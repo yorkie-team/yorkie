@@ -201,3 +201,39 @@ func TestParentsFirstIsLinear(t *testing.T) {
 		assert.Len(t, parentsFirst(spans), 3)
 	})
 }
+
+// TestAppendUncoveredSpansMatchesTheParent pins that a cascaded text piece
+// is covered only by an input span of its insertion under the same parent.
+// The input span recorded "abcd" under p before a split carried "cd" into
+// the product; the cascade reports "cd" under the product. Both are kept,
+// and the input gives up "cd", so a Restore after GC recreates "ab" under p
+// and "cd" under the product instead of all four under p.
+func TestAppendUncoveredSpansMatchesTheParent(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	ticket := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNodeID(ticket(1), 0)
+	p := &TreeRestoreSpan{ID: NewTreeNodeID(ticket(2), 0), NodeType: "p", ParentID: root}
+	product := &TreeRestoreSpan{ID: NewTreeNodeID(ticket(3), 0), NodeType: "p", ParentID: root}
+	text := func(offset int, value string, parent *TreeNodeID) *TreeRestoreSpan {
+		return &TreeRestoreSpan{
+			ID: NewTreeNodeID(ticket(4), offset), NodeType: "text", IsText: true,
+			Length: len(value), Value: value, ParentID: parent,
+		}
+	}
+
+	got := appendUncoveredSpans(
+		[]*TreeRestoreSpan{p, text(0, "abcd", p.ID)},
+		[]*TreeRestoreSpan{product, text(2, "cd", product.ID)},
+	)
+	var order []string
+	for _, span := range got {
+		order = append(order, span.NodeType+"@"+span.ParentID.toIDString()+"="+span.Value)
+	}
+	assert.Equal(t, []string{
+		"p@" + root.toIDString() + "=",
+		"text@" + p.ID.toIDString() + "=ab",
+		"p@" + root.toIDString() + "=",
+		"text@" + product.ID.toIDString() + "=cd",
+	}, order)
+}

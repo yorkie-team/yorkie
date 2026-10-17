@@ -1615,7 +1615,7 @@ func (t *Tree) Retombstone(
 
 // appendUncoveredSpans appends to spans every cascaded span, or the part of
 // it, that names what spans does not already describe: an element by its ID,
-// a text range by the text spans of the same insertion. The input spans of a
+// a text range by the text spans of the same insertion under the same parent. The input spans of a
 // delete routinely include a split product together with the element it was
 // cut off, and the §4.1 cascade from the element reaches the product before
 // its own span does; without this the reverse operation would carry the
@@ -1635,13 +1635,15 @@ func appendUncoveredSpans(spans, cascaded []*TreeRestoreSpan) []*TreeRestoreSpan
 	texts := make(map[string][]*TreeRestoreSpan)
 	for _, span := range spans {
 		if span.IsText {
-			key := span.ID.CreatedAt.Key()
+			key := textCoverKey(span)
 			texts[key] = append(texts[key], span)
 		} else {
 			elements[span.ID.toIDString()] = struct{}{}
 		}
 	}
 
+	inputs := len(spans)
+	moved := make(map[string][]*TreeRestoreSpan)
 	for _, span := range cascaded {
 		if !span.IsText {
 			if _, ok := elements[span.ID.toIDString()]; !ok {
@@ -1649,7 +1651,27 @@ func appendUncoveredSpans(spans, cascaded []*TreeRestoreSpan) []*TreeRestoreSpan
 			}
 			continue
 		}
-		spans = append(spans, uncoveredTextSpans(span, texts[span.ID.CreatedAt.Key()])...)
+		parts := uncoveredTextSpans(span, texts[textCoverKey(span)])
+		spans = append(spans, parts...)
+		key := span.ID.CreatedAt.Key()
+		moved[key] = append(moved[key], parts...)
+	}
+
+	// A kept text part sits under another parent than any input span of its
+	// insertion that overlaps it: a split carried it there. The input span
+	// gives that range up, so that after GC each part is recreated under the
+	// element it now belongs to rather than all of it under the one the
+	// input was recorded under.
+	if len(moved) > 0 {
+		trimmed := make([]*TreeRestoreSpan, 0, len(spans))
+		for i, span := range spans {
+			if i >= inputs || !span.IsText || len(moved[span.ID.CreatedAt.Key()]) == 0 {
+				trimmed = append(trimmed, span)
+				continue
+			}
+			trimmed = append(trimmed, uncoveredTextSpans(span, moved[span.ID.CreatedAt.Key()])...)
+		}
+		spans = trimmed
 	}
 	return parentsFirst(spans)
 }
@@ -1735,6 +1757,20 @@ func parentsFirst(spans []*TreeRestoreSpan) []*TreeRestoreSpan {
 		sorted[i] = spans[j]
 	}
 	return sorted
+}
+
+// textCoverKey groups text spans that can cover one another: the same
+// insertion under the same parent. A piece of the insertion that a split
+// carried under its product is not what an input span recorded under the
+// original element describes, though their offsets overlap: Restore would
+// bring that span back under the original element and leave the product's
+// piece removed.
+func textCoverKey(span *TreeRestoreSpan) string {
+	parent := ""
+	if span.ParentID != nil {
+		parent = span.ParentID.toIDString()
+	}
+	return span.ID.CreatedAt.Key() + "|" + parent
 }
 
 // uncoveredTextSpans returns the parts of the text span that none of covers
