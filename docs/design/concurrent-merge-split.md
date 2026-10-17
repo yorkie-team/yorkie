@@ -1433,8 +1433,9 @@ result. The JS SDK has to mirror all of the following:
    `Live`, in the purge itself, so a purge only ever detaches tombstones
    and nothing is held back for a live node. Released nodes stay
    registered, as detached nodes do. A node inserted under, or split off,
-   a detached node is detached too, and an edit range with both ends in a
-   detached subtree visits nothing. `Restore` resolves a span naming a
+   a detached node is detached too, an edit range with both ends in a
+   detached subtree visits nothing, and a style or style removal with
+   either end in one styles nothing and splits nothing. `Restore` resolves a span naming a
    detached node as if the node were purged: it unregisters and unlinks
    the node, which stays a tombstone, and recreates the span if its
    parent is there; recreate never places a node under a detached

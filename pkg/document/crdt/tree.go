@@ -4722,6 +4722,13 @@ func (t *Tree) StyleByIndex(
 	return pairs, size, err
 }
 
+// namesDetached reports whether pos resolves to a parent or left sibling
+// in a subtree a purge took out.
+func (t *Tree) namesDetached(pos *TreePos) bool {
+	parent, left := t.ToTreeNodes(pos)
+	return (parent != nil && parent.detached) || (left != nil && left.detached)
+}
+
 // styleTargets resolves the nodes a Style or RemoveStyle applies to, in
 // document order and without repeats, along with the size the boundary text
 // splits added to Live.
@@ -4747,6 +4754,15 @@ func (t *Tree) styleTargets(
 	versionVector time.VersionVector,
 ) ([]*TreeNode, resource.DataSize, error) {
 	var diff resource.DataSize
+
+	// A range with an end in a subtree a purge took out styles nothing, as
+	// on a replica that purged the subtree's nodes too: the end has no place
+	// in the attached tree to count an index from (see TreeNode.detached).
+	// Checked before anything is split, so a detached piece is not cut
+	// either.
+	if t.namesDetached(from) || t.namesDetached(to) {
+		return nil, diff, nil
+	}
 
 	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt, BoundaryRange)
 	if err != nil {

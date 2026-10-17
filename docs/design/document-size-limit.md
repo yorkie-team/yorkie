@@ -105,8 +105,8 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
   Everything a purge detaches is therefore a tombstone off `Live`.
 - Nothing makes a detached node live again. `Restore` resolves a span
   naming one as a replica that purged it does: the node leaves
-  `NodeMapByID` and its chain, stays a tombstone, and the span is recreated
-  only if its parent is there (`Tree.forgetDetached`). `recreateFromSpan`
+  `NodeMapByID` and its chain and stays a tombstone, and the span is
+  recreated only where its parent is attached (`Tree.forgetDetached`). `recreateFromSpan`
   places nothing under a detached element, `Retombstone` skips one, and
   content placed under a detached parent, or split off a detached node, is
   detached itself and born tombstoned, booked to GC only.
@@ -122,7 +122,10 @@ and the document's clone, which an undo or redo runs on before the root.
 That is why `Restore` resolves a detached node as if it were gone rather
 than leaving it as it is: the clone and the root, and every replica, then
 take the same branch for the same span
-(`TestUndoMatchesOnTheCloneWithoutDetachedNodes`).
+(`TestUndoMatchesOnTheCloneWithoutDetachedNodes`). An op other than
+`Restore` that names a detached node can still resolve on the root and
+fail on a rebuilt clone, which runs it first; main's rebuilt clone holds no
+detached node either, so that gap is the same there.
 
 | Path | With a detached node | Pinned by |
 |---|---|---|
@@ -133,7 +136,9 @@ take the same branch for the same span
 | `recreateFromSpan` under a detached parent or split home | declined, as under a purged one | `TestRestoreRecreatesNothingUnderADetachedParent`, `TestRecreateGoesNowhereDetachedThroughASplitHome` |
 | `Retombstone`, the §4.1 cascade, `refreshSpanAnchors` | skipped: no cascade, the span keeps its anchors | `TestRetombstoneLeavesADetachedNodeAlone` |
 | `Edit` insert under a detached or removed parent | born tombstoned and detached, GC only; a range inside the detached subtree visits nothing | `TestEditUnderADetachedParentNamingAReleasedNode`, `TestTreeOpsNamingACollectedSubtree` |
-| `Edit` delete, `Style` over one | tombstones only; no ledger change | `TestTreeOpsNamingACollectedSubtree` |
+| `Edit` delete over one | tombstones only; no ledger change | `TestTreeOpsNamingACollectedSubtree` |
+| `Style`, `RemoveStyle` with an end in one | styles and splits nothing | `TestStyleIntoADetachedSubtreeStylesNothing` |
+| `Split` of a detached node | the product is detached too | `TestSplitsInADetachedSubtreeStayDetached` |
 | `FindTreeNodesWithSplitText`, splits, chain walks | read tombstones as on main | `TestTreeOpsNamingACollectedSubtree` |
 | `dissolveMergeSources`, `mergeStamps` | stamps of the subtree leave the index at the purge | `TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree` |
 | `Tree.GCPairs` (a rebuild) | not reached: walks the attached tree | `assertRebuildsSame` in the tests above |
@@ -158,14 +163,24 @@ the element, and they release the same nodes. The server race of
 yorkie#2110 breaks that contract, since a minimum vector can arrive ahead
 of a change behind it; the conformance suite's lagging mode models it.
 Under the race, as for a crafted change, a change reaches a replica after
-its purge and names a node that is gone or detached: `Restore` revives no
-detached node and recreates nothing under one, so it lands as the release
-left it everywhere else. Released nodes stay registered, so an op whose
-position names one, such as an insert under a detached tombstone anchored
-on a released node, resolves and applies as on main, with its content born
-tombstoned and detached instead of charged to `Live`
-(`TestEditUnderADetachedParentNamingAReleasedNode`). An op naming a node
-the purge unregistered fails, as on main. `Restore` also leaves a
+its purge and names a node that is gone or detached: `Restore` never
+revives a detached node, and recreates one only where the span's parent is
+attached, so it lands as the release left it everywhere else. Released
+nodes stay registered, so an edit whose position names one, such as an
+insert under a detached tombstone anchored on a released node, resolves
+and applies as on main, with its content born tombstoned and detached
+instead of charged to `Live`
+(`TestEditUnderADetachedParentNamingAReleasedNode`). A `Style` or
+`RemoveStyle` with an end in a detached subtree styles nothing, as on a
+replica that has purged it, where main counted an index inside the
+detached subtree and could style unrelated attached content
+(`TestStyleIntoADetachedSubtreeStylesNothing`). An op naming a node the
+purge unregistered fails, as on main. Under the race, the conformance
+suite's lagging mode turns two runs into errors main did not report: uds3
+2520, a late op naming a node the race let one replica purge first, and ud
+11, which fails the same way in normal mode on main and on this change and
+which main's lagging run only masked; both are inputs the protocol
+contract excludes. `Restore` also leaves a
 node a tombstone under an ancestor whose removal the restoring change knew
 (`Tree.knownRemovalAbove`), which keeps the result before GC from depending
 on it: such a revive would stay live only on replicas that had not

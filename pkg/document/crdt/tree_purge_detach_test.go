@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
 // detachFixture builds <r><div><p>ab</p></div></r> with div and p removed and
@@ -442,4 +443,143 @@ func TestEditUnderADetachedParentNamingAReleasedNode(t *testing.T) {
 	assert.NotNil(t, pairs[0].GCOnlySize, "booked to GC only")
 	assert.Equal(t, live, root.DocSize().Live)
 	assert.Equal(t, "<r></r>", tree.ToXML())
+}
+
+// releasedFixture builds <r><div><p>ab</p></div><q>cd</q></r> with div
+// removed while p and its text are live. With purge set, div is purged,
+// releasing p and the text: tombstoned, detached and still registered.
+func releasedFixture(t *testing.T, purge bool) (*Tree, *TreeNode, *TreeNode, *TreeNode, func() *time.Ticket) {
+	t.Helper()
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	lamport := int64(0)
+	next := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, actor)
+	}
+	root := NewTreeNode(NewTreeNodeID(next(), 0), "r", nil)
+	div := NewTreeNode(NewTreeNodeID(next(), 0), "div", nil)
+	p := NewTreeNode(NewTreeNodeID(next(), 0), "p", nil)
+	ab := NewTreeNode(NewTreeNodeID(next(), 0), "text", nil, "ab")
+	q := NewTreeNode(NewTreeNodeID(next(), 0), "q", nil)
+	cd := NewTreeNode(NewTreeNodeID(next(), 0), "text", nil, "cd")
+	require.NoError(t, root.Append(div, q))
+	require.NoError(t, div.Append(p))
+	require.NoError(t, p.Append(ab))
+	require.NoError(t, q.Append(cd))
+	tree := NewTree(root, next())
+	div.remove(next())
+	if purge {
+		_, err = tree.PurgeReleasing(div)
+		require.NoError(t, err)
+		require.True(t, p.detached)
+	}
+	return tree, div, p, ab, next
+}
+
+// TestSplitsInADetachedSubtreeStayDetached pins that a piece split off a
+// detached node is detached too. A crafted insert or split in the middle of
+// the released "ab" cuts p and the text; every node under the purged div
+// must still be a detached tombstone, and a restore that does not know
+// div's removal revives none of them in place. A split product left
+// unmarked would be revived there, live in a subtree no rebuild holds, and
+// charged to Live (yorkie#2244).
+func TestSplitsInADetachedSubtreeStayDetached(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		splitLevel int
+		insert     bool
+	}{
+		{"an insert in the middle of the text", 0, true},
+		{"a split in the middle of the paragraph", 1, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tree, div, p, ab, next := releasedFixture(t, true)
+			mid := NewTreePos(p.id, NewTreeNodeID(ab.id.CreatedAt, 1))
+			var contents []*TreeNode
+			if tc.insert {
+				contents = []*TreeNode{NewTreeNode(NewTreeNodeID(next(), 0), "text", nil, "XYZ")}
+			}
+			known := time.NewVersionVector()
+			known.Set(ab.id.CreatedAt.ActorID(), 1000)
+			_, _, _, err := tree.Edit(mid, mid, contents, tc.splitLevel, next(), next, known, false)
+			require.NoError(t, err)
+
+			var nodes []*TreeNode
+			index.TraverseNode(div.Index, func(n *index.Node[*TreeNode], _ int) {
+				nodes = append(nodes, n.Value)
+			})
+			require.Greater(t, len(nodes), 3, "the op cut something under div")
+			for _, n := range nodes {
+				assert.True(t, n.detached, "%s is detached", n.Type())
+				assert.True(t, n.IsRemoved(), "%s is a tombstone", n.Type())
+			}
+
+			other, err := time.ActorIDFromHex("0000000000000000000000ee")
+			require.NoError(t, err)
+			unaware := time.NewVersionVector()
+			unaware.Set(other, 1)
+			var spans []*TreeRestoreSpan
+			for _, n := range nodes {
+				if n == div {
+					continue
+				}
+				if n.IsText() {
+					spans = append(spans, &TreeRestoreSpan{
+						ID: n.id, NodeType: "text", IsText: true, Length: n.Length(), Value: n.Value,
+						ParentID: n.Index.Parent.Value.id,
+					})
+				} else {
+					spans = append(spans, &TreeRestoreSpan{
+						ID: n.id, NodeType: n.Type(), Length: 1, ParentID: n.Index.Parent.Value.id,
+					})
+				}
+			}
+			untombstoned, _, _, _, _, err := tree.Restore(spans, false, unaware)
+			require.NoError(t, err)
+			assert.Empty(t, untombstoned, "nothing in the detached subtree is revived")
+			assert.Equal(t, "<r><q>cd</q></r>", tree.ToXML())
+		})
+	}
+}
+
+// TestStyleIntoADetachedSubtreeStylesNothing pins that a Style or
+// RemoveStyle with an end in a detached subtree is a no-op rather than a
+// failure. The range runs from the start of the root to the end of the
+// released "ab". A replica that purged div resolves that end into a detached
+// subtree with no index in the attached tree; one that did not resolves it
+// to div's place, which encloses nothing. Both leave the tree as it was,
+// without an error, and agree once the second collects too.
+func TestStyleIntoADetachedSubtreeStylesNothing(t *testing.T) {
+	type replica struct {
+		tree *Tree
+		div  *TreeNode
+		p    *TreeNode
+		ab   *TreeNode
+		next func() *time.Ticket
+	}
+	build := func(purge bool) replica {
+		tree, div, p, ab, next := releasedFixture(t, purge)
+		return replica{tree, div, p, ab, next}
+	}
+	for _, purged := range []bool{true, false} {
+		r := build(purged)
+		from := NewTreePos(r.tree.Root().id, r.tree.Root().id)
+		to := NewTreePos(r.p.id, NewTreeNodeID(r.ab.id.CreatedAt, 2))
+		known := time.NewVersionVector()
+		known.Set(r.ab.id.CreatedAt.ActorID(), 1000)
+
+		_, _, _, err := r.tree.Style(from, to, map[string]string{"k": "v"}, r.next(), known)
+		require.NoError(t, err, "purged %v: style", purged)
+		_, _, _, err = r.tree.RemoveStyle(from, to, []string{"k"}, r.next(), known)
+		require.NoError(t, err, "purged %v: remove style", purged)
+		assert.Equal(t, "<r><q>cd</q></r>", r.tree.ToXML(), "purged %v", purged)
+		assert.Empty(t, r.tree.drainPendingGCPairs(), "purged %v: nothing split", purged)
+
+		if !purged {
+			_, err := r.tree.PurgeReleasing(r.div)
+			require.NoError(t, err)
+			assert.Equal(t, "<r><q>cd</q></r>", r.tree.ToXML(), "after the second purge")
+		}
+	}
 }
