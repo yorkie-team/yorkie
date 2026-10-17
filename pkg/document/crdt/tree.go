@@ -1937,15 +1937,21 @@ func uncoveredTextSpans(span *TreeRestoreSpan, covers [][2]int) []*TreeRestoreSp
 	if len(gaps) == 1 && gaps[0] == [2]int{start, end} {
 		return []*TreeRestoreSpan{span}
 	}
-	// Value is sliced on its own bounds too: a span off the wire need not
-	// carry as many code units as its Length claims.
+	// Value is sliced on its own bounds too, should it carry fewer code
+	// units than its Length claims, and each part's Length is what its
+	// Value holds: the wire decoder rejects a text span whose Length is not
+	// the UTF-16 length of its Value, so a reverse operation carrying one
+	// could not be decoded. A part left with nothing describes nothing.
 	encoded := utf16.Encode([]rune(span.Value))
 	parts := make([]*TreeRestoreSpan, 0, len(gaps))
 	for _, gap := range gaps {
+		from, to := min(gap[0]-start, len(encoded)), min(gap[1]-start, len(encoded))
+		if from >= to {
+			continue
+		}
 		part := *span
 		part.ID = &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: gap[0]}
-		part.Length = gap[1] - gap[0]
-		from, to := min(gap[0]-start, len(encoded)), min(gap[1]-start, len(encoded))
+		part.Length = to - from
 		part.Value = string(utf16.Decode(encoded[from:to]))
 		if gap[0] > start {
 			part.LeftSiblingID = &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: gap[0] - 1}
