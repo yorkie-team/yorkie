@@ -1733,8 +1733,14 @@ func (t *Tree) Retombstone(
 		length := max(span.Length, 1)
 		end := start + length
 
+		// A text span names exactly its Length, as Restore reads it: an
+		// empty one removes nothing, where reading it as one character would
+		// remove a character its reverse, which reports Length 0, could not
+		// bring back.
 		var pieces []*TreeNode
-		if span.IsText {
+		if span.IsText && span.Length <= 0 {
+			pieces = nil
+		} else if span.IsText {
 			pieces = t.findPiecesOverlapping(span.ID.CreatedAt, start, end)
 		} else if n := t.findFloorNode(span.ID); n != nil && n.id.Equal(span.ID) {
 			pieces = []*TreeNode{n}

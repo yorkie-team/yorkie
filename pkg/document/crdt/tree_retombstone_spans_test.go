@@ -321,3 +321,35 @@ func TestAppendUncoveredSpansMatchesTheParent(t *testing.T) {
 		"text@" + p.ID.toIDString() + "=abcd",
 	}, order)
 }
+
+// TestRetombstoneAnEmptyTextSpanRemovesNothing pins that a text span of
+// Length 0 retombstones nothing. Read as one character, it removed "b" of
+// <p>ab</p> while its reverse, an empty span too, could not bring it back.
+func TestRetombstoneAnEmptyTextSpanRemovesNothing(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	lamport := int64(0)
+	next := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, actor)
+	}
+	root := NewTreeNode(NewTreeNodeID(next(), 0), "r", nil)
+	p := NewTreeNode(NewTreeNodeID(next(), 0), "p", nil)
+	text := NewTreeNode(NewTreeNodeID(next(), 0), "text", nil, "ab")
+	require.NoError(t, p.Append(text))
+	require.NoError(t, root.Append(p))
+	tree := NewTree(root, next())
+
+	span := &TreeRestoreSpan{
+		ID: NewTreeNodeID(text.id.CreatedAt, 1), NodeType: "text", IsText: true, ParentID: p.id,
+	}
+	known := time.NewVersionVector()
+	known.Set(actor, lamport)
+	pairs, _, edits, reverse, err := tree.Retombstone([]*TreeRestoreSpan{span}, next(), true, known)
+	require.NoError(t, err)
+	assert.Empty(t, pairs)
+	assert.Empty(t, edits)
+	assert.Equal(t, "<r><p>ab</p></r>", tree.ToXML())
+	require.Len(t, reverse, 1)
+	assert.Equal(t, 0, reverse[0].Length)
+}
