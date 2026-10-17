@@ -963,3 +963,37 @@ func TestTreeRetombstoneAnchorsTravelTogether(t *testing.T) {
 	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 4), applied[0].RightSiblingID,
 		`the right anchor is "o"`)
 }
+
+// TestTreeRetombstoneRefreshesAnAlreadyRemovedSpan pins that Retombstone
+// refreshes a span's anchors even when a peer already removed every piece of
+// it and the call removes nothing: the tombstones still sit where they are,
+// and the recorded anchors may be stale (#2169).
+func TestTreeRetombstoneRefreshesAnAlreadyRemovedSpan(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+	p := tree.Root().Children()[0]
+	createdAt := p.Children()[0].ID().CreatedAt
+
+	stale := crdt.NewTreeNodeID(helper.TimeT(ctx), 0)
+	span := &crdt.TreeRestoreSpan{
+		ID:             crdt.NewTreeNodeID(createdAt, 1),
+		NodeType:       "text",
+		IsText:         true,
+		Length:         3,
+		Value:          "ell",
+		ParentID:       p.ID(),
+		LeftSiblingID:  stale,
+		RightSiblingID: stale,
+	}
+
+	editT(t, tree, ctx, 2, 5, nil)
+	assert.Equal(t, "<r><p>ho</p></r>", tree.ToXML())
+
+	pairs, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), false, nil)
+	assert.NoError(t, err)
+	assert.Empty(t, pairs, "nothing was live to remove")
+	assert.Len(t, applied, 1)
+	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 0), applied[0].LeftSiblingID)
+	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 4), applied[0].RightSiblingID)
+	assert.Equal(t, p.ID(), applied[0].ParentID)
+}

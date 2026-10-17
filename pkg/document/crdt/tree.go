@@ -1541,12 +1541,10 @@ func (t *Tree) Retombstone(
 			pieces = []*TreeNode{n}
 		}
 
-		live := false
 		for _, piece := range pieces {
 			if piece.IsRemoved() {
 				continue
 			}
-			live = true
 			target := piece
 			if piece.IsText() {
 				from := max(piece.id.Offset, start)
@@ -1573,10 +1571,10 @@ func (t *Tree) Retombstone(
 				target, executedAt, measure, versionVector, pairs, edits, cascaded,
 			)
 		}
-		if live {
-			span = t.refreshSpanAnchors(span)
-		}
-		applied = append(applied, span)
+		// Refreshed whether or not anything was live: a span whose pieces a
+		// peer already removed sits next to whatever is beside those
+		// tombstones now, just as one this call removed does (#2169).
+		applied = append(applied, t.refreshSpanAnchors(span))
 	}
 	return pairs, diff, edits, append(applied, cascaded...), nil
 }
