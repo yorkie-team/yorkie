@@ -664,6 +664,12 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		}
 
 		r.docSize.GC.Sub(pair.Child.DataSize())
+		// Every live node is charged to Live at its DataSize, so the size of
+		// the live nodes the purge detached is what Live holds for them. It
+		// is still never taken below zero: Live is what MaxSizePerDocument
+		// is checked against, and an under-count would switch the gate off.
+		detachedLive.Data = min(detachedLive.Data, r.docSize.Live.Data)
+		detachedLive.Meta = min(detachedLive.Meta, r.docSize.Live.Meta)
 		r.docSize.Live.Sub(detachedLive)
 		delete(r.gcNodePairMap, key)
 		count++
