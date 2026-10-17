@@ -3241,15 +3241,55 @@ func (t *Tree) isSplitProductOf(node, origin *TreeNode) bool {
 	return false
 }
 
-// isSplitProductOfLeftElement reports whether next, a sibling the step-04
-// walk of FindTreeNodesWithSplitText is about to pass, was split off the
-// element the position anchors on. Only an element anchor has split
-// products; a left-most position anchors on its parent, not on a sibling.
-func (t *Tree) isSplitProductOfLeftElement(next, left *TreeNode, isLeftMost bool) bool {
-	if isLeftMost || left.IsText() || next.IsText() || next.InsPrevID == nil {
-		return false
+// splitProductTest returns a test for whether a sibling the step-04 walk of
+// FindTreeNodesWithSplitText is about to pass was split off left, the element
+// the position anchors on: the same answer isSplitProductOf gives, walking
+// InsPrevID back, but memoized across the siblings of one walk. Every node a
+// walk back visits is answered once, so the siblings of one position cost
+// O(siblings + chain), not one chain walk each -- the products of repeated
+// splits at one anchor are both siblings and links of the same chain. Only
+// an element anchor has split products; a left-most position anchors on its
+// parent, not on a sibling.
+func (t *Tree) splitProductTest(left *TreeNode, isLeftMost bool) func(next *TreeNode) bool {
+	if isLeftMost || left.IsText() {
+		return func(*TreeNode) bool { return false }
 	}
-	return t.isSplitProductOf(next, left)
+
+	known := map[*TreeNode]bool{left: true}
+	return func(next *TreeNode) bool {
+		if next.IsText() || next.InsPrevID == nil {
+			return false
+		}
+
+		var path []*TreeNode
+		onPath := make(map[*TreeNode]struct{})
+		answer := false
+		for current := next; ; {
+			if result, ok := known[current]; ok {
+				answer = result
+				break
+			}
+			// A crafted chain that loops back on itself reaches no origin.
+			if _, ok := onPath[current]; ok {
+				break
+			}
+			path = append(path, current)
+			onPath[current] = struct{}{}
+
+			if current.InsPrevID == nil {
+				break
+			}
+			prev := t.findFloorNode(current.InsPrevID)
+			if prev == nil || prev.IsText() {
+				break
+			}
+			current = prev
+		}
+		for _, n := range path {
+			known[n] = answer
+		}
+		return answer
+	}
 }
 
 // declaredAncestryHas walks the CURRENT ancestry of the element a position
@@ -5100,14 +5140,17 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 	// a non-empty Edit range (BoundaryEditEnd) -- was drawn after the whole
 	// element its client saw, unsplit, so the walk takes the product as it
 	// always has, and the split handling of the caller starts from there.
-	anchorElement := leftNode
+	var isSplitProduct func(*TreeNode) bool
+	if mode == BoundaryInsert {
+		isSplitProduct = t.splitProductTest(leftNode, isLeftMost)
+	}
 	parentChildren := realParentNode.Index.Children(true)
 	for i := idx; i < len(parentChildren); i++ {
 		next := parentChildren[i].Value
 		if !next.id.CreatedAt.After(editedAt) {
 			break
 		}
-		if mode == BoundaryInsert && t.isSplitProductOfLeftElement(next, anchorElement, isLeftMost) {
+		if isSplitProduct != nil && isSplitProduct(next) {
 			continue
 		}
 		leftNode = next

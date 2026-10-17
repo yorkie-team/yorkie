@@ -194,3 +194,41 @@ func TestTreeEditRangeStartsAfterAConcurrentlySplitElement(t *testing.T) {
 	assert.Equal(t, "<r><p>a</p><p>b</p></r>", tree.ToXML(),
 		"the split product is not inside the range")
 }
+
+// TestFindTreeNodesWithSplitTextManySplitProducts runs step 04 past a long
+// run of split products of the left element, each split off the previous one
+// at one anchor, as repeated Enters by a peer leave them. Each product is a
+// sibling the walk passes and a link of the chain every other product's
+// lineage goes through; the memoized test answers the whole run in one pass
+// over the chain instead of one chain walk per product.
+func TestFindTreeNodesWithSplitTextManySplitProducts(t *testing.T) {
+	const products = 2000
+
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+	editT(t, tree, ctx, 0, 0, crdt.NewTreeNode(helper.PosT(ctx), "p", nil))
+	editT(t, tree, ctx, 1, 1, textNode(ctx, "ab"))
+	left := tree.Root().Children()[0]
+	editedAt := helper.TimeT(ctx)
+	pos := crdt.NewTreePos(tree.Root().ID(), left.ID())
+
+	// The first Enter splits <p>ab</p> after "a"; each one after it splits
+	// the newest product right before "b", leaving an empty product behind,
+	// so every product is split off the one before it: <r>0<p>1a2</p>3, then
+	// one empty <p></p> per earlier product, then <p>b</p>.
+	for k := range products {
+		at := 2
+		if k > 0 {
+			at = 3 + 2*(k-1) + 1
+		}
+		_, _, err := tree.EditT(at, at, nil, 1, helper.TimeT(ctx), issueTicket(ctx))
+		require.NoError(t, err)
+	}
+	last := tree.Root().Children()[products]
+	require.Equal(t, "<p>b</p>", crdt.ToXML(last))
+	require.Len(t, tree.Root().Children(), products+1)
+
+	_, anchor, _, err := tree.FindTreeNodesWithSplitText(pos, editedAt, crdt.BoundaryInsert)
+	require.NoError(t, err)
+	assert.Same(t, left, anchor, "every product is passed over")
+}
