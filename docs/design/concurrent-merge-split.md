@@ -1416,8 +1416,10 @@ result. The JS SDK has to mirror all of the following:
    under it, so a purge only ever detaches tombstones. `Restore` leaves a
    detached node a tombstone, and also a node under an ancestor whose
    removal the restoring change's version vector covers (a change without
-   clocks is treated as knowing every removal, as `TicketKnown` does);
-   content inserted under a removed parent is booked to GC
+   clocks is treated as knowing every removal, as `TicketKnown` does). It
+   revives in place in span order, so spans must come parent-first, for a
+   revive as for a recreate: a child listed before its removed parent stays
+   a tombstone. Content inserted under a removed parent is booked to GC
    only (yorkie#2244; the rule is in `document-size-limit.md`).
 
 ## Key Design Decisions
