@@ -93,3 +93,49 @@ func TestCollectNeverTakesLiveBelowZero(t *testing.T) {
 	assert.GreaterOrEqual(t, live.Data, 0, "the text's bytes are not taken out of a Live that never held them")
 	assert.GreaterOrEqual(t, live.Meta, 0)
 }
+
+// TestCollectWalksADeletedSubtreeOnce pins the cost of collecting a deleted
+// subtree whose nodes each carry a GC pair of their own: a chain of nested
+// removed elements, purged in whatever order the GC map yields. Each node is
+// walked once in all, by the first purge that detaches it, so the pass is
+// linear; walking each purged node's subtree again, or climbing to the root
+// to ask whether it is still attached, made it quadratic in the depth.
+func TestCollectWalksADeletedSubtreeOnce(t *testing.T) {
+	const depth = 2000
+
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	lamport := int64(0)
+	nextTicket := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, actor)
+	}
+	root := NewTreeNode(NewTreeNodeID(nextTicket(), 0), "r", nil)
+	nodes := make([]*TreeNode, depth)
+	parent := root
+	for i := range nodes {
+		nodes[i] = NewTreeNode(NewTreeNodeID(nextTicket(), 0), "div", nil)
+		require.NoError(t, parent.Append(nodes[i]))
+		parent = nodes[i]
+	}
+	tree := NewTree(root, nextTicket())
+	removedAt := nextTicket()
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	for _, node := range nodes {
+		node.remove(removedAt)
+		size := node.DataSize()
+		doc.RegisterGCPair(GCPair{Parent: tree, Child: node, GCOnlySize: &size})
+	}
+
+	visits := 0
+	purgeVisitForTest = func() { visits++ }
+	defer func() { purgeVisitForTest = nil }()
+
+	vector := time.NewVersionVector()
+	vector.Set(actor, removedAt.Lamport())
+	n, err := doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	assert.Equal(t, depth, n)
+	assert.LessOrEqual(t, visits, depth, "every node is walked at most once")
+	assert.Equal(t, 0, doc.GarbageLen())
+}

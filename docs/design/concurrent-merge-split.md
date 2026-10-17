@@ -1410,7 +1410,9 @@ result. The JS SDK has to mirror all of the following:
    to the restoring change, and a born-tombstoned recreate takes the
    removal of the parent it actually lands under.
 7. **Purge accounting.** Purging an element takes its live descendants'
-   size out of `docSize.Live` and unregisters them (yorkie#2244).
+   size out of `docSize.Live` and marks its whole subtree detached; the
+   nodes stay registered, and `Restore` and `Retombstone` leave a detached
+   node alone (yorkie#2244).
 
 ## Key Design Decisions
 

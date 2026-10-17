@@ -96,8 +96,10 @@ element detaches its whole subtree, including descendants that are still
 live: a child an identity restore revived under an element that stayed
 removed has no GC pair and is charged to `Live`. `Root` takes those
 descendants' size out of `Live` when it purges the element (`GCDetach`),
-and `Tree.Purge` unregisters them, so a later change that names one by
-identity does not take it out a second time (yorkie#2244).
+and marks the detached subtree. The nodes keep their identity, as before,
+but `Restore` and `Retombstone` leave a detached node alone, so a later
+change that names one by identity neither takes it out of a ledger a second
+time nor charges one for it (yorkie#2244).
 
 **Unknown admits.** A zero `live_size` — no snapshot yet, a snapshot written
 before the field existed, or a document just compacted — admits the push. The

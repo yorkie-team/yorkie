@@ -35,8 +35,8 @@ import (
 // paragraph d1 removed, as a piece chained after the removed "a". Purging
 // the paragraph detaches "b" with it, so a rebuild no longer counts it, and
 // the running ledger must not either: Live is what MaxSizePerDocument is
-// checked against. The purge also unregisters "b" and takes it out of its
-// insertion chain, as a rebuild has neither.
+// checked against. "b" keeps its identity, as on main, and a later redo that
+// names it leaves it alone rather than charge a ledger it left.
 func TestTreePurgeWithLiveDescendant(t *testing.T) {
 	d1, d2, a1, a2 := newReplicas(t)
 
@@ -82,13 +82,12 @@ func TestTreePurgeWithLiveDescendant(t *testing.T) {
 	assert.Positive(t, d1.GarbageCollect(vv))
 	require.Equal(t, "<doc><p>cd</p></doc>", treeXML(t, d1))
 
+	// As on main, the detached piece keeps its identity: a later change that
+	// names it still finds it, rather than a floor lookup handing it an
+	// earlier piece of the insertion.
 	tree := treeCRDT(t, d1)
-	if _, registered := tree.NodeMapByID.Floor(text.ID()); registered == text {
-		assert.Fail(t, "the detached live piece is still registered")
-	}
-	assert.Nil(t, text.InsPrevID, "the detached live piece leaves its insertion chain")
-	assert.Nil(t, text.InsNextID)
-	assert.Nil(t, head.InsNextID, "and nothing in the chain points at it")
+	_, registered := tree.NodeMapByID.Floor(text.ID())
+	assert.Same(t, text, registered, "the detached live piece is still found by its ID")
 
 	assertRebuildsSame(t, d1, "after purging an element with a live descendant")
 	rebuilt, err := d1.InternalDocumentForTest().DeepCopy()
@@ -101,5 +100,20 @@ func TestTreePurgeWithLiveDescendant(t *testing.T) {
 	// it out a second time.
 	require.NoError(t, d2.Redo())
 	crossSync(t, d1, d2)
+	assert.False(t, text.IsRemoved(), "the redo leaves the detached piece alone")
 	assertRebuildsSame(t, d1, "after a redo names the detached text")
+
+	// d2 had not collected when the redo arrived, so it applied it to the
+	// paragraph it still held. Once it collects too, the two agree.
+	assert.Equal(t, treeXML(t, d1), treeXML(t, d2))
+	vv = d1.VersionVector().DeepCopy()
+	for _, actor := range []time.ActorID{a1, a2} {
+		if v := d2.VersionVector().VersionOf(actor); v > vv.VersionOf(actor) {
+			vv.Set(actor, v)
+		}
+	}
+	d1.GarbageCollect(vv)
+	d2.GarbageCollect(vv)
+	assert.Equal(t, treeShape(t, d1), treeShape(t, d2), "both replicas end on the same tree")
+	assertRebuildsSame(t, d2, "the replica that collected after the redo")
 }
