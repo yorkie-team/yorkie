@@ -270,3 +270,26 @@ func TestRetombstoneLeavesADetachedNodeAlone(t *testing.T) {
 	assert.False(t, product.IsRemoved(), "the attached split product stays live")
 	assert.Equal(t, "<r><div><p>b</p></div></r>", tree.ToXML())
 }
+
+// TestRestoreRecreatesNothingUnderADetachedParent pins recreateParent's
+// detached check. div is purged with p under it, and the text under p was
+// purged on its own, so p is registered and detached while the text is
+// gone. A restore naming the text under p must not recreate it there: the
+// node would be charged to GC for bytes no rebuild holds, and a replica that
+// had purged p too would have nowhere to put it.
+func TestRestoreRecreatesNothingUnderADetachedParent(t *testing.T) {
+	tree, div, p, text, removedAt := detachFixture(t)
+	text.remove(removedAt)
+	require.NoError(t, tree.Purge(text))
+	require.NoError(t, tree.Purge(div))
+	require.True(t, p.detached)
+
+	untombstoned, recreated, _, _, _, err := tree.Restore([]*TreeRestoreSpan{
+		{ID: text.id, NodeType: "text", IsText: true, Length: 2, Value: "ab", ParentID: p.id},
+	}, false, nil)
+	require.NoError(t, err)
+	assert.Empty(t, untombstoned)
+	assert.Empty(t, recreated)
+	assert.Empty(t, p.Children(true), "nothing is placed under the detached p")
+	assert.Empty(t, tree.drainPendingGCPairs(), "and nothing is booked to GC")
+}

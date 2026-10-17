@@ -1413,7 +1413,8 @@ result. The JS SDK has to mirror all of the following:
    follows a same-insertion successor into the element it now sits under
    when every split between that element and the span's parent is unknown
    to the restoring change, and a born-tombstoned recreate takes the
-   removal of the parent it actually lands under.
+   removal of the parent it actually lands under. A span whose parent is
+   detached is not recreated, as one whose parent was purged.
 7. **Purge accounting.** GC holds a removed element while a live node is
    under it, so a purge only ever detaches tombstones. `Restore` leaves a
    detached node a tombstone, and also a node under an ancestor whose

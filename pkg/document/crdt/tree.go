@@ -2139,8 +2139,11 @@ func (t *Tree) findPiecesOverlapping(createdAt *time.Ticket, start, end int) []*
 
 // recreateParent resolves the node a recreated span hangs under, or nil when
 // the span must be left unplaced (B1). Three shapes are unplaceable. The
-// parent is genuinely absent (purged and not part of this restore). The parent
-// is a text node, which cannot hold children. Or the identity being recreated,
+// parent is genuinely absent: purged and not part of this restore, or
+// detached with an ancestor a purge took out, which is the same tree a
+// replica that purged it too holds (see TreeNode.detached); a node recreated
+// there would be charged to GC for bytes no rebuild holds. The parent is a
+// text node, which cannot hold children. Or the identity being recreated,
 // id, is one a surviving node already holds -- exactly, or inside a surviving
 // text run of the same insertion -- in which case recreating would put a
 // second node under one identity, and putNode overwrites the live
@@ -2158,7 +2161,7 @@ func (t *Tree) recreateParent(span *TreeRestoreSpan, id *TreeNodeID) *TreeNode {
 		return nil
 	}
 	parent := t.findFloorNode(span.ParentID)
-	if parent == nil || !parent.id.Equal(span.ParentID) || parent.IsText() {
+	if parent == nil || !parent.id.Equal(span.ParentID) || parent.IsText() || parent.detached {
 		return nil
 	}
 
