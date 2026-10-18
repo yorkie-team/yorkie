@@ -3199,3 +3199,95 @@ func TestAnHonestTicketTheVectorLacksIsNotForged(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, tree.DetachedNode(m.id), "let go once a vector covers it")
 }
+
+// ledgerAgrees checks the root's ledger against its copy and one derived
+// from its content.
+func ledgerAgrees(t *testing.T, doc *Root, when string) {
+	t.Helper()
+	copied, err := doc.DeepCopy()
+	require.NoError(t, err)
+	rederived, err := doc.Rederive()
+	require.NoError(t, err)
+	for _, other := range []*Root{copied, rederived} {
+		assert.Equal(t, other.DocSize(), doc.DocSize(), "%s: size", when)
+		assert.Equal(t, other.GarbageLen(), doc.GarbageLen(), "%s: garbage", when)
+	}
+}
+
+// TestADisplacedReleasedTreeLetsItsDetachedStateGo pins the common restore
+// of a removed Tree: the restored copy takes the removed tree's createdAt,
+// so once it is registered nothing can name the old tree, and the detached
+// subtrees it kept for a change that could (see release) go with their
+// pairs and retained bytes. The root's ledger then agrees with its copy and
+// with one derived from the content at every step.
+func TestADisplacedReleasedTreeLetsItsDetachedStateGo(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	a := NewTreeNode(NewTreeNodeID(tk(3), 0), "p", nil)
+	y := NewTreeNode(NewTreeNodeID(tk(4), 0), "div", nil)
+	b := NewTreeNode(NewTreeNodeID(tk(5), 0), "p", nil)
+	require.NoError(t, root.Append(x, y))
+	require.NoError(t, x.Append(a))
+	require.NoError(t, y.Append(b))
+	x.remove(tk(10))
+	y.remove(tk(30))
+	keepDetached(a)
+	doc, tree := releaseFixture(t, root, tk(6))
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	_, err = doc.GarbageCollect(vector, nil)
+	require.NoError(t, err)
+	ledgerAgrees(t, doc, "after the purge")
+
+	copied, err := tree.DeepCopy()
+	require.NoError(t, err)
+	doc.Object().Delete("t", tk(40))
+	doc.RegisterRemovedElementPair(doc.Object(), tree)
+	ledgerAgrees(t, doc, "removed")
+	doc.Object().SetWithExecutedAt("t", copied, tk(41))
+	require.True(t, doc.UnregisterRemovedElementPair(tree.CreatedAt()))
+	doc.RegisterElement(copied, doc.Object())
+	require.Same(t, copied, doc.FindByCreatedAt(tree.CreatedAt()), "the copy holds the slot")
+	assert.Nil(t, tree.DetachedNode(a.id), "the old tree's detached subtree goes")
+	assert.NotContains(t, doc.detachedTrees, tree)
+	ledgerAgrees(t, doc, "restored")
+
+	vector.Set(actor, 50)
+	_, err = doc.GarbageCollect(vector, nil)
+	require.NoError(t, err)
+	ledgerAgrees(t, doc, "collected")
+}
+
+// TestAReleasedTreeStillNamedTracksWhatItsPurgesDetach pins that a purge in
+// a released Tree a change can still name, which books nothing, still has
+// its detached state tracked, so the coverage drop lets it go: a, live
+// under x, is released by the purge of x after the tree was released, and
+// the same collection, which has seen a created, lets it go.
+func TestAReleasedTreeStillNamedTracksWhatItsPurgesDetach(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	a := NewTreeNode(NewTreeNodeID(tk(3), 0), "p", nil)
+	require.NoError(t, root.Append(x))
+	require.NoError(t, x.Append(a))
+	x.remove(tk(10))
+	doc, tree := releaseFixture(t, root, tk(6))
+	doc.Object().Delete("t", tk(40))
+	doc.RegisterRemovedElementPair(doc.Object(), tree)
+	require.True(t, doc.UnregisterRemovedElementPair(tree.CreatedAt()))
+	require.Same(t, tree, doc.FindByCreatedAt(tree.CreatedAt()), "still named")
+
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	_, err = doc.GarbageCollect(vector, nil)
+	require.NoError(t, err)
+	require.True(t, a.released)
+	assert.Nil(t, tree.DetachedNode(a.id), "tracked, so the drop reaches it")
+	assert.Empty(t, doc.detachedTrees)
+	assert.Equal(t, 0, doc.GarbageLen())
+}

@@ -298,6 +298,17 @@ func (r *Root) index(elem Element) {
 	if prev, ok := r.elementMap[key]; ok && prev != elem {
 		if charged, ok := r.sizeInGC[prev]; ok && charged == (resource.DataSize{}) {
 			delete(r.sizeInGC, prev)
+			// A released Tree kept its detached subtrees only while a
+			// change could still name them through it (see release); with
+			// its slot taken over, nothing can, so they go now, with the
+			// pairs and the retained bytes their nodes hold, and so do the
+			// pairs of its attached tombstones, which nothing would
+			// otherwise collect before a pass at a vector covering them.
+			if tree, isTree := prev.(*Tree); isTree {
+				r.dropNodes(tree, tree.dropSubtrees(tree.tops()))
+				r.dropNodes(tree, subtreeOf(tree.Root()))
+				delete(r.detachedTrees, tree)
+			}
 		}
 	}
 	r.elementMap[key] = elem
@@ -491,11 +502,12 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 // The element collection entries of the subtree's own removed members go with
 // it, for the same reason: nothing can reach them to collect them, so leaving
 // them would hold GarbageLen above zero forever and let a later pass subtract
-// a cost this call has already released. A released Tree keeps its detached
-// subtrees, which a change can still name, until a collection's coverage
-// lets them go (see release). The pairs of its attached tombstones stay: they hold their own share of GC, not the
-// element's, and the next collection whose vector covers them purges them,
-// until when GC sits above a rebuild by them, as on main.
+// a cost this call has already released. A released Tree keeps its
+// detached subtrees, which a change can still name, until a collection's
+// coverage lets them go (see release), and the pairs of its attached
+// tombstones, which hold their own share of GC, until a collection covering
+// them purges them; once a restored copy takes its slot and nothing can name
+// it, both go at once (see index).
 func (r *Root) UnregisterRemovedElementPair(createdAt *time.Ticket) bool {
 	pair, ok := r.gcElementPairMap[createdAt.Key()]
 	if !ok {
@@ -733,8 +745,11 @@ func (r *Root) copyTreePairs(src *Root, all, trees map[*Tree]*Tree, copies map[*
 			}
 			copiedTree, paired := trees[tree]
 			if !paired {
-				// A Tree the scan alone books: but for a node out of the
-				// tree, which it does not reach.
+				// A Tree the scan alone books. Defensive: a tree without
+				// detached state holds no pair for a node out of it, as a
+				// purge deletes the pair of the node it takes out and
+				// detaches nothing else; were one there, the scan would not
+				// reach it, so it is copied on its own.
 				attached := !node.detached && node.Index != nil && node.Index.Parent != nil
 				if copiedTree, ok = all[tree]; !ok || attached {
 					continue
@@ -918,6 +933,11 @@ func (r *Root) dropDetached(vector time.VersionVector, clock *DocumentClock) int
 func (r *Root) bookRelease(parent GCParent, result purgeResult) {
 	tree, isTree := parent.(*Tree)
 	if isTree && tree.collected {
+		// A released tree a change can still name keeps what the purge
+		// detached for the coverage drop, though it books nothing.
+		if len(tree.detachedTops) > 0 && r.elementMap[tree.CreatedAt().Key()] == tree {
+			r.detachedTrees[tree] = struct{}{}
+		}
 		return
 	}
 	if charged, inGC := r.sizeInGC[tree]; isTree && inGC {

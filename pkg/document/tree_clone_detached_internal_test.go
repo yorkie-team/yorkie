@@ -377,3 +377,86 @@ func TestLocalTreeOpsOnARemovedElementKeepTheCloneWithTheRoot(t *testing.T) {
 		check("after a collection")
 	}
 }
+
+// TestAnHonestTicketOfASnapshotWithAnEmptyVectorIsKept pins the lamport the
+// document hands the collection (crdt.DocumentClock). A document loaded from
+// a snapshot stored with an emptied vector, as an opt-out-only one is,
+// rebuilds its vector from the changes it applies after, here B's alone, so
+// the vector lacks C, whose merge stamps "ab". "ab" was revived by a restore
+// under the removed paragraph before the snapshot, so the collection, whose
+// vector covers the paragraph's removal and not C, releases it and keeps its
+// subtree for a change that has not seen the merge. The snapshot's lamport
+// bounds C's ticket, which is honest, so the subtree stays on the root and
+// on the clone; read as forged, it would go.
+func TestAnHonestTicketOfASnapshotWithAnEmptyVectorIsKept(t *testing.T) {
+	actorA, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	actorB, err := time.ActorIDFromHex("000000000000000000000002")
+	require.NoError(t, err)
+	actorC, err := time.ActorIDFromHex("000000000000000000000003")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	treeOf := func(root *crdt.Root) *crdt.Tree { return root.Object().Get("t").(*crdt.Tree) }
+
+	origin := New("empty-vector")
+	origin.SetActor(actorA)
+	require.NoError(t, origin.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+		}})
+		return nil
+	}))
+	p := treeOf(origin.doc.root).Root().Children()[0]
+	text := p.Children()[0]
+	require.NoError(t, origin.Update(func(root *json.Object, _ *presence.Presence) error {
+		root.GetTree("t").Edit(0, 4, nil, 0)
+		return nil
+	}))
+	created := text.ID().CreatedAt
+	unaware := time.NewVersionVector()
+	unaware.Set(created.ActorID(), created.Lamport())
+	at := time.NewTicket(origin.doc.Lamport()+1, 0, peer)
+	pos := crdt.NewTreePos(p.ID(), p.ID())
+	op := operations.NewRestoreTreeEdit(treeOf(origin.doc.root).CreatedAt(), pos, pos, at,
+		[]*crdt.TreeRestoreSpan{{
+			ID: text.ID(), NodeType: "text", IsText: true, Length: 2, Value: "ab", ParentID: p.ID(),
+		}}, crdt.RestoreModeRestore, nil)
+	_, err = op.Execute(origin.doc.root, operations.OpSourceRemote, unaware)
+	require.NoError(t, err)
+	require.False(t, text.IsRemoved(), "revived under the removed paragraph")
+	lamport := at.Lamport() + 10
+	text.MergedFrom, text.MergedAt = p.ID(), time.NewTicket(lamport-1, 0, actorC)
+	snapshot, err := converter.SnapshotToBytes(origin.RootObject(), nil)
+	require.NoError(t, err)
+	load := func() *Document {
+		internal, err := NewInternalDocumentFromSnapshot("empty-vector", 1, lamport, time.NewVersionVector(), snapshot)
+		require.NoError(t, err)
+		return internal.ToDocument()
+	}
+
+	other := load()
+	other.SetActor(actorB)
+	require.NoError(t, other.Update(func(root *json.Object, _ *presence.Presence) error {
+		root.SetString("k", "v")
+		return nil
+	}))
+	d := load()
+	require.NoError(t, d.ApplyChangePack(change.NewPack(
+		"empty-vector", change.InitialCheckpoint.NextServerSeq(2), other.CreateChangePack().Changes, nil, nil,
+	)))
+	_, knowsC := d.doc.VersionVector().Get(actorC)
+	require.False(t, knowsC, "the vector lacks C")
+	require.NotEmpty(t, d.doc.VersionVector(), "and is not empty")
+
+	vector := time.NewVersionVector()
+	vector.Set(actorA, lamport)
+	vector.Set(peer, at.Lamport())
+	vector.Set(actorB, d.doc.VersionVector().VersionOf(actorB))
+	require.NoError(t, d.ensureClone())
+	d.GarbageCollect(vector)
+	require.Len(t, treeOf(d.doc.root).Root().Children(true), 0, "the paragraph is purged")
+	for _, root := range []*crdt.Root{d.doc.root, d.cloneRoot} {
+		assert.NotNil(t, treeOf(root).DetachedNode(text.ID()), "kept: C's ticket is honest")
+	}
+}
