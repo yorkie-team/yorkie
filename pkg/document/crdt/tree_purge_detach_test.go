@@ -1908,3 +1908,49 @@ func TestDeepCopyKeepsASlotThroughAnUnregisteredSibling(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
 }
+
+// TestDeepCopyBooksADetachedTombstonesPendingPair pins Tree.GCPairs on the
+// detached nodes a copy carries: div is purged while p, removed later by a
+// change the collection does not cover, keeps its own pair pending. A
+// DeepCopy of the root books that pair too, so it reports the GC and
+// GarbageLen its source does, and both settle alike once p's removal is
+// covered.
+func TestDeepCopyBooksADetachedTombstonesPendingPair(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	root := NewTreeNode(NewTreeNodeID(time.NewTicket(1, 0, actor), 0), "r", nil)
+	div := NewTreeNode(NewTreeNodeID(time.NewTicket(2, 0, actor), 0), "div", nil)
+	p := NewTreeNode(NewTreeNodeID(time.NewTicket(3, 0, actor), 0), "p", nil)
+	require.NoError(t, root.Append(div))
+	require.NoError(t, div.Append(p))
+	div.remove(time.NewTicket(10, 0, actor))
+	p.remove(time.NewTicket(20, 0, peer))
+	tree := NewTree(root, time.NewTicket(4, 0, actor))
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	doc.Object().Set("t", tree)
+	doc.RegisterElement(tree, doc.Object())
+
+	divOnly := time.NewVersionVector()
+	divOnly.Set(actor, 10)
+	_, err = doc.GarbageCollect(divOnly)
+	require.NoError(t, err)
+	require.True(t, p.detached)
+	require.Equal(t, 1, doc.GarbageLen(), "p's pair is pending")
+
+	copied, err := doc.DeepCopy()
+	require.NoError(t, err)
+	assert.Equal(t, doc.DocSize(), copied.DocSize(), "the copy books p's pending pair")
+	assert.Equal(t, doc.GarbageLen(), copied.GarbageLen())
+
+	all := time.NewVersionVector()
+	all.Set(actor, time.MaxLamport)
+	all.Set(peer, time.MaxLamport)
+	for _, r := range []*Root{doc, copied} {
+		_, err = r.GarbageCollect(all)
+		require.NoError(t, err)
+	}
+	assert.Equal(t, doc.DocSize(), copied.DocSize())
+	assert.Equal(t, 0, copied.GarbageLen())
+}
