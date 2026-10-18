@@ -90,6 +90,11 @@ func gcParentsAreComparable() {
 
 var _ = gcParentsAreComparable
 
+// Root.collect releases a Tree's live nodes only through this assertion, so
+// a Tree that stops implementing it would book purges by the plain path,
+// silently; this fails the build instead.
+var _ GCLiveRelease[GCChild] = (*Tree)(nil)
+
 // Root is a structure represents the root of JSON. It has a hash table of
 // all JSON elements to find a specific element when applying remote changes
 // received from server.

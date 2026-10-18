@@ -1587,7 +1587,9 @@ func (t *Tree) unregisterNode(node *TreeNode) {
 }
 
 // moveToDetached moves node's own entry from NodeMapByID to detachedByID,
-// for a node a purge has just detached.
+// for a node a purge has just detached. A node another one holds the ID
+// over has no entry to move: no lookup reached it before the purge either,
+// and none does on a replica that has not purged.
 func (t *Tree) moveToDetached(node *TreeNode) {
 	if key, registered := t.NodeMapByID.Floor(node.id); registered == node && key.Equal(node.id) {
 		t.NodeMapByID.Remove(node.id)
