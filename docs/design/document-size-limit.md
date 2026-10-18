@@ -119,9 +119,13 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
   never went through a removal, has no charge, and sits in `Live`, edits to
   it included, until its container is collected, as on main. A Tree a restore releases (`Root.release`)
   loses its charge as a deregistered one does, so a later release inside it
-  books nothing, but stays addressable, so its detached subtrees stay until
-  a collection's coverage lets them go
-  (`TestReleasingATreeKeepsItsDetachedSubtreesForCoverage`). Each takes
+  books nothing, but stays addressable, so its detached subtrees stay, and
+  what its later purges detach is tracked, until a collection's coverage
+  lets them go (`TestReleasingATreeKeepsItsDetachedSubtreesForCoverage`,
+  `TestAReleasedTreeStillNamedTracksWhatItsPurgesDetach`). Once a restored
+  copy takes its slot, nothing can name it, and its detached subtrees and
+  every pair its nodes hold go at once
+  (`TestADisplacedReleasedTreeLetsItsDetachedStateGo`). Each takes
   the removal of its nearest removed ancestor, which depends on the subtree
   alone and not on which of two pairs a collection purged first in Go's map
   order (`TestReleaseTicketDoesNotDependOnPurgeOrder`). They leave
@@ -236,7 +240,8 @@ do: a document loaded from a snapshot stored with an emptied vector, an
 opt-out-only one (disable-gc-on-attach.md), rebuilds its vector from the
 changes applied after it, which can lack the entry of an actor whose
 tickets the snapshot holds, while the snapshot's lamport still bounds them
-(`TestAnHonestTicketTheVectorLacksIsNotForged`). A forger can still pick a
+(`TestAnHonestTicketTheVectorLacksIsNotForged`,
+`TestAnHonestTicketOfASnapshotWithAnEmptyVectorIsKept`). A forger can still pick a
 lamport under the document's, and keep the subtree; the vector a change
 carries is validated nowhere, which is yorkie#2234's. The nodes leave
 `detachedByID` and the merge stamp index,
