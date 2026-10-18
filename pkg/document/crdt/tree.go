@@ -1126,6 +1126,11 @@ type Tree struct {
 	// node once a later collection lets the subtrees go (see dropDetached).
 	// NewTree, the only way a Tree is made, always sets it.
 	detachedByID *llrb.Tree[*TreeNodeID, *TreeNode]
+
+	// detachedTops holds the top of every subtree a purge took out that has
+	// nodes under it, so a drop reaches each of them, those another node
+	// holds the ID over included, which detachedByID does not index.
+	detachedTops map[*TreeNode]struct{}
 }
 
 // NewTree creates a new instance of Tree.
@@ -1134,6 +1139,7 @@ func NewTree(root *TreeNode, createdAt *time.Ticket) *Tree {
 		IndexTree:    index.NewTree[*TreeNode](root.Index),
 		NodeMapByID:  llrb.NewTree[*TreeNodeID, *TreeNode](),
 		detachedByID: llrb.NewTree[*TreeNodeID, *TreeNode](),
+		detachedTops: make(map[*TreeNode]struct{}),
 		createdAt:    createdAt,
 	}
 
@@ -1410,6 +1416,10 @@ func (t *Tree) purgeReleasing(node *TreeNode) (int, purgeResult, error) {
 	visits := 0
 	if !node.detached {
 		visits, result.Released, result.ReleasedNodes = t.detachSubtree(node, node.removedAt)
+	}
+	// A purge inside a detached subtree cuts a new one off it, under node.
+	if len(node.Index.Children(true)) > 0 {
+		t.detachedTops[node] = struct{}{}
 	}
 
 	// NodeMapByID is keyed by ID, so an unconditional Remove would also
@@ -1826,28 +1836,15 @@ func (t *Tree) forgetDetached(node *TreeNode) {
 	t.forgotten = append(t.forgotten, node)
 }
 
-// detachedTops returns the tops of the subtrees a purge took out that hold
-// a node in detachedByID, in the order of their first such node's ID. A
-// walk up from a detached node stops at the first node that is not
-// detached, which only a tree breaking that invariant has, and the node is
-// passed over rather than taking the attached tree with it.
-func (t *Tree) detachedTops() []*TreeNode {
-	var tops []*TreeNode
-	seen := make(map[*TreeNode]struct{})
-	for _, n := range t.detachedByID.Values() {
-		top := n
-		for top.detached && top.Index.Parent != nil {
-			top = top.Index.Parent.Value
-		}
-		if !top.detached {
-			continue
-		}
-		if _, ok := seen[top]; ok {
-			continue
-		}
-		seen[top] = struct{}{}
+// tops returns the tops of the subtrees a purge took out (see
+// detachedTops), in ID order, so a walk over them runs alike on the root and
+// its clone.
+func (t *Tree) tops() []*TreeNode {
+	tops := make([]*TreeNode, 0, len(t.detachedTops))
+	for top := range t.detachedTops {
 		tops = append(tops, top)
 	}
+	slices.SortFunc(tops, func(a, b *TreeNode) int { return a.id.Compare(b.id) })
 	return tops
 }
 
@@ -1888,7 +1885,7 @@ func seenWhole(top *TreeNode, vector time.VersionVector) bool {
 // seen whole (see seenWhole), and returns their nodes (see dropSubtrees).
 func (t *Tree) dropDetached(vector time.VersionVector) []*TreeNode {
 	var tops []*TreeNode
-	for _, top := range t.detachedTops() {
+	for _, top := range t.tops() {
 		if seenWhole(top, vector) {
 			tops = append(tops, top)
 		}
@@ -1906,6 +1903,7 @@ func (t *Tree) dropSubtrees(tops []*TreeNode) []*TreeNode {
 	var nodes []*TreeNode
 	for _, top := range tops {
 		nodes = append(nodes, subtreeOf(top)...)
+		delete(t.detachedTops, top)
 	}
 	// Every link is rewritten while all of them still resolve: a split
 	// link names its neighbour by ID, and the floor of one already let go
@@ -3104,7 +3102,7 @@ func (t *Tree) copyDetachedFrom(src *Tree) (map[*TreeNode]*TreeNode, error) {
 		return nil, fmt.Errorf("copy of tree %s: %w", src.createdAt.Key(), ErrTreeCopyShape)
 	}
 	registered := src.detachedByID.Values()
-	if len(registered) == 0 {
+	if len(registered) == 0 && len(src.detachedTops) == 0 {
 		return copies, nil
 	}
 	// A subtree is copied whole, from the top a purge took out. The ones
@@ -3127,6 +3125,9 @@ func (t *Tree) copyDetachedFrom(src *Tree) (map[*TreeNode]*TreeNode, error) {
 	}
 	for _, n := range registered {
 		enqueue(n)
+	}
+	for _, top := range src.tops() {
+		enqueue(top)
 	}
 	for len(pending) > 0 {
 		top := pending[len(pending)-1]
@@ -3159,6 +3160,11 @@ func (t *Tree) copyDetachedFrom(src *Tree) (map[*TreeNode]*TreeNode, error) {
 	for _, n := range registered {
 		if c, ok := copies[n]; ok {
 			t.detachedByID.Put(c.id, c)
+		}
+	}
+	for top := range src.detachedTops {
+		if c := copies[top]; c != nil {
+			t.detachedTops[c] = struct{}{}
 		}
 	}
 	return copies, nil
@@ -6342,6 +6348,12 @@ func (t *Tree) putNode(node *TreeNode) {
 	// so it is registered with the other detached nodes.
 	if node.detached {
 		t.noteMergeStamp(node)
+		// As moveToDetached does, an ID an attached node holds stays its:
+		// the lookup takes the floor of both indexes, and two entries under
+		// one ID would answer for the attached one only while it is there.
+		if key, attached := t.NodeMapByID.Floor(node.id); attached != nil && attached != node && key.Equal(node.id) {
+			return
+		}
 		// The same rule as for attached nodes below: a live node keeps its
 		// ID over a tombstone, which for detached nodes, all tombstones,
 		// leaves the last put.

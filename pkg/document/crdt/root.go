@@ -115,6 +115,11 @@ type Root struct {
 	// GarbageCollect).
 	detachedTrees map[*Tree]struct{}
 
+	// retainedOff holds the GC size of a released node whose pair key
+	// another node's pair holds, which only crafted duplicate IDs give (see
+	// bookRetained); DropGCPair gives it back when the node is let go.
+	retainedOff map[*TreeNode]resource.DataSize
+
 	// sizeInGC maps every registered element whose size counts toward
 	// docSize.GC rather than docSize.Live to the exact amount charged. Each
 	// element's size belongs to exactly one of the two, and an element reaches
@@ -151,6 +156,7 @@ func NewRoot(root *Object) *Root {
 		gcElementPairMap: make(map[string]ElementPair),
 		gcNodePairMap:    make(map[gcPairKey]GCPair),
 		detachedTrees:    make(map[*Tree]struct{}),
+		retainedOff:      make(map[*TreeNode]resource.DataSize),
 		sizeInGC:         make(map[Element]resource.DataSize),
 		docSize: resource.DocSize{
 			Live: resource.DataSize{
@@ -360,7 +366,10 @@ func (r *Root) deregisterElement(element Element) int {
 	deregister := func(elem Element) {
 		createdAt := elem.CreatedAt().Key()
 		if tree, ok := elem.(*Tree); ok {
-			// Its detached subtrees go with it.
+			// Its detached subtrees go with it, and the pairs their nodes
+			// hold: collect leaves a released node's to the drop, which a
+			// tree out of the document no longer gets.
+			r.dropNodes(tree, tree.dropSubtrees(tree.tops()))
 			delete(r.detachedTrees, tree)
 		}
 		// Subtract the size from wherever it is actually counted, and by the
@@ -600,6 +609,12 @@ func (r *Root) DeepCopy() (*Root, error) {
 		}
 	}
 	copied.copyTreePairs(r, trees, copies)
+	for node, size := range r.retainedOff {
+		if c := copies[node]; c != nil {
+			copied.retainedOff[c] = size
+			copied.docSize.GC.Add(size)
+		}
+	}
 	return copied, nil
 }
 
@@ -752,9 +767,7 @@ func (r *Root) Rederive() (*Root, error) {
 // The repeat also makes the result independent of Go's map iteration order,
 // which decides only how many passes it takes, not what ends up collected.
 func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
-	r.dropDetached(vector)
-
-	count := 0
+	count := r.dropDetached(vector)
 	for {
 		purged, deferred, err := r.collect(vector)
 		if err != nil {
@@ -770,7 +783,10 @@ func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 
 // dropDetached lets go of the detached subtrees vector has seen whole, in
 // every Tree, with the pairs their nodes still hold (see Tree.dropDetached).
-// It runs before the collection, so only subtrees an earlier one took out.
+// It runs before the collection, so a subtree outlives the collection that
+// took it out, for a change that names it after the purge, and its bytes
+// stay in GC until then (see TreeNode.released). It reports how many pairs
+// it dropped.
 //
 // A purge at vector V comes after every change concurrent with the removal
 // it collects, by the protocol, but a change that is not concurrent with
@@ -781,39 +797,51 @@ func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 // fails to resolve, as on a replica that keeps no detached nodes. The rule
 // reads the subtree and the vector alone, so the root and its clone, which
 // collect at the same vectors, let go alike.
-func (r *Root) dropDetached(vector time.VersionVector) {
+func (r *Root) dropDetached(vector time.VersionVector) int {
+	count := 0
 	for tree := range r.detachedTrees {
-		r.dropNodes(tree, tree.dropDetached(vector))
-		if tree.detachedByID.Len() == 0 {
+		count += r.dropNodes(tree, tree.dropDetached(vector))
+		if len(tree.detachedTops) == 0 {
 			delete(r.detachedTrees, tree)
 		}
 	}
+	return count
 }
 
 // bookRetained books the pair of a node a purge released, its tombstone's
-// size to GC alone: the purge has taken its live bytes off Live. Inserted,
-// not registered, so a key another node holds is not cancelled; that one
-// keeps it, which only crafted duplicate IDs reach.
+// size to GC alone: the purge has taken its live bytes off Live, so the
+// booking has to land. Inserted, not registered, so a key another node
+// holds is not cancelled; when one does, which only crafted duplicate IDs
+// reach, the size is held in retainedOff instead, for DropGCPair to give
+// back when the node is let go.
 func (r *Root) bookRetained(pair GCPair) {
+	size := pair.Child.DataSize()
+	r.docSize.GC.Add(size)
 	key := keyOf(pair)
 	if _, ok := r.gcNodePairMap[key]; ok {
+		node := pair.Child.(*TreeNode)
+		r.retainedOff[node] = size
 		return
 	}
-	size := pair.Child.DataSize()
 	pair.GCOnlySize = &size
 	r.gcNodePairMap[key] = pair
-	r.docSize.GC.Add(size)
 }
 
-// dropNodes drops the pairs the nodes a Tree let go still hold: their own,
-// and those of their removed attributes.
-func (r *Root) dropNodes(tree *Tree, nodes []*TreeNode) {
+// dropNodes drops the pairs the nodes a Tree let go still hold, their own
+// and those of their removed attributes, and reports how many it dropped.
+func (r *Root) dropNodes(tree *Tree, nodes []*TreeNode) int {
+	count := 0
 	for _, node := range nodes {
-		r.DropGCPair(GCPair{Parent: tree, Child: node})
+		if r.DropGCPair(GCPair{Parent: tree, Child: node}) {
+			count++
+		}
 		for _, pair := range node.GCPairs() {
-			r.DropGCPair(pair)
+			if r.DropGCPair(pair) {
+				count++
+			}
 		}
 	}
+	return count
 }
 
 // collect runs one collection pass, reporting how much it purged and how much
@@ -904,7 +932,7 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 			if err != nil {
 				return 0, 0, err
 			}
-			if tree, ok := parent.(*Tree); ok && result.Purged && tree.detachedByID.Len() > 0 {
+			if tree, ok := parent.(*Tree); ok && result.Purged && len(tree.detachedTops) > 0 {
 				r.detachedTrees[tree] = struct{}{}
 			}
 			// Defensive; unreachable because the check above skips a pair
@@ -1028,16 +1056,25 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 // as a purge would, after the sibling's purge may already have given back
 // only the sibling's own size. No path of this change reaches
 // that cancel for a split piece: a forgotten node's pair is dropped before
-// anything registers under its key. It is a no-op when no pair is
-// registered under the key, or the one registered is another child's.
-func (r *Root) DropGCPair(pair GCPair) {
+// anything registers under its key. It is a no-op, reporting false, when no
+// pair is registered under the key, or the one registered is another
+// child's, and the child holds no size in retainedOff either.
+func (r *Root) DropGCPair(pair GCPair) bool {
 	key := keyOf(pair)
 	p, ok := r.gcNodePairMap[key]
 	if !ok || p.Child != pair.Child {
-		return
+		if node, isNode := pair.Child.(*TreeNode); isNode {
+			if size, held := r.retainedOff[node]; held {
+				r.docSize.GC.Sub(size)
+				delete(r.retainedOff, node)
+				return true
+			}
+		}
+		return false
 	}
 	r.docSize.GC.Sub(p.Child.DataSize())
 	delete(r.gcNodePairMap, key)
+	return true
 }
 
 // UnregisterGCPair removes a GC pair whose child has been restored

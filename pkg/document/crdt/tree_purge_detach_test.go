@@ -2589,10 +2589,10 @@ func TestCopyDetachedFromATreeOfAnotherShape(t *testing.T) {
 	assert.ErrorIs(t, err, ErrTreeCopyShape)
 }
 
-// TestDropDetachedStopsAtTheAttachedTree pins the guard of detachedTops: a
-// node marked detached under an attached parent, which only a tree
-// breaking that invariant holds, is passed over, so a drop does not walk up
-// into the attached tree and let it go.
+// TestDropDetachedStopsAtTheAttachedTree pins that a drop walks down from
+// the tops purges recorded, never up: a node marked detached under an
+// attached parent, which only a tree breaking that invariant holds, is no
+// top, so a drop does not reach the attached tree and let it go.
 func TestDropDetachedStopsAtTheAttachedTree(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
@@ -2611,4 +2611,211 @@ func TestDropDetachedStopsAtTheAttachedTree(t *testing.T) {
 	assert.Empty(t, tree.dropDetached(vector))
 	assert.Same(t, p, tree.findFloorNode(p.id), "the attached tree stays")
 	assert.Same(t, root, tree.findFloorNode(root.id))
+}
+
+// releaseFixture builds a root holding a tree with the given nodes under
+// its root, books it, and returns both.
+func releaseFixture(t *testing.T, root *TreeNode, createdAt *time.Ticket) (*Root, *Tree) {
+	t.Helper()
+	tree := NewTree(root, createdAt)
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	doc.Object().Set("t", tree)
+	doc.RegisterElement(tree, doc.Object())
+	return doc, tree
+}
+
+// TestCollectingATreeDropsItsReleasedPairs pins the pairs of the nodes a
+// purge released when the Tree element itself is collected before their
+// subtree is let go. a, created by a peer the vector has not seen, keeps
+// x's subtree; collect leaves a released node's pair to the drop, which a
+// tree out of the document does not get, so deregistering the tree drops
+// them: GC is what one derived from the content reports, and nothing is
+// left.
+func TestCollectingATreeDropsItsReleasedPairs(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	a := NewTreeNode(NewTreeNodeID(time.NewTicket(40, 0, peer), 0), "p", nil)
+	b := NewTreeNode(NewTreeNodeID(tk(3), 0), "p", nil)
+	require.NoError(t, root.Append(x))
+	require.NoError(t, x.Append(a, b))
+	x.remove(tk(10))
+	doc, tree := releaseFixture(t, root, tk(4))
+
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	vector.Set(peer, 0)
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.True(t, a.released)
+	require.Equal(t, 2, doc.GarbageLen(), "a and b are held, released")
+
+	doc.Object().Delete("t", tk(21))
+	doc.RegisterRemovedElementPair(doc.Object(), tree)
+	vector.Set(actor, 30)
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.Nil(t, doc.FindByCreatedAt(tree.CreatedAt()))
+	assert.Equal(t, 0, doc.GarbageLen())
+	rederived, err := doc.Rederive()
+	require.NoError(t, err)
+	assert.Equal(t, rederived.DocSize(), doc.DocSize())
+	gc := doc.DocSize().GC
+	assert.Zero(t, (&gc).Total())
+}
+
+// TestDroppingReachesAReleasedNodeAnotherHoldsTheIDOf pins the drop's reach
+// for a released node detachedByID does not index: b shares its ID with a,
+// attached and live, which holds it. The purge of x releases b and books
+// its pair, and the tops of the detached subtrees, not detachedByID, are
+// what the drop walks, so the next collection lets b go with its pair.
+func TestDroppingReachesAReleasedNodeAnotherHoldsTheIDOf(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	shared := NewTreeNodeID(tk(3), 0)
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	b := NewTreeNode(shared, "p", nil)
+	a := NewTreeNode(shared, "p", nil)
+	require.NoError(t, root.Append(x, a))
+	require.NoError(t, x.Append(b))
+	x.remove(tk(10))
+	doc, tree := releaseFixture(t, root, tk(4))
+	require.Same(t, a, tree.findFloorNode(shared), "a holds the ID")
+
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.True(t, b.released)
+	require.Nil(t, tree.DetachedNode(shared), "b is not indexed")
+	require.Equal(t, 1, doc.GarbageLen(), "b's pair is booked")
+	copied, err := doc.DeepCopy()
+	require.NoError(t, err)
+	assert.Equal(t, doc.DocSize(), copied.DocSize())
+
+	n, err := doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	assert.Equal(t, 1, n, "the count takes in what the drop let go")
+	assert.Equal(t, 0, doc.GarbageLen(), "the drop reached b")
+	gc := doc.DocSize().GC
+	assert.Zero(t, (&gc).Total())
+	assert.Empty(t, doc.detachedTrees)
+}
+
+// TestARetainedBookingUnderATakenKeyIsKept pins bookRetained when the key
+// of a released node's pair is held by another node's: b, live under x,
+// shares its ID with a, an attached tombstone whose own pair is pending.
+// The purge has taken b's bytes off Live, so they go to GC whatever the
+// key, and the drop gives them back; a's pair stays, as it is a's.
+func TestARetainedBookingUnderATakenKeyIsKept(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	shared := NewTreeNodeID(tk(3), 0)
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	b := NewTreeNode(shared, "p", nil)
+	a := NewTreeNode(shared, "p", nil)
+	require.NoError(t, root.Append(x, a))
+	require.NoError(t, x.Append(b))
+	x.remove(tk(10))
+	a.remove(time.NewTicket(50, 0, peer))
+	doc, _ := releaseFixture(t, root, tk(4))
+	require.Equal(t, 2, doc.GarbageLen(), "x and a")
+
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	vector.Set(peer, 0)
+	live := doc.DocSize().Live
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.True(t, b.released)
+	held := a.DataSize()
+	held.Add(b.DataSize())
+	assert.Equal(t, held, doc.DocSize().GC, "b's bytes are in GC though a holds the key")
+	released := live
+	released.Sub(doc.DocSize().Live)
+	assert.Equal(t, b.DataSize().Data, released.Data, "and off Live")
+
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	assert.Equal(t, a.DataSize(), doc.DocSize().GC, "the drop gives b's back, a's pair stays")
+	assert.Equal(t, 1, doc.GarbageLen())
+	assert.Empty(t, doc.retainedOff)
+}
+
+// TestDroppingAZeroSizedAttributePairKeepsGC pins DropGCPair on an
+// attribute pair booked at zero: k, live on p when p was removed, is
+// removed afterwards, and its bytes are inside p's charge. The drop of
+// p's subtree gives back p's size, which no longer counts k, and k's, which
+// together are what was booked, so GC ends at zero and not below.
+func TestDroppingAZeroSizedAttributePairKeepsGC(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	p := NewTreeNode(NewTreeNodeID(tk(3), 0), "p", nil)
+	require.NoError(t, root.Append(x))
+	require.NoError(t, x.Append(p))
+	p.SetAttr("k", "value", tk(4))
+	x.remove(tk(10))
+	p.remove(time.NewTicket(50, 0, peer))
+	doc, tree := releaseFixture(t, root, tk(5))
+
+	// As RemoveStyle books it on a removed node: the dropped value leaves
+	// GC, and the tombstone's pair carries nothing.
+	removal := p.RemoveAttr("k", time.NewTicket(51, 0, peer))
+	doc.docSize.GC.Sub(removal.ValueDropped)
+	for _, rht := range removal.GCNodes {
+		doc.RegisterGCPair(attrGCPair(p, rht, true, false))
+	}
+	require.Equal(t, 3, doc.GarbageLen(), "x, p and k")
+
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	vector.Set(peer, 0)
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.Same(t, p, tree.DetachedNode(p.id))
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.Nil(t, tree.DetachedNode(p.id))
+	gc := doc.DocSize().GC
+	assert.GreaterOrEqual(t, gc.Data, 0)
+	assert.GreaterOrEqual(t, gc.Meta, 0)
+	assert.Zero(t, (&gc).Total())
+	assert.Equal(t, 0, doc.GarbageLen())
+}
+
+// TestPutNodeKeepsAnAttachedNodesID pins putNode's detached branch to the
+// rule moveToDetached keeps: a node placed in a detached subtree under an ID
+// an attached node holds is not registered with the detached nodes, so the
+// lookup keeps answering with the attached one.
+func TestPutNodeKeepsAnAttachedNodesID(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	shared := NewTreeNodeID(tk(3), 0)
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	a := NewTreeNode(shared, "p", nil)
+	require.NoError(t, root.Append(a))
+	tree := NewTree(root, tk(4))
+
+	n := NewTreeNode(shared, "p", nil)
+	n.remove(tk(5))
+	n.detached = true
+	tree.putNode(n)
+	assert.Nil(t, tree.DetachedNode(shared))
+	assert.Same(t, a, tree.findFloorNode(shared))
 }
