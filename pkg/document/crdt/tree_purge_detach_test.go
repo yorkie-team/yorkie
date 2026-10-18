@@ -1437,3 +1437,28 @@ func TestCollectLeavesAPairOfALiveNode(t *testing.T) {
 	assert.Equal(t, before, doc.DocSize())
 	assert.Same(t, tree.Root(), div.Index.Parent.Value)
 }
+
+// TestRelinkRecreatedTextNeverPointsAtItself pins the self-link guard: when
+// the surviving predecessor still points at the recreated piece's own ID,
+// left by an earlier node under it, the recreated piece does not take that
+// as its successor.
+func TestRelinkRecreatedTextNeverPointsAtItself(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	root := NewTreeNode(NewTreeNodeID(time.NewTicket(1, 0, actor), 0), "r", nil)
+	p := NewTreeNode(NewTreeNodeID(time.NewTicket(2, 0, actor), 0), "p", nil)
+	require.NoError(t, root.Append(p))
+	tree := NewTree(root, time.NewTicket(3, 0, actor))
+	insertion := time.NewTicket(4, 0, actor)
+	a := NewTreeNode(NewTreeNodeID(insertion, 0), "text", nil, "a")
+	b := NewTreeNode(NewTreeNodeID(insertion, 1), "text", nil, "b")
+	require.NoError(t, p.Append(a, b))
+	a.InsNextID = b.id
+	tree.putNode(a)
+	tree.putNode(b)
+
+	tree.relinkRecreatedText(b)
+	assert.Equal(t, b.id, a.InsNextID)
+	assert.Equal(t, a.id, b.InsPrevID)
+	assert.Nil(t, b.InsNextID, "b does not point at itself")
+}

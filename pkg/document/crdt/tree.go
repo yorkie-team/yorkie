@@ -2494,6 +2494,11 @@ func (t *Tree) relinkRecreatedText(node *TreeNode) {
 			succID = succ.InsNextID
 		}
 	}
+	// A predecessor still pointing at this ID names an earlier node under
+	// it, gone now; linking to it would point the node at itself.
+	if succID != nil && succID.Equal(node.id) {
+		succID = nil
+	}
 	node.InsPrevID = pred.id
 	node.InsNextID = succID
 	pred.InsNextID = node.id
