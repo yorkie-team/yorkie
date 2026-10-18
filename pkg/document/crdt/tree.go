@@ -2028,7 +2028,8 @@ func (t *Tree) retombstone(
 // text spans, so that a Restore after GC recreates the product's piece under
 // the product before the input span reaches that range, finds it there, and
 // recreates only the rest under the original element. parentsFirst then
-// restores parent-before-child order where the reordering broke it.
+// restores parent-before-child order where the reordering broke it, keeping
+// that precedence.
 //
 // Coverage is looked up in sorted, merged intervals per (insertion, parent),
 // so the merge costs O(N log N) however the client sized the span list.
@@ -2075,8 +2076,9 @@ func appendUncoveredSpans(spans, cascaded []*TreeRestoreSpan) []*TreeRestoreSpan
 	merged := make([]*TreeRestoreSpan, 0, len(spans)+len(kept))
 	merged = append(merged, inputElements...)
 	merged = append(merged, kept...)
+	inputTextsFrom := len(merged)
 	merged = append(merged, inputTexts...)
-	return parentsFirst(merged)
+	return parentsFirst(merged, inputTextsFrom)
 }
 
 // mergeIntervals sorts half-open intervals and merges the ones that overlap
@@ -2102,7 +2104,14 @@ func mergeIntervals(intervals [][2]int) [][2]int {
 // it hangs under. Spans already in order are returned as they are;
 // otherwise they are stably sorted by how many of their ancestors the list
 // itself holds, which keeps the order of every span against its siblings.
-func parentsFirst(spans []*TreeRestoreSpan) []*TreeRestoreSpan {
+//
+// The spans from inputTextsFrom on are input text spans, which have to stay
+// behind every earlier text span of the same insertion (see
+// appendUncoveredSpans), however deep that one sits. So an input text span
+// sorts at the depth of the deepest of those at least, and the stable sort
+// keeps it after them on a tie, as the list has it. A text span is no span's parent, so moving it later keeps every
+// parent ahead of its children.
+func parentsFirst(spans []*TreeRestoreSpan, inputTextsFrom int) []*TreeRestoreSpan {
 	position := make(map[string]int, len(spans))
 	for i, span := range spans {
 		if !span.IsText {
@@ -2165,6 +2174,22 @@ func parentsFirst(spans []*TreeRestoreSpan) []*TreeRestoreSpan {
 			base++
 		}
 	}
+
+	deepest := make(map[string]int)
+	for i, span := range spans[:inputTextsFrom] {
+		if span.IsText {
+			key := span.ID.CreatedAt.Key()
+			if d, ok := deepest[key]; !ok || depth[i] > d {
+				deepest[key] = depth[i]
+			}
+		}
+	}
+	for i := inputTextsFrom; i < len(spans); i++ {
+		if d, ok := deepest[spans[i].ID.CreatedAt.Key()]; ok && d > depth[i] {
+			depth[i] = d
+		}
+	}
+
 	order := make([]int, len(spans))
 	for i := range order {
 		order[i] = i

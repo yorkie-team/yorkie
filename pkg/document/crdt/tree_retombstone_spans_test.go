@@ -269,7 +269,7 @@ func TestParentsFirstIsLinear(t *testing.T) {
 		}
 		spans[n-1].ParentID = id(n + 1)
 
-		sorted := parentsFirst(spans)
+		sorted := parentsFirst(spans, len(spans))
 		require.Len(t, sorted, n)
 		assert.Same(t, spans[n-1], sorted[0], "the parent comes first")
 		assert.Same(t, spans[0], sorted[1], "the rest keep their order")
@@ -281,7 +281,7 @@ func TestParentsFirstIsLinear(t *testing.T) {
 			{ID: id(2), NodeType: "p", ParentID: id(1)},
 			{ID: id(3), NodeType: "p", ParentID: id(2)},
 		}
-		assert.Len(t, parentsFirst(spans), 3)
+		assert.Len(t, parentsFirst(spans, len(spans)), 3)
 	})
 }
 

@@ -873,6 +873,60 @@ func TestTreeRetombstoneCascadesToUnknownSplitProducts(t *testing.T) {
 	assert.Equal(t, "<r><div><p>X</p></div><div><p>Y</p></div></r>", tree.ToXML())
 }
 
+// TestTreeRestoreAfterGCPutsTheCascadedPieceFirst pins the order of the
+// spans a retombstone reports when the cascade's text sits deeper than the
+// input text of the same insertion.
+//
+// <div><p>XY</p></div> is split at level 2 by a change the retombstone did
+// not know. The input names div, the product's p and "XY" under the
+// original p, but not the product div, which the cascade adds, with "Y"
+// under the product's p. That puts the product's p ahead of its parent, so
+// the spans are re-sorted by depth; "XY" counts no ancestor in the list,
+// "Y" two. Once GC has purged the text, a Restore that reaches "XY" first
+// brings "Y" back under the original p, and the product's piece then finds
+// it there and is declined: the product's p comes back empty.
+func TestTreeRestoreAfterGCPutsTheCascadedPieceFirst(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+	editT(t, tree, ctx, 0, 0, crdt.NewTreeNode(helper.PosT(ctx), "div", nil))
+	editT(t, tree, ctx, 1, 1, crdt.NewTreeNode(helper.PosT(ctx), "p", nil))
+	editT(t, tree, ctx, 2, 2, textNode(ctx, "XY"))
+	div := tree.Root().Children()[0]
+	p := div.Children()[0]
+	text := p.Children()[0]
+	textAll := textSpan(text, p)
+
+	known := time.NewVersionVector()
+	at := helper.TimeT(ctx)
+	known.Set(at.ActorID(), at.Lamport())
+	peer, err := time.ActorIDFromHex("0000000000000000000000ff")
+	assert.NoError(t, err)
+	lamport := at.Lamport()
+	peerTicket := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, peer)
+	}
+	_, _, err = tree.EditT(3, 3, nil, 2, peerTicket(), peerTicket)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><div><p>X</p></div><div><p>Y</p></div></r>", tree.ToXML())
+	product := tree.Root().Children()[1]
+	productP := product.Children()[0]
+	productText := productP.Children()[0]
+
+	_, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{
+		elementSpan(div, tree.Root()), elementSpan(productP, product), textAll,
+	}, helper.TimeT(ctx), false, known)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r></r>", tree.ToXML())
+
+	for _, node := range []*crdt.TreeNode{productText, text} {
+		assert.NoError(t, tree.Purge(node))
+	}
+	_, _, _, _, _, err = tree.Restore(applied, false, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><div><p>X</p></div><div><p>Y</p></div></r>", tree.ToXML())
+}
+
 // TestTreeRestoreFollowsSuccessorIntoConcurrentSplit pins rung (a) of the
 // recreate ladder for a successor a split moved out of the span's parent.
 //
