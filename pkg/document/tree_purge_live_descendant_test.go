@@ -17,6 +17,7 @@
 package document_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -97,7 +98,7 @@ func TestTreePurgeWithLiveDescendant(t *testing.T) {
 	assert.Equal(t, 0, d1.GarbageLen(), `"b" goes in the same collection: the vector has seen the paragraph whole`)
 	assert.Equal(t, len(treeCRDT(t, d1).Nodes()), treeCRDT(t, d1).NodeLen(),
 		"every registered node is reachable from the root")
-	rebuilt, err := d1.InternalDocumentForTest().DeepCopy()
+	rebuilt, err := d1.InternalDocumentForTest().Root().Rederive()
 	require.NoError(t, err)
 	live, rebuiltLive := d1.DocSize().Live, rebuilt.DocSize().Live
 	assert.Equal(t, (&rebuiltLive).Total(), (&live).Total(), "the size gate reads what a rebuild reads")
@@ -485,4 +486,80 @@ func TestReleaseLiveEqualsASnapshotReload(t *testing.T) {
 	reloaded := crdt.NewRoot(obj)
 	live, reloadedLive := d1.DocSize().Live, reloaded.DocSize().Live
 	assert.Equal(t, reloadedLive, live, "Live equals a snapshot reload")
+}
+
+// assertReloadLive checks Live against a replica loaded from doc's snapshot,
+// which holds no detached state: the figure the server's size gate reads.
+func assertReloadLive(t *testing.T, doc *document.Document, msg string) {
+	t.Helper()
+	snapshot, err := converter.ObjectToBytes(doc.RootObject())
+	require.NoError(t, err)
+	obj, err := converter.BytesToObject(snapshot)
+	require.NoError(t, err)
+	assert.Equal(t, crdt.NewRoot(obj).DocSize().Live, doc.DocSize().Live, "%s: Live equals a reload", msg)
+}
+
+// TestTreeOpsInsideARemovedTreeElement pins the ledger of content a change
+// makes live inside a Tree element that is itself removed (yorkie#2251).
+// d1 deletes the first paragraph and then the whole element; d2, which saw
+// neither, inserts into the second paragraph, styles it, and deletes "b" of
+// the first and undoes that, reviving "b" by identity under the removed
+// paragraph. A rebuild counts a removed element in GC whole, so none of it
+// may land in Live: Live and GC equal a ledger derived from the content and
+// a reload at every step, through a collection that purges the paragraph
+// and releases "b" but leaves the element, and one that collects it.
+func TestTreeOpsInsideARemovedTreeElement(t *testing.T) {
+	for _, collectElement := range []bool{false, true} {
+		d1, d2, a1, a2 := newReplicas(t)
+		require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewTree("t", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+			}})
+			return nil
+		}))
+		crossSync(t, d1, d2)
+		require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(0, 4, nil, 0)
+			return nil
+		}))
+		pRemoval := d1.VersionVector().VersionOf(a1)
+		require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.Delete("t")
+			return nil
+		}))
+		require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(6, 6, &json.TreeNode{Type: "text", Value: "xy"}, 0)
+			root.GetTree("t").Style(4, 5, map[string]string{"k": "v"})
+			return nil
+		}))
+		require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Edit(2, 3, nil, 0)
+			return nil
+		}))
+		require.NoError(t, d2.Undo())
+		crossSync(t, d1, d2)
+		check := func(when string) {
+			t.Helper()
+			msg := fmt.Sprintf("collect element %v, %s", collectElement, when)
+			assertRebuildsSame(t, d1, msg)
+			assertReloadLive(t, d1, msg)
+		}
+		check("before collection")
+
+		vv := time.NewVersionVector()
+		vv.Set(a2, d2.VersionVector().VersionOf(a2))
+		if collectElement {
+			vv.Set(a1, d1.VersionVector().VersionOf(a1))
+		} else {
+			vv.Set(a1, pRemoval)
+		}
+		d1.GarbageCollect(vv)
+		check("after collection")
+		full := vv.DeepCopy()
+		full.Set(a1, d1.VersionVector().VersionOf(a1))
+		d1.GarbageCollect(full)
+		check("after full collection")
+		assert.Equal(t, 0, d1.GarbageLen(), "collect element %v", collectElement)
+	}
 }

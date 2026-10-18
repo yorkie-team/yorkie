@@ -541,6 +541,16 @@ func (r *Root) release(elem Element) {
 	if pair, ok := r.gcElementPairMap[createdAt]; ok && pair.elem == elem {
 		delete(r.gcElementPairMap, createdAt)
 	}
+
+	// A Tree leaves the document here as it does when deregistered: its
+	// detached subtrees go with the pairs their nodes hold, and with its
+	// charge gone, what a later release or edit inside it moves is booked
+	// to neither side (see bookRelease, ChargeToRemovedElement).
+	if tree, ok := elem.(*Tree); ok {
+		r.dropNodes(tree, tree.dropSubtrees(tree.tops()))
+		delete(r.detachedTrees, tree)
+		tree.collected = true
+	}
 }
 
 // moveSizeToGC moves the size of the given element from Live to GC, and
@@ -861,9 +871,9 @@ func (r *Root) dropDetached(vector, known time.VersionVector) int {
 // then on. A Tree the collection has already deregistered took its charge,
 // those bytes included, with it, so nothing is booked and the tree is not
 // tracked again; the pending pairs of its nodes are collected as they come
-// due, as on main. The other side of the removed-element case, a revive
-// inside a removed Tree element charging Live instead of the element's GC
-// charge, is pre-existing on main and tracked in yorkie#2251.
+// due, as on main. Taking the bytes from the element's charge is exact
+// because whatever an operation makes live inside a removed Tree element is
+// charged there too, not to Live (ChargeToRemovedElement, yorkie#2251).
 func (r *Root) bookRelease(parent GCParent, result purgeResult) {
 	tree, isTree := parent.(*Tree)
 	if isTree && tree.collected {
@@ -1178,6 +1188,32 @@ func (r *Root) UnregisterGCPair(pair GCPair) {
 // Acc accumulates the given DataSize to Live.
 func (r *Root) Acc(diff resource.DataSize) {
 	r.docSize.Live.Add(diff)
+}
+
+// ChargeToRemovedElement moves what Live gained or lost since liveBefore to
+// the GC charge of elem when elem is itself in GC, removed or under a
+// removed container: its content's bytes are in that charge, as a rebuild,
+// which counts a removed element in GC whole, has them, so an operation on
+// the content, a revive, a recreate, an insert or a style, moves them there
+// and not to Live (yorkie#2251). Pairs the operation booked keep their own
+// part of GC; only the Live side moves. A live element is left as it is.
+func (r *Root) ChargeToRemovedElement(elem Element, liveBefore resource.DataSize) {
+	charged, ok := r.sizeInGC[elem]
+	if !ok {
+		return
+	}
+	if tree, isTree := elem.(*Tree); isTree && tree.collected {
+		// Out of the document, released: its content is charged to
+		// neither side, as release left the element.
+		r.docSize.Live = liveBefore
+		return
+	}
+	delta := r.docSize.Live
+	delta.Sub(liveBefore)
+	r.docSize.Live = liveBefore
+	r.docSize.GC.Add(delta)
+	charged.Add(delta)
+	r.sizeInGC[elem] = charged
 }
 
 // AccMovedElement books the diff a move stamped on the given element into the

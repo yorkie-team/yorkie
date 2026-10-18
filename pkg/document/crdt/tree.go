@@ -1139,9 +1139,10 @@ type Tree struct {
 	// holds the ID over included, which detachedByID does not index.
 	detachedTops map[*TreeNode]struct{}
 
-	// collected is set when the collection deregisters the tree, with its
-	// GC charge: a pair of its nodes the same pass purges afterwards
-	// releases nothing to book (see Root.bookRelease).
+	// collected is set when the tree leaves the document with its charge,
+	// deregistered by the collection or released by a restore (see
+	// Root.release): a pair of its nodes purged afterwards releases nothing
+	// to book (see Root.bookRelease).
 	collected bool
 }
 

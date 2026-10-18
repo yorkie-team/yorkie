@@ -3106,3 +3106,52 @@ func TestAReleaseInACollectedTreeBooksNothing(t *testing.T) {
 	assert.Equal(t, empty.DocSize().Live, live, "nothing is left in Live for the tree")
 	assert.Empty(t, doc.detachedTrees)
 }
+
+// TestReleasingATreeLetsItsDetachedSubtreesGo pins the second way a Tree
+// leaves the document: a restore that releases the removed element it
+// replaces (Root.release, through UnregisterRemovedElementPair). As when
+// the collection deregisters it, its detached subtrees go with their pairs,
+// it leaves detachedTrees, and a later purge inside it books nothing, its
+// charge being gone.
+func TestReleasingATreeLetsItsDetachedSubtreesGo(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	a := NewTreeNode(NewTreeNodeID(tk(3), 0), "p", nil)
+	y := NewTreeNode(NewTreeNodeID(tk(4), 0), "div", nil)
+	b := NewTreeNode(NewTreeNodeID(tk(5), 0), "p", nil)
+	require.NoError(t, root.Append(x, y))
+	require.NoError(t, x.Append(a))
+	require.NoError(t, y.Append(b))
+	x.remove(tk(10))
+	y.remove(tk(30))
+	keepDetached(a)
+	doc, tree := releaseFixture(t, root, tk(6))
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.True(t, a.released)
+	require.Contains(t, doc.detachedTrees, tree)
+
+	doc.Object().Delete("t", tk(40))
+	doc.RegisterRemovedElementPair(doc.Object(), tree)
+	require.True(t, doc.UnregisterRemovedElementPair(tree.CreatedAt()))
+	assert.Nil(t, tree.DetachedNode(a.id), "its detached subtree goes")
+	assert.NotContains(t, doc.detachedTrees, tree)
+	assert.Equal(t, 1, doc.GarbageLen(), "y's pair, pending, is all that is left")
+	gc := doc.DocSize().GC
+	held := y.DataSize()
+	assert.Equal(t, held, gc, "a's retained bytes left GC with it")
+
+	vector.Set(actor, 30)
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.True(t, b.released, "y's purge releases b")
+	assert.NotContains(t, doc.detachedTrees, tree, "and the tree is not tracked again")
+	assert.Equal(t, 0, doc.GarbageLen(), "b's release books no pair")
+	gc = doc.DocSize().GC
+	assert.Zero(t, (&gc).Total(), "nothing is booked for what y's purge released")
+}
