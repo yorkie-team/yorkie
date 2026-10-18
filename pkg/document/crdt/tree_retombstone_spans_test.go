@@ -285,6 +285,42 @@ func TestParentsFirstIsLinear(t *testing.T) {
 	})
 }
 
+// TestParentsFirstKeepsInputTextOrder pins that lifting an input text span
+// behind a deeper cascaded piece of its insertion keeps the input text spans
+// in their order. X is lifted behind K; Y, of another insertion, anchors on
+// X's last character, and a Restore after GC that reached Y first would
+// place it without X.
+func TestParentsFirstKeepsInputTextOrder(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	ticket := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNodeID(ticket(1), 0)
+	p := NewTreeNodeID(ticket(2), 0)
+	p2 := NewTreeNodeID(ticket(9), 0)
+	insI, insJ := ticket(3), ticket(4)
+	text := func(id *TreeNodeID, value string, parent *TreeNodeID) *TreeRestoreSpan {
+		return &TreeRestoreSpan{
+			ID: id, NodeType: "text", IsText: true, Length: len(value), Value: value, ParentID: parent,
+		}
+	}
+	P := &TreeRestoreSpan{ID: p, NodeType: "p", ParentID: root}
+	// C names P2, which comes after it, so the list has to be re-sorted.
+	C := &TreeRestoreSpan{ID: NewTreeNodeID(ticket(10), 0), NodeType: "q", ParentID: p2}
+	P2 := &TreeRestoreSpan{ID: p2, NodeType: "p", ParentID: p}
+	K := text(NewTreeNodeID(insI, 2), "cd", p2)
+	X := text(NewTreeNodeID(insI, 0), "ab", p)
+	Y := text(NewTreeNodeID(insJ, 0), "ef", p)
+	Y.LeftSiblingID = NewTreeNodeID(insI, 1)
+
+	got := parentsFirst([]*TreeRestoreSpan{P, C, P2, K, X, Y}, 4)
+	names := map[*TreeRestoreSpan]string{P: "P", C: "C", P2: "P2", K: "K", X: "X", Y: "Y"}
+	var order []string
+	for _, span := range got {
+		order = append(order, names[span])
+	}
+	assert.Equal(t, []string{"P", "P2", "C", "K", "X", "Y"}, order)
+}
+
 // TestAppendUncoveredSpansMatchesTheParent pins that a cascaded text piece
 // is covered only by an input span of its insertion under the same parent.
 // The input span recorded "abcd" under p before a split carried "cd" into

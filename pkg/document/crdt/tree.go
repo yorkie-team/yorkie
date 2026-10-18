@@ -2114,8 +2114,11 @@ func mergeIntervals(intervals [][2]int) [][2]int {
 // behind every earlier text span of the same insertion (see
 // appendUncoveredSpans), however deep that one sits. So an input text span
 // sorts at the depth of the deepest of those at least, and the stable sort
-// keeps it after them on a tie, as the list has it. A text span is no span's parent, so moving it later keeps every
-// parent ahead of its children.
+// keeps it after them on a tie, as the list has it. The input text spans
+// also keep their own order, as a later one can anchor on an earlier one:
+// each sorts at least as deep as every input text span before it. A text
+// span is no span's parent, so moving it later keeps every parent ahead of
+// its children.
 func parentsFirst(spans []*TreeRestoreSpan, inputTextsFrom int) []*TreeRestoreSpan {
 	position := make(map[string]int, len(spans))
 	for i, span := range spans {
@@ -2189,10 +2192,13 @@ func parentsFirst(spans []*TreeRestoreSpan, inputTextsFrom int) []*TreeRestoreSp
 			}
 		}
 	}
+	floor := 0
 	for i := inputTextsFrom; i < len(spans); i++ {
 		if d, ok := deepest[spans[i].ID.CreatedAt.Key()]; ok && d > depth[i] {
 			depth[i] = d
 		}
+		floor = max(floor, depth[i])
+		depth[i] = floor
 	}
 
 	order := make([]int, len(spans))
