@@ -295,13 +295,17 @@ func TestADocumentCollectsWithItsOwnVersionVector(t *testing.T) {
 // when there is one, merged in by a change of actor at lamport that the
 // document applied and a collection's vector, short of it, has not seen,
 // so a subtree holding the node stays after a purge takes it out, as one
-// holding a node a concurrent merge moved in stays. Only the drop reads
-// MergedAt without MergedFrom.
+// holding a node a concurrent merge moved in stays. The stamp is the whole
+// lineage a merge leaves, MergedFrom with MergedAt, naming a source that has
+// since been purged.
 func stampUnseenMerge(d *Document, actor time.ActorID, lamport int64, pick func(*crdt.Tree) *crdt.TreeNode) {
 	at := time.NewTicket(lamport, 0, actor)
+	from := crdt.NewTreeNodeID(time.NewTicket(lamport-1, 0, actor), 0)
 	for _, root := range []*crdt.Root{d.doc.root, d.cloneRoot} {
 		if root != nil {
-			pick(root.Object().Get("t").(*crdt.Tree)).MergedAt = at
+			node := pick(root.Object().Get("t").(*crdt.Tree))
+			node.MergedFrom = from
+			node.MergedAt = at
 		}
 	}
 	applied := d.doc.VersionVector().DeepCopy()

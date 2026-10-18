@@ -43,10 +43,12 @@ var keeperActor = func() time.ActorID {
 // collection's vector has not seen, so a subtree holding node stays after a
 // purge takes it out, as one holding a node a concurrent merge moved in
 // stays (see Root.dropDetached), for the tests of what resolves against a
-// detached subtree. Only the drop reads MergedAt without MergedFrom, so
-// nothing else the tests check sees the stamp. A vector that names
-// keeperActor at keptUntil lets the subtree go.
+// detached subtree. The stamp is the whole lineage a merge leaves, MergedFrom
+// with MergedAt, naming a source that has since been purged, so the node is
+// one an honest document can hold. A vector that names keeperActor at
+// keptUntil lets the subtree go.
 func keepDetached(node *TreeNode) {
+	node.MergedFrom = NewTreeNodeID(time.NewTicket(keptUntil-1, 0, keeperActor), 0)
 	node.MergedAt = time.NewTicket(keptUntil, 0, keeperActor)
 }
 
