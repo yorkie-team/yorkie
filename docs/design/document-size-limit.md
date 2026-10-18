@@ -102,7 +102,12 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
   (`GCLiveRelease`, `Tree.purgeChild`) and `Root` moves their bytes from
   `Live` to `GC`, under a pair of each node's own that collect leaves alone
   and the drop of its subtree removes (see "How long a detached subtree is
-  kept" below); it happens only with the purge, never without it. Each takes
+  kept" below); it happens only with the purge, never without it. In a
+  Tree element that is itself removed, the bytes come out of the element's
+  GC charge instead, which its removal moved them to, and in one the same
+  collection already deregistered, which took its charge with it, nothing
+  is booked (`Root.bookRelease`, `TestReleaseInsideARemovedTreeElement`,
+  `TestAReleaseInACollectedTreeBooksNothing`). Each takes
   the removal of its nearest removed ancestor, which depends on the subtree
   alone and not on which of two pairs a collection purged first in Go's map
   order (`TestReleaseTicketDoesNotDependOnPurgeOrder`). They leave
@@ -172,7 +177,11 @@ none of its detached nodes, so main has that gap; this change closes it.
 
 **Garbage a reload does not see.** `Root.DeepCopy` books, for the copy of
 each tree node, the pairs the root itself holds for it, the detached nodes'
-included (`Root.copyTreePairs`), so a `DeepCopy` reports the GC and
+included (`Root.copyTreePairs`), each Tree paired with its copy by walking
+the root's object as `NewRoot` walks the copy's, so a Tree the element map
+holds but the object no longer reaches is carried by neither
+(`TestDeepCopyCarriesNothingForATreeTheObjectNoLongerReaches`), and a
+`DeepCopy` reports the GC and
 `GarbageLen` its source does; booking them through `RegisterGCPair` would
 let a detached node sharing an ID with an attached tombstone cancel that
 one's pair (`TestDeepCopyBooksTheRootsOwnTreePairs`). A restore that
