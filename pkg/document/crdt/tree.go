@@ -1354,8 +1354,8 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 
 // Purge implements GCParent: it detaches child, with its subtree, from the
 // tree, releasing the live nodes under it as purgeChild does. It cannot
-// report their size, so a caller that keeps a size ledger purges through
-// purgeChild instead, as Root does (see GCLiveRelease). See
+// report their size; Root, which keeps the size ledger, purges through
+// purgeChild instead (see GCLiveRelease). See
 // TreeNode.detached for what a detached node is.
 func (t *Tree) Purge(child GCChild) error {
 	_, _, err := t.purgeReleasing(child.(*TreeNode))
@@ -2307,7 +2307,9 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 	}
 
 	// siblings lists every product followed by its subtree, parent before
-	// child, so one pass over it emits the spans in that order, each node
+	// child, so one pass over it emits the spans in that order. A later link
+	// of the chain can sit inside an earlier product's subtree and so appear
+	// twice; its span is taken out once emitted, so each node is reported
 	// once.
 	for _, sibling := range siblings {
 		if steps != nil {
@@ -2315,6 +2317,7 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 		}
 		if span, ok := spans[sibling]; ok {
 			cascaded = append(cascaded, span)
+			delete(spans, sibling)
 		}
 	}
 	return pairs, edits, cascaded

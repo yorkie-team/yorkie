@@ -448,6 +448,41 @@ func TestDeleteCascadeReportsParentsFirst(t *testing.T) {
 	assert.Equal(t, "<r><div><p>a</p></div><div><p>b</p></div></r>", tree.ToXML(), "the undo brings all of it back")
 }
 
+// TestRetombstoneCascadeReportsANestedLinkOnce pins that the cascade's
+// spans name each node once when a later link of the split chain sits inside
+// an earlier product's subtree: A -> B -> C with C a child of B. The walk
+// lists B's subtree, which holds C, and then C again as the next link.
+func TestRetombstoneCascadeReportsANestedLinkOnce(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("000000000000000000000002")
+	require.NoError(t, err)
+	root := NewTreeNode(NewTreeNodeID(time.NewTicket(1, 0, actor), 0), "r", nil)
+	a := NewTreeNode(NewTreeNodeID(time.NewTicket(2, 0, actor), 0), "p", nil)
+	b := NewTreeNode(NewTreeNodeID(time.NewTicket(10, 0, peer), 0), "p", nil)
+	c := NewTreeNode(NewTreeNodeID(time.NewTicket(11, 0, peer), 0), "p", nil)
+	require.NoError(t, root.Append(a))
+	require.NoError(t, root.Append(b))
+	require.NoError(t, b.Append(c))
+	a.InsNextID, b.InsPrevID = b.id, a.id
+	b.InsNextID, c.InsPrevID = c.id, b.id
+	tree := NewTree(root, time.NewTicket(3, 0, actor))
+
+	vv := time.NewVersionVector()
+	vv.Set(actor, 5)
+	span := &TreeRestoreSpan{ID: a.id, NodeType: "p", Length: 1, ParentID: root.id}
+	_, _, _, spans, err := tree.Retombstone(
+		[]*TreeRestoreSpan{span}, time.NewTicket(6, 0, actor), false, vv,
+	)
+	require.NoError(t, err)
+
+	var ids []string
+	for _, s := range spans {
+		ids = append(ids, s.ID.toIDString())
+	}
+	assert.Equal(t, []string{a.id.toIDString(), b.id.toIDString(), c.id.toIDString()}, ids)
+}
+
 // TestRetombstoneCascadeIsLinear pins the cost of the §4.1 cascade over a
 // span list that names every element of one split chain. <r> holds p0 and
 // its split products p1..pN, linked through InsNextID and unknown to the
