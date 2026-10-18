@@ -488,10 +488,14 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 // the restored copy that RegisterElement is about to charge to Live as the only
 // thing accounted for.
 //
-// Collection entries belonging to the subtree's own tombstones go with it, for
-// the same reason: nothing can reach them to collect them, so leaving them
-// would hold GarbageLen above zero forever and let a later pass subtract a cost
-// this call has already released.
+// The element collection entries of the subtree's own removed members go with
+// it, for the same reason: nothing can reach them to collect them, so leaving
+// them would hold GarbageLen above zero forever and let a later pass subtract
+// a cost this call has already released. A released Tree also drops its
+// detached subtrees with the pairs their nodes hold (see release). The pairs
+// of its attached tombstones stay: they hold their own share of GC, not the
+// element's, and the next collection whose vector covers them purges them,
+// until when GC sits above a rebuild by them, as on main.
 func (r *Root) UnregisterRemovedElementPair(createdAt *time.Ticket) bool {
 	pair, ok := r.gcElementPairMap[createdAt.Key()]
 	if !ok {
@@ -1190,6 +1194,17 @@ func (r *Root) Acc(diff resource.DataSize) {
 	r.docSize.Live.Add(diff)
 }
 
+// ChargeTreeOp starts an operation on tree's content and returns the func
+// that ends it, for a defer: whatever the operation nets in Live goes to
+// the tree's GC charge when the tree is removed (see ChargeToRemovedElement).
+// Every path that writes tree content calls it, the local proxy and the
+// operations a change replays alike, so the root and its clone book the
+// same operation the same way.
+func (r *Root) ChargeTreeOp(tree *Tree) func() {
+	liveBefore := r.docSize.Live
+	return func() { r.ChargeToRemovedElement(tree, liveBefore) }
+}
+
 // ChargeToRemovedElement moves what Live gained or lost since liveBefore to
 // the GC charge of elem when elem is itself in GC, removed or under a
 // removed container: its content's bytes are in that charge, as a rebuild,
@@ -1203,8 +1218,10 @@ func (r *Root) ChargeToRemovedElement(elem Element, liveBefore resource.DataSize
 		return
 	}
 	if tree, isTree := elem.(*Tree); isTree && tree.collected {
-		// Out of the document, released: its content is charged to
-		// neither side, as release left the element.
+		// Defensive. An operation resolves its Tree through elementMap, and a
+		// collected tree has left it, a released one has its slot taken over
+		// by the restored copy, so none reaches one here. Were one to, its
+		// content would be charged to neither side, as release left it.
 		r.docSize.Live = liveBefore
 		return
 	}

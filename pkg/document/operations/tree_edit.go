@@ -199,7 +199,7 @@ func (e *TreeEdit) Execute(
 	case *crdt.Tree:
 		// In a Tree element that is itself removed, what the edit makes live
 		// is charged to the element's GC charge, not to Live (yorkie#2251).
-		defer root.ChargeToRemovedElement(obj, root.DocSize().Live)
+		defer root.ChargeTreeOp(obj)()
 
 		// Identity-preserving restore/retombstone path (mirrors Edit).
 		// restoreMode selects direction; an undo revives restoreSpans and
