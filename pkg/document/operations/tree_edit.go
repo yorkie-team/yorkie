@@ -1187,5 +1187,10 @@ func validateTreeRestoreIdentities(
 func dropForgottenPairs(root *crdt.Root, tree *crdt.Tree) {
 	for _, node := range tree.TakeForgotten() {
 		root.DropGCPair(crdt.GCPair{Parent: tree, Child: node})
+		// The node's removed attributes hold pairs of their own, keyed on
+		// the node, which no other node can collect.
+		for _, pair := range node.GCPairs() {
+			root.DropGCPair(pair)
+		}
 	}
 }

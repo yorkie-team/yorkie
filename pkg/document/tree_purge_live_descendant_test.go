@@ -382,6 +382,54 @@ func TestRestoreAfterDetachKeepsTheLedger(t *testing.T) {
 	assert.Equal(t, 0, d1.GarbageLen())
 }
 
+// TestRestoreForgettingADetachedNodeDropsItsAttributePairs pins the pairs a
+// detached element's removed attributes hold when a restore forgets the
+// element to recreate it. d2 removes p's attribute and then p, both after
+// d1's delete of the div, so a collection that covers d1's delete alone
+// purges the div and leaves p detached, with its own pair and its
+// attribute's pending. d1's undo forgets p and recreates it; both pairs go
+// with the node, or the root keeps one for a node no longer in the
+// document and its GC drifts from its copy's.
+func TestRestoreForgettingADetachedNodeDropsItsAttributePairs(t *testing.T) {
+	d1, d2, a1, a2 := newReplicas(t)
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+			{Type: "div", Children: []json.TreeNode{
+				{Type: "p", Attributes: map[string]string{"k": "v"}, Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+			}},
+		}})
+		return nil
+	}))
+	crossSync(t, d1, d2)
+	for range 5 {
+		require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			root.GetTree("t").Style(1, 2, map[string]string{"z": "z"})
+			return nil
+		}))
+	}
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(0, 6, nil, 0)
+		return nil
+	}))
+	require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").RemoveStyle(1, 2, []string{"k"})
+		root.GetTree("t").Edit(1, 5, nil, 0)
+		return nil
+	}))
+	crossSync(t, d1, d2)
+
+	vector := d1.VersionVector().DeepCopy()
+	vector.Set(a1, d1.VersionVector().VersionOf(a1))
+	vector.Set(a2, treeCRDT(t, d1).Root().Children(true)[0].RemovedAt().Lamport())
+	d1.GarbageCollect(vector)
+	require.Empty(t, treeCRDT(t, d1).Root().Children(true), "the div is purged")
+	require.Equal(t, 3, d1.GarbageLen(), "p, its removed attribute and the styled one are pending")
+	assertRebuildsSame(t, d1, "after the collection")
+
+	require.NoError(t, d1.Undo())
+	assertRebuildsSame(t, d1, "after the undo")
+}
+
 // TestReleaseLiveEqualsASnapshotReload pins Live, the figure the server's
 // size gate reads, against a replica loaded from a snapshot, which holds no
 // detached node. d1 deletes the first paragraph while d2 deletes its "b"
