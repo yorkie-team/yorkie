@@ -217,6 +217,15 @@ Rules that must match JS:
   identity and must keep their IDs, so the two paths diverge here.
 - Dedup counters produce no reverse operation. HyperLogLog cannot remove an
   actor once added.
+- A `TreeEdit` restore leaves a node a tombstone when the restoring change
+  knew the removal of one of its ancestors (`Tree.knownRemovalAbove`,
+  against the change's version vector; an empty vector knows every
+  removal). Reviving it there would bring back a node no one can see, and
+  whether it came back with the ancestor would depend on when each replica
+  collected. A restore concurrent with the ancestor's removal still
+  revives, and an ancestor revived earlier in the same call is live, so a
+  subtree restored parent-first comes back whole. The rule trusts the
+  change's vector, which needs server-side validation to close (#2234).
 
 ### Layer 3: History
 

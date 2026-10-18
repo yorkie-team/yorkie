@@ -215,6 +215,14 @@ SDKs, has to apply them the same way:
    Splitting a node at an offset past its end returns `ErrSplitOutOfRange`
    instead of slicing out of range.
 
+`NodeMapByID` holds the nodes reachable from the root. The nodes of a
+subtree a purge took out are kept in a second index, `detachedByID`, until
+a later collection lets the subtree go (see
+[garbage-collection.md](garbage-collection.md)), and rule 2 applies
+within each: a detached node is always a tombstone, so in `detachedByID`
+the last one put keeps the ID. A lookup takes the floor across both indexes, so a
+position naming a detached node resolves as it did while it was attached.
+
 Dropping content rather than rejecting the change is deliberate. Such changes
 are already in the history of existing documents, and a change the server
 refuses to replay is a document that can never be loaded again.
