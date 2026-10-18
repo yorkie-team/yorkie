@@ -247,9 +247,27 @@ document at the drop. A size cap that dropped subtrees before their
 coverage was tried and rejected: replicas purge at different times, so it
 would drop a subtree on one replica that another still holds, and an honest
 change naming a node in it would then fail on the first and apply on the
-second, which a client holding its clock back could force. A Tree element
-the collection deregisters takes its detached subtrees with it
-(`TestCollectingATreeLetsItsDetachedSubtreesGo`).
+second, which a client holding its clock back could force.
+
+The drop reaches every node a purge released, and every collection that
+takes one out of the document gives its bytes back: the tops of the
+detached subtrees are recorded at the purge, so a node whose ID another
+holds, which `detachedByID` does not index, is let go with the rest
+(`TestDroppingReachesAReleasedNodeAnotherHoldsTheIDOf`); a released node
+whose pair key another node's pair holds, which only crafted duplicate IDs
+give, still has its bytes moved to GC, held aside for the drop to give back
+(`TestARetainedBookingUnderATakenKeyIsKept`); and a Tree element the
+collection deregisters drops its detached subtrees with their pairs, since
+collect leaves a released node's pair to the drop
+(`TestCollectingATreeDropsItsReleasedPairs`). The drop runs before a
+collection purges anything, so a subtree outlives the collection that took
+it out, for a change that names a node in it after the purge, and its bytes
+show in `GC`, which the client's `MaxSizeLimit` reads with `Live`, until the
+next collection, which is when the replica frees them. Dropping a subtree
+already seen whole in the collection that purged it was measured too: no
+large-run row moves, but it leaves no detached state for a late change to
+resolve against, which the detached tests pin, so it is not done. Main kept
+these bytes in `Live` for good.
 
 **Born-tombstoned content and the size gate.** Content an `Edit` inserts
 under a removed parent is born a tombstone and booked to `GC` alone. Main
