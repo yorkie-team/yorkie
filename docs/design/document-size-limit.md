@@ -169,7 +169,11 @@ included (`Root.copyTreePairs`), so a `DeepCopy` reports the GC and
 let a detached node sharing an ID with an attached tombstone cancel that
 one's pair (`TestDeepCopyBooksTheRootsOwnTreePairs`). A restore that
 forgets a detached node drops its pair and those of its removed attributes
-(`TestRestoreForgettingADetachedNodeDropsItsAttributePairs`). A snapshot holds no detached node, so a
+(`TestRestoreForgettingADetachedNodeDropsItsAttributePairs`). Because the
+copy takes the root's pairs, it is no oracle for them: `Root.Rederive`,
+which `assertRebuildsSame` uses, derives each Tree's pairs from the content
+instead, NewRoot's scan of the attached tree and the pending pairs of the
+detached nodes it carries. A snapshot holds no detached node, so a
 replica loaded from one has no pair for a detached tombstone whose own
 removal is not yet collectable, nor for a removed attribute of a detached
 node. Until the next collection that covers that removal, the running `GC`
@@ -182,39 +186,61 @@ does (`TestReleaseLiveEqualsASnapshotReload`).
 
 **How long a detached subtree is kept.** The detached state is there for
 changes that name a node after a replica purged it, so it has to outlive
-the purge, but not the document. A collection at a vector strictly after
-the one of a Tree's last purges lets go of every detached subtree that
-vector has seen whole: every node in it created, and merged in, at a ticket
-the vector covers (`Root.dropDetached`, `Tree.dropDetached`). The nodes
-leave `detachedByID` and the merge stamp index, the split links of attached
-nodes skip them, and the pairs they still hold are dropped with their bytes
-out of GC (`TestALaterCollectionDropsADetachedSubtree`). A change naming one
-after that fails to resolve, as on a replica that keeps no detached nodes,
-or on main for a node whose own pair was collected.
+the purge, but not the document. Each collection, before it purges
+anything, lets go of every detached subtree its vector has seen whole:
+every node in it created, and merged in, at a ticket the vector covers
+(`Root.dropDetached`, `Tree.dropDetached`). Only subtrees an earlier
+collection took out are there to let go, so each outlives the collection
+that purged it. The nodes leave `detachedByID` and the merge stamp index,
+the split links of attached nodes skip them, and the pairs they still hold,
+their removed attributes' included, are dropped with their bytes out of GC
+(`TestALaterCollectionDropsADetachedSubtree`,
+`TestDroppingASubtreeUnlinksItsSplitSiblings`,
+`TestDroppingASubtreeDropsItsAttributePairs`,
+`TestDroppingABornDeadSplitPieceKeepsTheLedger`). A change naming one after
+that fails to resolve, as on a replica that keeps no detached nodes, or on
+main for a node whose own pair was collected.
 
-Both conditions are needed. A purge at vector V comes after every change
-concurrent with the removal it collects, but a change that is not
-concurrent with the removal can still name a node a concurrent split
-carried into the subtree, or a concurrent merge moved there, as long as it
-has not seen that split or merge: it is concurrent with the node's creation
-or merge, and the vector covers that ticket only once every such change has
-been delivered. In merge seed 528 the deleting replica, which never saw a
-split, merges across text the split carried into a product the delete's
-cascade took, after the other replica purged the product at a vector
-covering the delete and not the split. Dropping at the next later vector
-failed that change with "node not found" (`TestASubtreeASplitFedStaysForItsAuthor`).
-That subtree holds both nodes the vector has not seen created and nodes it
-has not seen merged in, so either check alone keeps 528 as main has it, a
-divergence and not an error; each is pinned on its own, by a subtree only
-the other one would let go (`TestADetachedSubtreeStaysUntilItsNodesAreSeen`).
-The strictly later vector
-keeps the subtree for a late change (yorkie#2110) that reaches a replica
-after a collection at the vector that purged it. Over 19 families × 3000
-seeds in each mode, no row moves against keeping every subtree, in
-particular none of the lagging mode's back to the error main has. The
-root and its clone collect at the same vectors and the clone copies the
-purge vector, so both let go alike; the bound is the one GC has, the
-minimum synced vector moving on.
+The coverage is what keeps honest changes resolving. A purge at vector V
+comes after every change concurrent with the removal it collects, but a
+change that is not concurrent with the removal can still name a node a
+concurrent split carried into the subtree, or a concurrent merge moved
+there, as long as it has not seen that split or merge: it is concurrent
+with the node's creation or merge, and the vector covers that ticket only
+once every such change has been delivered. In merge seed 528 the deleting
+replica, which never saw a split, merges across text the split carried into
+a product the delete's cascade took, after the other replica purged the
+product at a vector covering the delete and not the split. Dropping at the
+next later vector failed that change with "node not found"
+(`TestASubtreeASplitFedStaysForItsAuthor`). That subtree holds both nodes
+the vector has not seen created and nodes it has not seen merged in, so
+either check alone keeps 528 as main has it, a divergence and not an error;
+each is pinned on its own, by a subtree only the other one would let go
+(`TestADetachedSubtreeStaysUntilItsNodesAreSeen`). An earlier revision also
+waited for a vector strictly after the purging one, for a late change
+(yorkie#2110); over 19 families × 3000 seeds in each mode, lagging included,
+no row moves without it, and it stalled whenever a vector was not
+componentwise after the recorded one, so it is gone. The rule reads the
+subtree and the vector alone, so the root and its clone, which collect at
+the same vectors, let go alike.
+
+**A bound on what is kept.** Detached nodes are in neither `Live`, the
+figure the server's size gate reads, nor `GC`, and a minimum vector that
+stops moving, one silent client is enough, keeps the coverage from ever
+holding, so a client could otherwise grow them without limit: build a
+subtree, remove it, let a collection purge it, and again. After each
+collection, on its failed path too, the detached subtrees a document holds
+are kept within `maxDetachedSize`, 10 MiB, the default
+`MaxSizePerDocument`; past it they go oldest first, by the removal the
+purge collected, then the tree's and the top's IDs, until the rest fit
+(`Root.boundDetached`, `TestDetachedSubtreesStayWithinTheBound`). The order
+depends on the detached state alone, not on Go's map order or on when a
+collection ran, so the root and its clone drop the same subtrees. A change
+naming a node in one fails to resolve then, as for any dropped subtree; a
+document that keeps that much detached for a late change is past what the
+protocol promises it anyway. A Tree element the collection deregisters
+takes its detached subtrees with it
+(`TestCollectingATreeLetsItsDetachedSubtreesGo`).
 
 **Born-tombstoned content and the size gate.** Content an `Edit` inserts
 under a removed parent is born a tombstone and booked to `GC` alone. Main
@@ -242,7 +268,8 @@ moves the gate's figure toward a rebuild, never away from it.
 | `FindTreeNodesWithSplitText`, splits, chain walks | read tombstones as on main | `TestTreeOpsNamingACollectedSubtree` |
 | `dissolveMergeSources`, `mergeStamps` | stamps of the subtree stay indexed, so a restore dissolves alike on a replica that purged and one that did not; a node's stamp leaves with the node | `TestDissolutionKeepsTheSourcePointerWhetherOrNotPurged`, `TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree` |
 | `Tree.GCPairs` (a rebuild) | not reached: walks the attached tree | `assertRebuildsSame` in the tests above |
-| `Root.DeepCopy` | the copy holds the subtrees and the root's own pairs for them | `TestDeepCopyBooksTheRootsOwnTreePairs`, `TestDeepCopyKeepsASlotThroughAnUnregisteredParent` |
+| `Root.DeepCopy` | the copy holds the subtrees and the root's own pairs for them, in one pass over each pair map; a pair whose node left the tree is booked for a copy of the node; a tree of another shape keeps the scan's pairs | `TestDeepCopyBooksTheRootsOwnTreePairs`, `TestDeepCopyKeepsASlotThroughAnUnregisteredParent`, `TestDeepCopyBooksAPairWhoseNodeLeftTheTree`, `TestCopyDetachedFromATreeOfAnotherShape` |
+| `Root.Rederive` (the ledger oracle) | derives the pending pairs of the detached nodes from the nodes, not from the root's map | `assertRebuildsSame`, `TestDeepCopyBooksADetachedTombstonesPendingPair` |
 | A later collection | lets go of each subtree its vector has seen whole | `TestALaterCollectionDropsADetachedSubtree`, `TestADetachedSubtreeStaysUntilItsNodesAreSeen` |
 
 **Why release instead of hold.** An earlier revision held a removed element
