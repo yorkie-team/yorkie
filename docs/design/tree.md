@@ -213,7 +213,14 @@ SDKs, has to apply them the same way:
 
 3. **An unresolvable position fails the operation, never the process.**
    Splitting a node at an offset past its end returns `ErrSplitOutOfRange`
-   instead of slicing out of range.
+   instead of slicing out of range. One offset past a text piece's end is
+   not unresolvable: one inside a gap of its insertion that this replica's
+   own split chain explains, where a purge took pieces out, or a restore
+   recreated one and spliced it in, anchors after the piece before the gap
+   (`afterPurgedText`), where a replica still holding the purged piece
+   resolves the character it names. Every other offset past the end of an
+   insertion's last surviving piece still fails, since nothing tells a
+   purged tail from an offset the insertion never had.
 
 `NodeMapByID` holds the nodes reachable from the root. The nodes of a
 subtree a purge took out are kept in a second index, `detachedByID`, until

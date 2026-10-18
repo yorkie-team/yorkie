@@ -193,12 +193,21 @@ does (`TestReleaseLiveEqualsASnapshotReload`).
 
 **How long a detached subtree is kept.** The detached state is there for
 changes that name a node after a replica purged it, so it has to outlive
-the purge, but not the document. Each collection, before it purges
-anything, lets go of every detached subtree its vector has seen whole:
-every node in it created, and merged in, at a ticket the vector covers
-(`Root.dropDetached`, `Tree.dropDetached`). Only subtrees an earlier
-collection took out are there to let go, so each outlives the collection
-that purged it. The nodes leave `detachedByID` and the merge stamp index,
+the purge, but not the document. Each collection lets go of every
+detached subtree its vector has seen whole: every node in it created, and
+merged in, at a ticket the vector covers (`Root.dropDetached`,
+`Tree.dropDetached`). It does so before it purges, for subtrees an earlier
+collection took out, and after, for those it took out itself, so one call
+leaves nothing the next at the same vector would collect
+(`TestLiveReleaseWaitsForTheBarrier`). A subtree is kept past its purge only
+while a node in it is unseen, and that is the subtree a change can still
+name a node in. A ticket the replica's own version vector does not know
+counts as seen: every node a replica holds was created, and merged in, by a
+change it applied, so such a ticket is forged, a phantom actor or a
+lamport no change reached, and trusting it would keep the subtree, and its
+bytes in GC, for good (`Root.GarbageCollectKnown`,
+`TestAForgedTicketDoesNotKeepADetachedSubtree`,
+`TestADocumentCollectsWithItsOwnVersionVector`). The nodes leave `detachedByID` and the merge stamp index,
 the split links of attached nodes skip them, and the pairs they still hold,
 their removed attributes' included, are dropped with their bytes out of GC
 (`TestALaterCollectionDropsADetachedSubtree`,
@@ -259,15 +268,15 @@ give, still has its bytes moved to GC, held aside for the drop to give back
 (`TestARetainedBookingUnderATakenKeyIsKept`); and a Tree element the
 collection deregisters drops its detached subtrees with their pairs, since
 collect leaves a released node's pair to the drop
-(`TestCollectingATreeDropsItsReleasedPairs`). The drop runs before a
-collection purges anything, so a subtree outlives the collection that took
-it out, for a change that names a node in it after the purge, and its bytes
-show in `GC`, which the client's `MaxSizeLimit` reads with `Live`, until the
-next collection, which is when the replica frees them. Dropping a subtree
-already seen whole in the collection that purged it was measured too: no
-large-run row moves, but it leaves no detached state for a late change to
-resolve against, which the detached tests pin, so it is not done. Main kept
-these bytes in `Live` for good.
+(`TestCollectingATreeDropsItsReleasedPairs`). A subtree the collection that
+purges it has already seen whole goes in that call, so its bytes show in
+`GC`, which the client's `MaxSizeLimit` reads with `Live`, only while the
+subtree is kept for a change that can still name it; main kept these bytes
+in `Live` for good. A late change (yorkie#2110) naming a node in a subtree
+the purging collection saw whole then fails to resolve, as on main for a
+purged node; over 19 families × 3000 seeds in each mode, lagging included,
+no row moves for it. The detached tests keep their subtrees by a merge the
+collection has not seen.
 
 **Born-tombstoned content and the size gate.** Content an `Edit` inserts
 under a removed parent is born a tombstone and booked to `GC` alone. Main
