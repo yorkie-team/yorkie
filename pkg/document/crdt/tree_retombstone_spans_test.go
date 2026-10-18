@@ -547,7 +547,7 @@ func TestRetombstoneCascadeOverADeepProductIsLinear(t *testing.T) {
 	tree.putNode(product)
 	p.InsNextID, product.InsPrevID = product.id, p.id
 	parent := product
-	for i := 0; i < d; i++ {
+	for i := range d {
 		child := NewTreeNode(NewTreeNodeID(time.NewTicket(int64(11+i), 0, peer), 0), "div", nil)
 		require.NoError(t, parent.Append(child))
 		tree.putNode(child)
