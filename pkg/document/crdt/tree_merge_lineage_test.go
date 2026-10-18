@@ -649,8 +649,11 @@ func TestRestoreWithoutClocksDissolvesNothing(t *testing.T) {
 }
 
 // TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree pins that the
-// mergeStamps index lets go of every stamped node a purge detaches, not only
-// the purged node itself, so it keeps no purged subtree alive.
+// mergeStamps index lets go of a stamped node when the node leaves the
+// document, so it keeps nothing alive past it. A purge that detaches the
+// stamped node with its ancestor keeps the entry, as a replica that has not
+// purged does, so the dissolution decides alike on both; the node's own
+// purge drops it.
 func TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree(t *testing.T) {
 	f := newMergeLineageFixture(t)
 	f.p3.remove(f.nextTicket())
@@ -663,7 +666,9 @@ func TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree(t *testing.T) {
 	f.p2.remove(f.nextTicket())
 	f.text.remove(f.nextTicket())
 	require.NoError(t, tree.Purge(f.p2))
-	assert.Empty(t, tree.mergeStamps, "no entry outlives the subtree it named")
+	assert.Len(t, tree.mergeStamps[f.p3.id.toIDString()], 1, "the detached text keeps its entry")
+	require.NoError(t, tree.Purge(f.text))
+	assert.Empty(t, tree.mergeStamps, "no entry outlives the node it names")
 }
 
 // TestRestoreDissolvesTheStampOfANodeRefusedItsID pins that a stamped node

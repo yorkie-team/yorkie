@@ -1110,8 +1110,11 @@ type Tree struct {
 	// node joins the index tree registers it -- NewTree, or putNode, which
 	// indexes a node even when it refuses it the ID lookup -- and mergeNodes
 	// indexes a node it stamps in place, so no stamped node a walk of the
-	// tree reaches is missing. It is a candidate set, re-checked when read:
-	// an entry for a node that lost its stamp or left the tree is dropped then.
+	// tree reaches is missing. A detached node stays indexed, as it does on
+	// a replica that has not purged its subtree; only a node leaving the
+	// document (its own purge, forgetDetached) leaves it. It is a candidate
+	// set, re-checked when read: an entry for a node that lost its stamp is
+	// dropped then.
 	mergeStamps map[string]map[*TreeNode]struct{}
 
 	// detachedByID holds the nodes of subtrees a purge took out, by ID, so
@@ -1282,9 +1285,12 @@ func (t *Tree) dissolveMergeSources(sources []*TreeNodeID, versionVector time.Ve
 	for key, id := range ids {
 		stamped := t.mergeStamps[key]
 		for child := range stamped {
-			// Only a node still stamped with this source and still in the
-			// tree, tombstones included, as a walk of the tree would reach.
-			if child.MergedFrom == nil || child.MergedFrom.toIDString() != key || !t.isAttached(child) {
+			// Only a node still stamped with this source. A detached one
+			// counts as an attached one does: whether a purge has taken the
+			// stamp's subtree out must not decide whether the pointer goes,
+			// or a replica that collected would drop what one that did not
+			// keeps.
+			if child.MergedFrom == nil || child.MergedFrom.toIDString() != key {
 				delete(stamped, child)
 				continue
 			}
@@ -1362,7 +1368,8 @@ func (t *Tree) purge(node *TreeNode) (int, error) {
 // how many nodes it walked and what Root has to book (see purgeResult). It
 // unregisters and unlinks the purged node, as on main, and records where it
 // was taken from. Its subtree is marked detached and moved to detachedByID,
-// its merge stamps leave the index, and every live node in it is tombstoned
+// its merge stamps stay indexed (only node's own leaves with node), and
+// every live node in it is tombstoned
 // with node's removedAt (see GCLiveRelease); those still resolve, as main's
 // detached nodes do. The pairs of the subtree's tombstones and removed
 // attributes stay, and each is collected when its own removal is, as on
@@ -1409,9 +1416,6 @@ func (t *Tree) purgeReleasing(node *TreeNode) (int, purgeResult, error) {
 				n.Value.released = true
 			}
 			n.Value.detached = true
-			if n.Value.MergedFrom != nil {
-				t.forgetMergeStamp(n.Value)
-			}
 			if n.Value != node {
 				t.moveToDetached(n.Value)
 			}
@@ -1420,8 +1424,13 @@ func (t *Tree) purgeReleasing(node *TreeNode) (int, purgeResult, error) {
 
 	// NodeMapByID is keyed by ID, so an unconditional Remove would also
 	// unregister a different node that shares this one's ID — see putNode.
-	// Only drop the entry this node actually holds.
+	// Only drop the entry this node actually holds. The node leaves the
+	// document, so its merge stamp leaves the index; those of the detached
+	// nodes under it stay, as they stay on a replica that has not purged.
 	t.unregisterNode(node)
+	if node.MergedFrom != nil {
+		t.forgetMergeStamp(node)
+	}
 	t.unlinkInsChain(node)
 
 	result.Purged = true
@@ -1450,12 +1459,6 @@ func (t *Tree) unlinkInsChain(node *TreeNode) {
 	node.InsNextID = nil
 }
 
-// isAttached reports whether node still hangs off this tree's root, rather
-// than off a subtree a purge detached.
-func (t *Tree) isAttached(node *TreeNode) bool {
-	return !node.detached
-}
-
 // detachedRemovalOf returns the removal a node placed under the detached
 // node is tombstoned with: the node's own, or its nearest removed
 // ancestor's. Every detached node is a tombstone, since a purge takes out
@@ -1470,8 +1473,8 @@ func detachedRemovalOf(node *TreeNode) *time.Ticket {
 
 // takeDetachedSide gives node, just moved under a detached parent, that
 // parent's side of a purge (see TreeNode.detached): the node and its
-// subtree are marked detached, moved to detachedByID and out of the merge
-// stamp index, and every live node in it is tombstoned with at, as the
+// subtree are marked detached and moved to detachedByID, keeping their
+// merge stamps indexed, and every live node in it is tombstoned with at, as the
 // purge released what it found there. It returns the size those had in
 // Live. A node already detached is left as it is.
 func (t *Tree) takeDetachedSide(node *TreeNode, at *time.Ticket) resource.DataSize {
@@ -1486,9 +1489,6 @@ func (t *Tree) takeDetachedSide(node *TreeNode, at *time.Ticket) resource.DataSi
 			n.Value.released = true
 		}
 		n.Value.detached = true
-		if n.Value.MergedFrom != nil {
-			t.forgetMergeStamp(n.Value)
-		}
 		t.moveToDetached(n.Value)
 	})
 	return released
@@ -1783,6 +1783,9 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 // under the same ID books its own.
 func (t *Tree) forgetDetached(node *TreeNode) {
 	t.unregisterNode(node)
+	if node.MergedFrom != nil {
+		t.forgetMergeStamp(node)
+	}
 	t.unlinkInsChain(node)
 	t.forgotten = append(t.forgotten, node)
 }
@@ -2965,6 +2968,7 @@ func (t *Tree) copyDetachedFrom(src *Tree) error {
 	for _, n := range registered {
 		if c, ok := copies[n]; ok {
 			t.detachedByID.Put(c.id, c)
+			t.noteMergeStamp(c)
 		}
 	}
 	return nil
@@ -6153,9 +6157,9 @@ func (t *Tree) dropDuplicateContents(contents []*TreeNode, editedAt *time.Ticket
 // positions still resolve through.
 func (t *Tree) putNode(node *TreeNode) {
 	// A node placed in a detached subtree is not reachable from the root,
-	// so it is registered with the other detached nodes and carries no
-	// lineage anything reads.
+	// so it is registered with the other detached nodes.
 	if node.detached {
+		t.noteMergeStamp(node)
 		// The same rule as for attached nodes below: a live node keeps its
 		// ID over a tombstone, which for detached nodes, all tombstones,
 		// leaves the last put.
@@ -6196,7 +6200,7 @@ func (t *Tree) forgetMergeStamp(node *TreeNode) {
 
 // noteMergeStamp adds node to mergeStamps if it carries a MergedFrom.
 func (t *Tree) noteMergeStamp(node *TreeNode) {
-	if node.MergedFrom == nil || node.detached {
+	if node.MergedFrom == nil {
 		return
 	}
 	if t.mergeStamps == nil {

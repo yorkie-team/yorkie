@@ -849,10 +849,11 @@ func TestFindFloorNodeReadsBothIndexes(t *testing.T) {
 	assert.Nil(t, tree.findFloorNode(NewTreeNodeID(time.NewTicket(4, 0, actor), 0)))
 }
 
-// TestADetachedNodeCarriesNoIndexedLineage pins that a node placed in a
-// detached subtree is not indexed by the source its MergedFrom names, so
-// no purge has to take a stamp it gained after detachment back out.
-func TestADetachedNodeCarriesNoIndexedLineage(t *testing.T) {
+// TestADetachedNodeCarriesIndexedLineage pins that a node placed in a
+// detached subtree is indexed by the source its MergedFrom names, as it would
+// be on a replica where the subtree is still attached, so a restore of that
+// source decides its pointer alike on both.
+func TestADetachedNodeCarriesIndexedLineage(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
 	root := NewTreeNode(NewTreeNodeID(time.NewTicket(1, 0, actor), 0), "r", nil)
@@ -862,7 +863,8 @@ func TestADetachedNodeCarriesNoIndexedLineage(t *testing.T) {
 	node.MergedFrom = source
 	node.detached = true
 	tree.putNode(node)
-	assert.Empty(t, tree.mergeStamps[source.toIDString()])
+	_, stamped := tree.mergeStamps[source.toIDString()][node]
+	assert.True(t, stamped)
 }
 
 // TestRangeBetweenTwoDetachedSubtrees pins a range whose two ends sit in two
@@ -1409,7 +1411,7 @@ func TestMergeIntoADetachedParentTakesItsSide(t *testing.T) {
 			assert.True(t, n["cd"].detached, "cd takes the detached side")
 			assert.True(t, n["cd"].IsRemoved(), "and is released")
 			_, stamped := tree.mergeStamps[n["q"].id.toIDString()][n["cd"]]
-			assert.False(t, stamped, "and leaves the merge stamp index")
+			assert.True(t, stamped, "and keeps its merge stamp indexed, as an unpurged replica does")
 			assert.Equal(t, len(tree.Nodes()), tree.NodeLen(), "NodeMapByID holds only what is reachable")
 		}
 		rebuilt, err := doc.DeepCopy()
@@ -1963,4 +1965,51 @@ func TestDeepCopyBooksADetachedTombstonesPendingPair(t *testing.T) {
 	}
 	assert.Equal(t, doc.DocSize(), copied.DocSize())
 	assert.Equal(t, 0, copied.GarbageLen())
+}
+
+// TestDissolutionKeepsTheSourcePointerWhetherOrNotPurged pins that a
+// restore's decision to drop a revived source's mergedInto does not depend
+// on GC. s was merged into dst, whose child c carries the merge's stamp;
+// dst sits in x, removed. One replica purges x, detaching dst and c; the
+// other does not. A restore of s that did not know the merge keeps c's
+// stamp, so both keep s's pointer.
+func TestDissolutionKeepsTheSourcePointerWhetherOrNotPurged(t *testing.T) {
+	var kept []bool
+	for _, purge := range []bool{true, false} {
+		actor, err := time.ActorIDFromHex("000000000000000000000001")
+		require.NoError(t, err)
+		peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+		require.NoError(t, err)
+		root := NewTreeNode(NewTreeNodeID(time.NewTicket(1, 0, actor), 0), "r", nil)
+		s := NewTreeNode(NewTreeNodeID(time.NewTicket(2, 0, actor), 0), "p", nil)
+		x := NewTreeNode(NewTreeNodeID(time.NewTicket(3, 0, actor), 0), "div", nil)
+		dst := NewTreeNode(NewTreeNodeID(time.NewTicket(4, 0, actor), 0), "p", nil)
+		c := NewTreeNode(NewTreeNodeID(time.NewTicket(5, 0, actor), 0), "text", nil, "c")
+		require.NoError(t, root.Append(s, x))
+		require.NoError(t, x.Append(dst))
+		require.NoError(t, dst.Append(c))
+		merge := time.NewTicket(50, 0, peer)
+		s.remove(merge)
+		c.MergedFrom, c.MergedAt = s.id, merge
+		x.remove(time.NewTicket(60, 0, actor))
+		tree := NewTree(root, time.NewTicket(6, 0, actor))
+		s.mergedInto = dst.id
+		if purge {
+			_, err := tree.purgeChild(x)
+			require.NoError(t, err)
+			require.True(t, c.detached)
+		}
+
+		unaware := time.NewVersionVector()
+		unaware.Set(actor, 100)
+		_, _, _, _, _, err = tree.Restore([]*TreeRestoreSpan{
+			{ID: s.id, NodeType: "p", Length: 1, ParentID: root.id},
+		}, false, unaware)
+		require.NoError(t, err)
+		require.False(t, s.IsRemoved())
+		assert.Equal(t, s.id, c.MergedFrom, "purged %v: the unknown merge's stamp stays", purge)
+		kept = append(kept, s.mergedInto != nil)
+	}
+	assert.Equal(t, kept[1], kept[0], "the pointer is kept or dropped alike, purged or not")
+	assert.True(t, kept[0])
 }
