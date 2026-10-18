@@ -1796,7 +1796,11 @@ func TestDeleteCascadeSkipsADetachedSplitProduct(t *testing.T) {
 		from := NewTreePos(root.id, root.id)
 		to := NewTreePos(root.id, div.id)
 		at := time.NewTicket(lamport+50, 0, actor)
+		before := productP.removedAt
 		pairs, diff, _, err := tree.Edit(from, to, nil, 0, at, next, unaware, false)
+		if purge {
+			assert.Same(t, before, productP.removedAt, "the detached product keeps its removal")
+		}
 		require.NoError(t, err)
 		for _, pair := range pairs {
 			doc.RegisterGCPair(pair)
