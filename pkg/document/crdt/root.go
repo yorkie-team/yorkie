@@ -554,9 +554,10 @@ func (r *Root) DocSize() resource.DocSize {
 // DeepCopy copies itself deeply.
 //
 // The copy is the document's clone, which a change runs on before the root,
-// so it also carries the subtrees each Tree's purges took out, with the
-// pending pairs they hold (see Tree.copyDetachedFrom): an op the root
-// resolves through a detached node resolves on the clone alike.
+// so it also carries the subtrees each Tree's purges took out (see
+// Tree.copyDetachedFrom): an op the root resolves through a detached node
+// resolves on the clone alike. Each Tree's pairs are the root's own, booked
+// for the copies of their nodes (see copyTreePairs).
 func (r *Root) DeepCopy() (*Root, error) {
 	copiedObject, err := r.object.DeepCopy()
 	if err != nil {
@@ -572,14 +573,66 @@ func (r *Root) DeepCopy() (*Root, error) {
 		if !ok {
 			continue
 		}
-		if err := copiedTree.copyDetachedFrom(tree); err != nil {
+		copies, err := copiedTree.copyDetachedFrom(tree)
+		if err != nil {
 			return nil, err
 		}
-		for _, pair := range copiedTree.detachedGCPairs() {
-			copied.RegisterGCPair(pair)
-		}
+		copied.copyTreePairs(r, tree, copiedTree, copies)
 	}
 	return copied, nil
+}
+
+// copyTreePairs replaces the pairs NewRoot's scan booked for copiedTree with
+// the ones src holds for tree, booked for the copies of their nodes. The
+// scan reaches the attached tree only and books through RegisterGCPair,
+// whose second registration under a key cancels the first, so two nodes
+// sharing an ID would leave the copy with neither; src's own entries are
+// what it collects, so the copy collects the same.
+func (r *Root) copyTreePairs(src *Root, tree, copiedTree *Tree, copies map[*TreeNode]*TreeNode) {
+	copied := make(map[*TreeNode]struct{}, len(copies))
+	for _, c := range copies {
+		copied[c] = struct{}{}
+	}
+	for key, pair := range r.gcNodePairMap {
+		owned := pair.Parent == GCParent(copiedTree)
+		if node, ok := pair.Parent.(*TreeNode); ok {
+			_, owned = copied[node]
+		}
+		if !owned {
+			continue
+		}
+		if pair.GCOnlySize != nil {
+			r.docSize.GC.Sub(*pair.GCOnlySize)
+		} else {
+			r.docSize.GC.Sub(pair.Child.DataSize())
+		}
+		delete(r.gcNodePairMap, key)
+	}
+
+	book := func(parent GCParent, child GCChild) {
+		size := child.DataSize()
+		pair := GCPair{Parent: parent, Child: child, GCOnlySize: &size}
+		r.gcNodePairMap[keyOf(pair)] = pair
+		r.docSize.GC.Add(size)
+	}
+	for _, pair := range src.gcNodePairMap {
+		if pair.Parent == GCParent(tree) {
+			if node, ok := pair.Child.(*TreeNode); ok && copies[node] != nil {
+				book(copiedTree, copies[node])
+			}
+			continue
+		}
+		node, ok := pair.Parent.(*TreeNode)
+		if !ok || copies[node] == nil || copies[node].Attrs == nil {
+			continue
+		}
+		for _, attr := range copies[node].Attrs.Nodes() {
+			if attr.IDString() == pair.Child.IDString() {
+				book(copies[node], attr)
+				break
+			}
+		}
+	}
 }
 
 // GarbageCollect purge elements that were removed before the given time.

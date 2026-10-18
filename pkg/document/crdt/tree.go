@@ -2936,13 +2936,25 @@ func (t *Tree) DeepCopy() (Element, error) {
 // resolves every position src resolves through a detached node or a purge
 // slot alike, and dissolves merge sources alike. A snapshot holds none of
 // this.
-func (t *Tree) copyDetachedFrom(src *Tree) error {
+//
+// It returns the copy of every node of src, attached or detached, so Root
+// can book for the copies the pairs src's nodes have.
+func (t *Tree) copyDetachedFrom(src *Tree) (map[*TreeNode]*TreeNode, error) {
+	copies := make(map[*TreeNode]*TreeNode)
+	pairs := [][2]*index.Node[*TreeNode]{{src.Root().Index, t.Root().Index}}
+	for len(pairs) > 0 {
+		pair := pairs[len(pairs)-1]
+		pairs = pairs[:len(pairs)-1]
+		copies[pair[0].Value] = pair[1].Value
+		fromChildren, toChildren := pair[0].Children(true), pair[1].Children(true)
+		for i := range fromChildren {
+			pairs = append(pairs, [2]*index.Node[*TreeNode]{fromChildren[i], toChildren[i]})
+		}
+	}
 	registered := src.detachedByID.Values()
 	if len(registered) == 0 {
-		return nil
+		return copies, nil
 	}
-
-	copies := make(map[*TreeNode]*TreeNode)
 	// A subtree is copied whole, from the top a purge took out. The ones
 	// holding a registered node come first; a slot in a copied subtree can
 	// name a detached node in another, registered or not, so that one is
@@ -2969,7 +2981,7 @@ func (t *Tree) copyDetachedFrom(src *Tree) error {
 		pending = pending[:len(pending)-1]
 		copied, err := top.DeepCopy()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		pairs := [][2]*index.Node[*TreeNode]{{top.Index, copied.Index}}
 		for len(pairs) > 0 {
@@ -2988,29 +3000,20 @@ func (t *Tree) copyDetachedFrom(src *Tree) error {
 		}
 	}
 
-	// A slot names a node in either tree: its copy if it was detached, the
-	// copied attached tree's node under the same ID otherwise.
-	resolve := func(n *TreeNode) *TreeNode {
-		if n == nil {
-			return nil
-		}
-		if c, ok := copies[n]; ok && c != nil {
-			return c
-		}
-		if key, attached := t.NodeMapByID.Floor(n.id); attached != nil && key.Equal(n.id) {
-			return attached
-		}
-		return nil
-	}
+	// A slot names a node in either tree, attached or detached, and resolves
+	// to its copy; one that names a node no longer in the tree resolves to
+	// nil, as it does in src.
 	for from, to := range copies {
-		to.purgedFrom, to.purgedBefore = resolve(from.purgedFrom), resolve(from.purgedBefore)
+		if from.detached {
+			to.purgedFrom, to.purgedBefore = copies[from.purgedFrom], copies[from.purgedBefore]
+		}
 	}
 	for _, n := range registered {
 		if c, ok := copies[n]; ok {
 			t.detachedByID.Put(c.id, c)
 		}
 	}
-	return nil
+	return copies, nil
 }
 
 // GCPairs returns the pairs of GC.
@@ -3040,23 +3043,6 @@ func (t *Tree) GCPairs() []GCPair {
 		pairs = append(pairs, node.GCPairs()...)
 	}
 
-	return pairs
-}
-
-// detachedGCPairs returns the pairs the detached nodes the tree holds have
-// pending: a detached tombstone that is not released still has its own, and
-// every detached node the pairs of its removed attributes. Root.DeepCopy
-// books them for the copy it gives the detached subtrees, so the copy holds
-// the GC its source does.
-func (t *Tree) detachedGCPairs() []GCPair {
-	var pairs []GCPair
-	for _, node := range t.detachedByID.Values() {
-		if node.removedAt != nil && !node.released {
-			gcSize := node.DataSize()
-			pairs = append(pairs, GCPair{Parent: t, Child: node, GCOnlySize: &gcSize})
-		}
-		pairs = append(pairs, node.GCPairs()...)
-	}
 	return pairs
 }
 

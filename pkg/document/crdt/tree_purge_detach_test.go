@@ -1897,7 +1897,8 @@ func TestDeepCopyKeepsASlotThroughAnUnregisteredParent(t *testing.T) {
 	cp, err := tree.DeepCopy()
 	require.NoError(t, err)
 	ct := cp.(*Tree)
-	require.NoError(t, ct.copyDetachedFrom(tree))
+	_, err = ct.copyDetachedFrom(tree)
+	require.NoError(t, err)
 	cx := ct.DetachedNode(x.id)
 	require.NotNil(t, cx)
 	got, gotErr := ct.ToIndex(cx, cx)
@@ -1944,7 +1945,8 @@ func TestDeepCopyKeepsASlotThroughAnUnregisteredSibling(t *testing.T) {
 	cp, err := tree.DeepCopy()
 	require.NoError(t, err)
 	ct := cp.(*Tree)
-	require.NoError(t, ct.copyDetachedFrom(tree))
+	_, err = ct.copyDetachedFrom(tree)
+	require.NoError(t, err)
 	cab := ct.DetachedNode(ab.id)
 	require.NotNil(t, cab)
 	got, err := ct.ToIndex(cab, cab)
@@ -2097,4 +2099,51 @@ func TestDissolutionKeepsTheSourcePointerOnTheClone(t *testing.T) {
 	tree.forgetDetached(c)
 	_, stamped := tree.mergeStamps[s.id.toIDString()][c]
 	assert.False(t, stamped, "a forgotten node leaves the index")
+}
+
+// TestDeepCopyBooksTheRootsOwnTreePairs pins that the root's copy holds the
+// tree pairs the root holds. A, attached, and D, detached by the purge of x,
+// share an ID, so the root holds one pair under that key, A's. Booking D's
+// pair on the copy through RegisterGCPair cancelled A's, and the copy held
+// neither, collecting less than the root.
+func TestDeepCopyBooksTheRootsOwnTreePairs(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	shared := NewTreeNodeID(tk(4), 0)
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	d := NewTreeNode(shared, "p", nil)
+	a := NewTreeNode(shared, "p", nil)
+	require.NoError(t, root.Append(x, a))
+	require.NoError(t, x.Append(d))
+	x.remove(tk(10))
+	a.remove(tk(20))
+	// D, live, holds the ID, so the purge registers it as detached.
+	tree := NewTree(root, tk(5))
+	d.remove(tk(20))
+
+	// The scan books D and A under one key, and the second cancels the
+	// first; A's pair is then booked again, as a later removal of A would.
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	doc.Object().Set("t", tree)
+	doc.RegisterElement(tree, doc.Object())
+	size := a.DataSize()
+	doc.RegisterGCPair(GCPair{Parent: tree, Child: a, GCOnlySize: &size})
+	vector := time.NewVersionVector()
+	vector.Set(actor, 15)
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.True(t, d.detached)
+	require.Same(t, d, tree.DetachedNode(shared))
+	require.Equal(t, 1, doc.GarbageLen())
+
+	copied, err := doc.DeepCopy()
+	require.NoError(t, err)
+	assert.Equal(t, doc.GarbageLen(), copied.GarbageLen())
+	assert.Equal(t, doc.DocSize(), copied.DocSize())
+	ct := copied.Object().Get("t").(*Tree)
+	for _, pair := range copied.gcNodePairMap {
+		assert.Same(t, ct.Root().Children(true)[0], pair.Child, "the attached A's copy, as on the root")
+	}
 }
