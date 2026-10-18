@@ -1404,6 +1404,8 @@ func TestMergeIntoADetachedParentTakesItsSide(t *testing.T) {
 		if purge {
 			assert.True(t, n["cd"].detached, "cd takes the detached side")
 			assert.True(t, n["cd"].IsRemoved(), "and is released")
+			_, stamped := tree.mergeStamps[n["q"].id.toIDString()][n["cd"]]
+			assert.False(t, stamped, "and leaves the merge stamp index")
 			assert.Equal(t, len(tree.Nodes()), tree.NodeLen(), "NodeMapByID holds only what is reachable")
 		}
 		rebuilt, err := doc.DeepCopy()
@@ -1518,4 +1520,35 @@ func TestInsertSubtreeUnderADetachedParent(t *testing.T) {
 	}
 	assert.Equal(t, len(tree.Nodes()), tree.NodeLen())
 	assert.Equal(t, "<r><q>cd</q></r>", tree.ToXML())
+}
+
+// TestMergeIntoADetachedParentWithoutARemovalFails pins mergeNodes' twin of
+// the §7.4 invariant check: a detached destination always carries a
+// removal. Built by hand without one, the merge fails before anything moves.
+func TestMergeIntoADetachedParentWithoutARemovalFails(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	lamport := int64(0)
+	next := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, actor)
+	}
+	root := NewTreeNode(NewTreeNodeID(next(), 0), "r", nil)
+	dest := NewTreeNode(NewTreeNodeID(next(), 0), "p", nil)
+	source := NewTreeNode(NewTreeNodeID(next(), 0), "p", nil)
+	moved := NewTreeNode(NewTreeNodeID(next(), 0), "text", nil, "cd")
+	require.NoError(t, root.Append(dest, source))
+	require.NoError(t, source.Append(moved))
+	tree := NewTree(root, next())
+	dest.detached = true
+
+	attached, nodes := treeShapeOf(tree), tree.NodeLen()
+	_, released, err := tree.mergeNodes(dest, []*TreeNode{moved}, next())
+	assert.ErrorIs(t, err, ErrDetachedLive)
+	assert.Zero(t, released.Total())
+	assert.Equal(t, attached, treeShapeOf(tree), "the tree is untouched")
+	assert.Equal(t, nodes, tree.NodeLen())
+	assert.Same(t, source, moved.Index.Parent.Value, "nothing moved")
+	assert.Nil(t, moved.MergedFrom, "nothing stamped")
+	assert.False(t, moved.detached)
 }
