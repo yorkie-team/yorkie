@@ -1622,3 +1622,61 @@ func TestPutNodeKeepsALiveDetachedNodeOverATombstone(t *testing.T) {
 	tree.putNode(tomb)
 	assert.Same(t, live, tree.DetachedNode(id), "the live node keeps the ID")
 }
+
+// TestSplitOfAMergedInReleasedTextKeepsTheLedger pins the released mark a
+// merge into a detached parent leaves: "cd", merged into the detached p, is
+// released with it, so a later split of "cd" books nothing for the piece
+// cut off, and after everything is collected GC and Live equal a rebuild
+// with nothing left pending.
+func TestSplitOfAMergedInReleasedTextKeepsTheLedger(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	lamport := int64(0)
+	next := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, actor)
+	}
+	n := map[string]*TreeNode{}
+	mk := func(name, typ string, value ...string) *TreeNode {
+		n[name] = NewTreeNode(NewTreeNodeID(next(), 0), typ, nil, value...)
+		return n[name]
+	}
+	root := mk("r", "r")
+	require.NoError(t, root.Append(mk("div", "div"), mk("q", "q")))
+	require.NoError(t, n["div"].Append(mk("p", "p")))
+	require.NoError(t, n["p"].Append(mk("ab", "text", "ab")))
+	require.NoError(t, n["q"].Append(mk("cd", "text", "cd")))
+	n["div"].remove(next())
+	tree := NewTree(root, next())
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	doc.Object().Set("t", tree)
+	doc.RegisterElement(tree, doc.Object())
+	all := time.NewVersionVector()
+	all.Set(actor, time.MaxLamport)
+	_, err = doc.GarbageCollect(all)
+	require.NoError(t, err)
+	require.True(t, n["p"].detached)
+
+	apply := func(from, to *TreePos, contents ...*TreeNode) {
+		t.Helper()
+		at := next()
+		pairs, diff, _, err := tree.Edit(from, to, contents, 0, at, next, all, false)
+		require.NoError(t, err)
+		for _, pair := range pairs {
+			doc.RegisterGCPair(pair)
+		}
+		doc.Acc(diff)
+	}
+	// Merge q's "cd" into the detached p, then split "cd" with an insert.
+	apply(NewTreePos(n["p"].id, NewTreeNodeID(n["ab"].id.CreatedAt, 2)), NewTreePos(n["q"].id, n["q"].id))
+	assert.True(t, n["cd"].released, "cd is released into p")
+	mid := NewTreePos(n["p"].id, NewTreeNodeID(n["cd"].id.CreatedAt, 1))
+	apply(mid, mid, NewTreeNode(NewTreeNodeID(time.NewTicket(lamport+100, 0, actor), 0), "text", nil, "X"))
+
+	_, err = doc.GarbageCollect(all)
+	require.NoError(t, err)
+	rebuilt, err := doc.DeepCopy()
+	require.NoError(t, err)
+	assert.Equal(t, rebuilt.DocSize(), doc.DocSize(), "GC and Live equal a rebuild")
+	assert.Equal(t, 0, doc.GarbageLen(), "nothing is left pending")
+}
