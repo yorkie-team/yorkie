@@ -195,14 +195,19 @@ or on main for a node whose own pair was collected.
 Both conditions are needed. A purge at vector V comes after every change
 concurrent with the removal it collects, but a change that is not
 concurrent with the removal can still name a node a concurrent split
-carried into the subtree: in merge seed 528 the deleting replica, which
-never saw a split, merges across text the split carried into a product the
-delete's cascade took, after the other replica purged the product at a
-vector covering the delete and not the split. Dropping at the next later
-vector failed that change with "node not found"; waiting for the vector to
-cover the split, the product's creation, keeps it
-(`TestASubtreeASplitFedStaysForItsAuthor`,
-`TestADetachedSubtreeStaysUntilItsNodesAreSeen`). The strictly later vector
+carried into the subtree, or a concurrent merge moved there, as long as it
+has not seen that split or merge: it is concurrent with the node's creation
+or merge, and the vector covers that ticket only once every such change has
+been delivered. In merge seed 528 the deleting replica, which never saw a
+split, merges across text the split carried into a product the delete's
+cascade took, after the other replica purged the product at a vector
+covering the delete and not the split. Dropping at the next later vector
+failed that change with "node not found" (`TestASubtreeASplitFedStaysForItsAuthor`).
+That subtree holds both nodes the vector has not seen created and nodes it
+has not seen merged in, so either check alone keeps 528 as main has it, a
+divergence and not an error; each is pinned on its own, by a subtree only
+the other one would let go (`TestADetachedSubtreeStaysUntilItsNodesAreSeen`).
+The strictly later vector
 keeps the subtree for a late change (yorkie#2110) that reaches a replica
 after a collection at the vector that purged it. Over 19 families × 3000
 seeds in each mode, no row moves against keeping every subtree, in

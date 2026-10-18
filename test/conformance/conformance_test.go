@@ -572,6 +572,10 @@ func TestObserverOnlySyncs(t *testing.T) {
 // that text, naming it where d1 last saw it. d2 has purged the product by
 // then, at a vector that covers the delete and not the split, so a drop that
 // waited only for a later vector failed d1's change with "node not found".
+// The seed diverges, on main too; what this pins is that it does not error.
+// Its subtree holds nodes the vector has seen neither created nor merged in,
+// so either coverage check alone keeps it; each is pinned on its own by
+// TestADetachedSubtreeStaysUntilItsNodesAreSeen.
 func TestASubtreeASplitFedStaysForItsAuthor(t *testing.T) {
 	f, ok := FamilyByName("merge")
 	require.True(t, ok)
