@@ -19,6 +19,7 @@ package crdt
 import (
 	"strings"
 	"testing"
+	gotime "time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1679,4 +1680,56 @@ func TestSplitOfAMergedInReleasedTextKeepsTheLedger(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, rebuilt.DocSize(), doc.DocSize(), "GC and Live equal a rebuild")
 	assert.Equal(t, 0, doc.GarbageLen(), "nothing is left pending")
+}
+
+// TestPurgedSlotEndsOnACycle pins that resolving a position through purge
+// slots terminates when the recorded slots loop: a and b are detached roots,
+// each recorded as purged from the other, and the lookup fails with
+// ErrNodeNotFound instead of spinning. The same goes for a loop among the
+// recorded siblings.
+func TestPurgedSlotEndsOnACycle(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	root := NewTreeNode(NewTreeNodeID(time.NewTicket(1, 0, actor), 0), "r", nil)
+	tree := NewTree(root, time.NewTicket(2, 0, actor))
+	removedAt := time.NewTicket(3, 0, actor)
+	node := func(lamport int64) *TreeNode {
+		n := NewTreeNode(NewTreeNodeID(time.NewTicket(lamport, 0, actor), 0), "p", nil)
+		n.remove(removedAt)
+		n.detached = true
+		return n
+	}
+	finish := func(name string, fn func()) {
+		t.Helper()
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			fn()
+		}()
+		select {
+		case <-done:
+		case <-gotime.After(10 * gotime.Second):
+			t.Fatalf("%s did not terminate on a cycle of purge slots", name)
+		}
+	}
+
+	a, b := node(4), node(5)
+	a.purgedFrom, b.purgedFrom = b, a
+	finish("parents", func() {
+		_, err := tree.ToIndex(a, a)
+		assert.ErrorIs(t, err, ErrNodeNotFound)
+	})
+
+	parent := node(6)
+	parent.detached = false
+	parent.removedAt = nil
+	require.NoError(t, root.Append(parent))
+	c, x, y := node(7), node(8), node(9)
+	c.purgedFrom, c.purgedBefore = parent, x
+	x.purgedFrom, x.purgedBefore = parent, y
+	y.purgedFrom, y.purgedBefore = parent, x
+	finish("siblings", func() {
+		_, err := tree.ToIndex(c, c)
+		assert.ErrorIs(t, err, ErrNodeNotFound)
+	})
 }

@@ -1533,16 +1533,31 @@ func removedAncestorAt(node *TreeNode) *time.Ticket {
 // on which side of the merging range it sat, which is not recorded. ok is false only
 // for a detached node with no purge recorded above it.
 func (t *Tree) purgedSlot(node *TreeNode) (*TreeNode, *TreeNode, bool) {
+	// The recorded parents and siblings of honest purges never loop, but a
+	// node can be placed under a subtree it was purged from; a walk that
+	// comes back to a node it passed fails, as an unresolvable position
+	// does, instead of spinning.
+	seen := make(map[*TreeNode]struct{})
+	visit := func(n *TreeNode) bool {
+		if _, ok := seen[n]; ok {
+			return false
+		}
+		seen[n] = struct{}{}
+		return true
+	}
 	top := node
 	for top.Index.Parent != nil {
 		top = top.Index.Parent.Value
 	}
 	for top.detached {
-		if top.purgedFrom == nil {
+		if top.purgedFrom == nil || !visit(top) {
 			return nil, nil, false
 		}
 		parent, before := top.purgedFrom, top.purgedBefore
 		for before != nil && before.detached && before.purgedFrom == parent {
+			if !visit(before) {
+				return nil, nil, false
+			}
 			before = before.purgedBefore
 		}
 		if !parent.detached {
