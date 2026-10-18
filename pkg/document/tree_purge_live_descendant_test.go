@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
@@ -379,4 +380,50 @@ func TestRestoreAfterDetachKeepsTheLedger(t *testing.T) {
 	d1.GarbageCollect(full)
 	assertRebuildsSame(t, d1, "after collecting it")
 	assert.Equal(t, 0, d1.GarbageLen())
+}
+
+// TestReleaseLiveEqualsASnapshotReload pins Live, the figure the server's
+// size gate reads, against a replica loaded from a snapshot, which holds no
+// detached node. d1 deletes the first paragraph while d2 deletes its "b"
+// and undoes that, reviving "b" under the removed paragraph on d1; d1's
+// collection releases "b". A reload from d1's snapshot reports the same
+// Live. GC can differ by the pending pairs of detached nodes until the
+// collection that covers them (see document-size-limit.md).
+func TestReleaseLiveEqualsASnapshotReload(t *testing.T) {
+	d1, d2, a1, a2 := newReplicas(t)
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "abc"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "de"}}},
+		}})
+		return nil
+	}))
+	crossSync(t, d1, d2)
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(0, 5, nil, 0)
+		return nil
+	}))
+	require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").Edit(2, 3, nil, 0)
+		return nil
+	}))
+	require.NoError(t, d2.Undo())
+	crossSync(t, d1, d2)
+
+	vector := d1.VersionVector().DeepCopy()
+	for _, actor := range []time.ActorID{a1, a2} {
+		if v := d2.VersionVector().VersionOf(actor); v > vector.VersionOf(actor) {
+			vector.Set(actor, v)
+		}
+	}
+	assert.Positive(t, d1.GarbageCollect(vector))
+	require.Equal(t, "<doc><p>de</p></doc>", treeXML(t, d1))
+
+	snapshot, err := converter.ObjectToBytes(d1.RootObject())
+	require.NoError(t, err)
+	obj, err := converter.BytesToObject(snapshot)
+	require.NoError(t, err)
+	reloaded := crdt.NewRoot(obj)
+	live, reloadedLive := d1.DocSize().Live, reloaded.DocSize().Live
+	assert.Equal(t, reloadedLive, live, "Live equals a snapshot reload")
 }

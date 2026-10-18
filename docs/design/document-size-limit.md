@@ -168,7 +168,8 @@ node. Until the next collection that covers that removal, the running `GC`
 and `GarbageLen` hold that garbage and a reload does not. It ends at that
 collection, which purges the pair, and it is the same pending-pair window
 main has for the descendants of a purged node. `Live` is not affected: no
-detached node is in it.
+detached node is in it, so a reload reports the `Live` the running ledger
+does (`TestReleaseLiveEqualsASnapshotReload`).
 
 **Born-tombstoned content and the size gate.** Content an `Edit` inserts
 under a removed parent is born a tombstone and booked to `GC` alone. Main
