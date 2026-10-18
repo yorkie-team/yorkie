@@ -2240,23 +2240,26 @@ func TestALaterCollectionDropsADetachedSubtree(t *testing.T) {
 }
 
 // TestADetachedSubtreeStaysUntilItsNodesAreSeen pins that a collection
-// keeps a detached subtree holding a node its vector has not seen created:
-// a change concurrent with that node's creation, a split that carried text
-// into the subtree, say, can still name it, and so for a node merged in.
-// c, created by a peer at 40, and m, merged in by the peer at 41, sit
-// under x, purged at v1; v2 is after v1 but has seen neither, v3 sees c's
-// creation and not m's merge, v4 both.
+// keeps a detached subtree holding a node its vector has not seen created,
+// or merged in. A change that has not seen a split which carried a node
+// into the subtree, or a merge that moved one there, is concurrent with it
+// and can still name the node. c, created by one peer at 40, and m, merged
+// in by another at 41, sit under x, purged at v1. Each later vector has
+// seen one of the two and keeps the subtree; the one that has seen both
+// lets it go.
 func TestADetachedSubtreeStaysUntilItsNodesAreSeen(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
-	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	splitter, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	merger, err := time.ActorIDFromHex("0000000000000000000000ff")
 	require.NoError(t, err)
 	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
 	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
 	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
-	c := NewTreeNode(NewTreeNodeID(time.NewTicket(40, 0, peer), 0), "p", nil)
+	c := NewTreeNode(NewTreeNodeID(time.NewTicket(40, 0, splitter), 0), "p", nil)
 	m := NewTreeNode(NewTreeNodeID(tk(6), 0), "p", nil)
-	m.MergedFrom, m.MergedAt = c.id, time.NewTicket(41, 0, peer)
+	m.MergedFrom, m.MergedAt = c.id, time.NewTicket(41, 0, merger)
 	require.NoError(t, root.Append(x))
 	require.NoError(t, x.Append(c, m))
 	x.remove(tk(10))
@@ -2265,22 +2268,116 @@ func TestADetachedSubtreeStaysUntilItsNodesAreSeen(t *testing.T) {
 	doc.Object().Set("t", tree)
 	doc.RegisterElement(tree, doc.Object())
 
-	at := func(own, peers int64) time.VersionVector {
+	at := func(own, split, merge int64) time.VersionVector {
 		v := time.NewVersionVector()
 		v.Set(actor, own)
-		v.Set(peer, peers)
+		v.Set(splitter, split)
+		v.Set(merger, merge)
 		return v
 	}
-	_, err = doc.GarbageCollect(at(20, 0))
+	_, err = doc.GarbageCollect(at(20, 0, 0))
 	require.NoError(t, err)
-	_, err = doc.GarbageCollect(at(25, 0))
-	require.NoError(t, err)
-	assert.Same(t, c, tree.DetachedNode(c.id), "kept while c's creation is unseen")
-	_, err = doc.GarbageCollect(at(25, 40))
+	require.Same(t, c, tree.DetachedNode(c.id))
+	_, err = doc.GarbageCollect(at(21, 40, 0))
 	require.NoError(t, err)
 	assert.Same(t, c, tree.DetachedNode(c.id), "kept while m's merge is unseen")
-	_, err = doc.GarbageCollect(at(25, 41))
+	_, err = doc.GarbageCollect(at(22, 0, 41))
+	require.NoError(t, err)
+	assert.Same(t, c, tree.DetachedNode(c.id), "kept while c's creation is unseen")
+	_, err = doc.GarbageCollect(at(23, 40, 41))
 	require.NoError(t, err)
 	assert.Nil(t, tree.DetachedNode(c.id))
 	assert.Nil(t, tree.DetachedNode(m.id))
+}
+
+// TestDroppingASubtreeUnlinksItsSplitSiblings pins that a drop takes its
+// nodes out of the split chains attached nodes keep, as a purge of each
+// node would. a, attached, was split; its product b sits under x, removed
+// and purged. Left in a's InsNextID, b's ID would resolve, once b is gone,
+// to the floor of that ID: another piece of the same insertion, or nothing.
+func TestDroppingASubtreeUnlinksItsSplitSiblings(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	a := NewTreeNode(NewTreeNodeID(tk(2), 0), "p", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(3), 0), "div", nil)
+	b := NewTreeNode(NewTreeNodeID(tk(4), 0), "p", nil)
+	c := NewTreeNode(NewTreeNodeID(tk(5), 0), "p", nil)
+	require.NoError(t, root.Append(a, x, c))
+	require.NoError(t, x.Append(b))
+	a.InsNextID, b.InsPrevID = b.id, a.id
+	b.InsNextID, c.InsPrevID = c.id, b.id
+	x.remove(tk(10))
+	tree := NewTree(root, tk(6))
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	doc.Object().Set("t", tree)
+	doc.RegisterElement(tree, doc.Object())
+
+	at := func(lamport int64) time.VersionVector {
+		v := time.NewVersionVector()
+		v.Set(actor, lamport)
+		return v
+	}
+	_, err = doc.GarbageCollect(at(20))
+	require.NoError(t, err)
+	require.Same(t, b, tree.DetachedNode(b.id))
+	require.Equal(t, b.id, a.InsNextID, "a detached node stays in the chain")
+
+	_, err = doc.GarbageCollect(at(25))
+	require.NoError(t, err)
+	require.Nil(t, tree.DetachedNode(b.id))
+	assert.Equal(t, c.id, a.InsNextID, "a skips the dropped b")
+	assert.Equal(t, a.id, c.InsPrevID)
+}
+
+// TestDroppingASubtreeDropsItsAttributePairs pins the pairs a dropped node's
+// removed attributes hold. p, live under x, has had k removed by a peer at
+// 50; the purge of x releases p and leaves the pair of k pending, and the
+// drop at a vector that has seen p created, and not k removed, lets p go.
+// Its attribute's pair goes with it, so the root's GC is what its copy and
+// a reload of its object, neither of which holds p, report.
+func TestDroppingASubtreeDropsItsAttributePairs(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	p := NewTreeNode(NewTreeNodeID(tk(3), 0), "p", nil)
+	require.NoError(t, root.Append(x))
+	require.NoError(t, x.Append(p))
+	p.SetAttr("k", "v", tk(4))
+	p.RemoveAttr("k", time.NewTicket(50, 0, peer))
+	x.remove(tk(10))
+	tree := NewTree(root, tk(5))
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	doc.Object().Set("t", tree)
+	doc.RegisterElement(tree, doc.Object())
+
+	at := func(own int64) time.VersionVector {
+		v := time.NewVersionVector()
+		v.Set(actor, own)
+		v.Set(peer, 0)
+		return v
+	}
+	_, err = doc.GarbageCollect(at(20))
+	require.NoError(t, err)
+	require.Same(t, p, tree.DetachedNode(p.id))
+	require.Equal(t, 1, doc.GarbageLen(), "k's pair is pending")
+
+	_, err = doc.GarbageCollect(at(25))
+	require.NoError(t, err)
+	require.Nil(t, tree.DetachedNode(p.id))
+	copied, err := doc.DeepCopy()
+	require.NoError(t, err)
+	object, err := doc.Object().DeepCopy()
+	require.NoError(t, err)
+	reloaded := NewRoot(object.(*Object))
+	for _, other := range []*Root{copied, reloaded} {
+		assert.Equal(t, other.DocSize().GC, doc.DocSize().GC)
+		assert.Equal(t, other.GarbageLen(), doc.GarbageLen())
+	}
+	assert.Equal(t, 0, doc.GarbageLen())
 }
