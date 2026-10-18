@@ -1819,3 +1819,92 @@ func TestDeleteCascadeSkipsADetachedSplitProduct(t *testing.T) {
 	assert.Equal(t, xmls[0], xmls[1])
 	assert.Equal(t, shapes[0], shapes[1])
 }
+
+// TestDeepCopyKeepsASlotThroughAnUnregisteredParent pins that a DeepCopy
+// carries the purge slots of what it copies even through a node no longer
+// registered. In <r><l>LL</l><top><p><d1>x</d1></p></top><q></q></r>, d1 is
+// purged from p while x's own pair is pending; then top is purged, and p by
+// its own pair, which unregisters it, though d1 still records p as the
+// parent it was purged from. The copy resolves x where the source does.
+func TestDeepCopyKeepsASlotThroughAnUnregisteredParent(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	lamport := int64(0)
+	next := func() *time.Ticket { lamport++; return time.NewTicket(lamport, 0, actor) }
+	mk := func(typ string, val ...string) *TreeNode {
+		return NewTreeNode(NewTreeNodeID(next(), 0), typ, nil, val...)
+	}
+	root, l, ll := mk("r"), mk("l"), mk("text", "LL")
+	top, p, d1, x, q := mk("top"), mk("p"), mk("d1"), mk("text", "x"), mk("q")
+	require.NoError(t, root.Append(l))
+	require.NoError(t, l.Append(ll))
+	require.NoError(t, root.Append(top))
+	require.NoError(t, top.Append(p))
+	require.NoError(t, p.Append(d1))
+	require.NoError(t, d1.Append(x))
+	require.NoError(t, root.Append(q))
+	tree := NewTree(root, next())
+	rm := next()
+	for _, n := range []*TreeNode{top, p, d1, x} {
+		n.remove(rm)
+	}
+	for _, n := range []*TreeNode{d1, top, p} {
+		_, err = tree.purgeChild(n)
+		require.NoError(t, err)
+	}
+	require.Nil(t, tree.DetachedNode(p.id), "p left the registry with its own purge")
+	require.Same(t, x, tree.DetachedNode(x.id))
+	want, wantErr := tree.ToIndex(x, x)
+	cp, err := tree.DeepCopy()
+	require.NoError(t, err)
+	ct := cp.(*Tree)
+	cx := ct.DetachedNode(x.id)
+	require.NotNil(t, cx)
+	got, gotErr := ct.ToIndex(cx, cx)
+	assert.Equal(t, wantErr == nil, gotErr == nil)
+	assert.Equal(t, want, got)
+}
+
+// TestDeepCopyKeepsASlotThroughAnUnregisteredSibling pins the same for a
+// recorded sibling: in <r><l>LL</l><top>ab</top><s></s><q>cd</q></r>, top is
+// purged while ab's pair is pending, with s as the sibling it sat before;
+// s is purged next, which unregisters it. The slot of ab passes s to q on
+// the source, and on the copy too.
+func TestDeepCopyKeepsASlotThroughAnUnregisteredSibling(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	lamport := int64(0)
+	next := func() *time.Ticket { lamport++; return time.NewTicket(lamport, 0, actor) }
+	mk := func(typ string, val ...string) *TreeNode {
+		return NewTreeNode(NewTreeNodeID(next(), 0), typ, nil, val...)
+	}
+	root, l, ll := mk("r"), mk("l"), mk("text", "LL")
+	top, ab, s, q, cd := mk("top"), mk("text", "ab"), mk("s"), mk("q"), mk("text", "cd")
+	require.NoError(t, root.Append(l))
+	require.NoError(t, l.Append(ll))
+	require.NoError(t, root.Append(top))
+	require.NoError(t, top.Append(ab))
+	require.NoError(t, root.Append(s))
+	require.NoError(t, root.Append(q))
+	require.NoError(t, q.Append(cd))
+	tree := NewTree(root, next())
+	rm := next()
+	for _, n := range []*TreeNode{top, ab, s} {
+		n.remove(rm)
+	}
+	for _, n := range []*TreeNode{top, s} {
+		_, err = tree.purgeChild(n)
+		require.NoError(t, err)
+	}
+	want, err := tree.ToIndex(ab, ab)
+	require.NoError(t, err)
+	require.Equal(t, 4, want, "after <l>LL</l>, where top sat")
+	cp, err := tree.DeepCopy()
+	require.NoError(t, err)
+	ct := cp.(*Tree)
+	cab := ct.DetachedNode(ab.id)
+	require.NotNil(t, cab)
+	got, err := ct.ToIndex(cab, cab)
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+}

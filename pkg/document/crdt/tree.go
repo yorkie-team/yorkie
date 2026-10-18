@@ -2902,19 +2902,34 @@ func (t *Tree) copyDetachedFrom(src *Tree) error {
 	}
 
 	copies := make(map[*TreeNode]*TreeNode)
-	for _, n := range registered {
+	// A subtree is copied whole, from the top a purge took out. The ones
+	// holding a registered node come first; a slot in a copied subtree can
+	// name a detached node in another, registered or not, so that one is
+	// copied too, until every slot names a copied node or an attached one.
+	var pending []*TreeNode
+	enqueue := func(n *TreeNode) {
+		if n == nil || !n.detached {
+			return
+		}
 		top := n
 		for top.Index.Parent != nil {
 			top = top.Index.Parent.Value
 		}
-		if _, ok := copies[top]; ok {
-			continue
+		if _, ok := copies[top]; !ok {
+			copies[top] = nil
+			pending = append(pending, top)
 		}
+	}
+	for _, n := range registered {
+		enqueue(n)
+	}
+	for len(pending) > 0 {
+		top := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
 		copied, err := top.DeepCopy()
 		if err != nil {
 			return err
 		}
-
 		pairs := [][2]*index.Node[*TreeNode]{{top.Index, copied.Index}}
 		for len(pairs) > 0 {
 			pair := pairs[len(pairs)-1]
@@ -2922,6 +2937,8 @@ func (t *Tree) copyDetachedFrom(src *Tree) error {
 			from, to := pair[0].Value, pair[1].Value
 			copies[from] = to
 			to.detached, to.released = from.detached, from.released
+			enqueue(from.purgedFrom)
+			enqueue(from.purgedBefore)
 			fromChildren, toChildren := pair[0].Children(true), pair[1].Children(true)
 			for i := range fromChildren {
 				pairs = append(pairs, [2]*index.Node[*TreeNode]{fromChildren[i], toChildren[i]})
@@ -2935,7 +2952,7 @@ func (t *Tree) copyDetachedFrom(src *Tree) error {
 		if n == nil {
 			return nil
 		}
-		if c, ok := copies[n]; ok {
+		if c, ok := copies[n]; ok && c != nil {
 			return c
 		}
 		if key, attached := t.NodeMapByID.Floor(n.id); attached != nil && key.Equal(n.id) {
