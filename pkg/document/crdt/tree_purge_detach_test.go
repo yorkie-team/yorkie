@@ -1158,11 +1158,17 @@ func TestDropGCPairGivesBackThePurgeAmount(t *testing.T) {
 	assert.Equal(t, 0, doc.GarbageLen())
 	assert.Equal(t, base.GC, doc.DocSize().GC, "an ordinary pair gives back the child's size")
 
-	size := p.DataSize()
-	doc.RegisterGCPair(GCPair{Parent: tree, Child: p, GCOnlySize: &size})
+	// Booked with less than its size, as a piece split off a removed node
+	// is: the drop still gives back the size, which is what is held for it.
+	split := resource.DataSize{Data: 0, Meta: 3}
+	require.NotEqual(t, p.DataSize(), split)
+	doc.RegisterGCPair(GCPair{Parent: tree, Child: p, GCOnlySize: &split})
 	doc.DropGCPair(GCPair{Parent: tree, Child: p})
 	assert.Equal(t, 0, doc.GarbageLen())
-	assert.Equal(t, base.GC, doc.DocSize().GC, "a GCOnlySize pair gives back the child's size")
+	want := base.GC
+	want.Add(split)
+	want.Sub(p.DataSize())
+	assert.Equal(t, want, doc.DocSize().GC, "a GCOnlySize pair gives back the child's size, not its booking")
 
 	booked := resource.DataSize{Data: 7, Meta: 3}
 	other := NewTreeNode(p.id, "p", nil)
@@ -1417,6 +1423,27 @@ func TestMergeIntoADetachedParentTakesItsSide(t *testing.T) {
 	assert.Equal(t, shapes[0], shapes[1], "and hold the same once both collect")
 }
 
+// TestInsertCopyOfADetachedNodeIsDropped pins that the duplicate-content
+// check sees detached nodes: content from an older change carrying the ID of
+// a released node is a copy of a node that already exists, so the edit drops
+// it rather than put a second node under one ID, as it did while main kept
+// detached nodes in NodeMapByID.
+func TestInsertCopyOfADetachedNodeIsDropped(t *testing.T) {
+	tree, _, p, ab, next := releasedFixture(t, true)
+	require.True(t, ab.detached)
+	copied := NewTreeNode(ab.id, "text", nil, "ab")
+	at := next()
+	known := time.NewVersionVector()
+	known.Set(at.ActorID(), at.Lamport())
+	pos := NewTreePos(tree.Root().id, tree.Root().id)
+	_, _, _, err := tree.Edit(pos, pos, []*TreeNode{copied}, 0, at, next, known, false)
+	require.NoError(t, err)
+	assert.Equal(t, "<r><q>cd</q></r>", tree.ToXML(), "the copy is dropped")
+	assert.Nil(t, copied.Index.Parent)
+	assert.Same(t, ab, tree.findFloorNode(ab.id), "the ID still names the released node")
+	assert.Same(t, p, ab.Index.Parent.Value)
+}
+
 // TestCollectLeavesAPairOfALiveNode pins that a collection neither purges
 // nor books anything for a pair whose child is live: the pair stays, GC and
 // Live keep their sizes, and the node stays in the tree.
@@ -1461,4 +1488,34 @@ func TestRelinkRecreatedTextNeverPointsAtItself(t *testing.T) {
 	assert.Equal(t, b.id, a.InsNextID)
 	assert.Equal(t, a.id, b.InsPrevID)
 	assert.Nil(t, b.InsNextID, "b does not point at itself")
+}
+
+// TestInsertSubtreeUnderADetachedParent pins that every node of an inserted
+// subtree, not only its root, takes the detached side of the parent it is
+// placed under: detached, a tombstone, indexed with the detached nodes,
+// booked to GC alone and charging nothing to Live.
+func TestInsertSubtreeUnderADetachedParent(t *testing.T) {
+	tree, _, p, ab, next := releasedFixture(t, true)
+	at := next()
+	element := NewTreeNode(NewTreeNodeID(at, 0), "b", nil)
+	text := NewTreeNode(NewTreeNodeID(at, 1), "text", nil, "xy")
+	require.NoError(t, element.Append(text))
+	known := time.NewVersionVector()
+	known.Set(at.ActorID(), at.Lamport())
+	pos := NewTreePos(p.id, NewTreeNodeID(ab.id.CreatedAt, ab.Length()))
+
+	pairs, diff, _, err := tree.Edit(pos, pos, []*TreeNode{element}, 0, at, next, known, false)
+	require.NoError(t, err)
+	assert.Zero(t, diff.Total(), "nothing charged to Live")
+	require.Len(t, pairs, 2, "one pair per node")
+	for _, pair := range pairs {
+		assert.NotNil(t, pair.GCOnlySize, "booked to GC alone")
+	}
+	for _, n := range []*TreeNode{element, text} {
+		assert.True(t, n.detached, "%s is detached", n.Type())
+		assert.True(t, n.IsRemoved(), "%s is a tombstone", n.Type())
+		assert.Same(t, n, tree.DetachedNode(n.id), "%s is indexed with the detached nodes", n.Type())
+	}
+	assert.Equal(t, len(tree.Nodes()), tree.NodeLen())
+	assert.Equal(t, "<r><q>cd</q></r>", tree.ToXML())
 }
