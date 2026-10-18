@@ -429,6 +429,10 @@ func (n *TreeNode) Split(
 					// there, so it is booked to GC below and not to Live.
 					if dest := insNext.Index.Parent.Value; dest.detached != split.detached {
 						split.detached = dest.detached
+						// Out of a released subtree, the product is an
+						// attached tombstone, which a rebuild counts, so it
+						// books its pair below like any other.
+						split.released = split.released && split.detached
 						// The removal is there: checked before the split.
 						if at := detachedRemovalOf(dest); split.detached && split.removedAt == nil && at != nil {
 							split.remove(at)
