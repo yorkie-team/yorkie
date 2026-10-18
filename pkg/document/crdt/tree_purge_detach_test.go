@@ -1954,12 +1954,14 @@ func TestDeepCopyKeepsASlotThroughAnUnregisteredSibling(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
-// TestDeepCopyBooksADetachedTombstonesPendingPair pins Tree.GCPairs on the
-// detached nodes a copy carries: div is purged while p, removed later by a
-// change the collection does not cover, keeps its own pair pending. A
-// DeepCopy of the root books that pair too, so it reports the GC and
-// GarbageLen its source does, and both settle alike once p's removal is
-// covered.
+// TestDeepCopyBooksADetachedTombstonesPendingPair pins the pending pair of
+// a detached tombstone against a ledger derived from the content: div is
+// purged while p, removed later by a change the collection does not cover,
+// keeps its own pair pending. Rederive, which derives the pairs from the
+// nodes, p's included, and not from the root's map, reports the GC and
+// GarbageLen the root does, as does the DeepCopy the clone is, and a reload
+// of the attached tree alone reports less by exactly p. All settle alike
+// once p's removal is covered.
 func TestDeepCopyBooksADetachedTombstonesPendingPair(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
@@ -1984,9 +1986,19 @@ func TestDeepCopyBooksADetachedTombstonesPendingPair(t *testing.T) {
 	require.True(t, p.detached)
 	require.Equal(t, 1, doc.GarbageLen(), "p's pair is pending")
 
+	rederived, err := doc.Rederive()
+	require.NoError(t, err)
+	assert.Equal(t, doc.DocSize(), rederived.DocSize(), "derived from p, the root's ledger")
+	assert.Equal(t, doc.GarbageLen(), rederived.GarbageLen())
+	object, err := doc.Object().DeepCopy()
+	require.NoError(t, err)
+	reloaded := NewRoot(object.(*Object))
+	pending := doc.DocSize().GC
+	pending.Sub(reloaded.DocSize().GC)
+	assert.Equal(t, p.DataSize(), pending, "a reload lacks p's pair, and only that")
 	copied, err := doc.DeepCopy()
 	require.NoError(t, err)
-	assert.Equal(t, doc.DocSize(), copied.DocSize(), "the copy books p's pending pair")
+	assert.Equal(t, doc.DocSize(), copied.DocSize(), "the clone books p's pending pair")
 	assert.Equal(t, doc.GarbageLen(), copied.GarbageLen())
 
 	all := time.NewVersionVector()
@@ -2183,12 +2195,13 @@ func TestReleaseTicketDoesNotDependOnPurgeOrder(t *testing.T) {
 
 // TestALaterCollectionDropsADetachedSubtree pins the bound on the detached
 // state a purge leaves. x, removed, holds y, live, and t, a tombstone whose
-// own removal comes later. A collection at v1 purges x, releasing y and
-// leaving t detached with its pair pending. Another at v1 keeps them: a
-// late change could still name them. One at v2, strictly after v1, which
-// has seen every node in the subtree, lets the subtree go with t's pair, on
-// the root and on its copy alike; a position naming y then fails to
-// resolve, as on a replica that keeps no detached nodes.
+// own removal comes later. A collection at v purges x, releasing y and
+// leaving t detached with its pair pending, and keeps them for its own
+// remaining passes. The next, at the same v, which has seen every node in
+// the subtree created, lets the subtree go with t's pair, on the root and
+// on a copy made in between alike, and the ledger is what one derived from
+// the content reports; a position naming y then fails to resolve, as on a
+// replica that keeps no detached nodes.
 func TestALaterCollectionDropsADetachedSubtree(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
@@ -2217,15 +2230,12 @@ func TestALaterCollectionDropsADetachedSubtree(t *testing.T) {
 	require.Same(t, tomb, tree.DetachedNode(tomb.id))
 	require.Equal(t, 1, doc.GarbageLen(), "t's pair is pending")
 
-	_, err = doc.GarbageCollect(at(20))
-	require.NoError(t, err)
-	assert.Same(t, y, tree.DetachedNode(y.id), "a collection at the same vector keeps it")
-
 	copied, err := doc.DeepCopy()
 	require.NoError(t, err)
 	ct := copied.Object().Get("t").(*Tree)
+	require.NotNil(t, ct.DetachedNode(y.id), "the copy carries the subtree")
 	for _, r := range []*Root{copied, doc} {
-		_, err = r.GarbageCollect(at(25))
+		_, err = r.GarbageCollect(at(20))
 		require.NoError(t, err)
 	}
 	for _, tr := range []*Tree{tree, ct} {
@@ -2236,7 +2246,11 @@ func TestALaterCollectionDropsADetachedSubtree(t *testing.T) {
 	assert.Equal(t, 0, doc.GarbageLen(), "t's pair goes with it")
 	assert.Equal(t, doc.DocSize(), copied.DocSize())
 	assert.Equal(t, 0, copied.GarbageLen())
+	rederived, err := doc.Rederive()
+	require.NoError(t, err)
+	assert.Equal(t, rederived.DocSize(), doc.DocSize())
 	assert.Empty(t, doc.detachedTrees)
+	assert.Empty(t, copied.detachedTrees)
 }
 
 // TestADetachedSubtreeStaysUntilItsNodesAreSeen pins that a collection
@@ -2380,4 +2394,252 @@ func TestDroppingASubtreeDropsItsAttributePairs(t *testing.T) {
 		assert.Equal(t, other.GarbageLen(), doc.GarbageLen())
 	}
 	assert.Equal(t, 0, doc.GarbageLen())
+}
+
+// TestDroppingABornDeadSplitPieceKeepsTheLedger pins DropGCPair on the pair
+// of a piece split off a tombstone, booked for the split's overhead alone:
+// the bytes it took from its sibling stay in GC under the sibling's charge.
+// "abcd", removed by a peer at 50, is split in two, and its paragraph and
+// div, removed earlier, are purged at a vector that has not seen the text's
+// removal, which leaves both pieces detached, tombstones with their pairs
+// pending. The next collection drops them; what each drop gives back adds
+// up to what the two pairs booked, so GC is what a reload reports.
+func TestDroppingABornDeadSplitPieceKeepsTheLedger(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	lamport := int64(0)
+	tk := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, actor)
+	}
+	root := NewTreeNode(NewTreeNodeID(tk(), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(), 0), "div", nil)
+	p := NewTreeNode(NewTreeNodeID(tk(), 0), "p", nil)
+	text := NewTreeNode(NewTreeNodeID(tk(), 0), "text", nil, "abcd")
+	require.NoError(t, root.Append(x))
+	require.NoError(t, x.Append(p))
+	require.NoError(t, p.Append(text))
+	removedAt := tk()
+	x.remove(removedAt)
+	p.remove(removedAt)
+	text.remove(time.NewTicket(50, 0, peer))
+	tree := NewTree(root, tk())
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	doc.Object().Set("t", tree)
+	doc.RegisterElement(tree, doc.Object())
+
+	_, err = text.Split(tree, 2, tk, nil)
+	require.NoError(t, err)
+	pairs := tree.drainPendingGCPairs()
+	require.Len(t, pairs, 1, "the born-dead piece books its overhead")
+	require.NotNil(t, pairs[0].GCOnlySize)
+	require.NotEqual(t, pairs[0].Child.DataSize(), *pairs[0].GCOnlySize)
+	doc.RegisterGCPair(pairs[0])
+	piece := pairs[0].Child.(*TreeNode)
+
+	at := func(own int64) time.VersionVector {
+		v := time.NewVersionVector()
+		v.Set(actor, own)
+		v.Set(peer, 0)
+		return v
+	}
+	_, err = doc.GarbageCollect(at(lamport))
+	require.NoError(t, err)
+	require.Same(t, piece, tree.DetachedNode(piece.id))
+	require.Equal(t, 2, doc.GarbageLen(), "both pieces' pairs are pending")
+
+	_, err = doc.GarbageCollect(at(lamport))
+	require.NoError(t, err)
+	require.Nil(t, tree.DetachedNode(piece.id))
+	object, err := doc.Object().DeepCopy()
+	require.NoError(t, err)
+	reloaded := NewRoot(object.(*Object))
+	assert.Equal(t, reloaded.DocSize(), doc.DocSize())
+	assert.Equal(t, 0, doc.GarbageLen())
+}
+
+// TestDeepCopyBooksAPairWhoseNodeLeftTheTree pins the copy's ledger for a
+// pair the root still holds for a node no longer in its tree: p, a leaf,
+// is purged while the pair of its attribute k, removed later by a peer,
+// stays pending. The copy has no node for p, so it books the pair for a
+// copy of p alone; dropping it would leave the clone, whose size the
+// client's MaxSizeLimit reads, holding less GC than the root.
+func TestDeepCopyBooksAPairWhoseNodeLeftTheTree(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	p := NewTreeNode(NewTreeNodeID(tk(2), 0), "p", nil)
+	require.NoError(t, root.Append(p))
+	p.SetAttr("k", "v", tk(3))
+	p.RemoveAttr("k", time.NewTicket(50, 0, peer))
+	p.remove(tk(10))
+	tree := NewTree(root, tk(4))
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	doc.Object().Set("t", tree)
+	doc.RegisterElement(tree, doc.Object())
+
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	vector.Set(peer, 0)
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.Empty(t, tree.Root().Children(true), "p is purged")
+	require.Equal(t, 1, doc.GarbageLen(), "k's pair is pending")
+
+	copied, err := doc.DeepCopy()
+	require.NoError(t, err)
+	assert.Equal(t, doc.DocSize(), copied.DocSize())
+	assert.Equal(t, doc.GarbageLen(), copied.GarbageLen())
+
+	vector.Set(peer, 50)
+	for _, r := range []*Root{doc, copied} {
+		_, err = r.GarbageCollect(vector)
+		require.NoError(t, err)
+	}
+	assert.Equal(t, doc.DocSize(), copied.DocSize())
+	assert.Equal(t, 0, copied.GarbageLen())
+}
+
+// TestDetachedSubtreesStayWithinTheBound pins maxDetachedSize. Two removed
+// divs hold paragraphs a peer created at 40, which the collection's vector
+// has not seen, so dropDetached keeps both subtrees after their purge, as
+// it would for as long as that vector stalls. Past the bound, the subtree
+// whose purged removal is the oldest goes, and the other stays, on the root
+// and on its clone alike, whatever order the collection purged them in.
+func TestDetachedSubtreesStayWithinTheBound(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	for range 16 {
+		root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+		older := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+		newer := NewTreeNode(NewTreeNodeID(tk(3), 0), "div", nil)
+		a := NewTreeNode(NewTreeNodeID(time.NewTicket(40, 0, peer), 0), "p", nil)
+		b := NewTreeNode(NewTreeNodeID(time.NewTicket(41, 0, peer), 0), "p", nil)
+		require.NoError(t, root.Append(older, newer))
+		require.NoError(t, older.Append(a))
+		require.NoError(t, newer.Append(b))
+		older.remove(tk(10))
+		newer.remove(tk(11))
+		tree := NewTree(root, tk(4))
+		doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+		doc.Object().Set("t", tree)
+		doc.RegisterElement(tree, doc.Object())
+		copied, err := doc.DeepCopy()
+		require.NoError(t, err)
+		ct := copied.Object().Get("t").(*Tree)
+
+		one := int64(0)
+		for _, n := range []*TreeNode{newer, b} {
+			s := n.DataSize()
+			one += int64(s.Data + s.Meta)
+		}
+		bound := maxDetachedSize
+		maxDetachedSize = one + time.TicketSize
+		vector := time.NewVersionVector()
+		vector.Set(actor, 20)
+		vector.Set(peer, 0)
+		for _, r := range []*Root{doc, copied} {
+			_, err = r.GarbageCollect(vector)
+			require.NoError(t, err)
+		}
+		maxDetachedSize = bound
+
+		for _, tr := range []*Tree{tree, ct} {
+			assert.Nil(t, tr.DetachedNode(a.id), "the oldest goes")
+			assert.NotNil(t, tr.DetachedNode(b.id), "the newer stays")
+		}
+		assert.Equal(t, doc.DocSize(), copied.DocSize())
+	}
+}
+
+// TestCollectingATreeLetsItsDetachedSubtreesGo pins that a Tree element the
+// collection deregisters leaves detachedTrees, and does not stay reachable
+// through it with the subtrees it holds.
+func TestCollectingATreeLetsItsDetachedSubtreesGo(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	a := NewTreeNode(NewTreeNodeID(time.NewTicket(40, 0, peer), 0), "p", nil)
+	require.NoError(t, root.Append(x))
+	require.NoError(t, x.Append(a))
+	x.remove(tk(10))
+	tree := NewTree(root, tk(3))
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	doc.Object().Set("t", tree)
+	doc.RegisterElement(tree, doc.Object())
+
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	vector.Set(peer, 0)
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.Contains(t, doc.detachedTrees, tree)
+
+	removed := doc.Object().Delete("t", tk(21))
+	require.Same(t, tree, removed)
+	doc.RegisterRemovedElementPair(doc.Object(), tree)
+	vector.Set(actor, 30)
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.Nil(t, doc.FindByCreatedAt(tree.CreatedAt()), "the tree is collected")
+	assert.NotContains(t, doc.detachedTrees, tree)
+}
+
+// TestCopyDetachedFromATreeOfAnotherShape pins that copyDetachedFrom, which
+// pairs a source's nodes with a copy's by walking both in lockstep, copies
+// nothing for a tree that is not a copy of the source in shape, rather than
+// indexing past the end of the shorter child list.
+func TestCopyDetachedFromATreeOfAnotherShape(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	srcRoot := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	require.NoError(t, srcRoot.Append(
+		NewTreeNode(NewTreeNodeID(tk(2), 0), "p", nil),
+		NewTreeNode(NewTreeNodeID(tk(3), 0), "p", nil),
+	))
+	src := NewTree(srcRoot, tk(4))
+	other := NewTree(NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil), tk(4))
+
+	assert.NotPanics(t, func() {
+		copies, err := other.copyDetachedFrom(src)
+		require.NoError(t, err)
+		assert.Nil(t, copies)
+	})
+}
+
+// TestDropDetachedStopsAtTheAttachedTree pins the guard of detachedTops: a
+// node marked detached under an attached parent, which only a tree
+// breaking that invariant holds, is passed over, so a drop does not walk up
+// into the attached tree and let it go.
+func TestDropDetachedStopsAtTheAttachedTree(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	p := NewTreeNode(NewTreeNodeID(tk(2), 0), "p", nil)
+	stray := NewTreeNode(NewTreeNodeID(tk(3), 0), "q", nil)
+	require.NoError(t, root.Append(p))
+	require.NoError(t, p.Append(stray))
+	tree := NewTree(root, tk(4))
+	stray.detached = true
+	tree.moveToDetached(stray)
+
+	vector := time.NewVersionVector()
+	vector.Set(actor, 10)
+	assert.Empty(t, tree.dropDetached(vector))
+	assert.Same(t, p, tree.findFloorNode(p.id), "the attached tree stays")
+	assert.Same(t, root, tree.findFloorNode(root.id))
 }

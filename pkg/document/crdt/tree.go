@@ -1126,12 +1126,6 @@ type Tree struct {
 	// node once a later collection lets the subtrees go (see dropDetached).
 	// NewTree, the only way a Tree is made, always sets it.
 	detachedByID *llrb.Tree[*TreeNodeID, *TreeNode]
-
-	// purgeVector is the vector of the collection that took out the
-	// detached subtrees the tree holds, nil while it holds none. A
-	// collection at a vector strictly after it lets them go (see
-	// Root.GarbageCollect).
-	purgeVector time.VersionVector
 }
 
 // NewTree creates a new instance of Tree.
@@ -1826,46 +1820,86 @@ func (t *Tree) forgetDetached(node *TreeNode) {
 	t.forgotten = append(t.forgotten, node)
 }
 
-// dropDetached lets go of the subtrees a purge took out that vector has
-// seen whole: every node in them was created, and merged in, at a ticket it
-// covers. A change concurrent with one of those could still name the node,
-// as one concurrent with the split that carried text into a subtree a
-// removal took out does, so such a subtree is kept. Each node of a subtree
-// let go leaves detachedByID and the merge stamp index, and the split links
-// of attached nodes skip it, as a purge of the node itself would; a
-// position naming one of them then fails to resolve, as on a replica that
-// keeps no detached nodes. It returns the nodes it let go, for Root to drop
-// the pairs they still hold.
-func (t *Tree) dropDetached(vector time.VersionVector) []*TreeNode {
-	var nodes []*TreeNode
+// detachedTops returns the tops of the subtrees a purge took out that hold
+// a node in detachedByID, in the order of their first such node's ID. A
+// walk up from a detached node stops at the first node that is not
+// detached, which only a tree breaking that invariant has, and the node is
+// passed over rather than taking the attached tree with it.
+func (t *Tree) detachedTops() []*TreeNode {
+	var tops []*TreeNode
 	seen := make(map[*TreeNode]struct{})
 	for _, n := range t.detachedByID.Values() {
 		top := n
-		for top.Index.Parent != nil {
+		for top.detached && top.Index.Parent != nil {
 			top = top.Index.Parent.Value
+		}
+		if !top.detached {
+			continue
 		}
 		if _, ok := seen[top]; ok {
 			continue
 		}
 		seen[top] = struct{}{}
-		var subtree []*TreeNode
-		seenWhole := true
-		stack := []*index.Node[*TreeNode]{top.Index}
-		for len(stack) > 0 {
-			current := stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
-			node := current.Value
-			if !vector.EqualToOrAfter(node.id.CreatedAt) ||
-				(node.MergedAt != nil && !vector.EqualToOrAfter(node.MergedAt)) {
-				seenWhole = false
-				break
-			}
-			subtree = append(subtree, node)
-			stack = append(stack, current.Children(true)...)
+		tops = append(tops, top)
+	}
+	return tops
+}
+
+// subtreeOf returns top and every node under it, iteratively, since the
+// depth is the client's to choose.
+func subtreeOf(top *TreeNode) []*TreeNode {
+	var nodes []*TreeNode
+	stack := []*index.Node[*TreeNode]{top.Index}
+	for len(stack) > 0 {
+		current := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		nodes = append(nodes, current.Value)
+		stack = append(stack, current.Children(true)...)
+	}
+	return nodes
+}
+
+// seenWhole reports whether vector covers the creation of every node in
+// top's subtree, and the merge that moved in any that a merge did. A change
+// that has seen neither could still name the node: one concurrent with the
+// split that carried text into a subtree a removal took out does.
+func seenWhole(top *TreeNode, vector time.VersionVector) bool {
+	stack := []*index.Node[*TreeNode]{top.Index}
+	for len(stack) > 0 {
+		current := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		node := current.Value
+		if !vector.EqualToOrAfter(node.id.CreatedAt) ||
+			(node.MergedAt != nil && !vector.EqualToOrAfter(node.MergedAt)) {
+			return false
 		}
-		if seenWhole {
-			nodes = append(nodes, subtree...)
+		stack = append(stack, current.Children(true)...)
+	}
+	return true
+}
+
+// dropDetached lets go of the subtrees a purge took out that vector has
+// seen whole (see seenWhole), and returns their nodes (see dropSubtrees).
+func (t *Tree) dropDetached(vector time.VersionVector) []*TreeNode {
+	var tops []*TreeNode
+	for _, top := range t.detachedTops() {
+		if seenWhole(top, vector) {
+			tops = append(tops, top)
 		}
+	}
+	return t.dropSubtrees(tops)
+}
+
+// dropSubtrees lets go of the detached subtrees under tops. Each node in
+// them leaves detachedByID and the merge stamp index, and the split links
+// of attached nodes skip it, as a purge of the node itself would; a
+// position naming one of them then fails to resolve, as on a replica that
+// keeps no detached nodes. It returns the nodes, for Root to drop the pairs
+// they still hold.
+func (t *Tree) dropSubtrees(tops []*TreeNode) []*TreeNode {
+	var nodes []*TreeNode
+	for _, top := range tops {
+		nodes = append(nodes, subtreeOf(top)...)
 	}
 	// Every link is rewritten while all of them still resolve: a split
 	// link names its neighbour by ID, and the floor of one already let go
@@ -3014,6 +3048,29 @@ func (t *Tree) DeepCopy() (Element, error) {
 	return tree, nil
 }
 
+// pairCopies walks the subtree under from and its copy under to in
+// lockstep, and returns each node of the first mapped to its counterpart.
+// It reports false at the first node whose children do not match in
+// number: the two are not copies, and pairing them on would index past the
+// end of the shorter list.
+func pairCopies(from, to *TreeNode) (map[*TreeNode]*TreeNode, bool) {
+	copies := make(map[*TreeNode]*TreeNode)
+	pairs := [][2]*index.Node[*TreeNode]{{from.Index, to.Index}}
+	for len(pairs) > 0 {
+		pair := pairs[len(pairs)-1]
+		pairs = pairs[:len(pairs)-1]
+		copies[pair[0].Value] = pair[1].Value
+		fromChildren, toChildren := pair[0].Children(true), pair[1].Children(true)
+		if len(fromChildren) != len(toChildren) {
+			return nil, false
+		}
+		for i := range fromChildren {
+			pairs = append(pairs, [2]*index.Node[*TreeNode]{fromChildren[i], toChildren[i]})
+		}
+	}
+	return copies, true
+}
+
 // copyDetachedFrom gives the tree, a fresh copy of src's attached tree, the
 // subtrees src's purges took out, for Root.DeepCopy. Tree.DeepCopy, which
 // also makes the copies an element payload carries, keeps the attached tree
@@ -3027,25 +3084,16 @@ func (t *Tree) DeepCopy() (Element, error) {
 // this.
 //
 // It returns the copy of every node of src, attached or detached, so Root
-// can book for the copies the pairs src's nodes have.
+// can book for the copies the pairs src's nodes have, or nil, copying
+// nothing, when the tree is not a copy of src's attached tree in shape.
 func (t *Tree) copyDetachedFrom(src *Tree) (map[*TreeNode]*TreeNode, error) {
-	copies := make(map[*TreeNode]*TreeNode)
-	pairs := [][2]*index.Node[*TreeNode]{{src.Root().Index, t.Root().Index}}
-	for len(pairs) > 0 {
-		pair := pairs[len(pairs)-1]
-		pairs = pairs[:len(pairs)-1]
-		copies[pair[0].Value] = pair[1].Value
-		fromChildren, toChildren := pair[0].Children(true), pair[1].Children(true)
-		for i := range fromChildren {
-			pairs = append(pairs, [2]*index.Node[*TreeNode]{fromChildren[i], toChildren[i]})
-		}
+	copies, ok := pairCopies(src.Root(), t.Root())
+	if !ok {
+		return nil, nil
 	}
 	registered := src.detachedByID.Values()
 	if len(registered) == 0 {
 		return copies, nil
-	}
-	if src.purgeVector != nil {
-		t.purgeVector = src.purgeVector.DeepCopy()
 	}
 	// A subtree is copied whole, from the top a purge took out. The ones
 	// holding a registered node come first; a slot in a copied subtree can
@@ -3075,20 +3123,16 @@ func (t *Tree) copyDetachedFrom(src *Tree) (map[*TreeNode]*TreeNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		pairs := [][2]*index.Node[*TreeNode]{{top.Index, copied.Index}}
-		for len(pairs) > 0 {
-			pair := pairs[len(pairs)-1]
-			pairs = pairs[:len(pairs)-1]
-			from, to := pair[0].Value, pair[1].Value
+		subtree, ok := pairCopies(top, copied)
+		if !ok {
+			return nil, nil
+		}
+		for from, to := range subtree {
 			copies[from] = to
 			to.detached, to.released = from.detached, from.released
 			t.noteMergeStamp(to)
 			enqueue(from.purgedFrom)
 			enqueue(from.purgedBefore)
-			fromChildren, toChildren := pair[0].Children(true), pair[1].Children(true)
-			for i := range fromChildren {
-				pairs = append(pairs, [2]*index.Node[*TreeNode]{fromChildren[i], toChildren[i]})
-			}
 		}
 	}
 

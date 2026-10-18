@@ -20,6 +20,9 @@
 package crdt
 
 import (
+	"maps"
+	"slices"
+
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -108,10 +111,10 @@ type Root struct {
 	gcNodePairMap    map[gcPairKey]GCPair
 	docSize          resource.DocSize
 
-	// detachedTrees holds the Trees whose purges left detached subtrees
-	// (see Tree.purgeVector), so a collection lets them go without walking
-	// every element. The value says the running collection purged in it.
-	detachedTrees map[*Tree]bool
+	// detachedTrees holds the Trees whose purges left detached subtrees, so
+	// a collection lets them go without walking every element (see
+	// GarbageCollect).
+	detachedTrees map[*Tree]struct{}
 
 	// sizeInGC maps every registered element whose size counts toward
 	// docSize.GC rather than docSize.Live to the exact amount charged. Each
@@ -148,7 +151,7 @@ func NewRoot(root *Object) *Root {
 		elementMap:       make(map[string]Element),
 		gcElementPairMap: make(map[string]ElementPair),
 		gcNodePairMap:    make(map[gcPairKey]GCPair),
-		detachedTrees:    make(map[*Tree]bool),
+		detachedTrees:    make(map[*Tree]struct{}),
 		sizeInGC:         make(map[Element]resource.DataSize),
 		docSize: resource.DocSize{
 			Live: resource.DataSize{
@@ -357,6 +360,10 @@ func (r *Root) deregisterElement(element Element) int {
 
 	deregister := func(elem Element) {
 		createdAt := elem.CreatedAt().Key()
+		if tree, ok := elem.(*Tree); ok {
+			// Its detached subtrees go with it.
+			delete(r.detachedTrees, tree)
+		}
 		// Subtract the size from wherever it is actually counted, and by the
 		// amount actually charged. A descendant created inside an
 		// already-removed container never passed through a removal, so it
@@ -563,13 +570,17 @@ func (r *Root) DocSize() resource.DocSize {
 // so it also carries the subtrees each Tree's purges took out (see
 // Tree.copyDetachedFrom): an op the root resolves through a detached node
 // resolves on the clone alike. Each Tree's pairs are the root's own, booked
-// for the copies of their nodes (see copyTreePairs).
+// for the copies of their nodes (see copyTreePairs). A Tree whose copy does
+// not match it in shape, which no honest document produces, keeps the pairs
+// NewRoot's scan derived and no detached state.
 func (r *Root) DeepCopy() (*Root, error) {
 	copiedObject, err := r.object.DeepCopy()
 	if err != nil {
 		return nil, err
 	}
 	copied := NewRoot(copiedObject.(*Object))
+	trees := make(map[*Tree]*Tree)
+	copies := make(map[*TreeNode]*TreeNode)
 	for key, elem := range r.elementMap {
 		tree, ok := elem.(*Tree)
 		if !ok {
@@ -579,33 +590,47 @@ func (r *Root) DeepCopy() (*Root, error) {
 		if !ok {
 			continue
 		}
-		copies, err := copiedTree.copyDetachedFrom(tree)
+		treeCopies, err := copiedTree.copyDetachedFrom(tree)
 		if err != nil {
 			return nil, err
 		}
-		if _, ok := r.detachedTrees[tree]; ok {
-			copied.detachedTrees[copiedTree] = false
+		if treeCopies == nil {
+			continue
 		}
-		copied.copyTreePairs(r, tree, copiedTree, copies)
+		trees[tree] = copiedTree
+		maps.Copy(copies, treeCopies)
+		if _, ok := r.detachedTrees[tree]; ok {
+			copied.detachedTrees[copiedTree] = struct{}{}
+		}
 	}
+	copied.copyTreePairs(r, trees, copies)
 	return copied, nil
 }
 
-// copyTreePairs replaces the pairs NewRoot's scan booked for copiedTree with
-// the ones src holds for tree, booked for the copies of their nodes. The
-// scan reaches the attached tree only and books through RegisterGCPair,
-// whose second registration under a key cancels the first, so two nodes
-// sharing an ID would leave the copy with neither; src's own entries are
-// what it collects, so the copy collects the same.
-func (r *Root) copyTreePairs(src *Root, tree, copiedTree *Tree, copies map[*TreeNode]*TreeNode) {
-	copied := make(map[*TreeNode]struct{}, len(copies))
+// copyTreePairs replaces the pairs NewRoot's scan booked for the copied
+// Trees with the ones src holds for their sources, booked for the copies of
+// their nodes. The scan reaches the attached tree only and books through
+// RegisterGCPair, whose second registration under a key cancels the first,
+// so two nodes sharing an ID would leave the copy with neither; src's own
+// entries are what it collects, so the copy collects the same. A pair whose
+// node has no copy, one no longer in its tree, is booked for a copy of the
+// node alone, which collect purges as it does the original.
+//
+// trees maps each source Tree to its copy and copies each source node to
+// its copy, so one pass over each pair map does it all.
+func (r *Root) copyTreePairs(src *Root, trees map[*Tree]*Tree, copies map[*TreeNode]*TreeNode) {
+	copiedTrees := make(map[GCParent]struct{}, len(trees))
+	for _, c := range trees {
+		copiedTrees[c] = struct{}{}
+	}
+	copiedNodes := make(map[*TreeNode]struct{}, len(copies))
 	for _, c := range copies {
-		copied[c] = struct{}{}
+		copiedNodes[c] = struct{}{}
 	}
 	for key, pair := range r.gcNodePairMap {
-		owned := pair.Parent == GCParent(copiedTree)
+		_, owned := copiedTrees[pair.Parent]
 		if node, ok := pair.Parent.(*TreeNode); ok {
-			_, owned = copied[node]
+			_, owned = copiedNodes[node]
 		}
 		if !owned {
 			continue
@@ -624,24 +649,97 @@ func (r *Root) copyTreePairs(src *Root, tree, copiedTree *Tree, copies map[*Tree
 		r.gcNodePairMap[keyOf(pair)] = pair
 		r.docSize.GC.Add(size)
 	}
+	// copyOf answers the copy of a node, copying one no longer in its tree
+	// on its own. Only a node out of every tree has none: an attached one
+	// was copied with its tree.
+	copyOf := func(node *TreeNode) *TreeNode {
+		if c := copies[node]; c != nil {
+			return c
+		}
+		if !node.detached && node.Index != nil && node.Index.Parent != nil {
+			return nil
+		}
+		c, err := node.DeepCopy()
+		if err != nil {
+			return nil
+		}
+		copies[node] = c
+		return c
+	}
+	attrsOf := make(map[*TreeNode]map[string]*RHTNode)
 	for _, pair := range src.gcNodePairMap {
-		if pair.Parent == GCParent(tree) {
-			if node, ok := pair.Child.(*TreeNode); ok && copies[node] != nil {
-				book(copiedTree, copies[node])
+		if tree, ok := pair.Parent.(*Tree); ok {
+			copiedTree, ok := trees[tree]
+			node, isNode := pair.Child.(*TreeNode)
+			if !ok || !isNode {
+				continue
+			}
+			if c := copyOf(node); c != nil {
+				book(copiedTree, c)
 			}
 			continue
 		}
 		node, ok := pair.Parent.(*TreeNode)
-		if !ok || copies[node] == nil || copies[node].Attrs == nil {
+		if !ok {
 			continue
 		}
-		for _, attr := range copies[node].Attrs.Nodes() {
-			if attr.IDString() == pair.Child.IDString() {
-				book(copies[node], attr)
-				break
+		if _, ours := copies[node]; !ours && !node.detached {
+			// An attached node of a Tree not in trees: the scan booked it.
+			continue
+		}
+		c := copyOf(node)
+		if c == nil || c.Attrs == nil {
+			continue
+		}
+		byID, ok := attrsOf[c]
+		if !ok {
+			byID = make(map[string]*RHTNode)
+			for _, attr := range c.Attrs.Nodes() {
+				byID[attr.IDString()] = attr
+			}
+			attrsOf[c] = byID
+		}
+		if attr := byID[pair.Child.IDString()]; attr != nil {
+			book(c, attr)
+		}
+	}
+}
+
+// Rederive returns a copy of the root whose ledger is derived from the
+// copy's own content, as an oracle for the running one: NewRoot's scan of
+// the attached trees, and for the detached nodes each Tree carries, the
+// pending pair of every one that is a tombstone and not released, and those
+// of their removed attributes. DeepCopy takes the root's own pairs instead,
+// so it cannot tell a ledger that drifted from one that did not.
+func (r *Root) Rederive() (*Root, error) {
+	copiedObject, err := r.object.DeepCopy()
+	if err != nil {
+		return nil, err
+	}
+	copied := NewRoot(copiedObject.(*Object))
+	for key, elem := range r.elementMap {
+		tree, ok := elem.(*Tree)
+		if !ok {
+			continue
+		}
+		copiedTree, ok := copied.elementMap[key].(*Tree)
+		if !ok {
+			continue
+		}
+		if _, err := copiedTree.copyDetachedFrom(tree); err != nil {
+			return nil, err
+		}
+		for _, node := range copiedTree.detachedByID.Values() {
+			if node.removedAt != nil && !node.released {
+				size := node.DataSize()
+				copied.RegisterGCPair(GCPair{Parent: copiedTree, Child: node, GCOnlySize: &size})
+			}
+			for _, pair := range node.GCPairs() {
+				copied.RegisterGCPair(pair)
 			}
 		}
 	}
+	return copied, nil
 }
 
 // GarbageCollect purge elements that were removed before the given time.
@@ -657,6 +755,9 @@ func (r *Root) copyTreePairs(src *Root, tree, copiedTree *Tree, copies map[*Tree
 // which decides only how many passes it takes, not what ends up collected.
 func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 	r.dropDetached(vector)
+	// On every path, the failed one included: a pass that errors may have
+	// purged already.
+	defer r.boundDetached()
 
 	count := 0
 	for {
@@ -667,46 +768,110 @@ func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 		count += purged
 
 		if purged == 0 || deferred == 0 {
-			break
+			return count, nil
 		}
 	}
-
-	for tree, purged := range r.detachedTrees {
-		if tree.detachedByID.Len() == 0 {
-			tree.purgeVector = nil
-			delete(r.detachedTrees, tree)
-		} else if purged {
-			tree.purgeVector = vector.DeepCopy()
-			r.detachedTrees[tree] = false
-		}
-	}
-	return count, nil
 }
 
-// dropDetached lets go of the detached subtrees vector has seen whole (see
-// Tree.dropDetached), with the pairs their nodes still hold, in every Tree
-// whose last purges ran at a vector the given one is strictly after.
+// maxDetachedSize bounds the bytes of the detached subtrees a document
+// holds (see boundDetached). It matches the default MaxSizePerDocument, the
+// figure the server gates Live on.
+var maxDetachedSize int64 = 10 * 1024 * 1024
+
+// dropDetached lets go of the detached subtrees vector has seen whole, in
+// every Tree, with the pairs their nodes still hold (see Tree.dropDetached).
+// It runs before the collection, so only subtrees an earlier one took out.
 //
 // A purge at vector V comes after every change concurrent with the removal
 // it collects, by the protocol, but a change that is not concurrent with
 // the removal can still name a node a concurrent split carried into the
-// subtree, and a late change (yorkie#2110) any node in it. So a subtree is
-// kept until a collection at a later vector that also covers the creation
-// of every node in it; a change naming it after that fails to resolve, as
-// on a replica that keeps no detached nodes. The root and its clone collect
-// at the same vectors, and the clone copies purgeVector, so both let go
-// alike.
+// subtree, or a merge moved there, as long as it has not seen that split or
+// merge. So a subtree is kept until a collection whose vector covers the
+// creation and merge of every node in it; a change naming it after that
+// fails to resolve, as on a replica that keeps no detached nodes. The rule
+// reads the subtree and the vector alone, so the root and its clone, which
+// collect at the same vectors, let go alike.
 func (r *Root) dropDetached(vector time.VersionVector) {
 	for tree := range r.detachedTrees {
-		if tree.purgeVector == nil || !vector.AfterOrEqual(tree.purgeVector) ||
-			tree.purgeVector.AfterOrEqual(vector) {
+		r.dropNodes(tree, tree.dropDetached(vector))
+	}
+}
+
+// dropNodes drops the pairs the nodes a Tree let go still hold: their own,
+// and those of their removed attributes.
+func (r *Root) dropNodes(tree *Tree, nodes []*TreeNode) {
+	for _, node := range nodes {
+		r.DropGCPair(GCPair{Parent: tree, Child: node})
+		for _, pair := range node.GCPairs() {
+			r.DropGCPair(pair)
+		}
+	}
+}
+
+// boundDetached keeps the detached subtrees a document holds within
+// maxDetachedSize. They are in neither Live, which the server's size gate
+// reads, nor GC, and a stalled minimum vector would keep dropDetached from
+// ever letting them go, so without a bound a client could grow them without
+// limit. Past the bound, the subtrees go oldest first, by the removal the
+// purge collected and then the top's ID, until the rest fit: an order that
+// depends on the detached state alone, not on Go's map order or on when a
+// collection ran, so the root and its clone drop the same ones. A change
+// naming a node in one then fails to resolve, as for any dropped subtree.
+// Trees left with none leave detachedTrees.
+func (r *Root) boundDetached() {
+	type held struct {
+		tree *Tree
+		top  *TreeNode
+		size int64
+	}
+	var subtrees []held
+	var total int64
+	for tree := range r.detachedTrees {
+		tops := tree.detachedTops()
+		if len(tops) == 0 {
+			delete(r.detachedTrees, tree)
 			continue
 		}
-		for _, node := range tree.dropDetached(vector) {
-			r.DropGCPair(GCPair{Parent: tree, Child: node})
-			for _, pair := range node.GCPairs() {
-				r.DropGCPair(pair)
+		for _, top := range tops {
+			var size int64
+			for _, n := range subtreeOf(top) {
+				s := n.DataSize()
+				size += int64(s.Data + s.Meta)
 			}
+			subtrees = append(subtrees, held{tree, top, size})
+			total += size
+		}
+	}
+	if total <= maxDetachedSize {
+		return
+	}
+	// Every top is a purged tombstone; one without a removal, only in a tree
+	// breaking that, sorts by its creation.
+	removal := func(n *TreeNode) *time.Ticket {
+		if n.removedAt != nil {
+			return n.removedAt
+		}
+		return n.id.CreatedAt
+	}
+	slices.SortFunc(subtrees, func(a, b held) int {
+		if c := removal(a.top).Compare(removal(b.top)); c != 0 {
+			return c
+		}
+		if c := a.tree.createdAt.Compare(b.tree.createdAt); c != 0 {
+			return c
+		}
+		return a.top.id.Compare(b.top.id)
+	})
+	for _, h := range subtrees {
+		if total <= maxDetachedSize {
+			break
+		}
+		r.dropNodes(h.tree, h.tree.dropSubtrees([]*TreeNode{h.top}))
+		total -= h.size
+	}
+	for tree := range r.detachedTrees {
+		if tree.detachedByID.Len() == 0 {
+			delete(r.detachedTrees, tree)
 		}
 	}
 }
@@ -793,8 +958,8 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 			if err != nil {
 				return 0, 0, err
 			}
-			if tree, ok := parent.(*Tree); ok {
-				r.detachedTrees[tree] = true
+			if tree, ok := parent.(*Tree); ok && result.Purged && tree.detachedByID.Len() > 0 {
+				r.detachedTrees[tree] = struct{}{}
 			}
 			// Defensive; unreachable because the check above skips a pair
 			// whose child has no removal, the only purge that does not happen.

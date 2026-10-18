@@ -33,11 +33,13 @@ import (
 // document's sizes and garbage count are a function of its content, so a
 // document rebuilt from that content reports the same numbers. A rebuilt
 // document is what every client joining an existing document holds, and what
-// the server replays from a snapshot.
+// the server replays from a snapshot. The rebuilt ledger is derived from the
+// content (crdt.Root.Rederive), the pending pairs of the detached nodes a
+// running replica carries included, not copied from the document's own.
 func assertRebuildsSame(t *testing.T, doc *document.Document, msg string) {
 	t.Helper()
 
-	rebuilt, err := doc.InternalDocumentForTest().DeepCopy()
+	rebuilt, err := doc.InternalDocumentForTest().Root().Rederive()
 	require.NoError(t, err)
 	assert.Equal(t, doc.DocSize().GC, rebuilt.DocSize().GC, "%s: gc size", msg)
 	assert.Equal(t, doc.GarbageLen(), rebuilt.GarbageLen(), "%s: garbage count", msg)
