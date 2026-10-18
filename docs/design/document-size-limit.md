@@ -111,9 +111,13 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
   element's content exactly because an edit or a style inside a removed
   Tree element, a revive, a recreate or an insert, charges what it makes
   live there too, not to `Live`, as a rebuild counts a removed element in
-  GC whole (`Root.ChargeToRemovedElement`,
-  `TestTreeOpsInsideARemovedTreeElement`, yorkie#2251); main charged it to
-  `Live`, which kept it for good. A Tree a restore releases (`Root.release`)
+  GC whole (`Root.ChargeTreeOp`, which the local proxy and the replayed
+  operations share, `TestTreeOpsInsideARemovedTreeElement`,
+  `TestLocalTreeOpsOnARemovedElementKeepTheCloneWithTheRoot`, yorkie#2251);
+  main charged it to `Live`, which kept it for good. The charge is exact for
+  a Tree that has one: a Tree a peer adds into a container already removed
+  never went through a removal, has no charge, and sits in `Live`, edits to
+  it included, until its container is collected, as on main. A Tree a restore releases (`Root.release`)
   leaves as a deregistered one does, its detached subtrees and their pairs
   with it (`TestReleasingATreeLetsItsDetachedSubtreesGo`). Each takes
   the removal of its nearest removed ancestor, which depends on the subtree
