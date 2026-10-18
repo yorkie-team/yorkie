@@ -447,3 +447,46 @@ func TestDeleteCascadeReportsParentsFirst(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "<r><div><p>a</p></div><div><p>b</p></div></r>", tree.ToXML(), "the undo brings all of it back")
 }
+
+// TestRetombstoneCascadeIsLinear pins the cost of the §4.1 cascade over a
+// span list that names every element of one split chain. <r> holds p0 and
+// its split products p1..pN, linked through InsNextID and unknown to the
+// retombstoning change; a span for each one makes each cascade start one
+// link further down. The call walks the chain once in all, not once per
+// span, so a crafted span list over a long chain costs linear work.
+func TestRetombstoneCascadeIsLinear(t *testing.T) {
+	const n = 500
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ff")
+	require.NoError(t, err)
+	root := NewTreeNode(NewTreeNodeID(time.NewTicket(1, 0, actor), 0), "r", nil)
+	tree := NewTree(root, time.NewTicket(2, 0, actor))
+	chain := make([]*TreeNode, n+1)
+	chain[0] = NewTreeNode(NewTreeNodeID(time.NewTicket(3, 0, actor), 0), "p", nil)
+	for i := 1; i <= n; i++ {
+		chain[i] = NewTreeNode(NewTreeNodeID(time.NewTicket(int64(10+i), 0, peer), 0), "p", nil)
+	}
+	var prev *TreeNode
+	for _, p := range chain {
+		require.NoError(t, root.Append(p))
+		tree.putNode(p)
+		if prev != nil {
+			prev.InsNextID, p.InsPrevID = p.id, prev.id
+		}
+		prev = p
+	}
+	known := time.NewVersionVector()
+	known.Set(actor, 5)
+
+	spans := make([]*TreeRestoreSpan, 0, len(chain))
+	for _, p := range chain {
+		spans = append(spans, &TreeRestoreSpan{ID: p.id, NodeType: "p", ParentID: root.id})
+	}
+	_, _, _, _, err = tree.Retombstone(spans, time.NewTicket(6, 0, actor), false, known)
+	require.NoError(t, err)
+	for _, p := range chain {
+		require.True(t, p.IsRemoved())
+	}
+	assert.LessOrEqual(t, tree.cascadeSteps, 2*n, "each link is walked about once, not once per span")
+}
