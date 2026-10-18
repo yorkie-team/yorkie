@@ -38,8 +38,9 @@ needs neither, finishing the corpus and all 1850 parity rows in seconds.
 unset `CONFORMANCE_FAM` skips it.
 
 The one lane that runs it also runs the integration suite, on the same four
-cores, so the rows are a CPU budget as much as a check: a v1 family pins 200
-seeds and a v2 family 50. What catches a convergence bug is the corpus — a
+cores, so the rows are a CPU budget as much as a check: the six original
+families pin 200 seeds and every family added since 50, whatever script
+format it generates (see `parity/` below). What catches a convergence bug is the corpus — a
 seed that caught one is minimized into `corpus/` and replayed on every run —
 so the seed count only has to be wide enough to catch a runner that drifts
 from the other SDK.
