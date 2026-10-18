@@ -1738,3 +1738,84 @@ func TestPurgedSlotEndsOnACycle(t *testing.T) {
 		assert.ErrorIs(t, err, ErrNodeNotFound)
 	})
 }
+
+// TestDeleteCascadeSkipsADetachedSplitProduct pins the forward §4.1 cascade
+// against a split product a purge took out. A peer's split cut
+// <r><div><p>ab</p></div></r> into div and div', the product p' carrying
+// "b"; div' was then removed while p' stayed live under it. One replica
+// purges div', releasing p' and "b"; the other does not. A delete of div
+// that did not know the split cascades to p'. The purged replica walks past
+// the detached p', with nothing to remove there; the other removes the
+// still-live p'. Both show the same tree, keep a ledger equal to a rebuild,
+// and hold the same once both collect.
+func TestDeleteCascadeSkipsADetachedSplitProduct(t *testing.T) {
+	var xmls, shapes []string
+	for _, purge := range []bool{true, false} {
+		actor, err := time.ActorIDFromHex("000000000000000000000001")
+		require.NoError(t, err)
+		peer, err := time.ActorIDFromHex("0000000000000000000000ff")
+		require.NoError(t, err)
+		lamport := int64(0)
+		next := func() *time.Ticket {
+			lamport++
+			return time.NewTicket(lamport, 0, actor)
+		}
+		root := NewTreeNode(NewTreeNodeID(next(), 0), "r", nil)
+		div := NewTreeNode(NewTreeNodeID(next(), 0), "div", nil)
+		p := NewTreeNode(NewTreeNodeID(next(), 0), "p", nil)
+		require.NoError(t, p.Append(NewTreeNode(NewTreeNodeID(next(), 0), "text", nil, "ab")))
+		require.NoError(t, div.Append(p))
+		require.NoError(t, root.Append(div))
+		tree := NewTree(root, next())
+		unaware := time.NewVersionVector()
+		unaware.Set(actor, lamport+100)
+
+		peerLamport := lamport
+		peerTicket := func() *time.Ticket {
+			peerLamport++
+			return time.NewTicket(peerLamport, 0, peer)
+		}
+		_, _, err = tree.EditT(3, 3, nil, 2, peerTicket(), peerTicket)
+		require.NoError(t, err)
+		product := tree.Root().Children()[1]
+		productP := product.Children()[0]
+		product.remove(peerTicket())
+
+		doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+		doc.Object().Set("t", tree)
+		doc.RegisterElement(tree, doc.Object())
+		all := time.NewVersionVector()
+		all.Set(actor, time.MaxLamport)
+		all.Set(peer, time.MaxLamport)
+		if purge {
+			_, err := doc.GarbageCollect(all)
+			require.NoError(t, err)
+			require.True(t, productP.detached)
+		}
+
+		from := NewTreePos(root.id, root.id)
+		to := NewTreePos(root.id, div.id)
+		at := time.NewTicket(lamport+50, 0, actor)
+		pairs, diff, _, err := tree.Edit(from, to, nil, 0, at, next, unaware, false)
+		require.NoError(t, err)
+		for _, pair := range pairs {
+			doc.RegisterGCPair(pair)
+		}
+		doc.Acc(diff)
+		rebuilt, err := doc.DeepCopy()
+		require.NoError(t, err)
+		assert.Equal(t, rebuilt.DocSize(), doc.DocSize(), "purged %v: after the delete", purge)
+		xmls = append(xmls, tree.ToXML())
+
+		_, err = doc.GarbageCollect(all)
+		require.NoError(t, err)
+		rebuilt, err = doc.DeepCopy()
+		require.NoError(t, err)
+		assert.Equal(t, rebuilt.DocSize(), doc.DocSize(), "purged %v: after collecting", purge)
+		assert.Equal(t, 0, doc.GarbageLen(), "purged %v", purge)
+		shapes = append(shapes, treeShapeOf(tree))
+	}
+	assert.Equal(t, "<r></r>", xmls[0])
+	assert.Equal(t, xmls[0], xmls[1])
+	assert.Equal(t, shapes[0], shapes[1])
+}

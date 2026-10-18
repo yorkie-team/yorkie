@@ -4693,7 +4693,11 @@ func (t *Tree) appendUnknownSplitSiblings(
 			if !seenGone && !enclosed(next) {
 				break
 			}
-		} else {
+		} else if !next.detached {
+			// A detached sibling is a tombstone in a subtree a purge took
+			// out, with nothing to remove there; the walk goes on past it, as
+			// Retombstone's does (see TreeNode.detached).
+			//
 			// Cascade through the full subtree, not just immediate children,
 			// parent before child: the order becomes the reverse operation's
 			// spans, and Restore revives a child only once its parent is live
