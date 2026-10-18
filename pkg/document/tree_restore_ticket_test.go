@@ -89,25 +89,23 @@ const (
 	actorTicketObserverBase = 10
 )
 
-// nodeByID answers the question NodeMapByID answers, which is NOT the question
-// a traversal answers.
+// nodeByID answers the question the production ID lookup answers, which is
+// NOT the question a traversal answers.
 //
 // Every assertion about a restored node has to survive the node becoming
 // unreachable -- that is the defect. tree.Nodes() walks the index tree and so
 // loses exactly the nodes worth looking at, while findFloorNode is unexported.
-// Floor is the only door in from outside the crdt package. The production
-// lookup reads NodeMapByID together with the index of detached nodes; a
-// restored node this helper asserts on is attached, so NodeMapByID is where
-// the server would find it.
+// It reads NodeMapByID together with the index of detached nodes, so this
+// does the same from outside the crdt package: NodeMapByID's Floor, then
+// DetachedNode, each for exactly id.
 func nodeByID(t *testing.T, doc *document.Document, id *crdt.TreeNodeID) *crdt.TreeNode {
 	t.Helper()
 
-	key, node := treeCRDT(t, doc).NodeMapByID.Floor(id)
-	if node == nil || key == nil || !key.Equal(id) {
-		return nil
+	tree := treeCRDT(t, doc)
+	if key, node := tree.NodeMapByID.Floor(id); node != nil && key != nil && key.Equal(id) {
+		return node
 	}
-
-	return node
+	return tree.DetachedNode(id)
 }
 
 // tombstoneOf renders a node's liveness as the TICKET it carries, not as a
