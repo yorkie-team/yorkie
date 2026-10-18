@@ -107,7 +107,15 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
   GC charge instead, which its removal moved them to, and in one the same
   collection already deregistered, which took its charge with it, nothing
   is booked (`Root.bookRelease`, `TestReleaseInsideARemovedTreeElement`,
-  `TestAReleaseInACollectedTreeBooksNothing`). Each takes
+  `TestAReleaseInACollectedTreeBooksNothing`). That charge holds the
+  element's content exactly because an edit or a style inside a removed
+  Tree element, a revive, a recreate or an insert, charges what it makes
+  live there too, not to `Live`, as a rebuild counts a removed element in
+  GC whole (`Root.ChargeToRemovedElement`,
+  `TestTreeOpsInsideARemovedTreeElement`, yorkie#2251); main charged it to
+  `Live`, which kept it for good. A Tree a restore releases (`Root.release`)
+  leaves as a deregistered one does, its detached subtrees and their pairs
+  with it (`TestReleasingATreeLetsItsDetachedSubtreesGo`). Each takes
   the removal of its nearest removed ancestor, which depends on the subtree
   alone and not on which of two pairs a collection purged first in Go's map
   order (`TestReleaseTicketDoesNotDependOnPurgeOrder`). They leave
