@@ -1239,7 +1239,11 @@ func (d *Document) DocSize() resource.DocSize {
 // now that invalidation leaves the pointer live (see Document.cloneStale).
 func (d *Document) GarbageCollect(vector time.VersionVector) int {
 	if d.updating.Load() {
-		return d.garbageCollect(vector)
+		// The updater holds d.mu and may write the document's clock as its
+		// change lands, so this collection reads none of it: a nil clock
+		// trusts every ticket, keeping a subtree a forged one would hold
+		// until the next collection that takes the lock tells it apart.
+		return d.garbageCollectWith(vector, nil)
 	}
 
 	d.mu.Lock()
@@ -1252,19 +1256,25 @@ func (d *Document) GarbageCollect(vector time.VersionVector) int {
 // ApplyChangePack holds the lock for the whole pack and sync.RWMutex is not
 // reentrant, so calling the exported method from there would deadlock.
 func (d *Document) garbageCollect(vector time.VersionVector) int {
+	return d.garbageCollectWith(vector, d.doc.clock())
+}
+
+// garbageCollectWith is garbageCollect with the clock the collection tells
+// forged tickets by (see crdt.DocumentClock), the same for the root and
+// its clone.
+func (d *Document) garbageCollectWith(vector time.VersionVector, clock *crdt.DocumentClock) int {
 	// A stale clone holds a prefix of a change its root never took, so
 	// collecting on it is both pointless -- ensureClone throws it away on the
 	// next access -- and unsafe, since it may not satisfy GarbageCollect's
 	// invariants. A nil cloneRoot, not yet built, is skipped by the same
 	// check.
 	if d.cloneRoot != nil && !d.cloneStale {
-		// The root's own version vector, as the root's collection below uses.
-		if _, err := d.cloneRoot.GarbageCollect(vector, d.doc.clock()); err != nil {
+		if _, err := d.cloneRoot.GarbageCollect(vector, clock); err != nil {
 			panic(err)
 		}
 	}
 
-	n, err := d.doc.GarbageCollect(vector)
+	n, err := d.doc.root.GarbageCollect(vector, clock)
 	if err != nil {
 		panic(err)
 	}
