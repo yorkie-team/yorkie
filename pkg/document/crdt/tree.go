@@ -215,6 +215,12 @@ type TreeNode struct {
 	// still to come. The pair goes when the subtree is let go
 	// (Root.dropDetached), or the node is forgotten.
 	released bool
+
+	// forgotten is set on a detached node a restore forgot (see
+	// Tree.forgetDetached): it has left the document and its pairs with
+	// it, though it still hangs in its detached subtree until the subtree
+	// is let go. Runtime only.
+	forgotten bool
 }
 
 // Children returns the children of this node.
@@ -1833,6 +1839,7 @@ func (t *Tree) forgetDetached(node *TreeNode) {
 		t.forgetMergeStamp(node)
 	}
 	t.unlinkInsChain(node)
+	node.forgotten = true
 	t.forgotten = append(t.forgotten, node)
 }
 
@@ -3142,7 +3149,7 @@ func (t *Tree) copyDetachedFrom(src *Tree) (map[*TreeNode]*TreeNode, error) {
 		}
 		for from, to := range subtree {
 			copies[from] = to
-			to.detached, to.released = from.detached, from.released
+			to.detached, to.released, to.forgotten = from.detached, from.released, from.forgotten
 			t.noteMergeStamp(to)
 			enqueue(from.purgedFrom)
 			enqueue(from.purgedBefore)

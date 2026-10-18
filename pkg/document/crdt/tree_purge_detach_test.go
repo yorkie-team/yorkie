@@ -2745,8 +2745,19 @@ func TestARetainedBookingUnderATakenKeyIsKept(t *testing.T) {
 	released.Sub(doc.DocSize().Live)
 	assert.Equal(t, b.DataSize().Data, released.Data, "and off Live")
 
-	_, err = doc.GarbageCollect(vector)
+	copied, err := doc.DeepCopy()
 	require.NoError(t, err)
+	assert.Equal(t, doc.DocSize(), copied.DocSize(), "the clone holds b's bytes too")
+	assert.Len(t, copied.retainedOff, 1)
+	rederived, err := doc.Rederive()
+	require.NoError(t, err)
+	assert.Equal(t, doc.DocSize(), rederived.DocSize())
+
+	for _, r := range []*Root{doc, copied} {
+		_, err = r.GarbageCollect(vector)
+		require.NoError(t, err)
+	}
+	assert.Equal(t, doc.DocSize(), copied.DocSize())
 	assert.Equal(t, a.DataSize(), doc.DocSize().GC, "the drop gives b's back, a's pair stays")
 	assert.Equal(t, 1, doc.GarbageLen())
 	assert.Empty(t, doc.retainedOff)
@@ -2818,4 +2829,59 @@ func TestPutNodeKeepsAnAttachedNodesID(t *testing.T) {
 	tree.putNode(n)
 	assert.Nil(t, tree.DetachedNode(shared))
 	assert.Same(t, a, tree.findFloorNode(shared))
+}
+
+// TestCopyCarriesATopNoIndexedNodeHangsUnder pins that a copy of the root
+// carries every detached subtree a purge recorded, including one with no
+// node detachedByID indexes: b, the only node under x, shares its ID with
+// a, attached, which holds it. A copy that found its subtrees through
+// detachedByID alone would book b's pair for a copy of b, with no top to
+// drop it by, and hold more GC than the root once the root drops it. Both,
+// and a ledger derived from the content, agree before the drop, which the
+// next collection makes, and after.
+func TestCopyCarriesATopNoIndexedNodeHangsUnder(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	shared := NewTreeNodeID(time.NewTicket(40, 0, peer), 0)
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	b := NewTreeNode(shared, "p", nil)
+	a := NewTreeNode(shared, "p", nil)
+	require.NoError(t, root.Append(x, a))
+	require.NoError(t, x.Append(b))
+	x.remove(tk(10))
+	doc, tree := releaseFixture(t, root, tk(4))
+	require.Same(t, a, tree.findFloorNode(shared))
+
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	vector.Set(peer, 40)
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.True(t, b.released)
+	require.Zero(t, tree.detachedByID.Len(), "no node under x is indexed")
+
+	copied, err := doc.DeepCopy()
+	require.NoError(t, err)
+	check := func(when string) {
+		t.Helper()
+		assert.Equal(t, doc.DocSize(), copied.DocSize(), when)
+		assert.Equal(t, doc.GarbageLen(), copied.GarbageLen(), when)
+		rederived, err := doc.Rederive()
+		require.NoError(t, err)
+		assert.Equal(t, doc.DocSize(), rederived.DocSize(), when)
+		assert.Equal(t, doc.GarbageLen(), rederived.GarbageLen(), when)
+	}
+	check("before the drop")
+	require.Equal(t, 1, doc.GarbageLen())
+
+	for _, r := range []*Root{doc, copied} {
+		_, err = r.GarbageCollect(vector)
+		require.NoError(t, err)
+	}
+	require.Equal(t, 0, doc.GarbageLen(), "the root drops b")
+	check("after the drop")
 }

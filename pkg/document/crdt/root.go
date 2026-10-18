@@ -718,9 +718,10 @@ func (r *Root) copyTreePairs(src *Root, trees map[*Tree]*Tree, copies map[*TreeN
 
 // Rederive returns a copy of the root whose ledger is derived from the
 // copy's own content, as an oracle for the running one: NewRoot's scan of
-// the attached trees, and for the detached nodes each Tree carries, the
-// pending pair of every one that is a tombstone, released ones included, and
-// those of their removed attributes. DeepCopy takes the root's own pairs
+// the attached trees, and for the detached subtrees each Tree carries,
+// walked from their tops, the pending pair of every node that is a
+// tombstone, released ones included, and those of their removed
+// attributes. DeepCopy takes the root's own pairs
 // instead, so it cannot tell a ledger that drifted from one that did not.
 // For tests and diagnostics, as NodeLen is; exported for the tests of
 // package document, which check a document's ledger with it.
@@ -742,14 +743,26 @@ func (r *Root) Rederive() (*Root, error) {
 		if _, err := copiedTree.copyDetachedFrom(tree); err != nil {
 			return nil, err
 		}
-		for _, node := range copiedTree.detachedByID.Values() {
-			if node.removedAt != nil {
-				size := node.DataSize()
-				copied.RegisterGCPair(GCPair{Parent: copiedTree, Child: node, GCOnlySize: &size})
+		// Walked from the tops, as the drop is, not from detachedByID, which
+		// does not index a node another holds the ID of. A top's own pair
+		// was purged with it; the rest of its subtree, but for nodes a
+		// restore forgot, holds a pair each, booked as bookRetained does
+		// one, and those of their removed attributes.
+		for _, top := range copiedTree.tops() {
+			for _, node := range subtreeOf(top) {
+				if node.forgotten {
+					continue
+				}
+				if node != top && node.removedAt != nil {
+					copied.bookRetained(GCPair{Parent: copiedTree, Child: node})
+				}
+				for _, pair := range node.GCPairs() {
+					copied.RegisterGCPair(pair)
+				}
 			}
-			for _, pair := range node.GCPairs() {
-				copied.RegisterGCPair(pair)
-			}
+		}
+		if len(copiedTree.detachedTops) > 0 {
+			copied.detachedTrees[copiedTree] = struct{}{}
 		}
 	}
 	return copied, nil
