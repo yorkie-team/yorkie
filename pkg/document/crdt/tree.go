@@ -208,6 +208,13 @@ type TreeNode struct {
 	// that has not purged the subtree resolves it at the subtree's place.
 	purgedFrom   *TreeNode
 	purgedBefore *TreeNode
+
+	// released is set on a node a purge tombstoned because it was live in
+	// the subtree taken out (see GCLiveRelease), and on pieces split off
+	// one. Runtime only. Such a node carries no GC pair, and its bytes are
+	// in neither Live nor GC: the purge took them off Live and booked
+	// nothing, as a rebuild holds nothing for it.
+	released bool
 }
 
 // Children returns the children of this node.
@@ -369,6 +376,7 @@ func (n *TreeNode) Split(
 		// A piece split off a detached node sits in the same detached
 		// subtree (see TreeNode.detached).
 		split.detached = n.detached
+		split.released = n.released
 
 		split.InsPrevID = n.id
 		if n.InsNextID != nil {
@@ -453,6 +461,14 @@ func (n *TreeNode) Split(
 		// piece was never live, so the net-new size the split created goes
 		// straight to docSize.GC when the pair is registered; return a zero
 		// diff to the caller (which accounts diffs to docSize.Live).
+		//
+		// A piece split off a released node is released too: its source's
+		// bytes are in neither Live nor GC, so the piece's are not either,
+		// and a pair booked for its split overhead alone would give back its
+		// whole size when purged, which GC never held.
+		if split.removedAt != nil && split.released {
+			return resource.DataSize{}, nil
+		}
 		if split.removedAt != nil {
 			gcSize := diff
 			tree.pendingGCPairs = append(tree.pendingGCPairs, GCPair{
@@ -1402,6 +1418,7 @@ func (t *Tree) purgeReleasing(node *TreeNode) (int, PurgeResult, error) {
 			if !n.Value.IsRemoved() {
 				result.Released.Add(n.Value.DataSize())
 				n.Value.remove(node.removedAt)
+				n.Value.released = true
 			}
 			n.Value.detached = true
 			if n.Value.MergedFrom != nil {
@@ -1478,6 +1495,7 @@ func (t *Tree) takeDetachedSide(node *TreeNode, at *time.Ticket) resource.DataSi
 		if !n.Value.IsRemoved() {
 			released.Add(n.Value.DataSize())
 			n.Value.remove(at)
+			n.Value.released = true
 		}
 		n.Value.detached = true
 		if n.Value.MergedFrom != nil {

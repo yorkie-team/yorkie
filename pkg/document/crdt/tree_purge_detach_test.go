@@ -1552,3 +1552,53 @@ func TestMergeIntoADetachedParentWithoutARemovalFails(t *testing.T) {
 	assert.Nil(t, moved.MergedFrom, "nothing stamped")
 	assert.False(t, moved.detached)
 }
+
+// TestSplitOfAReleasedTextKeepsTheLedger pins the ledger of a split inside
+// a released subtree. A purge releases the live "ab" under the removed div,
+// taking its bytes off Live and booking nothing. A late insert in the middle
+// of "ab" splits it; the piece split off is released too, so it books no
+// pair: one booked for its split overhead alone would give back the piece's
+// whole size at its purge, which GC never held. After everything is
+// collected, GC and Live equal a rebuild and nothing is left pending.
+func TestSplitOfAReleasedTextKeepsTheLedger(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	removedAt := time.NewTicket(10, 0, actor)
+	root := NewTreeNode(NewTreeNodeID(time.NewTicket(1, 0, actor), 0), "r", nil)
+	div := NewTreeNode(NewTreeNodeID(time.NewTicket(2, 0, actor), 0), "div", nil)
+	p := NewTreeNode(NewTreeNodeID(time.NewTicket(3, 0, actor), 0), "p", nil)
+	text := NewTreeNode(NewTreeNodeID(time.NewTicket(4, 0, actor), 0), "text", nil, "ab")
+	require.NoError(t, root.Append(div))
+	require.NoError(t, div.Append(p))
+	require.NoError(t, p.Append(text))
+	div.remove(removedAt)
+	tree := NewTree(root, time.NewTicket(5, 0, actor))
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	doc.Object().Set("t", tree)
+	doc.RegisterElement(tree, doc.Object())
+	all := time.NewVersionVector()
+	all.Set(removedAt.ActorID(), time.MaxLamport)
+	_, err = doc.GarbageCollect(all)
+	require.NoError(t, err)
+	require.True(t, text.released, "the text is released with div")
+
+	at := time.NewTicket(removedAt.Lamport()+10, 0, removedAt.ActorID())
+	issue := func() *time.Ticket { return at }
+	pos := NewTreePos(p.id, NewTreeNodeID(text.id.CreatedAt, 1))
+	content := NewTreeNode(NewTreeNodeID(at, 0), "text", nil, "X")
+	pairs, diff, _, err := tree.Edit(pos, pos, []*TreeNode{content}, 0, at, issue, all, false)
+	require.NoError(t, err)
+	require.Len(t, p.Children(true), 3, "ab was split around the insert")
+	assert.True(t, p.Children(true)[2].released, "the piece split off is released too")
+	for _, pair := range pairs {
+		doc.RegisterGCPair(pair)
+	}
+	doc.Acc(diff)
+
+	_, err = doc.GarbageCollect(all)
+	require.NoError(t, err)
+	rebuilt, err := doc.DeepCopy()
+	require.NoError(t, err)
+	assert.Equal(t, rebuilt.DocSize(), doc.DocSize(), "GC and Live equal a rebuild")
+	assert.Equal(t, 0, doc.GarbageLen(), "nothing is left pending")
+}
