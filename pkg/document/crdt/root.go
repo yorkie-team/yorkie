@@ -304,6 +304,12 @@ func (r *Root) index(elem Element) {
 			// pairs and the retained bytes their nodes hold, and so do the
 			// pairs of its attached tombstones, which nothing would
 			// otherwise collect before a pass at a vector covering them.
+			// Set, release's one caller, registers the restored copy right
+			// after, so every released element the copy has a counterpart
+			// of is displaced here. One it has none of, a member a peer
+			// added to the removed container, keeps its slot, as on main,
+			// and its detached state stays in detachedTrees, which the
+			// coverage drop reaches like any other.
 			if tree, isTree := prev.(*Tree); isTree {
 				r.dropNodes(tree, tree.dropSubtrees(tree.tops()))
 				r.dropNodes(tree, subtreeOf(tree.Root()))
@@ -1054,8 +1060,9 @@ func (r *Root) bookRetained(pair GCPair) {
 	r.docSize.GC.Add(size)
 	key := keyOf(pair)
 	if _, ok := r.gcNodePairMap[key]; ok {
-		node := pair.Child.(*TreeNode)
-		r.retainedOff[node] = size
+		if node, isNode := pair.Child.(*TreeNode); isNode {
+			r.retainedOff[node] = size
+		}
 		return
 	}
 	pair.GCOnlySize = &size
