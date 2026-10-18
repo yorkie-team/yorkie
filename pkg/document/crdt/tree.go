@@ -1121,10 +1121,17 @@ type Tree struct {
 	// NodeMapByID holds exactly the nodes reachable from the root. Lookups
 	// consult both (see findFloorNode), so a position naming a detached node
 	// resolves as it did while main kept such nodes in NodeMapByID. A
-	// detached node leaves it when its own GC pair purges it, or when a
-	// restore names it (see forgetDetached). NewTree, the only way a Tree is
-	// made, always sets it.
+	// detached node leaves it when its own GC pair purges it, when a
+	// restore names it (see forgetDetached), or with every other detached
+	// node once a later collection lets the subtrees go (see dropDetached).
+	// NewTree, the only way a Tree is made, always sets it.
 	detachedByID *llrb.Tree[*TreeNodeID, *TreeNode]
+
+	// purgeVector is the vector of the collection that took out the
+	// detached subtrees the tree holds, nil while it holds none. A
+	// collection at a vector strictly after it lets them go (see
+	// Root.GarbageCollect).
+	purgeVector time.VersionVector
 }
 
 // NewTree creates a new instance of Tree.
@@ -1817,6 +1824,62 @@ func (t *Tree) forgetDetached(node *TreeNode) {
 	}
 	t.unlinkInsChain(node)
 	t.forgotten = append(t.forgotten, node)
+}
+
+// dropDetached lets go of the subtrees a purge took out that vector has
+// seen whole: every node in them was created, and merged in, at a ticket it
+// covers. A change concurrent with one of those could still name the node,
+// as one concurrent with the split that carried text into a subtree a
+// removal took out does, so such a subtree is kept. Each node of a subtree
+// let go leaves detachedByID and the merge stamp index, and the split links
+// of attached nodes skip it, as a purge of the node itself would; a
+// position naming one of them then fails to resolve, as on a replica that
+// keeps no detached nodes. It returns the nodes it let go, for Root to drop
+// the pairs they still hold.
+func (t *Tree) dropDetached(vector time.VersionVector) []*TreeNode {
+	var nodes []*TreeNode
+	seen := make(map[*TreeNode]struct{})
+	for _, n := range t.detachedByID.Values() {
+		top := n
+		for top.Index.Parent != nil {
+			top = top.Index.Parent.Value
+		}
+		if _, ok := seen[top]; ok {
+			continue
+		}
+		seen[top] = struct{}{}
+		var subtree []*TreeNode
+		seenWhole := true
+		stack := []*index.Node[*TreeNode]{top.Index}
+		for len(stack) > 0 {
+			current := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			node := current.Value
+			if !vector.EqualToOrAfter(node.id.CreatedAt) ||
+				(node.MergedAt != nil && !vector.EqualToOrAfter(node.MergedAt)) {
+				seenWhole = false
+				break
+			}
+			subtree = append(subtree, node)
+			stack = append(stack, current.Children(true)...)
+		}
+		if seenWhole {
+			nodes = append(nodes, subtree...)
+		}
+	}
+	// Every link is rewritten while all of them still resolve: a split
+	// link names its neighbour by ID, and the floor of one already let go
+	// would be another piece of the same insertion.
+	for _, n := range nodes {
+		t.unlinkInsChain(n)
+	}
+	for _, n := range nodes {
+		t.unregisterNode(n)
+		if n.MergedFrom != nil {
+			t.forgetMergeStamp(n)
+		}
+	}
+	return nodes
 }
 
 // TakeForgotten returns the detached nodes the last Restore forgot and
@@ -2980,6 +3043,9 @@ func (t *Tree) copyDetachedFrom(src *Tree) (map[*TreeNode]*TreeNode, error) {
 	registered := src.detachedByID.Values()
 	if len(registered) == 0 {
 		return copies, nil
+	}
+	if src.purgeVector != nil {
+		t.purgeVector = src.purgeVector.DeepCopy()
 	}
 	// A subtree is copied whole, from the top a purge took out. The ones
 	// holding a registered node come first; a slot in a copied subtree can

@@ -565,6 +565,22 @@ func TestObserverOnlySyncs(t *testing.T) {
 	}
 }
 
+// TestASubtreeASplitFedStaysForItsAuthor pins merge seed 528, where the
+// detached state of a purge must outlive more than one collection. d1
+// deletes a paragraph while d2 splits it, carrying text into a product the
+// delete's cascade takes; d1, which never saw the split, then merges across
+// that text, naming it where d1 last saw it. d2 has purged the product by
+// then, at a vector that covers the delete and not the split, so a drop that
+// waited only for a later vector failed d1's change with "node not found".
+func TestASubtreeASplitFedStaysForItsAuthor(t *testing.T) {
+	f, ok := FamilyByName("merge")
+	require.True(t, ok)
+	for _, opts := range []Options{{}, {LaggingMinVV: true}} {
+		fx := runFamilyWith(f, 528, 1, opts)
+		assert.NotEqual(t, "error", fx.Rows[0].Result, "lagging %v", opts.LaggingMinVV)
+	}
+}
+
 // TestLargeRun runs a seed range of one family and writes its rows, for
 // comparing against the JS runner. It is skipped unless CONFORMANCE_FAM is
 // set; CONFORMANCE_RUNS, CONFORMANCE_SEED0 and CONFORMANCE_OUT tune it, and

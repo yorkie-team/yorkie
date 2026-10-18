@@ -108,6 +108,11 @@ type Root struct {
 	gcNodePairMap    map[gcPairKey]GCPair
 	docSize          resource.DocSize
 
+	// detachedTrees holds the Trees whose purges left detached subtrees
+	// (see Tree.purgeVector), so a collection lets them go without walking
+	// every element. The value says the running collection purged in it.
+	detachedTrees map[*Tree]bool
+
 	// sizeInGC maps every registered element whose size counts toward
 	// docSize.GC rather than docSize.Live to the exact amount charged. Each
 	// element's size belongs to exactly one of the two, and an element reaches
@@ -143,6 +148,7 @@ func NewRoot(root *Object) *Root {
 		elementMap:       make(map[string]Element),
 		gcElementPairMap: make(map[string]ElementPair),
 		gcNodePairMap:    make(map[gcPairKey]GCPair),
+		detachedTrees:    make(map[*Tree]bool),
 		sizeInGC:         make(map[Element]resource.DataSize),
 		docSize: resource.DocSize{
 			Live: resource.DataSize{
@@ -577,6 +583,9 @@ func (r *Root) DeepCopy() (*Root, error) {
 		if err != nil {
 			return nil, err
 		}
+		if _, ok := r.detachedTrees[tree]; ok {
+			copied.detachedTrees[copiedTree] = false
+		}
 		copied.copyTreePairs(r, tree, copiedTree, copies)
 	}
 	return copied, nil
@@ -647,8 +656,9 @@ func (r *Root) copyTreePairs(src *Root, tree, copiedTree *Tree, copies map[*Tree
 // The repeat also makes the result independent of Go's map iteration order,
 // which decides only how many passes it takes, not what ends up collected.
 func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
-	count := 0
+	r.dropDetached(vector)
 
+	count := 0
 	for {
 		purged, deferred, err := r.collect(vector)
 		if err != nil {
@@ -657,7 +667,46 @@ func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 		count += purged
 
 		if purged == 0 || deferred == 0 {
-			return count, nil
+			break
+		}
+	}
+
+	for tree, purged := range r.detachedTrees {
+		if tree.detachedByID.Len() == 0 {
+			tree.purgeVector = nil
+			delete(r.detachedTrees, tree)
+		} else if purged {
+			tree.purgeVector = vector.DeepCopy()
+			r.detachedTrees[tree] = false
+		}
+	}
+	return count, nil
+}
+
+// dropDetached lets go of the detached subtrees vector has seen whole (see
+// Tree.dropDetached), with the pairs their nodes still hold, in every Tree
+// whose last purges ran at a vector the given one is strictly after.
+//
+// A purge at vector V comes after every change concurrent with the removal
+// it collects, by the protocol, but a change that is not concurrent with
+// the removal can still name a node a concurrent split carried into the
+// subtree, and a late change (yorkie#2110) any node in it. So a subtree is
+// kept until a collection at a later vector that also covers the creation
+// of every node in it; a change naming it after that fails to resolve, as
+// on a replica that keeps no detached nodes. The root and its clone collect
+// at the same vectors, and the clone copies purgeVector, so both let go
+// alike.
+func (r *Root) dropDetached(vector time.VersionVector) {
+	for tree := range r.detachedTrees {
+		if tree.purgeVector == nil || !vector.AfterOrEqual(tree.purgeVector) ||
+			tree.purgeVector.AfterOrEqual(vector) {
+			continue
+		}
+		for _, node := range tree.dropDetached(vector) {
+			r.DropGCPair(GCPair{Parent: tree, Child: node})
+			for _, pair := range node.GCPairs() {
+				r.DropGCPair(pair)
+			}
 		}
 	}
 }
@@ -743,6 +792,9 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 			result, err := parent.purgeChild(pair.Child)
 			if err != nil {
 				return 0, 0, err
+			}
+			if tree, ok := parent.(*Tree); ok {
+				r.detachedTrees[tree] = true
 			}
 			// Defensive; unreachable because the check above skips a pair
 			// whose child has no removal, the only purge that does not happen.

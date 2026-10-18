@@ -2180,3 +2180,107 @@ func TestReleaseTicketDoesNotDependOnPurgeOrder(t *testing.T) {
 		require.Equal(t, tk(20).Key(), z.RemovedAt().Key(), "y's removal, whichever purge came first")
 	}
 }
+
+// TestALaterCollectionDropsADetachedSubtree pins the bound on the detached
+// state a purge leaves. x, removed, holds y, live, and t, a tombstone whose
+// own removal comes later. A collection at v1 purges x, releasing y and
+// leaving t detached with its pair pending. Another at v1 keeps them: a
+// late change could still name them. One at v2, strictly after v1, which
+// has seen every node in the subtree, lets the subtree go with t's pair, on
+// the root and on its copy alike; a position naming y then fails to
+// resolve, as on a replica that keeps no detached nodes.
+func TestALaterCollectionDropsADetachedSubtree(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	y := NewTreeNode(NewTreeNodeID(tk(3), 0), "p", nil)
+	tomb := NewTreeNode(NewTreeNodeID(tk(4), 0), "q", nil)
+	require.NoError(t, root.Append(x))
+	require.NoError(t, x.Append(y, tomb))
+	x.remove(tk(10))
+	tomb.remove(tk(30))
+	tree := NewTree(root, tk(5))
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	doc.Object().Set("t", tree)
+	doc.RegisterElement(tree, doc.Object())
+
+	at := func(lamport int64) time.VersionVector {
+		v := time.NewVersionVector()
+		v.Set(actor, lamport)
+		return v
+	}
+	_, err = doc.GarbageCollect(at(20))
+	require.NoError(t, err)
+	require.Same(t, y, tree.DetachedNode(y.id))
+	require.Same(t, tomb, tree.DetachedNode(tomb.id))
+	require.Equal(t, 1, doc.GarbageLen(), "t's pair is pending")
+
+	_, err = doc.GarbageCollect(at(20))
+	require.NoError(t, err)
+	assert.Same(t, y, tree.DetachedNode(y.id), "a collection at the same vector keeps it")
+
+	copied, err := doc.DeepCopy()
+	require.NoError(t, err)
+	ct := copied.Object().Get("t").(*Tree)
+	for _, r := range []*Root{copied, doc} {
+		_, err = r.GarbageCollect(at(25))
+		require.NoError(t, err)
+	}
+	for _, tr := range []*Tree{tree, ct} {
+		assert.Nil(t, tr.DetachedNode(y.id))
+		assert.Nil(t, tr.DetachedNode(tomb.id))
+		assert.Zero(t, tr.detachedByID.Len())
+	}
+	assert.Equal(t, 0, doc.GarbageLen(), "t's pair goes with it")
+	assert.Equal(t, doc.DocSize(), copied.DocSize())
+	assert.Equal(t, 0, copied.GarbageLen())
+	assert.Empty(t, doc.detachedTrees)
+}
+
+// TestADetachedSubtreeStaysUntilItsNodesAreSeen pins that a collection
+// keeps a detached subtree holding a node its vector has not seen created:
+// a change concurrent with that node's creation, a split that carried text
+// into the subtree, say, can still name it, and so for a node merged in.
+// c, created by a peer at 40, and m, merged in by the peer at 41, sit
+// under x, purged at v1; v2 is after v1 but has seen neither, v3 sees c's
+// creation and not m's merge, v4 both.
+func TestADetachedSubtreeStaysUntilItsNodesAreSeen(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	c := NewTreeNode(NewTreeNodeID(time.NewTicket(40, 0, peer), 0), "p", nil)
+	m := NewTreeNode(NewTreeNodeID(tk(6), 0), "p", nil)
+	m.MergedFrom, m.MergedAt = c.id, time.NewTicket(41, 0, peer)
+	require.NoError(t, root.Append(x))
+	require.NoError(t, x.Append(c, m))
+	x.remove(tk(10))
+	tree := NewTree(root, tk(5))
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	doc.Object().Set("t", tree)
+	doc.RegisterElement(tree, doc.Object())
+
+	at := func(own, peers int64) time.VersionVector {
+		v := time.NewVersionVector()
+		v.Set(actor, own)
+		v.Set(peer, peers)
+		return v
+	}
+	_, err = doc.GarbageCollect(at(20, 0))
+	require.NoError(t, err)
+	_, err = doc.GarbageCollect(at(25, 0))
+	require.NoError(t, err)
+	assert.Same(t, c, tree.DetachedNode(c.id), "kept while c's creation is unseen")
+	_, err = doc.GarbageCollect(at(25, 40))
+	require.NoError(t, err)
+	assert.Same(t, c, tree.DetachedNode(c.id), "kept while m's merge is unseen")
+	_, err = doc.GarbageCollect(at(25, 41))
+	require.NoError(t, err)
+	assert.Nil(t, tree.DetachedNode(c.id))
+	assert.Nil(t, tree.DetachedNode(m.id))
+}
