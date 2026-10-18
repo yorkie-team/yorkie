@@ -1330,7 +1330,7 @@ func TestRelinkRecreatedTextLeavesADetachedSuccessor(t *testing.T) {
 }
 
 // TestRegisterGCPairCancelsAGCOnlyPairByItsBooking pins the RegisterGCPair
-// branch DropGCPair's doc leans on: registering a pair booked with
+// branch DropGCPair's doc sets itself against: registering a pair booked with
 // GCOnlySize a second time cancels it and gives back GCOnlySize, the amount
 // the first registration put in, rather than the child's size.
 func TestRegisterGCPairCancelsAGCOnlyPairByItsBooking(t *testing.T) {

@@ -656,7 +656,9 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		}
 
 		// Live nodes under the child go with it, off Live (see
-		// GCLiveRelease), so the purge detaches tombstones only.
+		// GCLiveRelease), so the purge detaches tombstones only. Only a Tree
+		// purges a subtree; every other GC parent purges a leaf -- a text or
+		// list node, an attribute -- with nothing under it to release.
 		if parent, ok := pair.Parent.(GCLiveRelease[GCChild]); ok {
 			result, err := parent.PurgeReleasing(pair.Child)
 			if err != nil {
@@ -769,10 +771,19 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 // overhead alone, while the bytes it took from its sibling stay in GC under
 // the sibling's charge; the sibling's own purge gives back only its own
 // size, which leaves those bytes for the piece's purge, by its size, to
-// give back. Cancelling a pair right after registering it, which
-// RegisterGCPair does, is the one case GCOnlySize is still the amount. It
-// is a no-op when no pair is registered under the key, or the one
-// registered is another child's.
+// give back.
+//
+// RegisterGCPair's cancel branch (#1874) gives back GCOnlySize instead, for
+// a split piece registered a second time under its key, which keeps the
+// piece's content bytes with the sibling that carried them in. The two
+// differ because they end different things: a cancel, as #1874 has it,
+// takes the pair off a piece whose content its sibling's charge is taken to
+// cover still, while a drop takes off one whose node has left the document,
+// as a purge would, after the sibling's purge may already have given back
+// only the sibling's own size. No path of this change reaches
+// that cancel for a split piece: a forgotten node's pair is dropped before
+// anything registers under its key. It is a no-op when no pair is
+// registered under the key, or the one registered is another child's.
 func (r *Root) DropGCPair(pair GCPair) {
 	key := keyOf(pair)
 	p, ok := r.gcNodePairMap[key]
