@@ -118,8 +118,10 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
   a Tree that has one: a Tree a peer adds into a container already removed
   never went through a removal, has no charge, and sits in `Live`, edits to
   it included, until its container is collected, as on main. A Tree a restore releases (`Root.release`)
-  leaves as a deregistered one does, its detached subtrees and their pairs
-  with it (`TestReleasingATreeLetsItsDetachedSubtreesGo`). Each takes
+  loses its charge as a deregistered one does, so a later release inside it
+  books nothing, but stays addressable, so its detached subtrees stay until
+  a collection's coverage lets them go
+  (`TestReleasingATreeKeepsItsDetachedSubtreesForCoverage`). Each takes
   the removal of its nearest removed ancestor, which depends on the subtree
   alone and not on which of two pairs a collection purged first in Go's map
   order (`TestReleaseTicketDoesNotDependOnPurgeOrder`). They leave
@@ -222,13 +224,22 @@ collection took out, and after, for those it took out itself, so one call
 leaves nothing the next at the same vector would collect
 (`TestLiveReleaseWaitsForTheBarrier`). A subtree is kept past its purge only
 while a node in it is unseen, and that is the subtree a change can still
-name a node in. A ticket the replica's own version vector does not know
-counts as seen: every node a replica holds was created, and merged in, by a
-change it applied, so such a ticket is forged, a phantom actor or a
-lamport no change reached, and trusting it would keep the subtree, and its
-bytes in GC, for good (`Root.GarbageCollectKnown`,
+name a node in. A ticket the replica's document cannot have applied
+counts as seen: one its version vector does not know, above its own
+lamport, which every change it applies raises to the change's own. Every
+node a replica holds was created, and merged in, by a change it applied, so
+such a ticket is forged, and trusting it would keep the subtree, and its
+bytes in GC, for good (`crdt.DocumentClock`,
 `TestAForgedTicketDoesNotKeepADetachedSubtree`,
-`TestADocumentCollectsWithItsOwnVersionVector`). The nodes leave `detachedByID` and the merge stamp index,
+`TestADocumentCollectsWithItsOwnVersionVector`). The vector alone would not
+do: a document loaded from a snapshot stored with an emptied vector, an
+opt-out-only one (disable-gc-on-attach.md), rebuilds its vector from the
+changes applied after it, which can lack the entry of an actor whose
+tickets the snapshot holds, while the snapshot's lamport still bounds them
+(`TestAnHonestTicketTheVectorLacksIsNotForged`). A forger can still pick a
+lamport under the document's, and keep the subtree; the vector a change
+carries is validated nowhere, which is yorkie#2234's. The nodes leave
+`detachedByID` and the merge stamp index,
 the split links of attached nodes skip them, and the pairs they still hold,
 their removed attributes' included, are dropped with their bytes out of GC
 (`TestALaterCollectionDropsADetachedSubtree`,
