@@ -207,9 +207,13 @@ type TreeNode struct {
 
 	// released is set on a node a purge tombstoned because it was live in
 	// the subtree taken out (see GCLiveRelease), and on pieces split off
-	// one. Runtime only. Such a node carries no GC pair, and its bytes are
-	// in neither Live nor GC: the purge took them off Live and booked
-	// nothing, as a rebuild holds nothing for it.
+	// one. Runtime only. Its bytes move from Live to GC with the release,
+	// under a pair of its own, so Live is what a reload reports and what the
+	// replica still holds is counted in GC. Collect leaves the pair alone:
+	// the removal it carries was covered when the purge ran, and purging
+	// the node then would let go of what the coverage keeps for a change
+	// still to come. The pair goes when the subtree is let go
+	// (Root.dropDetached), or the node is forgotten.
 	released bool
 }
 
@@ -449,13 +453,9 @@ func (n *TreeNode) Split(
 		// straight to docSize.GC when the pair is registered; return a zero
 		// diff to the caller (which accounts diffs to docSize.Live).
 		//
-		// A piece split off a released node is released too: its source's
-		// bytes are in neither Live nor GC, so the piece's are not either,
-		// and a pair booked for its split overhead alone would give back its
-		// whole size when purged, which GC never held.
-		if split.removedAt != nil && split.released {
-			return resource.DataSize{}, nil
-		}
+		// A piece split off a released node is released too, and books its
+		// overhead the same way: its source's bytes are held in GC under the
+		// source's pair (see TreeNode.released), as a tombstone's are.
 		if split.removedAt != nil {
 			gcSize := diff
 			tree.pendingGCPairs = append(tree.pendingGCPairs, GCPair{
@@ -1409,7 +1409,7 @@ func (t *Tree) purgeReleasing(node *TreeNode) (int, purgeResult, error) {
 
 	visits := 0
 	if !node.detached {
-		visits, result.Released = t.detachSubtree(node, node.removedAt)
+		visits, result.Released, result.ReleasedNodes = t.detachSubtree(node, node.removedAt)
 	}
 
 	// NodeMapByID is keyed by ID, so an unconditional Remove would also
@@ -1469,7 +1469,11 @@ func detachedRemovalOf(node *TreeNode) *time.Ticket {
 // returns the size those had in Live. A node already detached is left as
 // it is.
 func (t *Tree) takeDetachedSide(node *TreeNode, at *time.Ticket) resource.DataSize {
-	_, released := t.detachSubtree(node, at)
+	_, released, nodes := t.detachSubtree(node, at)
+	for _, n := range nodes {
+		size := n.DataSize()
+		t.pendingGCPairs = append(t.pendingGCPairs, GCPair{Parent: t, Child: n, GCOnlySize: &size})
+	}
 	return released
 }
 
@@ -1486,12 +1490,13 @@ func (t *Tree) takeDetachedSide(node *TreeNode, at *time.Ticket) resource.DataSi
 // of an ancestor and one of a removed node under it must tombstone what
 // is live under the latter alike. The walk is iterative, since the depth is
 // the client's to choose.
-func (t *Tree) detachSubtree(top *TreeNode, at *time.Ticket) (int, resource.DataSize) {
+func (t *Tree) detachSubtree(top *TreeNode, at *time.Ticket) (int, resource.DataSize, []*TreeNode) {
 	type entry struct {
 		node *index.Node[*TreeNode]
 		at   *time.Ticket
 	}
 	var released resource.DataSize
+	var releasedNodes []*TreeNode
 	visits := 0
 	stack := []entry{{top.Index, at}}
 	for len(stack) > 0 {
@@ -1509,6 +1514,7 @@ func (t *Tree) detachSubtree(top *TreeNode, at *time.Ticket) (int, resource.Data
 			released.Add(n.DataSize())
 			n.remove(hiding)
 			n.released = true
+			releasedNodes = append(releasedNodes, n)
 		}
 		n.detached = true
 		t.moveToDetached(n)
@@ -1516,7 +1522,7 @@ func (t *Tree) detachSubtree(top *TreeNode, at *time.Ticket) (int, resource.Data
 			stack = append(stack, entry{child, hiding})
 		}
 	}
-	return visits, released
+	return visits, released, releasedNodes
 }
 
 // detachedRemovalOr returns the removal a node placed under the detached

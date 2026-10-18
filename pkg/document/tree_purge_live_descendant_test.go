@@ -94,7 +94,7 @@ func TestTreePurgeWithLiveDescendant(t *testing.T) {
 	require.Len(t, treeCRDT(t, d1).Root().Children(true), 1, "the paragraph is purged")
 	assert.True(t, text.IsRemoved(), `"b" went out with it, as a tombstone`)
 	assertRebuildsSame(t, d1, "after a collection that met the live descendant")
-	assert.Equal(t, 0, d1.GarbageLen(), "nothing is held")
+	assert.Equal(t, 1, d1.GarbageLen(), `"b" is held, released, until the next collection`)
 	assert.Equal(t, len(treeCRDT(t, d1).Nodes()), treeCRDT(t, d1).NodeLen(),
 		"every registered node is reachable from the root")
 	rebuilt, err := d1.InternalDocumentForTest().DeepCopy()
@@ -315,8 +315,11 @@ func TestTreeCraftedReviveCannotPinARemovedChain(t *testing.T) {
 	assert.Positive(t, d1.GarbageCollect(vector))
 	assert.Empty(t, treeCRDT(t, d1).Root().Children(true), "the whole chain is purged")
 	assert.True(t, text.IsRemoved())
-	assert.Equal(t, 0, d1.GarbageLen(), "nothing is held in GC")
+	assert.Equal(t, 1, d1.GarbageLen(), "the released text is held until the next collection")
 	assertRebuildsSame(t, d1, "after the collection")
+	d1.GarbageCollect(vector)
+	assert.Equal(t, 0, d1.GarbageLen(), "and nothing after it")
+	assertRebuildsSame(t, d1, "after the next collection")
 }
 
 // TestRestoreAfterDetachKeepsTheLedger pins the GC pair of a detached node a

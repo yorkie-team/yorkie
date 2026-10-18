@@ -60,7 +60,9 @@ func detachFixture(t *testing.T) (*Tree, *TreeNode, *TreeNode, *TreeNode, *time.
 // collection vector covers their removal, the text is tombstoned and goes
 // with them: a purge that left it live would detach bytes Live still holds
 // while a rebuild no longer counts them, and holding div for it instead
-// would keep div for as long as a node no one can see stays live.
+// would keep div for as long as a node no one can see stays live. Its
+// bytes move to GC, where the replica holds them until the next collection
+// lets the subtree go.
 func TestCollectReleasesALiveDescendantWithItsAncestor(t *testing.T) {
 	tree, div, p, text, removedAt := detachFixture(t)
 	root := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
@@ -82,9 +84,16 @@ func TestCollectReleasesALiveDescendantWithItsAncestor(t *testing.T) {
 	assert.Same(t, removedAt, text.RemovedAt(), "tombstoned with the ancestor's removal")
 	assert.Same(t, text, tree.findFloorNode(text.id), "the text still resolves, as main leaves a detached node")
 	assert.Equal(t, len(tree.Nodes()), tree.NodeLen(), "NodeMapByID holds only what is reachable from the root")
-	assert.Equal(t, 0, root.GarbageLen())
+	assert.Equal(t, 1, root.GarbageLen(), "the text is held, released")
 	live, gc := root.DocSize().Live, root.DocSize().GC
 	assert.Equal(t, base, live, "the text's bytes left Live with it")
+	assert.Equal(t, text.DataSize(), gc, "for GC, as the tombstone it is now")
+
+	_, err = root.GarbageCollect(vector)
+	require.NoError(t, err)
+	assert.Nil(t, tree.DetachedNode(text.id), "the next collection lets it go")
+	assert.Equal(t, 0, root.GarbageLen())
+	gc = root.DocSize().GC
 	assert.Zero(t, (&gc).Total())
 }
 
@@ -262,9 +271,14 @@ func TestLiveReleaseWaitsForTheBarrier(t *testing.T) {
 	assert.Equal(t, 1, collect(50), "barrier covered: div goes")
 	assert.True(t, text.IsRemoved())
 	assert.True(t, text.detached)
-	assert.Equal(t, 0, doc.GarbageLen())
+	assert.Equal(t, 1, doc.GarbageLen(), "the released text is held")
 	live, gc := doc.DocSize().Live, doc.DocSize().GC
 	assert.Equal(t, base, live)
+	assert.Equal(t, text.DataSize(), gc)
+
+	collect(50)
+	assert.Equal(t, 0, doc.GarbageLen())
+	gc = doc.DocSize().GC
 	assert.Zero(t, (&gc).Total())
 }
 
@@ -1138,13 +1152,13 @@ func TestSplitOutOfSightKeepsTheLedger(t *testing.T) {
 			doc.RegisterGCPair(pair)
 		}
 		doc.Acc(diff)
-		rebuilt, err := doc.DeepCopy()
+		rebuilt, err := doc.Rederive()
 		require.NoError(t, err)
 		assert.Equal(t, rebuilt.DocSize(), doc.DocSize(), "purged %v: after the split", purge)
 
 		_, err = doc.GarbageCollect(vv)
 		require.NoError(t, err)
-		rebuilt, err = doc.DeepCopy()
+		rebuilt, err = doc.Rederive()
 		require.NoError(t, err)
 		assert.Equal(t, rebuilt.DocSize(), doc.DocSize(), "purged %v: after collecting", purge)
 		assert.Equal(t, rebuilt.GarbageLen(), doc.GarbageLen(), "purged %v", purge)
@@ -1445,14 +1459,14 @@ func TestMergeIntoADetachedParentTakesItsSide(t *testing.T) {
 			assert.True(t, stamped, "and keeps its merge stamp indexed, as an unpurged replica does")
 			assert.Equal(t, len(tree.Nodes()), tree.NodeLen(), "NodeMapByID holds only what is reachable")
 		}
-		rebuilt, err := doc.DeepCopy()
+		rebuilt, err := doc.Rederive()
 		require.NoError(t, err)
 		assert.Equal(t, rebuilt.DocSize().Live, doc.DocSize().Live, "purged %v: Live equals a rebuild", purge)
 		xmls = append(xmls, tree.ToXML())
 
 		_, err = doc.GarbageCollect(vv)
 		require.NoError(t, err)
-		rebuilt, err = doc.DeepCopy()
+		rebuilt, err = doc.Rederive()
 		require.NoError(t, err)
 		assert.Equal(t, rebuilt.DocSize(), doc.DocSize(), "purged %v: after collecting", purge)
 		shapes = append(shapes, treeShapeOf(tree))
@@ -1636,7 +1650,7 @@ func TestSplitOfAReleasedTextKeepsTheLedger(t *testing.T) {
 
 	_, err = doc.GarbageCollect(all)
 	require.NoError(t, err)
-	rebuilt, err := doc.DeepCopy()
+	rebuilt, err := doc.Rederive()
 	require.NoError(t, err)
 	assert.Equal(t, rebuilt.DocSize(), doc.DocSize(), "GC and Live equal a rebuild")
 	assert.Equal(t, 0, doc.GarbageLen(), "nothing is left pending")
@@ -1714,7 +1728,7 @@ func TestSplitOfAMergedInReleasedTextKeepsTheLedger(t *testing.T) {
 
 	_, err = doc.GarbageCollect(all)
 	require.NoError(t, err)
-	rebuilt, err := doc.DeepCopy()
+	rebuilt, err := doc.Rederive()
 	require.NoError(t, err)
 	assert.Equal(t, rebuilt.DocSize(), doc.DocSize(), "GC and Live equal a rebuild")
 	assert.Equal(t, 0, doc.GarbageLen(), "nothing is left pending")
@@ -1839,14 +1853,14 @@ func TestDeleteCascadeSkipsADetachedSplitProduct(t *testing.T) {
 			doc.RegisterGCPair(pair)
 		}
 		doc.Acc(diff)
-		rebuilt, err := doc.DeepCopy()
+		rebuilt, err := doc.Rederive()
 		require.NoError(t, err)
 		assert.Equal(t, rebuilt.DocSize(), doc.DocSize(), "purged %v: after the delete", purge)
 		xmls = append(xmls, tree.ToXML())
 
 		_, err = doc.GarbageCollect(all)
 		require.NoError(t, err)
-		rebuilt, err = doc.DeepCopy()
+		rebuilt, err = doc.Rederive()
 		require.NoError(t, err)
 		assert.Equal(t, rebuilt.DocSize(), doc.DocSize(), "purged %v: after collecting", purge)
 		assert.Equal(t, 0, doc.GarbageLen(), "purged %v", purge)
@@ -2228,7 +2242,7 @@ func TestALaterCollectionDropsADetachedSubtree(t *testing.T) {
 	require.NoError(t, err)
 	require.Same(t, y, tree.DetachedNode(y.id))
 	require.Same(t, tomb, tree.DetachedNode(tomb.id))
-	require.Equal(t, 1, doc.GarbageLen(), "t's pair is pending")
+	require.Equal(t, 2, doc.GarbageLen(), "y is held, released, and t's pair is pending")
 
 	copied, err := doc.DeepCopy()
 	require.NoError(t, err)
@@ -2379,7 +2393,7 @@ func TestDroppingASubtreeDropsItsAttributePairs(t *testing.T) {
 	_, err = doc.GarbageCollect(at(20))
 	require.NoError(t, err)
 	require.Same(t, p, tree.DetachedNode(p.id))
-	require.Equal(t, 1, doc.GarbageLen(), "k's pair is pending")
+	require.Equal(t, 2, doc.GarbageLen(), "p is held, released, and k's pair is pending")
 
 	_, err = doc.GarbageCollect(at(25))
 	require.NoError(t, err)
@@ -2503,61 +2517,6 @@ func TestDeepCopyBooksAPairWhoseNodeLeftTheTree(t *testing.T) {
 	}
 	assert.Equal(t, doc.DocSize(), copied.DocSize())
 	assert.Equal(t, 0, copied.GarbageLen())
-}
-
-// TestDetachedSubtreesStayWithinTheBound pins maxDetachedSize. Two removed
-// divs hold paragraphs a peer created at 40, which the collection's vector
-// has not seen, so dropDetached keeps both subtrees after their purge, as
-// it would for as long as that vector stalls. Past the bound, the subtree
-// whose purged removal is the oldest goes, and the other stays, on the root
-// and on its clone alike, whatever order the collection purged them in.
-func TestDetachedSubtreesStayWithinTheBound(t *testing.T) {
-	actor, err := time.ActorIDFromHex("000000000000000000000001")
-	require.NoError(t, err)
-	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
-	require.NoError(t, err)
-	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
-	for range 16 {
-		root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
-		older := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
-		newer := NewTreeNode(NewTreeNodeID(tk(3), 0), "div", nil)
-		a := NewTreeNode(NewTreeNodeID(time.NewTicket(40, 0, peer), 0), "p", nil)
-		b := NewTreeNode(NewTreeNodeID(time.NewTicket(41, 0, peer), 0), "p", nil)
-		require.NoError(t, root.Append(older, newer))
-		require.NoError(t, older.Append(a))
-		require.NoError(t, newer.Append(b))
-		older.remove(tk(10))
-		newer.remove(tk(11))
-		tree := NewTree(root, tk(4))
-		doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
-		doc.Object().Set("t", tree)
-		doc.RegisterElement(tree, doc.Object())
-		copied, err := doc.DeepCopy()
-		require.NoError(t, err)
-		ct := copied.Object().Get("t").(*Tree)
-
-		one := int64(0)
-		for _, n := range []*TreeNode{newer, b} {
-			s := n.DataSize()
-			one += int64(s.Data + s.Meta)
-		}
-		bound := maxDetachedSize
-		maxDetachedSize = one + time.TicketSize
-		vector := time.NewVersionVector()
-		vector.Set(actor, 20)
-		vector.Set(peer, 0)
-		for _, r := range []*Root{doc, copied} {
-			_, err = r.GarbageCollect(vector)
-			require.NoError(t, err)
-		}
-		maxDetachedSize = bound
-
-		for _, tr := range []*Tree{tree, ct} {
-			assert.Nil(t, tr.DetachedNode(a.id), "the oldest goes")
-			assert.NotNil(t, tr.DetachedNode(b.id), "the newer stays")
-		}
-		assert.Equal(t, doc.DocSize(), copied.DocSize())
-	}
 }
 
 // TestCollectingATreeLetsItsDetachedSubtreesGo pins that a Tree element the

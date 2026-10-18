@@ -51,8 +51,10 @@ type GCPair struct {
 	//   - a live attribute removed from a node that is ALREADY a tombstone,
 	//     whose bytes are inside that node's charge -- this one carries zero.
 	//
-	// A released node is in neither Live nor GC and books no pair at all
-	// (see GCLiveRelease), nor does a piece split off one.
+	//   - a node a purge released, its tombstone's size, which the purge
+	//     took off Live; collect leaves its pair to the drop of its subtree
+	//     (see TreeNode.released). A piece split off one books its split
+	//     overhead, as one split off a tombstone does.
 	GCOnlySize *resource.DataSize
 }
 
@@ -110,9 +112,11 @@ type GCBarrier[C any] interface {
 //
 // Root therefore purges through purgeChild once removedAt and
 // GCBarrier have both let the child go: it takes the child out, tombstones
-// every live node under it, and reports their size, which Root takes off
-// Live. They leave the document with the child, as if the child's removal
-// had covered them, and they happen only with the purge. Nothing is held
+// every live node under it, and reports them and their size, which Root
+// moves from Live to GC under a pair of each node's own. They leave the
+// document with the child's subtree, when a later collection lets it go,
+// as if the child's removal had covered them, and they happen only with
+// the purge. Nothing is held
 // back, so no client input can keep a removed element in the tree: what a
 // pass purges is decided by the collection vector and the tree, as on main.
 //
@@ -145,4 +149,8 @@ type purgeResult struct {
 
 	// Released is the size the live nodes the purge tombstoned had in Live.
 	Released resource.DataSize
+
+	// ReleasedNodes are those nodes. Root books a pair for each, which
+	// holds its bytes in GC until the subtree is let go (see Tree.released).
+	ReleasedNodes []*TreeNode
 }

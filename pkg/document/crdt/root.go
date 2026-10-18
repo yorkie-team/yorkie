@@ -21,7 +21,6 @@ package crdt
 
 import (
 	"maps"
-	"slices"
 
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -705,9 +704,11 @@ func (r *Root) copyTreePairs(src *Root, trees map[*Tree]*Tree, copies map[*TreeN
 // Rederive returns a copy of the root whose ledger is derived from the
 // copy's own content, as an oracle for the running one: NewRoot's scan of
 // the attached trees, and for the detached nodes each Tree carries, the
-// pending pair of every one that is a tombstone and not released, and those
-// of their removed attributes. DeepCopy takes the root's own pairs instead,
-// so it cannot tell a ledger that drifted from one that did not.
+// pending pair of every one that is a tombstone, released ones included, and
+// those of their removed attributes. DeepCopy takes the root's own pairs
+// instead, so it cannot tell a ledger that drifted from one that did not.
+// For tests and diagnostics, as NodeLen is; exported for the tests of
+// package document, which check a document's ledger with it.
 func (r *Root) Rederive() (*Root, error) {
 	copiedObject, err := r.object.DeepCopy()
 	if err != nil {
@@ -727,7 +728,7 @@ func (r *Root) Rederive() (*Root, error) {
 			return nil, err
 		}
 		for _, node := range copiedTree.detachedByID.Values() {
-			if node.removedAt != nil && !node.released {
+			if node.removedAt != nil {
 				size := node.DataSize()
 				copied.RegisterGCPair(GCPair{Parent: copiedTree, Child: node, GCOnlySize: &size})
 			}
@@ -752,9 +753,6 @@ func (r *Root) Rederive() (*Root, error) {
 // which decides only how many passes it takes, not what ends up collected.
 func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 	r.dropDetached(vector)
-	// On every path, the failed one included: a pass that errors may have
-	// purged already.
-	defer r.boundDetached()
 
 	count := 0
 	for {
@@ -769,11 +767,6 @@ func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 		}
 	}
 }
-
-// maxDetachedSize bounds the bytes of the detached subtrees a document
-// holds (see boundDetached). It matches the default MaxSizePerDocument, the
-// figure the server gates Live on.
-var maxDetachedSize int64 = 10 * 1024 * 1024
 
 // dropDetached lets go of the detached subtrees vector has seen whole, in
 // every Tree, with the pairs their nodes still hold (see Tree.dropDetached).
@@ -791,7 +784,25 @@ var maxDetachedSize int64 = 10 * 1024 * 1024
 func (r *Root) dropDetached(vector time.VersionVector) {
 	for tree := range r.detachedTrees {
 		r.dropNodes(tree, tree.dropDetached(vector))
+		if tree.detachedByID.Len() == 0 {
+			delete(r.detachedTrees, tree)
+		}
 	}
+}
+
+// bookRetained books the pair of a node a purge released, its tombstone's
+// size to GC alone: the purge has taken its live bytes off Live. Inserted,
+// not registered, so a key another node holds is not cancelled; that one
+// keeps it, which only crafted duplicate IDs reach.
+func (r *Root) bookRetained(pair GCPair) {
+	key := keyOf(pair)
+	if _, ok := r.gcNodePairMap[key]; ok {
+		return
+	}
+	size := pair.Child.DataSize()
+	pair.GCOnlySize = &size
+	r.gcNodePairMap[key] = pair
+	r.docSize.GC.Add(size)
 }
 
 // dropNodes drops the pairs the nodes a Tree let go still hold: their own,
@@ -801,74 +812,6 @@ func (r *Root) dropNodes(tree *Tree, nodes []*TreeNode) {
 		r.DropGCPair(GCPair{Parent: tree, Child: node})
 		for _, pair := range node.GCPairs() {
 			r.DropGCPair(pair)
-		}
-	}
-}
-
-// boundDetached keeps the detached subtrees a document holds within
-// maxDetachedSize. They are in neither Live, which the server's size gate
-// reads, nor GC, and a stalled minimum vector would keep dropDetached from
-// ever letting them go, so without a bound a client could grow them without
-// limit. Past the bound, the subtrees go oldest first, by the removal the
-// purge collected and then the top's ID, until the rest fit: an order that
-// depends on the detached state alone, not on Go's map order or on when a
-// collection ran, so the root and its clone drop the same ones. A change
-// naming a node in one then fails to resolve, as for any dropped subtree.
-// Trees left with none leave detachedTrees.
-func (r *Root) boundDetached() {
-	type held struct {
-		tree *Tree
-		top  *TreeNode
-		size int64
-	}
-	var subtrees []held
-	var total int64
-	for tree := range r.detachedTrees {
-		tops := tree.detachedTops()
-		if len(tops) == 0 {
-			delete(r.detachedTrees, tree)
-			continue
-		}
-		for _, top := range tops {
-			var size int64
-			for _, n := range subtreeOf(top) {
-				s := n.DataSize()
-				size += int64(s.Data + s.Meta)
-			}
-			subtrees = append(subtrees, held{tree, top, size})
-			total += size
-		}
-	}
-	if total <= maxDetachedSize {
-		return
-	}
-	// Every top is a purged tombstone; one without a removal, only in a tree
-	// breaking that, sorts by its creation.
-	removal := func(n *TreeNode) *time.Ticket {
-		if n.removedAt != nil {
-			return n.removedAt
-		}
-		return n.id.CreatedAt
-	}
-	slices.SortFunc(subtrees, func(a, b held) int {
-		if c := removal(a.top).Compare(removal(b.top)); c != 0 {
-			return c
-		}
-		if c := a.tree.createdAt.Compare(b.tree.createdAt); c != 0 {
-			return c
-		}
-		return a.top.id.Compare(b.top.id)
-	})
-	for _, h := range subtrees {
-		if total <= maxDetachedSize {
-			break
-		}
-		r.dropNodes(h.tree, h.tree.dropSubtrees([]*TreeNode{h.top}))
-		total -= h.size
-	}
-	for tree := range r.detachedTrees {
-		if tree.detachedByID.Len() == 0 {
-			delete(r.detachedTrees, tree)
 		}
 	}
 }
@@ -932,6 +875,12 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 	// is purge-dependent today; using the key already in hand means none has
 	// to stay that way.
 	for key, pair := range r.gcNodePairMap {
+		// A released node's pair holds its bytes until its subtree is let
+		// go, not until its removal is covered (see TreeNode.released).
+		if node, ok := pair.Child.(*TreeNode); ok && node.released {
+			continue
+		}
+
 		// A pair whose child is not removed claims a tombstone that is not
 		// there, as for an element above; it is left on the worklist rather
 		// than dereferenced or purged.
@@ -964,6 +913,9 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 				continue
 			}
 			r.docSize.Live.Sub(result.Released)
+			for _, node := range result.ReleasedNodes {
+				r.bookRetained(GCPair{Parent: pair.Parent, Child: node})
+			}
 		} else if err := pair.Parent.Purge(pair.Child); err != nil {
 			return 0, 0, err
 		}
