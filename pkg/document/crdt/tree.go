@@ -3048,6 +3048,10 @@ func (t *Tree) DeepCopy() (Element, error) {
 	return tree, nil
 }
 
+// ErrTreeCopyShape is returned when a copy of a tree does not match it in
+// shape (see Tree.copyDetachedFrom).
+var ErrTreeCopyShape = errors.New("tree copy does not match its source in shape")
+
 // pairCopies walks the subtree under from and its copy under to in
 // lockstep, and returns each node of the first mapped to its counterpart.
 // It reports false at the first node whose children do not match in
@@ -3084,12 +3088,14 @@ func pairCopies(from, to *TreeNode) (map[*TreeNode]*TreeNode, bool) {
 // this.
 //
 // It returns the copy of every node of src, attached or detached, so Root
-// can book for the copies the pairs src's nodes have, or nil, copying
-// nothing, when the tree is not a copy of src's attached tree in shape.
+// can book for the copies the pairs src's nodes have. A tree that is not a
+// copy of src's attached tree in shape, which only a broken invariant
+// gives, fails with ErrTreeCopyShape: copying it without the detached state
+// would leave the clone resolving what the root resolves differently.
 func (t *Tree) copyDetachedFrom(src *Tree) (map[*TreeNode]*TreeNode, error) {
 	copies, ok := pairCopies(src.Root(), t.Root())
 	if !ok {
-		return nil, nil
+		return nil, fmt.Errorf("copy of tree %s: %w", src.createdAt.Key(), ErrTreeCopyShape)
 	}
 	registered := src.detachedByID.Values()
 	if len(registered) == 0 {
@@ -3125,7 +3131,7 @@ func (t *Tree) copyDetachedFrom(src *Tree) (map[*TreeNode]*TreeNode, error) {
 		}
 		subtree, ok := pairCopies(top, copied)
 		if !ok {
-			return nil, nil
+			return nil, fmt.Errorf("copy of detached node %s: %w", top.id.toIDString(), ErrTreeCopyShape)
 		}
 		for from, to := range subtree {
 			copies[from] = to

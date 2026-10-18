@@ -571,8 +571,8 @@ func (r *Root) DocSize() resource.DocSize {
 // Tree.copyDetachedFrom): an op the root resolves through a detached node
 // resolves on the clone alike. Each Tree's pairs are the root's own, booked
 // for the copies of their nodes (see copyTreePairs). A Tree whose copy does
-// not match it in shape, which no honest document produces, keeps the pairs
-// NewRoot's scan derived and no detached state.
+// not match it in shape, which no honest document produces, fails the copy
+// with ErrTreeCopyShape.
 func (r *Root) DeepCopy() (*Root, error) {
 	copiedObject, err := r.object.DeepCopy()
 	if err != nil {
@@ -593,9 +593,6 @@ func (r *Root) DeepCopy() (*Root, error) {
 		treeCopies, err := copiedTree.copyDetachedFrom(tree)
 		if err != nil {
 			return nil, err
-		}
-		if treeCopies == nil {
-			continue
 		}
 		trees[tree] = copiedTree
 		maps.Copy(copies, treeCopies)

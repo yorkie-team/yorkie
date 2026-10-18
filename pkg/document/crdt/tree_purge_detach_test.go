@@ -2598,9 +2598,13 @@ func TestCollectingATreeLetsItsDetachedSubtreesGo(t *testing.T) {
 }
 
 // TestCopyDetachedFromATreeOfAnotherShape pins that copyDetachedFrom, which
-// pairs a source's nodes with a copy's by walking both in lockstep, copies
-// nothing for a tree that is not a copy of the source in shape, rather than
-// indexing past the end of the shorter child list.
+// pairs a source's nodes with a copy's by walking both in lockstep, fails
+// with ErrTreeCopyShape for a tree that is not a copy of the source in
+// shape, rather than indexing past the end of the shorter child list, and
+// that Root.DeepCopy fails with it rather than handing back a clone without
+// the detached state its root holds. The root's element map is made to
+// name a tree of another shape than the one its object holds, which only a
+// broken invariant gives.
 func TestCopyDetachedFromATreeOfAnotherShape(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
@@ -2614,10 +2618,16 @@ func TestCopyDetachedFromATreeOfAnotherShape(t *testing.T) {
 	other := NewTree(NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil), tk(4))
 
 	assert.NotPanics(t, func() {
-		copies, err := other.copyDetachedFrom(src)
-		require.NoError(t, err)
-		assert.Nil(t, copies)
+		_, err := other.copyDetachedFrom(src)
+		assert.ErrorIs(t, err, ErrTreeCopyShape)
 	})
+
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	doc.Object().Set("t", other)
+	doc.RegisterElement(other, doc.Object())
+	doc.elementMap[other.CreatedAt().Key()] = src
+	_, err = doc.DeepCopy()
+	assert.ErrorIs(t, err, ErrTreeCopyShape)
 }
 
 // TestDropDetachedStopsAtTheAttachedTree pins the guard of detachedTops: a
