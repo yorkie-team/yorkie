@@ -102,7 +102,7 @@ type GCBarrier[C any] interface {
 	PurgeBarrierAt(child C) *time.Ticket
 }
 
-// GCLiveRelease is an optional capability of a GC parent whose Purge takes
+// gcLiveRelease is an optional capability of a GC parent whose Purge takes
 // the child out together with its descendants. A descendant can still be
 // live: an insert or an identity restore concurrent with the child's
 // removal leaves one there, and so can a crafted change that claims not to
@@ -133,7 +133,7 @@ type GCBarrier[C any] interface {
 // main's detached nodes do, and a position inside the subtree resolves to
 // the place the subtree was purged from, where a replica that has not
 // purged it counts it from.
-type GCLiveRelease[C any] interface {
+type gcLiveRelease[C any] interface {
 	// purgeChild purges child as Purge does, tombstoning every live node
 	// under it, and reports what Root has to book for it (see purgeResult).
 	purgeChild(child C) (purgeResult, error)

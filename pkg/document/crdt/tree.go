@@ -206,7 +206,7 @@ type TreeNode struct {
 	purgedBefore *TreeNode
 
 	// released is set on a node a purge tombstoned because it was live in
-	// the subtree taken out (see GCLiveRelease), and on pieces split off
+	// the subtree taken out (see gcLiveRelease), and on pieces split off
 	// one. Runtime only. Its bytes move from Live to GC with the release,
 	// under a pair of its own, so Live is what a reload reports and what the
 	// replica still holds is counted in GC. Collect leaves the pair alone:
@@ -1366,14 +1366,14 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 // does. A child that is not a tombstone is left where it is and nil
 // returned, as its GC pair claims a removal it does not have (see
 // purgeReleasing). It cannot report what it released; Root, which keeps
-// the size ledger, purges through purgeChild instead (see GCLiveRelease).
+// the size ledger, purges through purgeChild instead (see gcLiveRelease).
 // See TreeNode.detached for what a detached node is.
 func (t *Tree) Purge(child GCChild) error {
 	_, _, err := t.purgeReleasing(child.(*TreeNode))
 	return err
 }
 
-// purgeChild implements GCLiveRelease[GCChild]: it is Purge, and it
+// purgeChild implements gcLiveRelease[GCChild]: it is Purge, and it
 // reports what Root has to book for it.
 func (t *Tree) purgeChild(child GCChild) (purgeResult, error) {
 	_, result, err := t.purgeReleasing(child.(*TreeNode))
@@ -1392,7 +1392,7 @@ func (t *Tree) purge(node *TreeNode) (int, error) {
 // was taken from. Its subtree is marked detached and moved to detachedByID,
 // its merge stamps stay indexed (only node's own leaves with node), and
 // every live node in it is tombstoned with the removal that hides it (see
-// detachSubtree, GCLiveRelease); those still resolve, as main's detached
+// detachSubtree, gcLiveRelease); those still resolve, as main's detached
 // nodes do. The pairs of the subtree's tombstones and removed
 // attributes stay, and each is collected when its own removal is, as on
 // main. The subtree is walked once in
@@ -1984,7 +1984,7 @@ func (t *Tree) TakeForgotten() []*TreeNode {
 // and whether it then came back with the ancestor would depend on when each
 // replica collected: one that had already purged the ancestor leaves the
 // node out with it, while one that had not keeps the node live until it
-// collects (see GCLiveRelease) and shows it again if the ancestor is
+// collects (see gcLiveRelease) and shows it again if the ancestor is
 // restored first. A restore concurrent with the ancestor's removal still
 // revives, as before: every replica applies it before the minimum synced
 // vector lets one purge the ancestor, so they all decide alike. An ancestor
@@ -4534,7 +4534,7 @@ func (t *Tree) mergeNodes(
 		// Left live, it would be stranded instead: Phase 5 has already
 		// tombstoned the source it stays under, so the node would sit out of
 		// sight until a collection released it with the source (see
-		// GCLiveRelease), and a restore of the source would show it again
+		// gcLiveRelease), and a restore of the source would show it again
 		// only on replicas that had not collected yet. So it is tombstoned where it
 		// stands, with its descendants, exactly as propagateMergeDeletes
 		// tombstones a merge-moved child whose source this edit deletes. The

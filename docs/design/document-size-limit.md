@@ -99,7 +99,7 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
 
 - **A detached node is a tombstone, and stays one.** When a collection
   purges a removed element, the purge tombstones every live node under it
-  (`GCLiveRelease`, `Tree.purgeChild`) and `Root` moves their bytes from
+  (`gcLiveRelease`, `Tree.purgeChild`) and `Root` moves their bytes from
   `Live` to `GC`, under a pair of each node's own that collect leaves alone
   and the drop of its subtree removes (see "How long a detached subtree is
   kept" below); it happens only with the purge, never without it. In a

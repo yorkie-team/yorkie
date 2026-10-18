@@ -96,7 +96,7 @@ var _ = gcParentsAreComparable
 // Root.collect releases a Tree's live nodes only through this assertion, so
 // a Tree that stops implementing it would book purges by the plain path,
 // silently; this fails the build instead.
-var _ GCLiveRelease[GCChild] = (*Tree)(nil)
+var _ gcLiveRelease[GCChild] = (*Tree)(nil)
 
 // Root is a structure represents the root of JSON. It has a hash table of
 // all JSON elements to find a specific element when applying remote changes
@@ -1014,7 +1014,7 @@ func (r *Root) dropDetached(vector time.VersionVector, clock *DocumentClock) int
 	return count
 }
 
-// bookRelease books what a purge in a Tree released (see GCLiveRelease). The
+// bookRelease books what a purge in a Tree released (see gcLiveRelease). The
 // released bytes leave whichever ledger holds them: Live, or, for a Tree
 // element that is itself removed, the GC charge its removal moved them to
 // (sizeInGC), and each released node's pair holds its tombstone in GC from
@@ -1166,10 +1166,10 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		}
 
 		// Live nodes under the child go with it, off Live (see
-		// GCLiveRelease), so the purge detaches tombstones only. Only a Tree
+		// gcLiveRelease), so the purge detaches tombstones only. Only a Tree
 		// purges a subtree; every other GC parent purges a leaf -- a text or
 		// list node, an attribute -- with nothing under it to release.
-		if parent, ok := pair.Parent.(GCLiveRelease[GCChild]); ok {
+		if parent, ok := pair.Parent.(gcLiveRelease[GCChild]); ok {
 			result, err := parent.purgeChild(pair.Child)
 			if err != nil {
 				return 0, 0, err
