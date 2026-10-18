@@ -3450,3 +3450,168 @@ func TestDroppingASubtreeRedirectsTheSlotsOfOnesKept(t *testing.T) {
 	_, copiedX := copies[x]
 	assert.False(t, copiedX, "a copy reaches nothing let go")
 }
+
+// TestDeepCopyFallsBackOnATreeOfAnotherShape pins Root.DeepCopy's fallback
+// when copyDetachedFrom finds the copy of a Tree with detached state is not
+// a copy of it in shape, which only a broken copy gives: here the copied
+// tree loses a child. The copy does not fail; that tree keeps the pairs the
+// scan books and carries no detached state, no stamp of one included.
+func TestDeepCopyFallsBackOnATreeOfAnotherShape(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	a := NewTreeNode(NewTreeNodeID(tk(3), 0), "p", nil)
+	q := NewTreeNode(NewTreeNodeID(tk(4), 0), "q", nil)
+	require.NoError(t, root.Append(x, q))
+	require.NoError(t, x.Append(a))
+	x.remove(tk(10))
+	q.remove(tk(30))
+	keepDetached(a)
+	doc, tree := releaseFixture(t, root, tk(6))
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	_, err = doc.GarbageCollect(vector, nil)
+	require.NoError(t, err)
+	require.Same(t, a, tree.DetachedNode(a.id))
+
+	defer func(original func(*Object) (Element, error)) { copyObject = original }(copyObject)
+	copyObject = func(object *Object) (Element, error) {
+		copied, err := object.DeepCopy()
+		if err != nil {
+			return nil, err
+		}
+		ct := copied.(*Object).Get("t").(*Tree)
+		ct.Root().Index.Children(true)[0].Value.MergedFrom = nil
+		require.NoError(t, ct.Root().Index.RemoveChild(ct.Root().Index.Children(true)[0]))
+		return copied, nil
+	}
+	for _, build := range []func() (*Root, error){doc.DeepCopy, doc.Rederive} {
+		copied, err := build()
+		require.NoError(t, err, "a copy of another shape does not fail")
+		ct := copied.Object().Get("t").(*Tree)
+		assert.Nil(t, ct.DetachedNode(a.id), "no detached state is carried")
+		assert.Zero(t, ct.detachedByID.Len())
+		assert.Empty(t, ct.detachedTops)
+		assert.Empty(t, ct.mergeStamps, "nor a stamp of it")
+		assert.Empty(t, copied.detachedTrees)
+		object, err := copyObject(doc.Object())
+		require.NoError(t, err)
+		scan := NewRoot(object.(*Object))
+		assert.Equal(t, scan.DocSize(), copied.DocSize(), "the tree keeps the scan's pairs")
+		assert.Equal(t, scan.GarbageLen(), copied.GarbageLen())
+	}
+}
+
+// TestPairedTreesChecksAnArraysOrder pins the createdAt check that pairs an
+// array's elements by list order: two lists of one length whose elements
+// differ at a place pair nothing there.
+func TestPairedTreesChecksAnArraysOrder(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	build := func(treeAt int64) (*Object, *Tree) {
+		tree := NewTree(NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil), tk(treeAt))
+		array := NewArray(NewRGATreeList(), tk(2))
+		require.NoError(t, array.Add(tree))
+		object := NewObject(NewElementRHT(), time.InitialTicket)
+		object.Set("a", array)
+		return object, tree
+	}
+	source, tree := build(3)
+	same, sameTree := build(3)
+	other, _ := build(4)
+
+	assert.Same(t, sameTree, pairedTrees(source, same)[tree], "the same place and createdAt pair")
+	assert.Empty(t, pairedTrees(source, other), "another createdAt at the place pairs nothing")
+}
+
+// TestAFailedDetachedCopyLeavesNoStamps pins that copyDetachedFrom notes
+// the merge stamps of the detached copies only once every subtree copied:
+// of two detached subtrees, each holding a stamped node, the second copies
+// to another shape, and the copy, falling back, holds no stamp of the
+// first either.
+func TestAFailedDetachedCopyLeavesNoStamps(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	a := NewTreeNode(NewTreeNodeID(tk(3), 0), "p", nil)
+	y := NewTreeNode(NewTreeNodeID(tk(4), 0), "div", nil)
+	b := NewTreeNode(NewTreeNodeID(tk(5), 0), "p", nil)
+	c := NewTreeNode(NewTreeNodeID(tk(7), 0), "q", nil)
+	require.NoError(t, root.Append(x, y))
+	require.NoError(t, x.Append(a))
+	require.NoError(t, y.Append(b, c))
+	x.remove(tk(10))
+	y.remove(tk(11))
+	keepDetached(a)
+	keepDetached(b)
+	doc, tree := releaseFixture(t, root, tk(6))
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	_, err = doc.GarbageCollect(vector, nil)
+	require.NoError(t, err)
+	require.Len(t, tree.detachedTops, 2)
+
+	defer func(original func(*TreeNode) (*TreeNode, error)) { copyTop = original }(copyTop)
+	calls := 0
+	copyTop = func(top *TreeNode) (*TreeNode, error) {
+		copied, err := top.DeepCopy()
+		if err != nil {
+			return nil, err
+		}
+		calls++
+		if calls == 2 {
+			// The second subtree copies to another shape.
+			require.NoError(t, copied.Index.RemoveChild(copied.Index.Children(true)[0]))
+		}
+		return copied, nil
+	}
+	copied, err := doc.DeepCopy()
+	require.NoError(t, err)
+	require.Equal(t, 2, calls, "the first subtree copied before the second failed")
+	ct := copied.Object().Get("t").(*Tree)
+	assert.Empty(t, ct.mergeStamps, "no stamp of the subtree that copied is left")
+	assert.Zero(t, ct.detachedByID.Len())
+	assert.Empty(t, copied.detachedTrees)
+}
+
+// TestDroppingASubtreeClearsASlotThatDoesNotResolve pins dropSubtrees on a
+// kept subtree whose slot does not resolve, which only a broken purge record
+// gives: x lost its own slot, so y, purged from x, resolves nowhere before
+// the drop and after it, and once x's subtree goes y's slot names nothing,
+// not the node let go.
+func TestDroppingASubtreeClearsASlotThatDoesNotResolve(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	y := NewTreeNode(NewTreeNodeID(tk(3), 0), "p", nil)
+	c := NewTreeNode(NewTreeNodeID(tk(4), 0), "text", nil, "c")
+	require.NoError(t, root.Append(x))
+	require.NoError(t, x.Append(y))
+	require.NoError(t, y.Append(c))
+	x.remove(tk(10))
+	y.remove(tk(11))
+	keepDetached(c)
+	tree := NewTree(root, tk(6))
+	_, err = tree.purge(x)
+	require.NoError(t, err)
+	_, err = tree.purge(y)
+	require.NoError(t, err)
+	x.purgedFrom = nil
+	_, err = tree.ToIndex(y, c)
+	require.ErrorIs(t, err, ErrNodeNotFound)
+
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	require.Contains(t, tree.dropDetached(vector, nil), x)
+	assert.Nil(t, y.purgedFrom, "names nothing let go")
+	assert.Nil(t, y.purgedBefore)
+	_, err = tree.ToIndex(y, c)
+	assert.ErrorIs(t, err, ErrNodeNotFound, "and still resolves nowhere")
+}

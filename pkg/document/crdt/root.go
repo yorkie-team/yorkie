@@ -610,7 +610,7 @@ func (r *Root) DocSize() resource.DocSize {
 // not match it in shape, which no honest document produces, fails the copy
 // with ErrTreeCopyShape.
 func (r *Root) DeepCopy() (*Root, error) {
-	copiedObject, err := r.object.DeepCopy()
+	copiedObject, err := copyObject(r.object)
 	if err != nil {
 		return nil, err
 	}
@@ -636,8 +636,10 @@ func (r *Root) DeepCopy() (*Root, error) {
 		treeCopies, err := copiedTree.copyDetachedFrom(tree)
 		if errors.Is(err, ErrTreeCopyShape) {
 			// Only a broken invariant gets here. The copy keeps the scan's
-			// pairs and no detached state, so a late change naming a node
-			// in a detached subtree fails on it rather than every copy.
+			// pairs and no detached state, none of its nodes' pairs either,
+			// so a late change naming a node in a detached subtree fails
+			// on it rather than every copy.
+			delete(all, tree)
 			continue
 		}
 		if err != nil {
@@ -658,6 +660,10 @@ func (r *Root) DeepCopy() (*Root, error) {
 	}
 	return copied, nil
 }
+
+// copyObject copies the root's object for DeepCopy and Rederive. A
+// variable only so a test can hand them a copy that does not match.
+var copyObject = func(object *Object) (Element, error) { return object.DeepCopy() }
 
 // pairedTrees pairs each Tree the source object reaches with its copy in
 // copied, a copy of it, by place: an object's members by their member key
@@ -857,7 +863,7 @@ func (r *Root) copyTreePairs(src *Root, all, trees map[*Tree]*Tree, copies map[*
 // For tests and diagnostics, as NodeLen is; exported for the tests of
 // package document, which check a document's ledger with it.
 func (r *Root) Rederive() (*Root, error) {
-	copiedObject, err := r.object.DeepCopy()
+	copiedObject, err := copyObject(r.object)
 	if err != nil {
 		return nil, err
 	}

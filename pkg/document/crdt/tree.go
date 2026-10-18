@@ -1940,10 +1940,10 @@ func (t *Tree) dropSubtrees(tops []*TreeNode) []*TreeNode {
 			if !fromGone && !beforeGone {
 				continue
 			}
-			parent, before, ok := t.purgedSlot(kept)
-			if !ok {
-				parent, before = nil, nil
-			}
+			// A slot that does not resolve, which only a broken purge record
+			// gives, ends nil, as purgedSlot answers it: still unresolved,
+			// and naming nothing let go.
+			parent, before, _ := t.purgedSlot(kept)
 			kept.purgedFrom, kept.purgedBefore = parent, before
 		}
 	}
@@ -3103,6 +3103,11 @@ func (t *Tree) DeepCopy() (Element, error) {
 	return tree, nil
 }
 
+// copyTop copies a detached subtree's top, with the subtree, for
+// copyDetachedFrom. A variable only so a test can hand it a copy that does
+// not match.
+var copyTop = func(top *TreeNode) (*TreeNode, error) { return top.DeepCopy() }
+
 // ErrTreeCopyShape is returned when a copy of a tree does not match it in
 // shape (see Tree.copyDetachedFrom).
 var ErrTreeCopyShape = errors.New("tree copy does not match its source in shape")
@@ -3183,7 +3188,7 @@ func (t *Tree) copyDetachedFrom(src *Tree) (map[*TreeNode]*TreeNode, error) {
 	for len(pending) > 0 {
 		top := pending[len(pending)-1]
 		pending = pending[:len(pending)-1]
-		copied, err := top.DeepCopy()
+		copied, err := copyTop(top)
 		if err != nil {
 			return nil, err
 		}
@@ -3194,18 +3199,20 @@ func (t *Tree) copyDetachedFrom(src *Tree) (map[*TreeNode]*TreeNode, error) {
 		for from, to := range subtree {
 			copies[from] = to
 			to.detached, to.released, to.forgotten = from.detached, from.released, from.forgotten
-			t.noteMergeStamp(to)
 			enqueue(from.purgedFrom)
 			enqueue(from.purgedBefore)
 		}
 	}
 
-	// A slot names a node in either tree, attached or detached, and resolves
-	// to its copy; one that names a node no longer in the tree resolves to
-	// nil, as it does in src.
+	// Only now that every subtree copied does the tree take anything of
+	// them: a copy that fails above leaves it as the scan made it. A slot
+	// names a node in either tree, attached or detached, and resolves to its
+	// copy; one that names a node no longer in the tree resolves to nil, as
+	// it does in src.
 	for from, to := range copies {
 		if from.detached {
 			to.purgedFrom, to.purgedBefore = copies[from.purgedFrom], copies[from.purgedBefore]
+			t.noteMergeStamp(to)
 		}
 	}
 	for _, n := range registered {
