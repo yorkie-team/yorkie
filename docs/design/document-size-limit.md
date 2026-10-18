@@ -146,25 +146,29 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
   replica does not record. Like the cases above, only a late or crafted op
   names a position there.
 
-**One undo, one result.** A copy built from the attached tree holds no
-detached node: a replica that collected further, a snapshot, a `DeepCopy`,
-and the document's clone, which an undo or redo runs on before the root.
-That is why `Restore` resolves a detached node as if it were gone rather
-than leaving it as it is: the clone and the root, and every replica, then
-take the same branch for the same span
-(`TestUndoMatchesOnTheCloneWithoutDetachedNodes`). An op other than
-`Restore` that names a detached node can still resolve on the root and
-fail on a rebuilt clone, which runs it first; main's rebuilt clone holds no
-detached node either, so that gap is the same there.
+**One undo, one result.** A replica that collected further holds no
+detached node there, nor does one loaded from a snapshot. That is why
+`Restore` resolves a detached node as if it were gone rather than leaving
+it as it is: every replica then takes the same branch for the same span
+(`TestUndoMatchesOnTheCloneWithoutDetachedNodes`). A `DeepCopy`, which is
+how the document builds the clone a change runs on before the root, does
+carry the detached subtrees, with their marks, purge slots and index
+entries (`Tree.copyDetachedFrom`), so any op that resolves on the root
+through a detached node or a purge slot resolves on the clone too, instead
+of failing there and aborting the pack
+(`TestRemoteOpNamingADetachedNodeAppliesOnTheClone`). Main's clone holds
+none of its detached nodes, so main has that gap; this change closes it.
 
-**Garbage a rebuild does not see.** A rebuild books GC from the attached
-tree (`Tree.GCPairs`), so it has no pair for a detached tombstone whose
-own removal is not yet collectable, nor for a removed attribute of a
-detached node. Until the next collection that covers that removal, the
-running `GC` and `GarbageLen` hold that garbage and a rebuild does not.
-It ends at that collection, which purges the pair, and it is the same
-pending-pair window main has for the descendants of a purged node. `Live`
-is not affected: no detached node is in it.
+**Garbage a reload does not see.** `Tree.GCPairs` books the pending pairs
+of the detached nodes a tree holds, so a `DeepCopy` reports the GC and
+`GarbageLen` its source does. A snapshot holds no detached node, so a
+replica loaded from one has no pair for a detached tombstone whose own
+removal is not yet collectable, nor for a removed attribute of a detached
+node. Until the next collection that covers that removal, the running `GC`
+and `GarbageLen` hold that garbage and a reload does not. It ends at that
+collection, which purges the pair, and it is the same pending-pair window
+main has for the descendants of a purged node. `Live` is not affected: no
+detached node is in it.
 
 **Born-tombstoned content and the size gate.** Content an `Edit` inserts
 under a removed parent is born a tombstone and booked to `GC` alone. Main

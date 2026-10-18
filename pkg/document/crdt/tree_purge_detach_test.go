@@ -193,8 +193,10 @@ func TestRestoreLeavesADetachedNodeATombstone(t *testing.T) {
 	t.Run("with the purged parent restored first, all three are recreated", func(t *testing.T) {
 		tree, div, p, text := setup(t)
 		spans := []*TreeRestoreSpan{spanOf(div, tree.Root()), spanOf(p, div), spanOf(text, p)}
-		copied, err := tree.DeepCopy()
+		// The attached tree alone, as a snapshot holds it: no detached node.
+		rootCopy, err := tree.Root().DeepCopy()
 		require.NoError(t, err)
+		attachedOnly := NewTree(rootCopy, tree.createdAt)
 
 		untombstoned, recreated, _, _, _, err := tree.Restore(spans, false, unaware)
 		require.NoError(t, err)
@@ -206,9 +208,9 @@ func TestRestoreLeavesADetachedNodeATombstone(t *testing.T) {
 
 		// A copy of the attached tree, which holds no detached node, ends
 		// the same.
-		_, _, _, _, _, err = copied.(*Tree).Restore(spans, false, unaware)
+		_, _, _, _, _, err = attachedOnly.Restore(spans, false, unaware)
 		require.NoError(t, err)
-		assert.Equal(t, tree.ToXML(), copied.(*Tree).ToXML())
+		assert.Equal(t, tree.ToXML(), attachedOnly.ToXML())
 	})
 }
 

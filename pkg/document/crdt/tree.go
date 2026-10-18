@@ -1772,11 +1772,11 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 // chain, as its own GC pair's purge will, for a Restore that names it.
 //
 // A detached node is a tombstone in a subtree a purge took out, kept
-// registered only until its own removal is collectable. Nothing built from
-// the attached tree holds it: not a replica that has collected that far, a
-// snapshot, a DeepCopy, or the document's clone that an undo runs on first.
+// registered only until its own removal is collectable. A replica that has
+// collected that far does not hold it, nor does one loaded from a snapshot.
 // Those find nothing under the span's ID and recreate it if its parent is
-// there, so this one has to resolve the span the same way. The node itself
+// there, so this one has to resolve the span the same way; a DeepCopy,
+// which carries the detached subtrees, resolves it as its source does. The node itself
 // stays a detached tombstone (see TreeNode.detached). It leaves the document
 // here as a purge would take it, so its pending GC pair goes too: Restore's
 // caller drops it (see TakeForgotten), and the recreate that may follow
@@ -2872,7 +2872,75 @@ func (t *Tree) DeepCopy() (Element, error) {
 	tree := NewTree(node, t.createdAt)
 	tree.movedAt = t.movedAt
 	tree.removedAt = t.removedAt
+	if err := tree.copyDetachedFrom(t); err != nil {
+		return nil, err
+	}
 	return tree, nil
+}
+
+// copyDetachedFrom gives the tree, a fresh copy of src's attached tree, the
+// subtrees src's purges took out: each copied whole, with the detached and
+// released marks, the purge slots, and the nodes src has in detachedByID
+// registered there. A copy that runs a change before src does, as the
+// document's clone does, then resolves every position src resolves through
+// a detached node or a purge slot alike. A snapshot holds none of this.
+func (t *Tree) copyDetachedFrom(src *Tree) error {
+	registered := src.detachedByID.Values()
+	if len(registered) == 0 {
+		return nil
+	}
+
+	copies := make(map[*TreeNode]*TreeNode)
+	for _, n := range registered {
+		top := n
+		for top.Index.Parent != nil {
+			top = top.Index.Parent.Value
+		}
+		if _, ok := copies[top]; ok {
+			continue
+		}
+		copied, err := top.DeepCopy()
+		if err != nil {
+			return err
+		}
+
+		pairs := [][2]*index.Node[*TreeNode]{{top.Index, copied.Index}}
+		for len(pairs) > 0 {
+			pair := pairs[len(pairs)-1]
+			pairs = pairs[:len(pairs)-1]
+			from, to := pair[0].Value, pair[1].Value
+			copies[from] = to
+			to.detached, to.released = from.detached, from.released
+			fromChildren, toChildren := pair[0].Children(true), pair[1].Children(true)
+			for i := range fromChildren {
+				pairs = append(pairs, [2]*index.Node[*TreeNode]{fromChildren[i], toChildren[i]})
+			}
+		}
+	}
+
+	// A slot names a node in either tree: its copy if it was detached, the
+	// copied attached tree's node under the same ID otherwise.
+	resolve := func(n *TreeNode) *TreeNode {
+		if n == nil {
+			return nil
+		}
+		if c, ok := copies[n]; ok {
+			return c
+		}
+		if key, attached := t.NodeMapByID.Floor(n.id); attached != nil && key.Equal(n.id) {
+			return attached
+		}
+		return nil
+	}
+	for from, to := range copies {
+		to.purgedFrom, to.purgedBefore = resolve(from.purgedFrom), resolve(from.purgedBefore)
+	}
+	for _, n := range registered {
+		if c, ok := copies[n]; ok {
+			t.detachedByID.Put(c.id, c)
+		}
+	}
+	return nil
 }
 
 // GCPairs returns the pairs of GC.
@@ -2899,6 +2967,18 @@ func (t *Tree) GCPairs() []GCPair {
 			})
 		}
 
+		pairs = append(pairs, node.GCPairs()...)
+	}
+
+	// A detached tombstone that is not released still has its own pair
+	// pending, as do the removed attributes of every detached node; a copy
+	// that carries them (see copyDetachedFrom) books them too, so it holds
+	// the GC its source holds.
+	for _, node := range t.detachedByID.Values() {
+		if node.removedAt != nil && !node.released {
+			gcSize := node.DataSize()
+			pairs = append(pairs, GCPair{Parent: t, Child: node, GCOnlySize: &gcSize})
+		}
 		pairs = append(pairs, node.GCPairs()...)
 	}
 

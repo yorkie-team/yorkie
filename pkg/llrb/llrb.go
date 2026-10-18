@@ -118,6 +118,15 @@ func (t *Tree[K, V]) Floor(key K) (K, V) {
 	return resultK, resultV
 }
 
+// Values returns the values of the tree in key order.
+func (t *Tree[K, V]) Values() []V {
+	values := make([]V, 0, t.size)
+	traverseInOrder(t.root, func(node *Node[K, V]) {
+		values = append(values, node.value)
+	})
+	return values
+}
+
 // Len returns the length of the tree.
 func (t *Tree[K, V]) Len() int {
 	return t.size
