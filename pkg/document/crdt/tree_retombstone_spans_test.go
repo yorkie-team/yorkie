@@ -489,5 +489,42 @@ func TestRetombstoneCascadeIsLinear(t *testing.T) {
 	for _, p := range chain {
 		require.True(t, p.IsRemoved())
 	}
-	assert.LessOrEqual(t, steps, 2*n, "each link is walked about once, not once per span")
+	assert.LessOrEqual(t, steps, 4*n, "each link is walked about once, not once per span")
+}
+
+// TestRetombstoneCascadeOverADeepProductIsLinear pins the cost of the §4.1
+// cascade emitting spans for a deep split product: one unknown product whose
+// subtree is a path of d elements. The cascade walks the subtree and emits a
+// span per node it removed, each node once, so the work is linear in d, and
+// the walk keeps no recursion as deep as the subtree.
+func TestRetombstoneCascadeOverADeepProductIsLinear(t *testing.T) {
+	const d = 2000
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ff")
+	require.NoError(t, err)
+	root := NewTreeNode(NewTreeNodeID(time.NewTicket(1, 0, actor), 0), "r", nil)
+	tree := NewTree(root, time.NewTicket(2, 0, actor))
+	p := NewTreeNode(NewTreeNodeID(time.NewTicket(3, 0, actor), 0), "p", nil)
+	product := NewTreeNode(NewTreeNodeID(time.NewTicket(10, 0, peer), 0), "p", nil)
+	require.NoError(t, root.Append(p, product))
+	tree.putNode(p)
+	tree.putNode(product)
+	p.InsNextID, product.InsPrevID = product.id, p.id
+	parent := product
+	for i := 0; i < d; i++ {
+		child := NewTreeNode(NewTreeNodeID(time.NewTicket(int64(11+i), 0, peer), 0), "div", nil)
+		require.NoError(t, parent.Append(child))
+		tree.putNode(child)
+		parent = child
+	}
+	known := time.NewVersionVector()
+	known.Set(actor, 5)
+
+	steps := 0
+	span := &TreeRestoreSpan{ID: p.id, NodeType: "p", ParentID: root.id}
+	_, _, _, reverse, err := tree.retombstone([]*TreeRestoreSpan{span}, time.NewTicket(6, 0, actor), false, known, &steps)
+	require.NoError(t, err)
+	require.Len(t, reverse, d+2, "p, the product and every node under it")
+	assert.LessOrEqual(t, steps, 4*d, "each node of the product is visited a constant number of times")
 }

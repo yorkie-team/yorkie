@@ -2289,18 +2289,16 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 		}
 	}
 
-	var emit func(node *TreeNode)
-	emit = func(node *TreeNode) {
-		if span, ok := spans[node]; ok {
-			cascaded = append(cascaded, span)
-			delete(spans, node)
-		}
-		for _, child := range node.Index.Children(true) {
-			emit(child.Value)
-		}
-	}
+	// siblings lists every product followed by its subtree, parent before
+	// child, so one pass over it emits the spans in that order, each node
+	// once.
 	for _, sibling := range siblings {
-		emit(sibling)
+		if steps != nil {
+			*steps++
+		}
+		if span, ok := spans[sibling]; ok {
+			cascaded = append(cascaded, span)
+		}
 	}
 	return pairs, edits, cascaded
 }
@@ -4603,14 +4601,20 @@ func (t *Tree) appendUnknownSplitSiblings(
 			// parent before child: the order becomes the reverse operation's
 			// spans, and Restore revives a child only once its parent is live
 			// again (see knownRemovalAbove).
-			var preorder func(n *index.Node[*TreeNode])
-			preorder = func(n *index.Node[*TreeNode]) {
+			// Iterative, as the subtree's depth is the client's to choose.
+			stack := []*index.Node[*TreeNode]{next.Index}
+			for len(stack) > 0 {
+				n := stack[len(stack)-1]
+				stack = stack[:len(stack)-1]
 				toBeRemoveds = append(toBeRemoveds, n.Value)
-				for _, child := range n.Children(true) {
-					preorder(child)
+				if steps != nil {
+					*steps++
+				}
+				children := n.Children(true)
+				for i := len(children) - 1; i >= 0; i-- {
+					stack = append(stack, children[i])
 				}
 			}
-			preorder(next.Index)
 		}
 		if next.InsNextID == nil {
 			break
