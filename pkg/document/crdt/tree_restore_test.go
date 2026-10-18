@@ -845,10 +845,15 @@ func TestTreeRetombstoneCascadesToUnknownSplitProducts(t *testing.T) {
 	productP := product.Children()[0]
 	productText := productP.Children()[0]
 
-	_, _, _, applied, err := tree.Retombstone(
-		[]*crdt.TreeRestoreSpan{divSpan}, helper.TimeT(ctx), false, known,
+	_, _, edits, applied, err := tree.Retombstone(
+		[]*crdt.TreeRestoreSpan{divSpan}, helper.TimeT(ctx), true, known,
 	)
 	assert.NoError(t, err)
+	// Measured against the tree as each removal finds it: the element's
+	// five tokens, then the product's five, now at the same index. The
+	// product's p and "Y" go out of sight with it and report nothing.
+	assert.Equal(t, []crdt.TreeVisibleEdit{{From: 0, To: 5}, {From: 0, To: 5}}, edits,
+		"the cascade reports the product's removal as a visible edit")
 	assert.Equal(t, "<r></r>", tree.ToXML(), "the unknown product goes with the element")
 
 	assert.Len(t, applied, 4, "the element's span, then one per cascaded node")

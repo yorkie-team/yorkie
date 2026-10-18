@@ -2618,11 +2618,10 @@ func TestCollectingATreeLetsItsDetachedSubtreesGo(t *testing.T) {
 // TestCopyDetachedFromATreeOfAnotherShape pins that copyDetachedFrom, which
 // pairs a source's nodes with a copy's by walking both in lockstep, fails
 // with ErrTreeCopyShape for a tree that is not a copy of the source in
-// shape, rather than indexing past the end of the shorter child list, and
-// that Root.DeepCopy fails with it rather than handing back a clone without
-// the detached state its root holds. The root's element map is made to
-// name a tree of another shape than the one its object holds, which only a
-// broken invariant gives.
+// shape, rather than indexing past the end of the shorter child list. Root
+// pairs each Tree with its copy by walking its object, as NewRoot walks the
+// copy's, so an element map naming another tree than the object holds
+// pairs the object's, and the copy does not fail.
 func TestCopyDetachedFromATreeOfAnotherShape(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
@@ -2644,8 +2643,9 @@ func TestCopyDetachedFromATreeOfAnotherShape(t *testing.T) {
 	doc.Object().Set("t", other)
 	doc.RegisterElement(other, doc.Object())
 	doc.elementMap[other.CreatedAt().Key()] = src
-	_, err = doc.DeepCopy()
-	assert.ErrorIs(t, err, ErrTreeCopyShape)
+	copied, err := doc.DeepCopy()
+	require.NoError(t, err)
+	assert.Empty(t, copied.Object().Get("t").(*Tree).Root().Children(true), "a copy of the object's tree")
 }
 
 // TestDropDetachedStopsAtTheAttachedTree pins that a drop walks down from
@@ -2989,18 +2989,120 @@ func TestAForgedTicketDoesNotKeepADetachedSubtree(t *testing.T) {
 	assert.Equal(t, 0, doc.GarbageLen())
 }
 
-// TestDeepCopyFailsForATreeItCannotFind pins that Root.DeepCopy fails when
-// the copy of its object holds no element for a Tree the root's element map
-// holds, which only a broken invariant gives, rather than handing back a
-// clone without that tree's detached state.
-func TestDeepCopyFailsForATreeItCannotFind(t *testing.T) {
+// TestDeepCopyCarriesNothingForATreeTheObjectNoLongerReaches pins that a
+// Tree the root's element map holds but its object no longer reaches, a
+// member a peer added to a container this replica removed and an undo then
+// replaced (see Root.release), neither fails the copy nor reaches it: the
+// copy holds no element for it, and none of the detached state it holds.
+func TestDeepCopyCarriesNothingForATreeTheObjectNoLongerReaches(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	a := NewTreeNode(NewTreeNodeID(time.NewTicket(40, 0, peer), 0), "p", nil)
+	require.NoError(t, root.Append(x))
+	require.NoError(t, x.Append(a))
+	x.remove(tk(10))
+	doc, stray := releaseFixture(t, root, tk(3))
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.True(t, a.detached)
+	require.Contains(t, doc.detachedTrees, stray)
+	// The object stops reaching the tree; the element map still holds it.
+	doc.Object().Delete("t", tk(21))
+	require.NoError(t, doc.Object().Purge(stray))
+
+	copied, err := doc.DeepCopy()
+	require.NoError(t, err, "a state the document reaches does not fail the copy")
+	assert.Nil(t, copied.FindByCreatedAt(stray.CreatedAt()))
+	assert.Empty(t, copied.detachedTrees)
+	_, err = doc.Rederive()
+	assert.NoError(t, err)
+}
+
+// TestReleaseInsideARemovedTreeElement pins the ledger of a release in a
+// Tree element that is itself removed: its removal moved its size, the live
+// text under the removed div included, to GC under the element's charge.
+// The purge of the div releases the text, so its bytes leave that charge,
+// not Live, which no longer holds them, and its tombstone is what GC holds
+// for it until the drop. Live stays what a reload reports, and GC what a
+// ledger derived from the content does.
+func TestReleaseInsideARemovedTreeElement(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	// Once dropped in the purging collection, and once kept past it.
+	for _, keep := range []bool{false, true} {
+		root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+		div := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+		text := NewTreeNode(NewTreeNodeID(tk(3), 0), "text", nil, "ab")
+		require.NoError(t, root.Append(div))
+		require.NoError(t, div.Append(text))
+		div.remove(tk(10))
+		if keep {
+			keepDetached(text)
+		}
+		doc, tree := releaseFixture(t, root, tk(4))
+		removed := doc.Object().Delete("t", time.NewTicket(50, 0, peer))
+		require.Same(t, tree, removed)
+		doc.RegisterRemovedElementPair(doc.Object(), tree)
+		live := doc.DocSize().Live
+
+		vector := time.NewVersionVector()
+		vector.Set(actor, 20)
+		vector.Set(peer, 0)
+		_, err = doc.GarbageCollect(vector)
+		require.NoError(t, err)
+		require.True(t, text.released, "keep %v", keep)
+		assert.Equal(t, live, doc.DocSize().Live, "keep %v: Live did not hold the text", keep)
+
+		object, err := doc.Object().DeepCopy()
+		require.NoError(t, err)
+		reloaded := NewRoot(object.(*Object))
+		assert.Equal(t, reloaded.DocSize().Live, doc.DocSize().Live, "keep %v: Live equals a reload", keep)
+		rederived, err := doc.Rederive()
+		require.NoError(t, err)
+		assert.Equal(t, rederived.DocSize(), doc.DocSize(), "keep %v: the ledger equals one derived from the content", keep)
+	}
+}
+
+// TestAReleaseInACollectedTreeBooksNothing pins a pass that collects a Tree
+// element and then purges a pair of its nodes: the element's charge, the
+// live text under the removed div included, left with it, so the release
+// of the text books nothing, neither off Live nor into GC, and the tree is
+// not tracked again for a drop no collection would run.
+func TestAReleaseInACollectedTreeBooksNothing(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
 	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
-	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
-	stray := NewTree(NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil), tk(2))
-	doc.elementMap[stray.CreatedAt().Key()] = stray
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	div := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	text := NewTreeNode(NewTreeNodeID(tk(3), 0), "text", nil, "ab")
+	require.NoError(t, root.Append(div))
+	require.NoError(t, div.Append(text))
+	div.remove(tk(10))
+	keepDetached(text)
+	doc, tree := releaseFixture(t, root, tk(4))
+	doc.Object().Delete("t", tk(15))
+	doc.RegisterRemovedElementPair(doc.Object(), tree)
 
-	_, err = doc.DeepCopy()
-	assert.ErrorIs(t, err, ErrTreeCopyShape)
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.Nil(t, doc.FindByCreatedAt(tree.CreatedAt()), "the tree is collected")
+	require.True(t, text.released)
+	assert.Equal(t, 0, doc.GarbageLen())
+	gc, live := doc.DocSize().GC, doc.DocSize().Live
+	assert.Zero(t, (&gc).Total())
+	empty := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	assert.Equal(t, empty.DocSize().Live, live, "nothing is left in Live for the tree")
+	assert.Empty(t, doc.detachedTrees)
 }

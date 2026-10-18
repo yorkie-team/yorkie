@@ -1138,6 +1138,11 @@ type Tree struct {
 	// nodes under it, so a drop reaches each of them, those another node
 	// holds the ID over included, which detachedByID does not index.
 	detachedTops map[*TreeNode]struct{}
+
+	// collected is set when the collection deregisters the tree, with its
+	// GC charge: a pair of its nodes the same pass purges afterwards
+	// releases nothing to book (see Root.bookRelease).
+	collected bool
 }
 
 // NewTree creates a new instance of Tree.
@@ -2475,8 +2480,17 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 
 	neverEnclosed := func(*TreeNode) bool { return false }
 	siblings := t.appendUnknownSplitSiblings(nil, target, versionVector, neverEnclosed, walked, steps)
-	spans := make(map[*TreeNode]*TreeRestoreSpan, len(siblings))
+	// What it allocates is bounded by what the operation reaches: the
+	// unknown products of its own target and their subtrees, each a node it
+	// removes, and a span only for one it does remove, not for a tombstone
+	// it passes over.
+	spans := make(map[*TreeNode]*TreeRestoreSpan)
 	for _, sibling := range siblings {
+		if sibling.removedAt != nil {
+			// Already a tombstone: the later removal still wins its ticket.
+			sibling.remove(executedAt)
+			continue
+		}
 		var from, to int
 		visible := false
 		if measure {

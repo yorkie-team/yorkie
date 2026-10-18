@@ -372,6 +372,7 @@ func (r *Root) deregisterElement(element Element) int {
 			// tree out of the document no longer gets.
 			r.dropNodes(tree, tree.dropSubtrees(tree.tops()))
 			delete(r.detachedTrees, tree)
+			tree.collected = true
 		}
 		// Subtract the size from wherever it is actually counted, and by the
 		// amount actually charged. A descendant created inside an
@@ -590,17 +591,17 @@ func (r *Root) DeepCopy() (*Root, error) {
 	copied := NewRoot(copiedObject.(*Object))
 	trees := make(map[*Tree]*Tree)
 	copies := make(map[*TreeNode]*TreeNode)
-	for key, elem := range r.elementMap {
-		tree, ok := elem.(*Tree)
-		if !ok {
-			continue
-		}
+	// Each Tree is paired with its copy by walking the root's object as
+	// NewRoot walks the copy's, not through elementMap: elementMap can hold
+	// a Tree the object no longer reaches, a member a peer added to a
+	// container this replica removed and an undo then replaced, and the
+	// copy holds nothing for such a tree, so it carries none of its state.
+	for key, tree := range reachableTrees(r.object) {
 		copiedTree, ok := copied.elementMap[key].(*Tree)
 		if !ok {
-			// The copy of the object holds every element the root's map
-			// does, so only a broken invariant gets here; a clone without
-			// the tree's detached state would resolve what the root does
-			// differently.
+			// The same walk over a copy reaches the same trees, so only a
+			// broken copy gets here; a clone without the tree's detached
+			// state would resolve what the root does differently.
 			return nil, fmt.Errorf("copy of tree %s: %w", key, ErrTreeCopyShape)
 		}
 		treeCopies, err := copiedTree.copyDetachedFrom(tree)
@@ -621,6 +622,20 @@ func (r *Root) DeepCopy() (*Root, error) {
 		}
 	}
 	return copied, nil
+}
+
+// reachableTrees returns the Trees the object reaches by createdAt key, the
+// one a later visit reaches winning a key two share, as NewRoot's indexing
+// of the same object picks it (see registerLive).
+func reachableTrees(object *Object) map[string]*Tree {
+	trees := make(map[string]*Tree)
+	object.Descendants(func(elem Element, _ Container) bool {
+		if tree, ok := elem.(*Tree); ok {
+			trees[tree.CreatedAt().Key()] = tree
+		}
+		return false
+	})
+	return trees
 }
 
 // copyTreePairs replaces the pairs NewRoot's scan booked for the copied
@@ -736,14 +751,10 @@ func (r *Root) Rederive() (*Root, error) {
 		return nil, err
 	}
 	copied := NewRoot(copiedObject.(*Object))
-	for key, elem := range r.elementMap {
-		tree, ok := elem.(*Tree)
-		if !ok {
-			continue
-		}
+	for key, tree := range reachableTrees(r.object) {
 		copiedTree, ok := copied.elementMap[key].(*Tree)
 		if !ok {
-			continue
+			return nil, fmt.Errorf("copy of tree %s: %w", key, ErrTreeCopyShape)
 		}
 		if _, err := copiedTree.copyDetachedFrom(tree); err != nil {
 			return nil, err
@@ -802,7 +813,8 @@ func (r *Root) GarbageCollectKnown(vector, known time.VersionVector) (int, error
 	for {
 		purged, deferred, err := r.collect(vector)
 		if err != nil {
-			return 0, err
+			// What the drop let go is gone already; say so.
+			return count, err
 		}
 		count += purged
 
@@ -840,6 +852,34 @@ func (r *Root) dropDetached(vector, known time.VersionVector) int {
 		}
 	}
 	return count
+}
+
+// bookRelease books what a purge in a Tree released (see GCLiveRelease). The
+// released bytes leave whichever ledger holds them: Live, or, for a Tree
+// element that is itself removed, the GC charge its removal moved them to
+// (sizeInGC), and each released node's pair holds its tombstone in GC from
+// then on. A Tree the collection has already deregistered took its charge,
+// those bytes included, with it, so nothing is booked and the tree is not
+// tracked again; the pending pairs of its nodes are collected as they come
+// due, as on main.
+func (r *Root) bookRelease(parent GCParent, result purgeResult) {
+	tree, isTree := parent.(*Tree)
+	if isTree && tree.collected {
+		return
+	}
+	if charged, inGC := r.sizeInGC[tree]; isTree && inGC {
+		charged.Sub(result.Released)
+		r.sizeInGC[tree] = charged
+		r.docSize.GC.Sub(result.Released)
+	} else {
+		r.docSize.Live.Sub(result.Released)
+	}
+	for _, node := range result.ReleasedNodes {
+		r.bookRetained(GCPair{Parent: parent, Child: node})
+	}
+	if isTree && len(tree.detachedTops) > 0 {
+		r.detachedTrees[tree] = struct{}{}
+	}
 }
 
 // bookRetained books the pair of a node a purge released, its tombstone's
@@ -966,18 +1006,12 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 			if err != nil {
 				return 0, 0, err
 			}
-			if tree, ok := parent.(*Tree); ok && result.Purged && len(tree.detachedTops) > 0 {
-				r.detachedTrees[tree] = struct{}{}
-			}
 			// Defensive; unreachable because the check above skips a pair
 			// whose child has no removal, the only purge that does not happen.
 			if !result.Purged {
 				continue
 			}
-			r.docSize.Live.Sub(result.Released)
-			for _, node := range result.ReleasedNodes {
-				r.bookRetained(GCPair{Parent: pair.Parent, Child: node})
-			}
+			r.bookRelease(pair.Parent, result)
 		} else if err := pair.Parent.Purge(pair.Child); err != nil {
 			return 0, 0, err
 		}
