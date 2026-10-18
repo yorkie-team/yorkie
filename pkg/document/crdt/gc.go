@@ -43,8 +43,16 @@ type GCPair struct {
 	//   - an array dead position node, which holds no element;
 	//   - a node recreated under a removed parent, born tombstoned and never
 	//     reported as recreated;
+	//   - content an Edit inserts under a removed parent, born tombstoned;
+	//   - a §7.4 split product tombstoned as it moves, cut off a node under
+	//     a removed ancestor or moved into a detached subtree, where the
+	//     value includes the removal ticket it is given;
+	//   - the attribute tombstones a split copies into its product;
 	//   - a live attribute removed from a node that is ALREADY a tombstone,
 	//     whose bytes are inside that node's charge -- this one carries zero.
+	//
+	// A released node is in neither Live nor GC and books no pair at all
+	// (see GCLiveRelease), nor does a piece split off one.
 	GCOnlySize *resource.DataSize
 }
 

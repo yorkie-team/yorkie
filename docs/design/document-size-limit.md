@@ -157,6 +157,23 @@ take the same branch for the same span
 fail on a rebuilt clone, which runs it first; main's rebuilt clone holds no
 detached node either, so that gap is the same there.
 
+**Garbage a rebuild does not see.** A rebuild books GC from the attached
+tree (`Tree.GCPairs`), so it has no pair for a detached tombstone whose
+own removal is not yet collectable, nor for a removed attribute of a
+detached node. Until the next collection that covers that removal, the
+running `GC` and `GarbageLen` hold that garbage and a rebuild does not.
+It ends at that collection, which purges the pair, and it is the same
+pending-pair window main has for the descendants of a purged node. `Live`
+is not affected: no detached node is in it.
+
+**Born-tombstoned content and the size gate.** Content an `Edit` inserts
+under a removed parent is born a tombstone and booked to `GC` alone. Main
+booked its pair as an ordinary one, which moved bytes from `Live` that had
+never been added to it, so `Live`, the figure the server's
+`MaxSizePerDocument` gate reads, fell below a rebuild by that content.
+Booking it to `GC` alone leaves `Live` as a rebuild reports it: the change
+moves the gate's figure toward a rebuild, never away from it.
+
 | Path | With a detached node | Pinned by |
 |---|---|---|
 | GC purge of an ancestor | live nodes under it are released with it | `TestCollectReleasesALiveDescendantWithItsAncestor`, `TestLiveReleaseWaitsForTheBarrier`, `TestTreePurgeWithLiveDescendant`, `TestTreeCraftedReviveCannotPinARemovedChain` |
