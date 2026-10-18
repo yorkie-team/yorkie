@@ -3103,11 +3103,6 @@ func (t *Tree) DeepCopy() (Element, error) {
 	return tree, nil
 }
 
-// copyTop copies a detached subtree's top, with the subtree, for
-// copyDetachedFrom. A variable only so a test can hand it a copy that does
-// not match.
-var copyTop = func(top *TreeNode) (*TreeNode, error) { return top.DeepCopy() }
-
 // ErrTreeCopyShape is returned when a copy of a tree does not match it in
 // shape (see Tree.copyDetachedFrom).
 var ErrTreeCopyShape = errors.New("tree copy does not match its source in shape")
@@ -3118,21 +3113,31 @@ var ErrTreeCopyShape = errors.New("tree copy does not match its source in shape"
 // number: the two are not copies, and pairing them on would index past the
 // end of the shorter list.
 func pairCopies(from, to *TreeNode) (map[*TreeNode]*TreeNode, bool) {
+	copies, _, ok := pairCopiesInOrder(from, to)
+	return copies, ok
+}
+
+// pairCopiesInOrder is pairCopies that also lists the source nodes in the
+// order the walk met them, for a caller that has to act on them in an
+// order that does not hang on Go's map order.
+func pairCopiesInOrder(from, to *TreeNode) (map[*TreeNode]*TreeNode, []*TreeNode, bool) {
 	copies := make(map[*TreeNode]*TreeNode)
+	var order []*TreeNode
 	pairs := [][2]*index.Node[*TreeNode]{{from.Index, to.Index}}
 	for len(pairs) > 0 {
 		pair := pairs[len(pairs)-1]
 		pairs = pairs[:len(pairs)-1]
 		copies[pair[0].Value] = pair[1].Value
+		order = append(order, pair[0].Value)
 		fromChildren, toChildren := pair[0].Children(true), pair[1].Children(true)
 		if len(fromChildren) != len(toChildren) {
-			return nil, false
+			return nil, nil, false
 		}
 		for i := range fromChildren {
 			pairs = append(pairs, [2]*index.Node[*TreeNode]{fromChildren[i], toChildren[i]})
 		}
 	}
-	return copies, true
+	return copies, order, true
 }
 
 // copyDetachedFrom gives the tree, a fresh copy of src's attached tree, the
@@ -3153,6 +3158,15 @@ func pairCopies(from, to *TreeNode) (map[*TreeNode]*TreeNode, bool) {
 // gives, fails with ErrTreeCopyShape: copying it without the detached state
 // would leave the clone resolving what the root resolves differently.
 func (t *Tree) copyDetachedFrom(src *Tree) (map[*TreeNode]*TreeNode, error) {
+	return t.copyDetachedFromWith(src, func(top *TreeNode) (*TreeNode, error) { return top.DeepCopy() })
+}
+
+// copyDetachedFromWith is copyDetachedFrom copying each detached top with
+// copyTop, which a test can hand a copy that does not match.
+func (t *Tree) copyDetachedFromWith(
+	src *Tree,
+	copyTop func(*TreeNode) (*TreeNode, error),
+) (map[*TreeNode]*TreeNode, error) {
 	copies, ok := pairCopies(src.Root(), t.Root())
 	if !ok {
 		return nil, fmt.Errorf("copy of tree %s: %w", src.createdAt.Key(), ErrTreeCopyShape)
@@ -3192,11 +3206,15 @@ func (t *Tree) copyDetachedFrom(src *Tree) (map[*TreeNode]*TreeNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		subtree, ok := pairCopies(top, copied)
+		subtree, order, ok := pairCopiesInOrder(top, copied)
 		if !ok {
 			return nil, fmt.Errorf("copy of detached node %s: %w", top.id.toIDString(), ErrTreeCopyShape)
 		}
-		for from, to := range subtree {
+		// In the walk's order, so which subtree the slots enqueue next
+		// does not hang on Go's map order; each top is enqueued once, its
+		// placeholder in copies standing until its subtree copies.
+		for _, from := range order {
+			to := subtree[from]
 			copies[from] = to
 			to.detached, to.released, to.forgotten = from.detached, from.released, from.forgotten
 			enqueue(from.purgedFrom)

@@ -606,11 +606,33 @@ func (r *Root) DocSize() resource.DocSize {
 // so it also carries the subtrees each Tree's purges took out (see
 // Tree.copyDetachedFrom): an op the root resolves through a detached node
 // resolves on the clone alike. Each Tree's pairs are the root's own, booked
-// for the copies of their nodes (see copyTreePairs). A Tree whose copy does
-// not match it in shape, which no honest document produces, fails the copy
-// with ErrTreeCopyShape.
+// for the copies of their nodes (see copyTreePairs). A Tree that does not
+// pair with its copy, or whose copy does not match it in shape, which no
+// honest document produces, keeps the scan's pairs and no detached state;
+// the copy itself never fails on it.
 func (r *Root) DeepCopy() (*Root, error) {
-	copiedObject, err := copyObject(r.object)
+	return r.deepCopyWith(realCopiers())
+}
+
+// copiers are what DeepCopy and Rederive copy the object and each detached
+// top with: the real ones, or, in a test, ones that hand back a copy that
+// does not match, to reach the fallback.
+type copiers struct {
+	object func(*Object) (Element, error)
+	top    func(*TreeNode) (*TreeNode, error)
+}
+
+// realCopiers returns the copiers every caller but a test uses.
+func realCopiers() copiers {
+	return copiers{
+		object: func(object *Object) (Element, error) { return object.DeepCopy() },
+		top:    func(top *TreeNode) (*TreeNode, error) { return top.DeepCopy() },
+	}
+}
+
+// deepCopyWith is DeepCopy with the given copiers.
+func (r *Root) deepCopyWith(with copiers) (*Root, error) {
+	copiedObject, err := with.object(r.object)
 	if err != nil {
 		return nil, err
 	}
@@ -633,7 +655,7 @@ func (r *Root) DeepCopy() (*Root, error) {
 		if tree.detachedByID.Len() == 0 && len(tree.detachedTops) == 0 {
 			continue
 		}
-		treeCopies, err := copiedTree.copyDetachedFrom(tree)
+		treeCopies, err := copiedTree.copyDetachedFromWith(tree, with.top)
 		if errors.Is(err, ErrTreeCopyShape) {
 			// Only a broken invariant gets here. The copy keeps the scan's
 			// pairs and no detached state, none of its nodes' pairs either,
@@ -660,10 +682,6 @@ func (r *Root) DeepCopy() (*Root, error) {
 	}
 	return copied, nil
 }
-
-// copyObject copies the root's object for DeepCopy and Rederive. A
-// variable only so a test can hand them a copy that does not match.
-var copyObject = func(object *Object) (Element, error) { return object.DeepCopy() }
 
 // pairedTrees pairs each Tree the source object reaches with its copy in
 // copied, a copy of it, by place: an object's members by their member key
@@ -863,13 +881,18 @@ func (r *Root) copyTreePairs(src *Root, all, trees map[*Tree]*Tree, copies map[*
 // For tests and diagnostics, as NodeLen is; exported for the tests of
 // package document, which check a document's ledger with it.
 func (r *Root) Rederive() (*Root, error) {
-	copiedObject, err := copyObject(r.object)
+	return r.rederiveWith(realCopiers())
+}
+
+// rederiveWith is Rederive with the given copiers.
+func (r *Root) rederiveWith(with copiers) (*Root, error) {
+	copiedObject, err := with.object(r.object)
 	if err != nil {
 		return nil, err
 	}
 	copied := NewRoot(copiedObject.(*Object))
 	for tree, copiedTree := range pairedTrees(r.object, copied.object) {
-		if _, err := copiedTree.copyDetachedFrom(tree); errors.Is(err, ErrTreeCopyShape) {
+		if _, err := copiedTree.copyDetachedFromWith(tree, with.top); errors.Is(err, ErrTreeCopyShape) {
 			continue
 		} else if err != nil {
 			return nil, err

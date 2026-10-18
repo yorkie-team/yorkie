@@ -3476,8 +3476,8 @@ func TestDeepCopyFallsBackOnATreeOfAnotherShape(t *testing.T) {
 	require.NoError(t, err)
 	require.Same(t, a, tree.DetachedNode(a.id))
 
-	defer func(original func(*Object) (Element, error)) { copyObject = original }(copyObject)
-	copyObject = func(object *Object) (Element, error) {
+	broken := realCopiers()
+	broken.object = func(object *Object) (Element, error) {
 		copied, err := object.DeepCopy()
 		if err != nil {
 			return nil, err
@@ -3487,8 +3487,8 @@ func TestDeepCopyFallsBackOnATreeOfAnotherShape(t *testing.T) {
 		require.NoError(t, ct.Root().Index.RemoveChild(ct.Root().Index.Children(true)[0]))
 		return copied, nil
 	}
-	for _, build := range []func() (*Root, error){doc.DeepCopy, doc.Rederive} {
-		copied, err := build()
+	for _, build := range []func(copiers) (*Root, error){doc.deepCopyWith, doc.rederiveWith} {
+		copied, err := build(broken)
 		require.NoError(t, err, "a copy of another shape does not fail")
 		ct := copied.Object().Get("t").(*Tree)
 		assert.Nil(t, ct.DetachedNode(a.id), "no detached state is carried")
@@ -3496,7 +3496,7 @@ func TestDeepCopyFallsBackOnATreeOfAnotherShape(t *testing.T) {
 		assert.Empty(t, ct.detachedTops)
 		assert.Empty(t, ct.mergeStamps, "nor a stamp of it")
 		assert.Empty(t, copied.detachedTrees)
-		object, err := copyObject(doc.Object())
+		object, err := broken.object(doc.Object())
 		require.NoError(t, err)
 		scan := NewRoot(object.(*Object))
 		assert.Equal(t, scan.DocSize(), copied.DocSize(), "the tree keeps the scan's pairs")
@@ -3556,9 +3556,9 @@ func TestAFailedDetachedCopyLeavesNoStamps(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, tree.detachedTops, 2)
 
-	defer func(original func(*TreeNode) (*TreeNode, error)) { copyTop = original }(copyTop)
 	calls := 0
-	copyTop = func(top *TreeNode) (*TreeNode, error) {
+	broken := realCopiers()
+	broken.top = func(top *TreeNode) (*TreeNode, error) {
 		copied, err := top.DeepCopy()
 		if err != nil {
 			return nil, err
@@ -3570,7 +3570,7 @@ func TestAFailedDetachedCopyLeavesNoStamps(t *testing.T) {
 		}
 		return copied, nil
 	}
-	copied, err := doc.DeepCopy()
+	copied, err := doc.deepCopyWith(broken)
 	require.NoError(t, err)
 	require.Equal(t, 2, calls, "the first subtree copied before the second failed")
 	ct := copied.Object().Get("t").(*Tree)
@@ -3614,4 +3614,52 @@ func TestDroppingASubtreeClearsASlotThatDoesNotResolve(t *testing.T) {
 	assert.Nil(t, y.purgedBefore)
 	_, err = tree.ToIndex(y, c)
 	assert.ErrorIs(t, err, ErrNodeNotFound, "and still resolves nowhere")
+}
+
+// TestCopyDetachedFromCopiesASubtreeOnce pins copyDetachedFrom on a top it
+// reaches both as a top of its own and through another top's slot: x's
+// subtree holds a registered node, and y, purged from x after x's purge,
+// names x in its slot. x's subtree is copied once, so the copy of y's slot
+// and the copy registered for x's node hang in one copied subtree, and the
+// copy is the same however often it runs.
+func TestCopyDetachedFromCopiesASubtreeOnce(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	y := NewTreeNode(NewTreeNodeID(tk(3), 0), "p", nil)
+	c := NewTreeNode(NewTreeNodeID(tk(4), 0), "text", nil, "c")
+	z := NewTreeNode(NewTreeNodeID(tk(5), 0), "q", nil)
+	require.NoError(t, root.Append(x))
+	require.NoError(t, x.Append(y, z))
+	require.NoError(t, y.Append(c))
+	x.remove(tk(10))
+	y.remove(tk(11))
+	tree := NewTree(root, tk(6))
+	_, err = tree.purge(x)
+	require.NoError(t, err)
+	_, err = tree.purge(y)
+	require.NoError(t, err)
+	require.Same(t, x, y.purgedFrom)
+	require.Same(t, z, tree.DetachedNode(z.id), "x's subtree holds a registered node")
+	require.Len(t, tree.detachedTops, 2)
+
+	for range 8 {
+		value, err := tree.DeepCopy()
+		require.NoError(t, err)
+		ct := value.(*Tree)
+		copied := 0
+		copies, err := ct.copyDetachedFromWith(tree, func(top *TreeNode) (*TreeNode, error) {
+			copied++
+			return top.DeepCopy()
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 2, copied, "each of the two subtrees is copied once")
+		copiedZ := ct.DetachedNode(z.id)
+		require.NotNil(t, copiedZ)
+		assert.Same(t, copies[x], copiedZ.Index.Parent.Value, "z hangs under the one copy of x")
+		assert.Same(t, copies[x], copies[y].purgedFrom, "and y's slot names that copy")
+		assert.Len(t, ct.detachedTops, 2)
+	}
 }
