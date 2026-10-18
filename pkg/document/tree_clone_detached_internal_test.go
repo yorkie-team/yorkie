@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -162,4 +163,68 @@ func TestRemoteOpNamingADetachedNodeAppliesOnTheClone(t *testing.T) {
 	assert.Equal(t, treeOf(d.doc.root).ToXML(), treeOf(d.cloneRoot).ToXML())
 	assert.Equal(t, d.doc.root.DocSize(), d.cloneRoot.DocSize(), "and the ledgers agree")
 	assert.Equal(t, d.doc.root.GarbageLen(), d.cloneRoot.GarbageLen())
+}
+
+// TestValueCopyOfATreeCarriesNoDetachedNode pins that detached state stays
+// with the document and its clone: a Tree's own DeepCopy, the copy a Remove's
+// reverse carries as an element payload, holds the attached tree alone, and
+// the converter's payload of it names no detached node, while the root's
+// DeepCopy, the clone, does carry them.
+func TestValueCopyOfATreeCarriesNoDetachedNode(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	d := New("value-copy-detached")
+	d.SetActor(actor)
+	require.NoError(t, d.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+			{Type: "div", Children: []json.TreeNode{
+				{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+			}},
+		}})
+		return nil
+	}))
+	treeOf := func(root *crdt.Root) *crdt.Tree { return root.Object().Get("t").(*crdt.Tree) }
+	tree := treeOf(d.doc.root)
+	div := tree.Root().Children()[0]
+	p := div.Children()[0]
+	text := p.Children()[0]
+	require.NoError(t, d.Update(func(root *json.Object, _ *presence.Presence) error {
+		root.GetTree("t").Edit(0, 6, nil, 0)
+		return nil
+	}))
+	unaware := time.NewVersionVector()
+	unaware.Set(actor, text.ID().CreatedAt.Lamport())
+	at := time.NewTicket(d.doc.VersionVector().VersionOf(actor)+1, 0, peer)
+	pos := crdt.NewTreePos(div.ID(), div.ID())
+	spans := []*crdt.TreeRestoreSpan{
+		{ID: p.ID(), NodeType: "p", Length: 1, ParentID: div.ID()},
+		{ID: text.ID(), NodeType: "text", IsText: true, Length: 2, Value: "ab", ParentID: p.ID()},
+	}
+	op := operations.NewRestoreTreeEdit(tree.CreatedAt(), pos, pos, at, spans, crdt.RestoreModeRestore, nil)
+	_, err = op.Execute(d.doc.root, operations.OpSourceRemote, unaware)
+	require.NoError(t, err)
+	vector := d.doc.VersionVector().DeepCopy()
+	vector.Set(peer, at.Lamport())
+	_, err = d.doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.Same(t, p, tree.DetachedNode(p.ID()), "p is released, detached")
+
+	value, err := tree.DeepCopy()
+	require.NoError(t, err)
+	assert.Nil(t, value.(*crdt.Tree).DetachedNode(p.ID()), "a value copy holds no detached node")
+	for _, node := range converter.ToTreeNodes(value.(*crdt.Tree).Root()) {
+		created := node.Id.CreatedAt
+		for _, detached := range []*crdt.TreeNode{p, text} {
+			id := detached.ID()
+			same := created.Lamport == id.CreatedAt.Lamport() &&
+				created.Delimiter == id.CreatedAt.Delimiter() && int(node.Id.Offset) == id.Offset
+			assert.False(t, same, "the payload names no detached node")
+		}
+	}
+
+	clone, err := d.doc.root.DeepCopy()
+	require.NoError(t, err)
+	assert.NotNil(t, treeOf(clone).DetachedNode(p.ID()), "the clone does carry it")
 }

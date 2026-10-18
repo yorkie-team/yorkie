@@ -547,12 +547,34 @@ func (r *Root) DocSize() resource.DocSize {
 }
 
 // DeepCopy copies itself deeply.
+//
+// The copy is the document's clone, which a change runs on before the root,
+// so it also carries the subtrees each Tree's purges took out, with the
+// pending pairs they hold (see Tree.copyDetachedFrom): an op the root
+// resolves through a detached node resolves on the clone alike.
 func (r *Root) DeepCopy() (*Root, error) {
 	copiedObject, err := r.object.DeepCopy()
 	if err != nil {
 		return nil, err
 	}
-	return NewRoot(copiedObject.(*Object)), nil
+	copied := NewRoot(copiedObject.(*Object))
+	for key, elem := range r.elementMap {
+		tree, ok := elem.(*Tree)
+		if !ok {
+			continue
+		}
+		copiedTree, ok := copied.elementMap[key].(*Tree)
+		if !ok {
+			continue
+		}
+		if err := copiedTree.copyDetachedFrom(tree); err != nil {
+			return nil, err
+		}
+		for _, pair := range copiedTree.detachedGCPairs() {
+			copied.RegisterGCPair(pair)
+		}
+	}
+	return copied, nil
 }
 
 // GarbageCollect purge elements that were removed before the given time.

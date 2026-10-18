@@ -1859,9 +1859,12 @@ func TestDeepCopyKeepsASlotThroughAnUnregisteredParent(t *testing.T) {
 	require.Nil(t, tree.DetachedNode(p.id), "p left the registry with its own purge")
 	require.Same(t, x, tree.DetachedNode(x.id))
 	want, wantErr := tree.ToIndex(x, x)
+	// The copy the document's clone gets: Root.DeepCopy adds the detached
+	// subtrees to the value copy.
 	cp, err := tree.DeepCopy()
 	require.NoError(t, err)
 	ct := cp.(*Tree)
+	require.NoError(t, ct.copyDetachedFrom(tree))
 	cx := ct.DetachedNode(x.id)
 	require.NotNil(t, cx)
 	got, gotErr := ct.ToIndex(cx, cx)
@@ -1903,9 +1906,12 @@ func TestDeepCopyKeepsASlotThroughAnUnregisteredSibling(t *testing.T) {
 	want, err := tree.ToIndex(ab, ab)
 	require.NoError(t, err)
 	require.Equal(t, 4, want, "after <l>LL</l>, where top sat")
+	// The copy the document's clone gets: Root.DeepCopy adds the detached
+	// subtrees to the value copy.
 	cp, err := tree.DeepCopy()
 	require.NoError(t, err)
 	ct := cp.(*Tree)
+	require.NoError(t, ct.copyDetachedFrom(tree))
 	cab := ct.DetachedNode(ab.id)
 	require.NotNil(t, cab)
 	got, err := ct.ToIndex(cab, cab)

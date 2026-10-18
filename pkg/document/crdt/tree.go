@@ -2883,16 +2883,15 @@ func (t *Tree) DeepCopy() (Element, error) {
 	tree := NewTree(node, t.createdAt)
 	tree.movedAt = t.movedAt
 	tree.removedAt = t.removedAt
-	if err := tree.copyDetachedFrom(t); err != nil {
-		return nil, err
-	}
 	return tree, nil
 }
 
 // copyDetachedFrom gives the tree, a fresh copy of src's attached tree, the
-// subtrees src's purges took out: each copied whole, with the detached and
-// released marks, the purge slots, and the nodes src has in detachedByID
-// registered there. A copy that runs a change before src does, as the
+// subtrees src's purges took out, for Root.DeepCopy. Tree.DeepCopy, which
+// also makes the copies an element payload carries, keeps the attached tree
+// alone, so a value never takes detached state along. Each subtree is
+// copied whole, with the detached and released marks and the purge slots,
+// and the nodes src has in detachedByID are registered there. A copy that runs a change before src does, as the
 // document's clone does, then resolves every position src resolves through
 // a detached node or a purge slot alike. A snapshot holds none of this.
 func (t *Tree) copyDetachedFrom(src *Tree) error {
@@ -2998,10 +2997,16 @@ func (t *Tree) GCPairs() []GCPair {
 		pairs = append(pairs, node.GCPairs()...)
 	}
 
-	// A detached tombstone that is not released still has its own pair
-	// pending, as do the removed attributes of every detached node; a copy
-	// that carries them (see copyDetachedFrom) books them too, so it holds
-	// the GC its source holds.
+	return pairs
+}
+
+// detachedGCPairs returns the pairs the detached nodes the tree holds have
+// pending: a detached tombstone that is not released still has its own, and
+// every detached node the pairs of its removed attributes. Root.DeepCopy
+// books them for the copy it gives the detached subtrees, so the copy holds
+// the GC its source does.
+func (t *Tree) detachedGCPairs() []GCPair {
+	var pairs []GCPair
 	for _, node := range t.detachedByID.Values() {
 		if node.removedAt != nil && !node.released {
 			gcSize := node.DataSize()
@@ -3009,7 +3014,6 @@ func (t *Tree) GCPairs() []GCPair {
 		}
 		pairs = append(pairs, node.GCPairs()...)
 	}
-
 	return pairs
 }
 
