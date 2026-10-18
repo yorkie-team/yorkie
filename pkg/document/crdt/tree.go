@@ -2501,6 +2501,8 @@ func (t *Tree) visibleRangeOf(node *TreeNode) (from, to int, ok bool) {
 		}
 	}
 
+	// A reported index, of a node every ancestor of which is live (checked
+	// above), so rangeIndex would answer the same.
 	to, err := t.ToIndex(node.Index.Parent.Value, node)
 	if err != nil || to < 0 {
 		return 0, 0, false
@@ -3453,6 +3455,9 @@ func (t *Tree) Edit(
 	// Gated, not moved: the capture point stays exactly here for every caller
 	// that does need it. Only the caller that reads nothing back skips it.
 	if needsReverseInfo {
+		// A reported index, in the visible-index space the undo/redo
+		// reconciliation adjusts other stack entries in, as JS's
+		// preEditFromIdx is; it selects no content itself.
 		preEditFromIdx, err := t.ToIndex(fromParent, fromLeft)
 		if err != nil {
 			return t.drainPendingGCPairs(), diff, info, err
@@ -3923,11 +3928,15 @@ func (t *Tree) reversedFromAnchorRecovery(
 	// exactly on the end one, and covering nothing loses the client's range
 	// just as completely as covering it backwards. Unless the client's own
 	// range was empty, in which case covering nothing is right.
-	fromIdx, err := t.ToIndex(fromParent, fromLeft)
+	//
+	// Range ends: whether the range collapsed is decided by the resolver the
+	// traversal it guards uses (traverseInPosRange), or the two can disagree
+	// on the order of the same ends.
+	fromIdx, err := t.rangeIndex(fromParent, fromLeft, false)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	toIdx, err := t.ToIndex(toParent, toLeft)
+	toIdx, err := t.rangeIndex(toParent, toLeft, false)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -4121,6 +4130,8 @@ func (t *Tree) beginsAtOrInside(node, declaredFromParent, declaredFromLeft *Tree
 	if err != nil {
 		return false
 	}
+	// Counted with tombstones, against nodeIdx, which is too; rangeIndex
+	// differs from ToIndex only when tombstones are left out.
 	declaredIdx, err := t.ToIndex(declaredFromParent, declaredFromLeft, true)
 	if err != nil || declaredIdx < 0 {
 		return false
