@@ -1830,21 +1830,32 @@ func (t *Tree) TakeForgotten() []*TreeNode {
 // pushed version vectors to close (#2234).
 func (t *Tree) knownRemovalAbove(versionVector time.VersionVector) func(*TreeNode) bool {
 	memo := make(map[*TreeNode]*TreeNode)
-	var nearest func(n *TreeNode) *TreeNode
-	nearest = func(n *TreeNode) *TreeNode {
-		if found, ok := memo[n]; ok && (found == nil || found.IsRemoved()) {
-			return found
-		}
+	// Iterative, as the depth is the client's to choose. Every node the
+	// walk passes on the way up has the same nearest such ancestor: the
+	// walk moves to a parent only when that parent's removal is not one the
+	// change knew.
+	nearest := func(n *TreeNode) *TreeNode {
+		var chain []*TreeNode
 		var found *TreeNode
-		if n.Index != nil && n.Index.Parent != nil {
-			parent := n.Index.Parent.Value
+		for current := n; ; {
+			if f, ok := memo[current]; ok && (f == nil || f.IsRemoved()) {
+				found = f
+				break
+			}
+			chain = append(chain, current)
+			if current.Index == nil || current.Index.Parent == nil {
+				break
+			}
+			parent := current.Index.Parent.Value
 			if parent.removedAt != nil && time.TicketKnown(versionVector, parent.removedAt) {
 				found = parent
-			} else {
-				found = nearest(parent)
+				break
 			}
+			current = parent
 		}
-		memo[n] = found
+		for _, c := range chain {
+			memo[c] = found
+		}
 		return found
 	}
 	return func(n *TreeNode) bool { return nearest(n) != nil }
