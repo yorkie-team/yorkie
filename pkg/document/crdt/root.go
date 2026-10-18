@@ -603,6 +603,7 @@ func (r *Root) DeepCopy() (*Root, error) {
 		return nil, err
 	}
 	copied := NewRoot(copiedObject.(*Object))
+	all := make(map[*Tree]*Tree)
 	trees := make(map[*Tree]*Tree)
 	copies := make(map[*TreeNode]*TreeNode)
 	// Each Tree is paired with its copy by walking the root's object as
@@ -618,6 +619,13 @@ func (r *Root) DeepCopy() (*Root, error) {
 			// state would resolve what the root does differently.
 			return nil, fmt.Errorf("copy of tree %s: %w", key, ErrTreeCopyShape)
 		}
+		all[tree] = copiedTree
+		// A Tree with no detached state has nothing the scan misses but a
+		// pair whose node left the tree, which copyTreePairs books on its
+		// own; it is not paired node by node, the common case and main's.
+		if tree.detachedByID.Len() == 0 && len(tree.detachedTops) == 0 {
+			continue
+		}
 		treeCopies, err := copiedTree.copyDetachedFrom(tree)
 		if err != nil {
 			return nil, err
@@ -628,7 +636,7 @@ func (r *Root) DeepCopy() (*Root, error) {
 			copied.detachedTrees[copiedTree] = struct{}{}
 		}
 	}
-	copied.copyTreePairs(r, trees, copies)
+	copied.copyTreePairs(r, all, trees, copies)
 	for node, size := range r.retainedOff {
 		if c := copies[node]; c != nil {
 			copied.retainedOff[c] = size
@@ -661,9 +669,11 @@ func reachableTrees(object *Object) map[string]*Tree {
 // node has no copy, one no longer in its tree, is booked for a copy of the
 // node alone, which collect purges as it does the original.
 //
-// trees maps each source Tree to its copy and copies each source node to
-// its copy, so one pass over each pair map does it all.
-func (r *Root) copyTreePairs(src *Root, trees map[*Tree]*Tree, copies map[*TreeNode]*TreeNode) {
+// all maps each reachable source Tree to its copy; trees, those with
+// detached state, which were paired node by node, and copies each of their
+// nodes to its copy, so one pass over each pair map does it all. A Tree with
+// no detached state keeps the scan's pairs.
+func (r *Root) copyTreePairs(src *Root, all, trees map[*Tree]*Tree, copies map[*TreeNode]*TreeNode) {
 	copiedTrees := make(map[GCParent]struct{}, len(trees))
 	for _, c := range trees {
 		copiedTrees[c] = struct{}{}
@@ -673,6 +683,9 @@ func (r *Root) copyTreePairs(src *Root, trees map[*Tree]*Tree, copies map[*TreeN
 		copiedNodes[c] = struct{}{}
 	}
 	for key, pair := range r.gcNodePairMap {
+		if len(trees) == 0 {
+			break
+		}
 		_, owned := copiedTrees[pair.Parent]
 		if node, ok := pair.Parent.(*TreeNode); ok {
 			_, owned = copiedNodes[node]
@@ -714,10 +727,18 @@ func (r *Root) copyTreePairs(src *Root, trees map[*Tree]*Tree, copies map[*TreeN
 	attrsOf := make(map[*TreeNode]map[string]*RHTNode)
 	for _, pair := range src.gcNodePairMap {
 		if tree, ok := pair.Parent.(*Tree); ok {
-			copiedTree, ok := trees[tree]
 			node, isNode := pair.Child.(*TreeNode)
-			if !ok || !isNode {
+			if !isNode {
 				continue
+			}
+			copiedTree, paired := trees[tree]
+			if !paired {
+				// A Tree the scan alone books: but for a node out of the
+				// tree, which it does not reach.
+				attached := !node.detached && node.Index != nil && node.Index.Parent != nil
+				if copiedTree, ok = all[tree]; !ok || attached {
+					continue
+				}
 			}
 			if c := copyOf(node); c != nil {
 				book(copiedTree, c)
