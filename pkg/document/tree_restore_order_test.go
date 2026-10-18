@@ -262,25 +262,40 @@ func assertNoOrphans(
 		label, state.Registered, state.Reachable, state)
 
 	root := tree.IndexTree.Root()
-	var orphans []string
+	reaches := func(node *crdt.TreeNode) bool {
+		for cur := node.Index; cur != nil; cur = cur.Parent {
+			if cur == root {
+				return true
+			}
+		}
+		return false
+	}
+	var orphans, liveDetached []string
 	for _, node := range before {
+		// A detached node lives in the separate index: it has to be a
+		// tombstone, off the attached tree, which is what the purge slot
+		// resolution relies on in place of the parent chain.
+		if tree.DetachedNode(node.ID()) == node {
+			if node.RemovedAt() == nil || reaches(node) {
+				liveDetached = append(liveDetached, fmt.Sprintf("%s (removed=%v reachable=%v)",
+					node.IDString(), node.RemovedAt() != nil, reaches(node)))
+			}
+			continue
+		}
+
 		key, held := tree.NodeMapByID.Floor(node.ID())
 		if held != node || !key.Equal(node.ID()) {
 			continue // purged, or the map answers this id with someone else.
 		}
-
-		reachable := false
-		for cur := node.Index; cur != nil; cur = cur.Parent {
-			if cur == root {
-				reachable = true
-				break
-			}
-		}
-		if !reachable {
+		if !reaches(node) {
 			orphans = append(orphans, fmt.Sprintf("%s (removed=%v)",
 				node.IDString(), node.RemovedAt() != nil))
 		}
 	}
+	slices.Sort(liveDetached)
+	assert.Empty(t, liveDetached,
+		"%s: these detached nodes are live or still reachable from the root: %v\n%s",
+		label, liveDetached, state)
 	slices.Sort(orphans)
 	assert.Empty(t, orphans,
 		"%s: these nodes are still registered but no longer reachable from the root: %v\n%s",

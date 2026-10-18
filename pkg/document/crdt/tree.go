@@ -2910,6 +2910,23 @@ func (t *Tree) NodeLen() int {
 	return t.NodeMapByID.Len()
 }
 
+// DetachedLen returns the number of detached nodes still registered by ID
+// (see detachedByID).
+func (t *Tree) DetachedLen() int {
+	return t.detachedByID.Len()
+}
+
+// DetachedNode returns the detached node registered under exactly id, or nil.
+// Detached nodes are kept apart from NodeMapByID, which holds only what is
+// reachable from the root, so checks of that index look here for the rest.
+func (t *Tree) DetachedNode(id *TreeNodeID) *TreeNode {
+	key, node := t.detachedByID.Floor(id)
+	if node == nil || !key.Equal(id) {
+		return nil
+	}
+	return node
+}
+
 // ToXML returns the XML encoding of this tree.
 func (t *Tree) ToXML() string {
 	return ToXML(t.Root())
