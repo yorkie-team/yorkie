@@ -1212,11 +1212,13 @@ func TestRelinkRecreatedTextSkipsDetachedPieces(t *testing.T) {
 	assert.Equal(t, a.id, b.InsPrevID, "the detached piece is left alone")
 }
 
-// TestSplitIntoADetachedParentWithoutARemovalFails pins the §7.4 invariant
-// check: a detached destination always carries a removal, since a purge
-// takes out only a tombstone. Built by hand without one, the move fails the
-// split rather than leave the product live in a detached subtree.
-func TestSplitIntoADetachedParentWithoutARemovalFails(t *testing.T) {
+// TestSplitIntoADetachedParentWithoutARemoval pins the §7.4 fallback: a
+// detached destination always carries a removal, since a purge takes out
+// only a tombstone. Built by hand without one, the split still applies -- an
+// error would fail every later replay of a change the server already stored
+// -- and the product it moves there is tombstoned with its own creation
+// ticket, so no live node sits in a detached subtree.
+func TestSplitIntoADetachedParentWithoutARemoval(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
 	lamport := int64(0)
@@ -1240,17 +1242,16 @@ func TestSplitIntoADetachedParentWithoutARemovalFails(t *testing.T) {
 
 	known := time.NewVersionVector()
 	known.Set(actor, 1000)
-	attached, inB := treeShapeOf(tree), len(b.Index.Children(true))
-	nodes, nextID, prevID := tree.NodeLen(), n.InsNextID, s.InsPrevID
+	inB := len(b.Index.Children(true))
 	_, err = n.Split(tree, 1, next, known)
-	assert.ErrorIs(t, err, ErrDetachedLive)
+	require.NoError(t, err)
 
-	assert.Equal(t, attached, treeShapeOf(tree), "the attached tree is untouched")
-	assert.Equal(t, inB, len(b.Index.Children(true)), "nothing moved into b")
-	assert.Equal(t, nodes, tree.NodeLen(), "nothing registered")
-	assert.Equal(t, nextID, n.InsNextID, "the chain is untouched")
-	assert.Equal(t, prevID, s.InsPrevID)
-	assert.Len(t, n.Index.Children(true), 1, "n is not split")
+	require.Len(t, b.Index.Children(true), inB+1, "the product moved into b")
+	product := b.Index.Children(true)[0].Value
+	assert.True(t, product.detached, "it takes b's side")
+	require.NotNil(t, product.removedAt, "a detached node is a tombstone")
+	assert.Equal(t, product.id.CreatedAt, product.removedAt, "tombstoned with its own creation ticket")
+	assert.Same(t, product, tree.DetachedNode(product.id))
 }
 
 // TestPurgeOfALiveNodeChangesNothing pins that a purge only takes out a
@@ -1523,10 +1524,12 @@ func TestInsertSubtreeUnderADetachedParent(t *testing.T) {
 	assert.Equal(t, "<r><q>cd</q></r>", tree.ToXML())
 }
 
-// TestMergeIntoADetachedParentWithoutARemovalFails pins mergeNodes' twin of
-// the §7.4 invariant check: a detached destination always carries a
-// removal. Built by hand without one, the merge fails before anything moves.
-func TestMergeIntoADetachedParentWithoutARemovalFails(t *testing.T) {
+// TestMergeIntoADetachedParentWithoutARemoval pins mergeNodes' twin of the
+// §7.4 fallback: built by hand without a removal, a merge into a detached
+// destination still applies, and what it moves there is tombstoned with the
+// edit's ticket and taken off Live, so no live node sits in a detached
+// subtree.
+func TestMergeIntoADetachedParentWithoutARemoval(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
 	lamport := int64(0)
@@ -1543,15 +1546,15 @@ func TestMergeIntoADetachedParentWithoutARemovalFails(t *testing.T) {
 	tree := NewTree(root, next())
 	dest.detached = true
 
-	attached, nodes := treeShapeOf(tree), tree.NodeLen()
-	_, released, err := tree.mergeNodes(dest, []*TreeNode{moved}, next())
-	assert.ErrorIs(t, err, ErrDetachedLive)
-	assert.Zero(t, released.Total())
-	assert.Equal(t, attached, treeShapeOf(tree), "the tree is untouched")
-	assert.Equal(t, nodes, tree.NodeLen())
-	assert.Same(t, source, moved.Index.Parent.Value, "nothing moved")
-	assert.Nil(t, moved.MergedFrom, "nothing stamped")
-	assert.False(t, moved.detached)
+	size := moved.DataSize()
+	editedAt := next()
+	_, released, err := tree.mergeNodes(dest, []*TreeNode{moved}, editedAt)
+	require.NoError(t, err)
+	assert.Equal(t, size, released, "its bytes leave Live")
+	assert.Same(t, dest, moved.Index.Parent.Value, "it moved into dest")
+	assert.True(t, moved.detached, "it takes dest's side")
+	assert.Equal(t, editedAt, moved.removedAt, "tombstoned with the edit's ticket")
+	assert.Same(t, moved, tree.DetachedNode(moved.id))
 }
 
 // TestSplitOfAReleasedTextKeepsTheLedger pins the ledger of a split inside

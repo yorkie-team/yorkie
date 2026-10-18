@@ -39,10 +39,6 @@ var (
 	// the node it resolves to, which means the position cannot be resolved on
 	// this replica.
 	ErrSplitOutOfRange = errors.New("split offset out of range")
-
-	// ErrDetachedLive is returned when a node in a subtree a purge took out
-	// is found live, which the purge never leaves (see TreeNode.detached).
-	ErrDetachedLive = errors.New("live node in a detached subtree")
 )
 
 // TreeNodeForTest is a TreeNode for test.
@@ -348,18 +344,6 @@ func (n *TreeNode) Split(
 	var err error
 	var diff resource.DataSize
 
-	// §7.4 below can move the product into a detached subtree, where it is
-	// tombstoned with the subtree's removal. Checked before anything changes,
-	// so a subtree that breaks the invariant fails the split untouched.
-	if !n.IsText() && !n.detached && n.InsNextID != nil {
-		if insNext := tree.findFloorNode(n.InsNextID); insNext != nil && insNext.Index.Parent != nil {
-			if dest := insNext.Index.Parent.Value; dest.detached && detachedRemovalOf(dest) == nil {
-				return diff, fmt.Errorf("split %s into detached %s: %w",
-					n.IDString(), dest.IDString(), ErrDetachedLive)
-			}
-		}
-	}
-
 	if n.IsText() {
 		split, diff, err = n.SplitText(offset, n.id.Offset)
 		if err != nil {
@@ -433,9 +417,8 @@ func (n *TreeNode) Split(
 						// attached tombstone, which a rebuild counts, so it
 						// books its pair below like any other.
 						split.released = split.released && split.detached
-						// The removal is there: checked before the split.
-						if at := detachedRemovalOf(dest); split.detached && split.removedAt == nil && at != nil {
-							split.remove(at)
+						if split.detached && split.removedAt == nil {
+							split.remove(detachedRemovalOr(dest, split.id.CreatedAt))
 							diff.Meta += time.TicketSize
 						}
 					}
@@ -1509,6 +1492,22 @@ func (t *Tree) takeDetachedSide(node *TreeNode, at *time.Ticket) resource.DataSi
 		t.moveToDetached(n.Value)
 	})
 	return released
+}
+
+// detachedRemovalOr returns the removal a node placed under the detached
+// node is tombstoned with (detachedRemovalOf), or fallback when there is
+// none. A purge takes out only a tombstone, so a detached node always has a
+// removal and the fallback is never used through a purge. It is there so
+// that a tree breaking the invariant still keeps "every detached node is a
+// tombstone" and applies the change: the server stores a change before it
+// applies one, so an error here would leave every later replay of the
+// document failing. The fallback is a ticket of the change itself, the same
+// on every replica that applies it.
+func detachedRemovalOr(node *TreeNode, fallback *time.Ticket) *time.Ticket {
+	if at := detachedRemovalOf(node); at != nil {
+		return at
+	}
+	return fallback
 }
 
 // removedAncestorAt returns the removal of node's nearest removed ancestor,
@@ -4121,12 +4120,10 @@ func (t *Tree) mergeNodes(
 
 	// A merge into a detached destination takes the moved nodes into a
 	// subtree a purge took out, and they take its side (takeDetachedSide),
-	// tombstoned with its removal. Checked before anything moves.
+	// tombstoned with its removal.
 	var detachedAt *time.Ticket
 	if dest.detached {
-		if detachedAt = detachedRemovalOf(dest); detachedAt == nil {
-			return nil, released, fmt.Errorf("merge into detached %s: %w", dest.IDString(), ErrDetachedLive)
-		}
+		detachedAt = detachedRemovalOr(dest, editedAt)
 	}
 
 	var stranded []*TreeNode
