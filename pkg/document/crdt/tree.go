@@ -1369,9 +1369,9 @@ func (t *Tree) purge(node *TreeNode) (int, error) {
 // unregisters and unlinks the purged node, as on main, and records where it
 // was taken from. Its subtree is marked detached and moved to detachedByID,
 // its merge stamps stay indexed (only node's own leaves with node), and
-// every live node in it is tombstoned
-// with node's removedAt (see GCLiveRelease); those still resolve, as main's
-// detached nodes do. The pairs of the subtree's tombstones and removed
+// every live node in it is tombstoned with the removal that hides it (see
+// detachSubtree, GCLiveRelease); those still resolve, as main's detached
+// nodes do. The pairs of the subtree's tombstones and removed
 // attributes stay, and each is collected when its own removal is, as on
 // main. The subtree is walked once in
 // all: a purge of a node already inside one finds the mark and walks
@@ -1408,18 +1408,7 @@ func (t *Tree) purgeReleasing(node *TreeNode) (int, purgeResult, error) {
 
 	visits := 0
 	if !node.detached {
-		index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
-			visits++
-			if !n.Value.IsRemoved() {
-				result.Released.Add(n.Value.DataSize())
-				n.Value.remove(node.removedAt)
-				n.Value.released = true
-			}
-			n.Value.detached = true
-			if n.Value != node {
-				t.moveToDetached(n.Value)
-			}
-		})
+		visits, result.Released = t.detachSubtree(node, node.removedAt)
 	}
 
 	// NodeMapByID is keyed by ID, so an unconditional Remove would also
@@ -1474,24 +1463,59 @@ func detachedRemovalOf(node *TreeNode) *time.Ticket {
 // takeDetachedSide gives node, just moved under a detached parent, that
 // parent's side of a purge (see TreeNode.detached): the node and its
 // subtree are marked detached and moved to detachedByID, keeping their
-// merge stamps indexed, and every live node in it is tombstoned with at, as the
-// purge released what it found there. It returns the size those had in
-// Live. A node already detached is left as it is.
+// merge stamps indexed, and every live node in it is tombstoned as
+// detachSubtree does, with at for one no removal in the subtree hides. It
+// returns the size those had in Live. A node already detached is left as
+// it is.
 func (t *Tree) takeDetachedSide(node *TreeNode, at *time.Ticket) resource.DataSize {
-	var released resource.DataSize
-	index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
-		if n.Value.detached {
-			return
-		}
-		if !n.Value.IsRemoved() {
-			released.Add(n.Value.DataSize())
-			n.Value.remove(at)
-			n.Value.released = true
-		}
-		n.Value.detached = true
-		t.moveToDetached(n.Value)
-	})
+	_, released := t.detachSubtree(node, at)
 	return released
+}
+
+// detachSubtree marks top and its subtree detached, moves them to
+// detachedByID (a purge then unregisters top, which leaves the document),
+// and tombstones each live one, released, with the
+// removal that hides it: that of its nearest removed ancestor in the
+// subtree, or at for one under none. It returns how many nodes it walked
+// and the size the live ones had in Live. A node already detached, and the
+// subtree under it, which is detached too, is passed over.
+//
+// The ticket depends only on the subtree, not on which purge reached the
+// node first: a collection purges its pairs in Go's map order, and a purge
+// of an ancestor and one of a removed node under it must tombstone what
+// is live under the latter alike. The walk is iterative, since the depth is
+// the client's to choose.
+func (t *Tree) detachSubtree(top *TreeNode, at *time.Ticket) (int, resource.DataSize) {
+	type entry struct {
+		node *index.Node[*TreeNode]
+		at   *time.Ticket
+	}
+	var released resource.DataSize
+	visits := 0
+	stack := []entry{{top.Index, at}}
+	for len(stack) > 0 {
+		e := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		n := e.node.Value
+		if n.detached {
+			continue
+		}
+		visits++
+		hiding := e.at
+		if n.removedAt != nil && !n.released {
+			hiding = n.removedAt
+		} else if n.removedAt == nil {
+			released.Add(n.DataSize())
+			n.remove(hiding)
+			n.released = true
+		}
+		n.detached = true
+		t.moveToDetached(n)
+		for _, child := range e.node.Children(true) {
+			stack = append(stack, entry{child, hiding})
+		}
+	}
+	return visits, released
 }
 
 // detachedRemovalOr returns the removal a node placed under the detached

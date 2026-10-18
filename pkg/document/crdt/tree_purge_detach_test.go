@@ -2147,3 +2147,36 @@ func TestDeepCopyBooksTheRootsOwnTreePairs(t *testing.T) {
 		assert.Same(t, ct.Root().Children(true)[0], pair.Child, "the attached A's copy, as on the root")
 	}
 }
+
+// TestReleaseTicketDoesNotDependOnPurgeOrder pins the removal a released
+// node is tombstoned with. z is live under y, removed, under x, removed
+// earlier; a collection that covers both purges their pairs in Go's map
+// order. Whichever goes first, z takes y's removal, the one that hides it,
+// so every replica and every run stores the same tombstone.
+func TestReleaseTicketDoesNotDependOnPurgeOrder(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	for range 32 {
+		root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+		x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+		y := NewTreeNode(NewTreeNodeID(tk(3), 0), "p", nil)
+		z := NewTreeNode(NewTreeNodeID(tk(4), 0), "text", nil, "z")
+		require.NoError(t, root.Append(x))
+		require.NoError(t, x.Append(y))
+		require.NoError(t, y.Append(z))
+		x.remove(tk(10))
+		y.remove(tk(20))
+		tree := NewTree(root, tk(5))
+		doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+		doc.Object().Set("t", tree)
+		doc.RegisterElement(tree, doc.Object())
+
+		vector := time.NewVersionVector()
+		vector.Set(actor, 30)
+		_, err = doc.GarbageCollect(vector)
+		require.NoError(t, err)
+		require.True(t, z.released)
+		require.Equal(t, tk(20).Key(), z.RemovedAt().Key(), "y's removal, whichever purge came first")
+	}
+}
