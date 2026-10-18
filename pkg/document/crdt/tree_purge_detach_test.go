@@ -1602,3 +1602,23 @@ func TestSplitOfAReleasedTextKeepsTheLedger(t *testing.T) {
 	assert.Equal(t, rebuilt.DocSize(), doc.DocSize(), "GC and Live equal a rebuild")
 	assert.Equal(t, 0, doc.GarbageLen(), "nothing is left pending")
 }
+
+// TestPutNodeKeepsALiveDetachedNodeOverATombstone pins that putNode's
+// duplicate-ID rule holds for the detached index as for NodeMapByID: a live
+// node keeps its ID over a tombstone put after it under the same ID.
+func TestPutNodeKeepsALiveDetachedNodeOverATombstone(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	root := NewTreeNode(NewTreeNodeID(time.NewTicket(1, 0, actor), 0), "r", nil)
+	tree := NewTree(root, time.NewTicket(2, 0, actor))
+	id := NewTreeNodeID(time.NewTicket(3, 0, actor), 0)
+	live := NewTreeNode(id, "p", nil)
+	live.detached = true
+	tomb := NewTreeNode(id, "p", nil)
+	tomb.detached = true
+	tomb.remove(time.NewTicket(4, 0, actor))
+
+	tree.putNode(live)
+	tree.putNode(tomb)
+	assert.Same(t, live, tree.DetachedNode(id), "the live node keeps the ID")
+}

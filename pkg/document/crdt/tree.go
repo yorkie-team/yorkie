@@ -1140,7 +1140,8 @@ type Tree struct {
 	// consult both (see findFloorNode), so a position naming a detached node
 	// resolves as it did while main kept such nodes in NodeMapByID. A
 	// detached node leaves it when its own GC pair purges it, or when a
-	// restore names it (see forgetDetached).
+	// restore names it (see forgetDetached). NewTree, the only way a Tree is
+	// made, always sets it.
 	detachedByID *llrb.Tree[*TreeNodeID, *TreeNode]
 }
 
@@ -6009,6 +6010,14 @@ func (t *Tree) putNode(node *TreeNode) {
 	// so it is registered with the other detached nodes and carries no
 	// lineage anything reads.
 	if node.detached {
+		// The same rule as for attached nodes below: a live node keeps its
+		// ID over a tombstone, which for detached nodes, all tombstones,
+		// leaves the last put.
+		key, existing := t.detachedByID.Floor(node.id)
+		if existing != nil && existing != node && key.Equal(node.id) &&
+			node.IsRemoved() && !existing.IsRemoved() {
+			return
+		}
 		t.detachedByID.Put(node.id, node)
 		return
 	}
@@ -6092,10 +6101,8 @@ func (t *Tree) findMergeNode(id *TreeNodeID) *TreeNode {
 // findFloorNode returns node from given id.
 func (t *Tree) findFloorNode(id *TreeNodeID) *TreeNode {
 	key, node := t.NodeMapByID.Floor(id)
-	if t.detachedByID != nil {
-		if dkey, dnode := t.detachedByID.Floor(id); dnode != nil && (node == nil || dkey.Compare(key) > 0) {
-			key, node = dkey, dnode
-		}
+	if dkey, dnode := t.detachedByID.Floor(id); dnode != nil && (node == nil || dkey.Compare(key) > 0) {
+		key, node = dkey, dnode
 	}
 
 	if node == nil || key.CreatedAt.Compare(id.CreatedAt) != 0 {
