@@ -195,11 +195,16 @@ none of its detached nodes, so main has that gap; this change closes it.
 
 **Garbage a reload does not see.** `Root.DeepCopy` books, for the copy of
 each tree node, the pairs the root itself holds for it, the detached nodes'
-included (`Root.copyTreePairs`), each Tree paired with its copy by walking
-the root's object as `NewRoot` walks the copy's, so a Tree the element map
-holds but the object no longer reaches is carried by neither
-(`TestDeepCopyCarriesNothingForATreeTheObjectNoLongerReaches`), and a
-`DeepCopy` reports the GC and
+included (`Root.copyTreePairs`), each Tree paired with its copy by its
+place in the object, an object's members by member key and createdAt and an
+array's by list order, not by createdAt alone, which another element can
+share (`TestDeepCopyPairsATreeWhoseKeyAnotherElementShares`,
+`TestUpdateWithAKeyATreeShares`); a Tree the element map holds but the
+object no longer reaches is carried by neither
+(`TestDeepCopyCarriesNothingForATreeTheObjectNoLongerReaches`), and one
+that does not pair, or whose copy does not match it in shape, keeps the
+scan's pairs and no detached state, as main's copy does, so a copy never
+fails on a state the document reaches. A `DeepCopy` reports the GC and
 `GarbageLen` its source does; booking them through `RegisterGCPair` would
 let a detached node sharing an ID with an attached tombstone cancel that
 one's pair (`TestDeepCopyBooksTheRootsOwnTreePairs`). A restore that
