@@ -99,13 +99,21 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
 
 - **A detached node is a tombstone, and stays one.** When a collection
   purges a removed element, the purge tombstones every live node under it
-  (`GCLiveRelease`, `Tree.purgeChild`) and `Root` takes their bytes
-  off `Live`; it happens only with the purge, never without it. Each takes
+  (`GCLiveRelease`, `Tree.purgeChild`) and `Root` moves their bytes from
+  `Live` to `GC`, under a pair of each node's own that collect leaves alone
+  and the drop of its subtree removes (see "How long a detached subtree is
+  kept" below); it happens only with the purge, never without it. Each takes
   the removal of its nearest removed ancestor, which depends on the subtree
   alone and not on which of two pairs a collection purged first in Go's map
   order (`TestReleaseTicketDoesNotDependOnPurgeOrder`). They leave
   the document with the element, as if its removal had covered them.
-  Everything a purge detaches is therefore a tombstone off `Live`.
+  Everything a purge detaches is therefore a tombstone off `Live`, and
+  each is counted once, in `GC`, from its release to its drop: a piece
+  split off a released node books its split overhead, as one split off a
+  tombstone does, while its bytes stay under its source's pair, and a node
+  a merge carries into a detached subtree is booked as the purge books one
+  (`TestSplitOfAReleasedTextKeepsTheLedger`,
+  `TestSplitOfAMergedInReleasedTextKeepsTheLedger`).
 - Nothing makes a detached node live again. `Restore` resolves a span
   naming one as a replica that purged it does: the node leaves
   `NodeMapByID` and its chain and stays a tombstone, and the span is
@@ -172,15 +180,14 @@ forgets a detached node drops its pair and those of its removed attributes
 (`TestRestoreForgettingADetachedNodeDropsItsAttributePairs`). Because the
 copy takes the root's pairs, it is no oracle for them: `Root.Rederive`,
 which `assertRebuildsSame` uses, derives each Tree's pairs from the content
-instead, NewRoot's scan of the attached tree and the pending pairs of the
-detached nodes it carries. A snapshot holds no detached node, so a
-replica loaded from one has no pair for a detached tombstone whose own
-removal is not yet collectable, nor for a removed attribute of a detached
-node. Until the next collection that covers that removal, the running `GC`
-and `GarbageLen` hold that garbage and a reload does not. It ends at that
-collection, which purges the pair, and it is the same pending-pair window
-main has for the descendants of a purged node, or at the collection that
-lets the subtree go, whichever comes first. `Live` is not affected: no
+instead, NewRoot's scan of the attached tree and the pairs of the detached
+nodes it carries, released ones included. A snapshot holds no detached
+node, so a replica loaded from one has no pair for a detached tombstone
+whose own removal is not yet collectable, for a removed attribute of a
+detached node, or for a released node. Until the collection that purges
+such a pair, or lets its subtree go, the running `GC` and `GarbageLen` hold
+that garbage and a reload does not, the same pending-pair window main has
+for the descendants of a purged node. `Live` is not affected: no
 detached node is in it, so a reload reports the `Live` the running ledger
 does (`TestReleaseLiveEqualsASnapshotReload`).
 
@@ -224,22 +231,24 @@ componentwise after the recorded one, so it is gone. The rule reads the
 subtree and the vector alone, so the root and its clone, which collect at
 the same vectors, let go alike.
 
-**A bound on what is kept.** Detached nodes are in neither `Live`, the
-figure the server's size gate reads, nor `GC`, and a minimum vector that
-stops moving, one silent client is enough, keeps the coverage from ever
-holding, so a client could otherwise grow them without limit: build a
-subtree, remove it, let a collection purge it, and again. After each
-collection, on its failed path too, the detached subtrees a document holds
-are kept within `maxDetachedSize`, 10 MiB, the default
-`MaxSizePerDocument`; past it they go oldest first, by the removal the
-purge collected, then the tree's and the top's IDs, until the rest fit
-(`Root.boundDetached`, `TestDetachedSubtreesStayWithinTheBound`). The order
-depends on the detached state alone, not on Go's map order or on when a
-collection ran, so the root and its clone drop the same subtrees. A change
-naming a node in one fails to resolve then, as for any dropped subtree; a
-document that keeps that much detached for a late change is past what the
-protocol promises it anyway. A Tree element the collection deregisters
-takes its detached subtrees with it
+**What is kept is counted.** A detached subtree is kept until a
+collection's vector has seen every node in it created and merged in, so a
+minimum vector that stops moving keeps it, and a client that holds its own
+clock behind can keep feeding a subtree nodes with tickets the minimum has
+not seen. That is the class main already has with a stalled minimum vector:
+no garbage is collected under it at all, on main or here. What this change
+adds is that the detached bytes are counted: a released node's are in `GC`
+from its release to its drop, as a tombstone's are until its purge, so the
+memory a replica holds for them shows in `docSize.GC` instead of hiding in
+neither figure. Main kept these nodes too: a live node under a purged
+element stayed in `NodeMapByID`, charged to `Live` for good (yorkie#2244),
+and nothing ever freed it; here it leaves `Live` at the purge and the
+document at the drop. A size cap that dropped subtrees before their
+coverage was tried and rejected: replicas purge at different times, so it
+would drop a subtree on one replica that another still holds, and an honest
+change naming a node in it would then fail on the first and apply on the
+second, which a client holding its clock back could force. A Tree element
+the collection deregisters takes its detached subtrees with it
 (`TestCollectingATreeLetsItsDetachedSubtreesGo`).
 
 **Born-tombstoned content and the size gate.** Content an `Edit` inserts
