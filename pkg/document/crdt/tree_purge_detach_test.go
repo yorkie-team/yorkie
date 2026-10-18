@@ -2044,3 +2044,57 @@ func TestDissolutionKeepsTheSourcePointerWhetherOrNotPurged(t *testing.T) {
 	assert.Equal(t, kept[1], kept[0], "the pointer is kept or dropped alike, purged or not")
 	assert.True(t, kept[0])
 }
+
+// TestDissolutionKeepsTheSourcePointerOnTheClone pins the same decision
+// between a root and its clone, Root.DeepCopy, which runs every change
+// first: the clone indexes the stamps of the detached subtrees it copies, so
+// a restore of s that did not know the merge keeps s's pointer on both. It
+// also pins that a detached node a restore forgets leaves the index.
+func TestDissolutionKeepsTheSourcePointerOnTheClone(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	root := NewTreeNode(NewTreeNodeID(time.NewTicket(1, 0, actor), 0), "r", nil)
+	s := NewTreeNode(NewTreeNodeID(time.NewTicket(2, 0, actor), 0), "p", nil)
+	x := NewTreeNode(NewTreeNodeID(time.NewTicket(3, 0, actor), 0), "div", nil)
+	dst := NewTreeNode(NewTreeNodeID(time.NewTicket(4, 0, actor), 0), "p", nil)
+	c := NewTreeNode(NewTreeNodeID(time.NewTicket(5, 0, actor), 0), "text", nil, "c")
+	require.NoError(t, root.Append(s, x))
+	require.NoError(t, x.Append(dst))
+	require.NoError(t, dst.Append(c))
+	merge := time.NewTicket(50, 0, peer)
+	s.remove(merge)
+	c.MergedFrom, c.MergedAt = s.id, merge
+	x.remove(time.NewTicket(60, 0, actor))
+	tree := NewTree(root, time.NewTicket(6, 0, actor))
+	s.mergedInto = dst.id
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	doc.Object().Set("t", tree)
+	doc.RegisterElement(tree, doc.Object())
+	_, err = tree.purgeChild(x)
+	require.NoError(t, err)
+
+	copied, err := doc.DeepCopy()
+	require.NoError(t, err)
+	clone := copied.Object().Get("t").(*Tree)
+
+	unaware := time.NewVersionVector()
+	unaware.Set(actor, 100)
+	var kept []bool
+	for _, tr := range []*Tree{clone, tree} {
+		_, _, _, _, _, err = tr.Restore([]*TreeRestoreSpan{
+			{ID: s.id, NodeType: "p", Length: 1, ParentID: root.id},
+		}, false, unaware)
+		require.NoError(t, err)
+		revived := tr.findFloorNode(s.id)
+		require.NotNil(t, revived)
+		require.False(t, revived.IsRemoved())
+		kept = append(kept, revived.mergedInto != nil)
+	}
+	assert.Equal(t, []bool{true, true}, kept, "the clone keeps the pointer the root keeps")
+
+	tree.forgetDetached(c)
+	_, stamped := tree.mergeStamps[s.id.toIDString()][c]
+	assert.False(t, stamped, "a forgotten node leaves the index")
+}

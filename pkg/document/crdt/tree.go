@@ -2930,9 +2930,12 @@ func (t *Tree) DeepCopy() (Element, error) {
 // also makes the copies an element payload carries, keeps the attached tree
 // alone, so a value never takes detached state along. Each subtree is
 // copied whole, with the detached and released marks and the purge slots,
-// and the nodes src has in detachedByID are registered there. A copy that runs a change before src does, as the
-// document's clone does, then resolves every position src resolves through
-// a detached node or a purge slot alike. A snapshot holds none of this.
+// and the nodes src has in detachedByID are registered there; every copy
+// is indexed by its merge stamp, as src indexes the detached nodes. A copy
+// that runs a change before src does, as the document's clone does, then
+// resolves every position src resolves through a detached node or a purge
+// slot alike, and dissolves merge sources alike. A snapshot holds none of
+// this.
 func (t *Tree) copyDetachedFrom(src *Tree) error {
 	registered := src.detachedByID.Values()
 	if len(registered) == 0 {
@@ -2975,6 +2978,7 @@ func (t *Tree) copyDetachedFrom(src *Tree) error {
 			from, to := pair[0].Value, pair[1].Value
 			copies[from] = to
 			to.detached, to.released = from.detached, from.released
+			t.noteMergeStamp(to)
 			enqueue(from.purgedFrom)
 			enqueue(from.purgedBefore)
 			fromChildren, toChildren := pair[0].Children(true), pair[1].Children(true)
@@ -3004,7 +3008,6 @@ func (t *Tree) copyDetachedFrom(src *Tree) error {
 	for _, n := range registered {
 		if c, ok := copies[n]; ok {
 			t.detachedByID.Put(c.id, c)
-			t.noteMergeStamp(c)
 		}
 	}
 	return nil
