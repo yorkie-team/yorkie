@@ -662,6 +662,8 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 			if err != nil {
 				return 0, 0, err
 			}
+			// Defensive; unreachable because the check above skips a pair
+			// whose child has no removal, the only purge that does not happen.
 			if !result.Purged {
 				continue
 			}

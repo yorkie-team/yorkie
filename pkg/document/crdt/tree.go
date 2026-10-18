@@ -2910,15 +2910,10 @@ func (t *Tree) NodeLen() int {
 	return t.NodeMapByID.Len()
 }
 
-// DetachedLen returns the number of detached nodes still registered by ID
-// (see detachedByID).
-func (t *Tree) DetachedLen() int {
-	return t.detachedByID.Len()
-}
-
 // DetachedNode returns the detached node registered under exactly id, or nil.
 // Detached nodes are kept apart from NodeMapByID, which holds only what is
 // reachable from the root, so checks of that index look here for the rest.
+// For diagnostics and tests, as NodeLen is.
 func (t *Tree) DetachedNode(id *TreeNodeID) *TreeNode {
 	key, node := t.detachedByID.Floor(id)
 	if node == nil || !key.Equal(id) {
@@ -4128,7 +4123,9 @@ func (t *Tree) mergeNodes(
 		}
 		// A detached node is not moved into the attached tree: a replica
 		// that purged its subtree has nothing there to move (see
-		// TreeNode.detached).
+		// TreeNode.detached). Defensive; unreachable because a merge's
+		// moved children are collected from a range of the attached tree,
+		// which holds no detached node.
 		if node.detached && !dest.detached {
 			continue
 		}
