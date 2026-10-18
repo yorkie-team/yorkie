@@ -1258,9 +1258,10 @@ func TestPurgeOfALiveNodeChangesNothing(t *testing.T) {
 	before := tree.ToXML()
 
 	require.NoError(t, tree.Purge(div))
-	released, err := tree.PurgeReleasing(div)
+	result, err := tree.PurgeReleasing(div)
 	require.NoError(t, err)
-	assert.Zero(t, released.Total(), "nothing released")
+	assert.False(t, result.Purged, "not purged, so its pair stays")
+	assert.Zero(t, result.Released.Total(), "nothing released")
 	assert.Equal(t, before, tree.ToXML())
 	assert.Same(t, tree.Root(), div.Index.Parent.Value, "div stays in the tree")
 	for _, n := range []*TreeNode{div, p, text} {
@@ -1414,4 +1415,25 @@ func TestMergeIntoADetachedParentTakesItsSide(t *testing.T) {
 	assert.Equal(t, "<r><x>12</x></r>", xmls[0])
 	assert.Equal(t, xmls[0], xmls[1], "both replicas show the same tree")
 	assert.Equal(t, shapes[0], shapes[1], "and hold the same once both collect")
+}
+
+// TestCollectLeavesAPairOfALiveNode pins that a collection neither purges
+// nor books anything for a pair whose child is live: the pair stays, GC and
+// Live keep their sizes, and the node stays in the tree.
+func TestCollectLeavesAPairOfALiveNode(t *testing.T) {
+	tree, div, _, _, removedAt := detachFixture(t)
+	div.removedAt = nil
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	size := div.DataSize()
+	doc.RegisterGCPair(GCPair{Parent: tree, Child: div, GCOnlySize: &size})
+	before := doc.DocSize()
+
+	vector := time.NewVersionVector()
+	vector.Set(removedAt.ActorID(), removedAt.Lamport())
+	n, err := doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	assert.Zero(t, n)
+	assert.Equal(t, 1, doc.GarbageLen(), "the pair stays")
+	assert.Equal(t, before, doc.DocSize())
+	assert.Same(t, tree.Root(), div.Index.Parent.Value)
 }

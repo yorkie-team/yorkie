@@ -1342,10 +1342,10 @@ func (t *Tree) Purge(child GCChild) error {
 }
 
 // PurgeReleasing implements GCLiveRelease[GCChild]: it is Purge, and it
-// reports the size the live nodes it released had in Live.
-func (t *Tree) PurgeReleasing(child GCChild) (resource.DataSize, error) {
-	_, released, err := t.purgeReleasing(child.(*TreeNode))
-	return released, err
+// reports what Root has to book for it.
+func (t *Tree) PurgeReleasing(child GCChild) (PurgeResult, error) {
+	_, result, err := t.purgeReleasing(child.(*TreeNode))
+	return result, err
 }
 
 // purge is Purge, also reporting how many nodes it walked.
@@ -1355,18 +1355,19 @@ func (t *Tree) purge(node *TreeNode) (int, error) {
 }
 
 // purgeReleasing takes node, with its subtree, out of the tree, reporting
-// how many nodes it walked and the Live size of the live nodes it released.
-// It unregisters and unlinks the purged node, as on main, and records where
-// it was taken from. Its subtree is marked detached and moved to
-// detachedByID, its merge stamps leave the index, and every live node in it
-// is tombstoned with node's removedAt (see GCLiveRelease); those still
-// resolve, as main's detached nodes do. The subtree is walked once in all: a later
-// purge of a node inside it, through the GC pair that node had booked,
-// finds the mark and walks nothing, so one collection pass costs O(nodes)
-// however the subtree's pairs are ordered. Nothing changes unless the node
-// actually leaves its parent.
-func (t *Tree) purgeReleasing(node *TreeNode) (int, resource.DataSize, error) {
-	var released resource.DataSize
+// how many nodes it walked and what Root has to book (see PurgeResult). It
+// unregisters and unlinks the purged node, as on main, and records where it
+// was taken from. Its subtree is marked detached and moved to detachedByID,
+// its merge stamps leave the index, and every live node in it is tombstoned
+// with node's removedAt (see GCLiveRelease); those still resolve, as main's
+// detached nodes do. The pairs of the subtree's tombstones and removed
+// attributes stay, and each is collected when its own removal is, as on
+// main. The subtree is walked once in
+// all: a purge of a node already inside one finds the mark and walks
+// nothing, so one collection pass costs O(nodes). Nothing changes unless
+// the node, a tombstone, actually leaves its parent.
+func (t *Tree) purgeReleasing(node *TreeNode) (int, PurgeResult, error) {
+	var result PurgeResult
 
 	// A parentless node cannot be detached: purging is removal from a parent's
 	// child list. GCPairs never books one, but a pair outlives the tree state
@@ -1374,13 +1375,15 @@ func (t *Tree) purgeReleasing(node *TreeNode) (int, resource.DataSize, error) {
 	// version passes it), so a node detached in between reaches here. Dropping
 	// it keeps GarbageCollect advancing instead of panicking on the deref.
 	if node.Index == nil || node.Index.Parent == nil {
-		return 0, released, nil
+		result.Purged = true
+		return 0, result, nil
 	}
 	// Only a tombstone is purged: a GC pair claims its child is removed, and
 	// a live node taken out would carry live bytes, and the live nodes under
-	// it, out of the tree with no removal to release them with.
+	// it, out of the tree with no removal to release them with. Its pair
+	// stays.
 	if node.removedAt == nil {
-		return 0, released, nil
+		return 0, result, nil
 	}
 	from := node.Index.Parent
 	var before *TreeNode
@@ -1388,7 +1391,7 @@ func (t *Tree) purgeReleasing(node *TreeNode) (int, resource.DataSize, error) {
 		before = next.Value
 	}
 	if err := from.RemoveChild(node.Index); err != nil {
-		return 0, released, err
+		return 0, result, err
 	}
 	node.purgedFrom, node.purgedBefore = from.Value, before
 
@@ -1397,7 +1400,7 @@ func (t *Tree) purgeReleasing(node *TreeNode) (int, resource.DataSize, error) {
 		index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
 			visits++
 			if !n.Value.IsRemoved() {
-				released.Add(n.Value.DataSize())
+				result.Released.Add(n.Value.DataSize())
 				n.Value.remove(node.removedAt)
 			}
 			n.Value.detached = true
@@ -1416,7 +1419,8 @@ func (t *Tree) purgeReleasing(node *TreeNode) (int, resource.DataSize, error) {
 	t.unregisterNode(node)
 	t.unlinkInsChain(node)
 
-	return visits, released, nil
+	result.Purged = true
+	return visits, result, nil
 }
 
 // unlinkInsChain joins node's InsPrevID/InsNextID neighbours to each other

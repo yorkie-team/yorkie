@@ -641,7 +641,10 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 	// is purge-dependent today; using the key already in hand means none has
 	// to stay that way.
 	for key, pair := range r.gcNodePairMap {
-		if !vector.EqualToOrAfter(pair.Child.RemovedAt()) {
+		// A pair whose child is not removed claims a tombstone that is not
+		// there, as for an element above; it is left on the worklist rather
+		// than dereferenced or purged.
+		if removedAt := pair.Child.RemovedAt(); removedAt == nil || !vector.EqualToOrAfter(removedAt) {
 			continue
 		}
 
@@ -655,11 +658,14 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		// Live nodes under the child go with it, off Live (see
 		// GCLiveRelease), so the purge detaches tombstones only.
 		if parent, ok := pair.Parent.(GCLiveRelease[GCChild]); ok {
-			released, err := parent.PurgeReleasing(pair.Child)
+			result, err := parent.PurgeReleasing(pair.Child)
 			if err != nil {
 				return 0, 0, err
 			}
-			r.docSize.Live.Sub(released)
+			if !result.Purged {
+				continue
+			}
+			r.docSize.Live.Sub(result.Released)
 		} else if err := pair.Parent.Purge(pair.Child); err != nil {
 			return 0, 0, err
 		}

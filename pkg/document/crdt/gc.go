@@ -123,6 +123,18 @@ type GCBarrier[C any] interface {
 // purged it counts it from.
 type GCLiveRelease[C any] interface {
 	// PurgeReleasing purges child as Purge does, tombstoning every live node
-	// under it, and returns the size they had in docSize.Live.
-	PurgeReleasing(child C) (resource.DataSize, error)
+	// under it, and reports what Root has to book for it (see PurgeResult).
+	PurgeReleasing(child C) (PurgeResult, error)
+}
+
+// PurgeResult is what a purge through PurgeReleasing leaves for Root to
+// book.
+type PurgeResult struct {
+	// Purged reports whether the child's pair is done with: the child left
+	// the tree, or was already out of it. A child that is not a tombstone is
+	// not purged, and its pair stays.
+	Purged bool
+
+	// Released is the size the live nodes the purge tombstoned had in Live.
+	Released resource.DataSize
 }
