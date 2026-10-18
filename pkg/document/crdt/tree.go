@@ -1131,10 +1131,6 @@ type Tree struct {
 	// an entry for a node that lost its stamp or left the tree is dropped then.
 	mergeStamps map[string]map[*TreeNode]struct{}
 
-	// cascadeSteps counts the split siblings §4.1 cascades have walked, for
-	// tests that pin the cost of a cascade.
-	cascadeSteps int
-
 	// detachedByID holds the nodes of subtrees a purge took out, by ID, so
 	// NodeMapByID holds exactly the nodes reachable from the root. Lookups
 	// consult both (see findFloorNode), so a position naming a detached node
@@ -1892,6 +1888,15 @@ func (t *Tree) isolateTextRange(
 func (t *Tree) Retombstone(
 	spans []*TreeRestoreSpan, executedAt *time.Ticket, measure bool, versionVector time.VersionVector,
 ) ([]GCPair, resource.DataSize, []TreeVisibleEdit, []*TreeRestoreSpan, error) {
+	return t.retombstone(spans, executedAt, measure, versionVector, nil)
+}
+
+// retombstone is Retombstone, also counting into steps, when given, the
+// split siblings its §4.1 cascades walk.
+func (t *Tree) retombstone(
+	spans []*TreeRestoreSpan, executedAt *time.Ticket, measure bool, versionVector time.VersionVector,
+	steps *int,
+) ([]GCPair, resource.DataSize, []TreeVisibleEdit, []*TreeRestoreSpan, error) {
 	var pairs []GCPair
 	var diff resource.DataSize
 	var edits []TreeVisibleEdit
@@ -1939,7 +1944,7 @@ func (t *Tree) Retombstone(
 				// the unknown split products must not depend on whether the
 				// peer's delete arrived first.
 				pairs, edits, cascaded = t.retombstoneUnknownSplitSiblings(
-					piece, executedAt, measure, versionVector, walked, pairs, edits, cascaded,
+					piece, executedAt, measure, versionVector, walked, steps, pairs, edits, cascaded,
 				)
 				continue
 			}
@@ -1966,7 +1971,7 @@ func (t *Tree) Retombstone(
 				}
 			}
 			pairs, edits, cascaded = t.retombstoneUnknownSplitSiblings(
-				target, executedAt, measure, versionVector, walked, pairs, edits, cascaded,
+				target, executedAt, measure, versionVector, walked, steps, pairs, edits, cascaded,
 			)
 		}
 		// Refreshed whether or not anything was live: a span whose pieces a
@@ -2256,6 +2261,7 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 	measure bool,
 	versionVector time.VersionVector,
 	walked map[*TreeNode]struct{},
+	steps *int,
 	pairs []GCPair,
 	edits []TreeVisibleEdit,
 	cascaded []*TreeRestoreSpan,
@@ -2265,7 +2271,7 @@ func (t *Tree) retombstoneUnknownSplitSiblings(
 	}
 
 	neverEnclosed := func(*TreeNode) bool { return false }
-	siblings := t.appendUnknownSplitSiblings(nil, target, versionVector, neverEnclosed, walked)
+	siblings := t.appendUnknownSplitSiblings(nil, target, versionVector, neverEnclosed, walked, steps)
 	spans := make(map[*TreeNode]*TreeRestoreSpan, len(siblings))
 	for _, sibling := range siblings {
 		var from, to int
@@ -4521,7 +4527,7 @@ func (t *Tree) collectBetween(
 					if !node.IsText() && node.InsNextID != nil &&
 						!slices.Contains(toBeMergedNodes, node) {
 						toBeRemoveds = t.appendUnknownSplitSiblings(
-							toBeRemoveds, node, versionVector, enclosed, nil,
+							toBeRemoveds, node, versionVector, enclosed, nil, nil,
 						)
 					}
 				}
@@ -4568,6 +4574,7 @@ func (t *Tree) appendUnknownSplitSiblings(
 	versionVector time.VersionVector,
 	enclosed func(*TreeNode) bool,
 	walked map[*TreeNode]struct{},
+	steps *int,
 ) []*TreeNode {
 	var walker insNextWalker
 	walker.visit(node)
@@ -4583,7 +4590,9 @@ func (t *Tree) appendUnknownSplitSiblings(
 			}
 			walked[next] = struct{}{}
 		}
-		t.cascadeSteps++
+		if steps != nil {
+			*steps++
+		}
 		if time.TicketKnown(versionVector, next.ID().CreatedAt) {
 			seenGone := next.removedAt != nil && time.TicketKnown(versionVector, next.removedAt)
 			if !seenGone && !enclosed(next) {

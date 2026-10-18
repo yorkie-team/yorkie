@@ -483,10 +483,11 @@ func TestRetombstoneCascadeIsLinear(t *testing.T) {
 	for _, p := range chain {
 		spans = append(spans, &TreeRestoreSpan{ID: p.id, NodeType: "p", ParentID: root.id})
 	}
-	_, _, _, _, err = tree.Retombstone(spans, time.NewTicket(6, 0, actor), false, known)
+	steps := 0
+	_, _, _, _, err = tree.retombstone(spans, time.NewTicket(6, 0, actor), false, known, &steps)
 	require.NoError(t, err)
 	for _, p := range chain {
 		require.True(t, p.IsRemoved())
 	}
-	assert.LessOrEqual(t, tree.cascadeSteps, 2*n, "each link is walked about once, not once per span")
+	assert.LessOrEqual(t, steps, 2*n, "each link is walked about once, not once per span")
 }
