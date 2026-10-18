@@ -1880,11 +1880,11 @@ func subtreeOf(top *TreeNode) []*TreeNode {
 // top's subtree, and the merge that moved in any that a merge did. A change
 // that has seen neither could still name the node: one concurrent with the
 // split that carried text into a subtree a removal took out does. A ticket
-// known, the replica's own version vector, does not know is forged and
-// counts as seen (see Root.GarbageCollectKnown).
-func seenWhole(top *TreeNode, vector, known time.VersionVector) bool {
+// the replica's document cannot have applied is forged and counts as seen
+// (see DocumentClock).
+func seenWhole(top *TreeNode, vector time.VersionVector, clock *DocumentClock) bool {
 	seen := func(ticket *time.Ticket) bool {
-		return vector.EqualToOrAfter(ticket) || (known != nil && !time.TicketKnown(known, ticket))
+		return vector.EqualToOrAfter(ticket) || clock.forged(ticket)
 	}
 	stack := []*index.Node[*TreeNode]{top.Index}
 	for len(stack) > 0 {
@@ -1901,10 +1901,10 @@ func seenWhole(top *TreeNode, vector, known time.VersionVector) bool {
 
 // dropDetached lets go of the subtrees a purge took out that vector has
 // seen whole (see seenWhole), and returns their nodes (see dropSubtrees).
-func (t *Tree) dropDetached(vector, known time.VersionVector) []*TreeNode {
+func (t *Tree) dropDetached(vector time.VersionVector, clock *DocumentClock) []*TreeNode {
 	var tops []*TreeNode
 	for _, top := range t.tops() {
-		if seenWhole(top, vector, known) {
+		if seenWhole(top, vector, clock) {
 			tops = append(tops, top)
 		}
 	}

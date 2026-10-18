@@ -60,7 +60,7 @@ func TestRegisterElementBooksInternalTombstones(t *testing.T) {
 	assert.NotEqual(t, 0, root.DocSize().GC.Data+root.DocSize().GC.Meta,
 		"its bytes belong to GC, not to nothing")
 
-	n, err := root.GarbageCollect(helper.MaxVersionVector())
+	n, err := root.GarbageCollect(helper.MaxVersionVector(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 }
@@ -93,7 +93,7 @@ func TestRegisterElementSkipsTombstonedTreeRoot(t *testing.T) {
 	assert.Equal(t, before+1, root.GarbageLen(),
 		"only the parented tombstone is booked, never the root")
 
-	n, err := root.GarbageCollect(helper.MaxVersionVector())
+	n, err := root.GarbageCollect(helper.MaxVersionVector(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 }

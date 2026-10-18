@@ -491,9 +491,9 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 // The element collection entries of the subtree's own removed members go with
 // it, for the same reason: nothing can reach them to collect them, so leaving
 // them would hold GarbageLen above zero forever and let a later pass subtract
-// a cost this call has already released. A released Tree also drops its
-// detached subtrees with the pairs their nodes hold (see release). The pairs
-// of its attached tombstones stay: they hold their own share of GC, not the
+// a cost this call has already released. A released Tree keeps its detached
+// subtrees, which a change can still name, until a collection's coverage
+// lets them go (see release). The pairs of its attached tombstones stay: they hold their own share of GC, not the
 // element's, and the next collection whose vector covers them purges them,
 // until when GC sits above a rebuild by them, as on main.
 func (r *Root) UnregisterRemovedElementPair(createdAt *time.Ticket) bool {
@@ -546,13 +546,13 @@ func (r *Root) release(elem Element) {
 		delete(r.gcElementPairMap, createdAt)
 	}
 
-	// A Tree leaves the document here as it does when deregistered: its
-	// detached subtrees go with the pairs their nodes hold, and with its
-	// charge gone, what a later release or edit inside it moves is booked
-	// to neither side (see bookRelease, ChargeToRemovedElement).
+	// A released Tree's charge is gone, so what a later release or edit
+	// inside it moves is booked to neither side (see bookRelease,
+	// ChargeToRemovedElement). It stays addressable, unlike a deregistered
+	// one, so a change that has not seen a node of its detached subtrees can
+	// still name it: they stay, with the pairs their nodes hold, until a
+	// collection's coverage lets them go, as for any other (dropDetached).
 	if tree, ok := elem.(*Tree); ok {
-		r.dropNodes(tree, tree.dropSubtrees(tree.tops()))
-		delete(r.detachedTrees, tree)
 		tree.collected = true
 	}
 }
@@ -809,21 +809,17 @@ func (r *Root) Rederive() (*Root, error) {
 //
 // The repeat also makes the result independent of Go's map iteration order,
 // which decides only how many passes it takes, not what ends up collected.
-func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
-	return r.GarbageCollectKnown(vector, nil)
-}
-
-// GarbageCollectKnown is GarbageCollect for a replica whose document knows
-// the changes in known, its own version vector. A detached subtree is let
-// go once vector has seen every node in it created and merged in (see
-// dropDetached), and a node this replica holds was created, and merged in,
-// by changes it applied, so known knows every honest ticket of one. A
-// ticket it does not know is forged, a phantom actor or a lamport no change
-// reached, and counts as seen: otherwise it would keep the subtree, and
-// its bytes in GC, for good. A nil known trusts every ticket. The root and
-// its clone are handed the same one.
-func (r *Root) GarbageCollectKnown(vector, known time.VersionVector) (int, error) {
-	count := r.dropDetached(vector, known)
+//
+// A detached subtree is let go once vector has seen every node in it created
+// and merged in (see dropDetached). clock is what the replica's document has
+// applied; a ticket it cannot have applied is forged and counts as seen,
+// since no vector would ever cover it (see DocumentClock). A nil clock
+// trusts every ticket, so a forged one keeps its subtree, and the subtree's
+// bytes in GC, for good: only a caller with no document to read one from,
+// a test of the collection itself, passes nil. The root and its clone are
+// handed the same clock.
+func (r *Root) GarbageCollect(vector time.VersionVector, clock *DocumentClock) (int, error) {
+	count := r.dropDetached(vector, clock)
 	for {
 		purged, deferred, err := r.collect(vector)
 		if err != nil {
@@ -839,7 +835,27 @@ func (r *Root) GarbageCollectKnown(vector, known time.VersionVector) (int, error
 	// And after: a subtree this collection took out that its vector has
 	// already seen whole goes now, so one call leaves no garbage the next
 	// at the same vector would collect.
-	return count + r.dropDetached(vector, known), nil
+	return count + r.dropDetached(vector, clock), nil
+}
+
+// DocumentClock is what a replica's document has applied: its version
+// vector and its lamport, which every change it applies raises to its own
+// at least. A ticket is forged when the vector does not know it and its
+// lamport is above the document's: no change the document applied carries
+// one, so no node it holds was made by one. The lamport bound is what keeps
+// an honest ticket from looking forged when the vector lacks its actor's
+// entry, which a snapshot stored with an emptied vector (an opt-out-only
+// document, see disable-gc-on-attach.md) and the changes applied after it
+// leave: the snapshot's lamport, and each change's, still bound every
+// ticket in it. An empty vector knows every ticket.
+type DocumentClock struct {
+	Vector  time.VersionVector
+	Lamport int64
+}
+
+// forged reports whether ticket is one no change clock has applied carried.
+func (c *DocumentClock) forged(ticket *time.Ticket) bool {
+	return c != nil && !time.TicketKnown(c.Vector, ticket) && ticket.Lamport() > c.Lamport
 }
 
 // dropDetached lets go of the detached subtrees vector has seen whole, in
@@ -857,10 +873,10 @@ func (r *Root) GarbageCollectKnown(vector, known time.VersionVector) (int, error
 // fails to resolve, as on a replica that keeps no detached nodes. The rule
 // reads the subtree and the vector alone, so the root and its clone, which
 // collect at the same vectors, let go alike.
-func (r *Root) dropDetached(vector, known time.VersionVector) int {
+func (r *Root) dropDetached(vector time.VersionVector, clock *DocumentClock) int {
 	count := 0
 	for tree := range r.detachedTrees {
-		count += r.dropNodes(tree, tree.dropDetached(vector, known))
+		count += r.dropNodes(tree, tree.dropDetached(vector, clock))
 		if len(tree.detachedTops) == 0 {
 			delete(r.detachedTrees, tree)
 		}

@@ -83,7 +83,7 @@ func (f *sizeInGCFixture) collect(t *testing.T) {
 
 	vector := time.NewVersionVector()
 	vector.Set(f.actor, time.MaxLamport)
-	_, err := f.root.GarbageCollect(vector)
+	_, err := f.root.GarbageCollect(vector, nil)
 	require.NoError(t, err)
 }
 

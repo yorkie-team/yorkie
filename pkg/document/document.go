@@ -1259,7 +1259,7 @@ func (d *Document) garbageCollect(vector time.VersionVector) int {
 	// check.
 	if d.cloneRoot != nil && !d.cloneStale {
 		// The root's own version vector, as the root's collection below uses.
-		if _, err := d.cloneRoot.GarbageCollectKnown(vector, d.doc.VersionVector()); err != nil {
+		if _, err := d.cloneRoot.GarbageCollect(vector, d.doc.clock()); err != nil {
 			panic(err)
 		}
 	}
