@@ -861,7 +861,9 @@ func (r *Root) dropDetached(vector, known time.VersionVector) int {
 // then on. A Tree the collection has already deregistered took its charge,
 // those bytes included, with it, so nothing is booked and the tree is not
 // tracked again; the pending pairs of its nodes are collected as they come
-// due, as on main.
+// due, as on main. The other side of the removed-element case, a revive
+// inside a removed Tree element charging Live instead of the element's GC
+// charge, is pre-existing on main and tracked in yorkie#2251.
 func (r *Root) bookRelease(parent GCParent, result purgeResult) {
 	tree, isTree := parent.(*Tree)
 	if isTree && tree.collected {

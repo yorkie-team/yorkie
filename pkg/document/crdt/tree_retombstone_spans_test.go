@@ -599,3 +599,54 @@ func TestRetombstoneCascadeOverADeepProductIsLinear(t *testing.T) {
 	require.Len(t, reverse, d+2, "p, the product and every node under it")
 	assert.LessOrEqual(t, steps, 4*d, "each node of the product is visited a constant number of times")
 }
+
+// TestRetombstoneCascadePassesOverATombstonedSibling pins the cascade on a
+// split sibling that is already a tombstone: its removal ticket is renewed,
+// the later one winning as for any concurrent delete, but it books no pair,
+// reports no restore span and no visible edit, and costs no span: the
+// cascade captures one only for a sibling it removes, so passing over many
+// tombstones allocates nothing per tombstone.
+func TestRetombstoneCascadePassesOverATombstonedSibling(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	const n = 200
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	p := NewTreeNode(NewTreeNodeID(tk(2), 0), "p", nil)
+	require.NoError(t, root.Append(p))
+	prev := p
+	var siblings []*TreeNode
+	for i := range n {
+		s := NewTreeNode(NewTreeNodeID(time.NewTicket(int64(100+i), 0, peer), 0), "p", nil)
+		s.Attrs = NewRHT()
+		s.Attrs.Set("k", "v", time.NewTicket(int64(100+i), 1, peer))
+		require.NoError(t, root.Append(s))
+		prev.InsNextID, s.InsPrevID = s.id, prev.id
+		prev = s
+		siblings = append(siblings, s)
+	}
+	tree := NewTree(root, tk(3))
+	for _, s := range siblings {
+		s.remove(tk(5))
+	}
+	known := time.NewVersionVector()
+	known.Set(actor, 1000)
+	span := &TreeRestoreSpan{ID: p.id, NodeType: "p", ParentID: root.id}
+
+	at := tk(10)
+	pairs, _, edits, applied, err := tree.Retombstone([]*TreeRestoreSpan{span}, at, true, known)
+	require.NoError(t, err)
+	assert.Len(t, pairs, 1, "only p's")
+	assert.Len(t, applied, 1, "only p's span")
+	assert.Equal(t, []TreeVisibleEdit{{From: 0, To: 2}}, edits, "only p's removal is in sight")
+	for _, s := range siblings {
+		require.Same(t, at, s.RemovedAt(), "the later removal wins the tombstone")
+	}
+
+	allocs := testing.AllocsPerRun(5, func() {
+		_, _, _, _, _ = tree.Retombstone([]*TreeRestoreSpan{span}, at, true, known)
+	})
+	assert.Less(t, allocs, float64(n), "nothing is allocated per tombstone the cascade passes over")
+}
