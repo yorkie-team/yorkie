@@ -474,7 +474,7 @@ func releasedFixture(t *testing.T, purge bool) (*Tree, *TreeNode, *TreeNode, *Tr
 	tree := NewTree(root, next())
 	div.remove(next())
 	if purge {
-		_, err = tree.PurgeReleasing(div)
+		_, err = tree.purgeChild(div)
 		require.NoError(t, err)
 		require.True(t, p.detached)
 	}
@@ -980,7 +980,7 @@ func TestSplitMovedAcrossTheDetachedBoundary(t *testing.T) {
 			} else {
 				s.remove(removedAt)
 			}
-			_, err = tree.PurgeReleasing(gone)
+			_, err = tree.purgeChild(gone)
 			require.NoError(t, err)
 
 			known := time.NewVersionVector()
@@ -1033,7 +1033,7 @@ func TestSplitOutOfSightMovesOutATombstone(t *testing.T) {
 		tree := NewTree(root, next())
 		top.remove(next())
 		if purge {
-			_, err := tree.PurgeReleasing(top)
+			_, err := tree.purgeChild(top)
 			require.NoError(t, err)
 		}
 
@@ -1047,7 +1047,7 @@ func TestSplitOutOfSightMovesOutATombstone(t *testing.T) {
 		assert.True(t, q.Children(true)[0].IsRemoved(), "purged %v: as a tombstone", purge)
 		xmls = append(xmls, tree.ToXML())
 		if !purge {
-			_, err := tree.PurgeReleasing(top)
+			_, err := tree.purgeChild(top)
 			require.NoError(t, err)
 		}
 		shapes = append(shapes, treeShapeOf(tree))
@@ -1254,7 +1254,7 @@ func TestSplitIntoADetachedParentWithoutARemovalFails(t *testing.T) {
 }
 
 // TestPurgeOfALiveNodeChangesNothing pins that a purge only takes out a
-// tombstone: asked to purge a live node, Purge and PurgeReleasing leave the
+// tombstone: asked to purge a live node, Purge and purgeChild leave the
 // tree, the indexes and every node as they were, and report nothing
 // released.
 func TestPurgeOfALiveNodeChangesNothing(t *testing.T) {
@@ -1265,7 +1265,7 @@ func TestPurgeOfALiveNodeChangesNothing(t *testing.T) {
 	before := tree.ToXML()
 
 	require.NoError(t, tree.Purge(div))
-	result, err := tree.PurgeReleasing(div)
+	result, err := tree.purgeChild(div)
 	require.NoError(t, err)
 	assert.False(t, result.Purged, "not purged, so its pair stays")
 	assert.Zero(t, result.Released.Total(), "nothing released")

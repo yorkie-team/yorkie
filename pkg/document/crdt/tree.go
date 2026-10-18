@@ -1353,18 +1353,18 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 }
 
 // Purge implements GCParent: it detaches child, with its subtree, from the
-// tree, releasing the live nodes under it as PurgeReleasing does. It cannot
+// tree, releasing the live nodes under it as purgeChild does. It cannot
 // report their size, so a caller that keeps a size ledger purges through
-// PurgeReleasing instead, as Root does (see GCLiveRelease). See
+// purgeChild instead, as Root does (see GCLiveRelease). See
 // TreeNode.detached for what a detached node is.
 func (t *Tree) Purge(child GCChild) error {
 	_, _, err := t.purgeReleasing(child.(*TreeNode))
 	return err
 }
 
-// PurgeReleasing implements GCLiveRelease[GCChild]: it is Purge, and it
+// purgeChild implements GCLiveRelease[GCChild]: it is Purge, and it
 // reports what Root has to book for it.
-func (t *Tree) PurgeReleasing(child GCChild) (PurgeResult, error) {
+func (t *Tree) purgeChild(child GCChild) (purgeResult, error) {
 	_, result, err := t.purgeReleasing(child.(*TreeNode))
 	return result, err
 }
@@ -1376,7 +1376,7 @@ func (t *Tree) purge(node *TreeNode) (int, error) {
 }
 
 // purgeReleasing takes node, with its subtree, out of the tree, reporting
-// how many nodes it walked and what Root has to book (see PurgeResult). It
+// how many nodes it walked and what Root has to book (see purgeResult). It
 // unregisters and unlinks the purged node, as on main, and records where it
 // was taken from. Its subtree is marked detached and moved to detachedByID,
 // its merge stamps leave the index, and every live node in it is tombstoned
@@ -1387,8 +1387,8 @@ func (t *Tree) purge(node *TreeNode) (int, error) {
 // all: a purge of a node already inside one finds the mark and walks
 // nothing, so one collection pass costs O(nodes). Nothing changes unless
 // the node, a tombstone, actually leaves its parent.
-func (t *Tree) purgeReleasing(node *TreeNode) (int, PurgeResult, error) {
-	var result PurgeResult
+func (t *Tree) purgeReleasing(node *TreeNode) (int, purgeResult, error) {
+	var result purgeResult
 
 	// A parentless node cannot be detached: purging is removal from a parent's
 	// child list. GCPairs never books one, but a pair outlives the tree state
@@ -1790,7 +1790,9 @@ func (t *Tree) forgetDetached(node *TreeNode) {
 
 // TakeForgotten returns the detached nodes the last Restore forgot and
 // clears the list; each Restore starts it afresh, so a caller that does not
-// take it leaves nothing for a later one to act on. The caller drops their pending GC pairs (Root.DropGCPair) before it
+// take it leaves nothing for a later one to act on. Internal to the CRDT
+// engine, exported only for the operation that applies a restore: that
+// caller drops their pending GC pairs (Root.DropGCPair) before it
 // registers the pairs the same Restore booked: a recreate reuses the
 // forgotten node's ID, and a pair left under that key would make the
 // recreated node's registration cancel it instead of adding its own.

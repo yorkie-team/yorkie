@@ -100,7 +100,7 @@ type GCBarrier[C any] interface {
 // ancestor would detach bytes docSize.Live still holds while a rebuild,
 // walking the attached tree, no longer counts them (yorkie#2244).
 //
-// Root therefore purges through PurgeReleasing once removedAt and
+// Root therefore purges through purgeChild once removedAt and
 // GCBarrier have both let the child go: it takes the child out, tombstones
 // every live node under it, and reports their size, which Root takes off
 // Live. They leave the document with the child, as if the child's removal
@@ -122,14 +122,14 @@ type GCBarrier[C any] interface {
 // the place the subtree was purged from, where a replica that has not
 // purged it counts it from.
 type GCLiveRelease[C any] interface {
-	// PurgeReleasing purges child as Purge does, tombstoning every live node
-	// under it, and reports what Root has to book for it (see PurgeResult).
-	PurgeReleasing(child C) (PurgeResult, error)
+	// purgeChild purges child as Purge does, tombstoning every live node
+	// under it, and reports what Root has to book for it (see purgeResult).
+	purgeChild(child C) (purgeResult, error)
 }
 
-// PurgeResult is what a purge through PurgeReleasing leaves for Root to
+// purgeResult is what a purge through purgeChild leaves for Root to
 // book.
-type PurgeResult struct {
+type purgeResult struct {
 	// Purged reports whether the child's pair is done with: the child left
 	// the tree, or was already out of it. A child that is not a tombstone is
 	// not purged, and its pair stays.

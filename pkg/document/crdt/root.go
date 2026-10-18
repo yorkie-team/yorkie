@@ -660,7 +660,7 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 		// purges a subtree; every other GC parent purges a leaf -- a text or
 		// list node, an attribute -- with nothing under it to release.
 		if parent, ok := pair.Parent.(GCLiveRelease[GCChild]); ok {
-			result, err := parent.PurgeReleasing(pair.Child)
+			result, err := parent.purgeChild(pair.Child)
 			if err != nil {
 				return 0, 0, err
 			}

@@ -99,7 +99,7 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
 
 - **A detached node is a tombstone, and stays one.** When a collection
   purges a removed element, the purge tombstones every live node under it
-  (`GCLiveRelease`, `Tree.PurgeReleasing`) and `Root` takes their bytes
+  (`GCLiveRelease`, `Tree.purgeChild`) and `Root` takes their bytes
   off `Live`; it happens only with the purge, never without it. They leave
   the document with the element, as if its removal had covered them.
   Everything a purge detaches is therefore a tombstone off `Live`.
