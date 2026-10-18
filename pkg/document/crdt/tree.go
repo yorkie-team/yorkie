@@ -341,6 +341,18 @@ func (n *TreeNode) Split(
 	var err error
 	var diff resource.DataSize
 
+	// §7.4 below can move the product into a detached subtree, where it is
+	// tombstoned with the subtree's removal. Checked before anything changes,
+	// so a subtree that breaks the invariant fails the split untouched.
+	if !n.IsText() && !n.detached && n.InsNextID != nil {
+		if insNext := tree.findFloorNode(n.InsNextID); insNext != nil && insNext.Index.Parent != nil {
+			if dest := insNext.Index.Parent.Value; dest.detached && detachedRemovalOf(dest) == nil {
+				return diff, fmt.Errorf("split %s into detached %s: %w",
+					n.IDString(), dest.IDString(), ErrDetachedLive)
+			}
+		}
+	}
+
 	if n.IsText() {
 		split, diff, err = n.SplitText(offset, n.id.Offset)
 		if err != nil {
@@ -409,21 +421,8 @@ func (n *TreeNode) Split(
 					// there, so it is booked to GC below and not to Live.
 					if dest := insNext.Index.Parent.Value; dest.detached != split.detached {
 						split.detached = dest.detached
-						if split.detached && split.removedAt == nil {
-							// Every detached node is a tombstone: a purge
-							// takes out only a removed node and tombstones
-							// what is live under it. A detached destination
-							// without a removal breaks that, and the product
-							// would sit live in a detached subtree, so the
-							// split fails rather than go on.
-							at := dest.removedAt
-							if at == nil {
-								at = removedAncestorAt(dest)
-							}
-							if at == nil {
-								return diff, fmt.Errorf("split %s into detached %s: %w",
-									n.IDString(), dest.IDString(), ErrDetachedLive)
-							}
+						// The removal is there: checked before the split.
+						if at := detachedRemovalOf(dest); split.detached && split.removedAt == nil && at != nil {
 							split.remove(at)
 							diff.Meta += time.TicketSize
 						}
@@ -1446,6 +1445,43 @@ func (t *Tree) unlinkInsChain(node *TreeNode) {
 // than off a subtree a purge detached.
 func (t *Tree) isAttached(node *TreeNode) bool {
 	return !node.detached
+}
+
+// detachedRemovalOf returns the removal a node placed under the detached
+// node is tombstoned with: the node's own, or its nearest removed
+// ancestor's. Every detached node is a tombstone, since a purge takes out
+// only a removed node and tombstones what is live under it, so it is nil
+// only for a tree that breaks that invariant.
+func detachedRemovalOf(node *TreeNode) *time.Ticket {
+	if node.removedAt != nil {
+		return node.removedAt
+	}
+	return removedAncestorAt(node)
+}
+
+// takeDetachedSide gives node, just moved under a detached parent, that
+// parent's side of a purge (see TreeNode.detached): the node and its
+// subtree are marked detached, moved to detachedByID and out of the merge
+// stamp index, and every live node in it is tombstoned with at, as the
+// purge released what it found there. It returns the size those had in
+// Live. A node already detached is left as it is.
+func (t *Tree) takeDetachedSide(node *TreeNode, at *time.Ticket) resource.DataSize {
+	var released resource.DataSize
+	index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
+		if n.Value.detached {
+			return
+		}
+		if !n.Value.IsRemoved() {
+			released.Add(n.Value.DataSize())
+			n.Value.remove(at)
+		}
+		n.Value.detached = true
+		if n.Value.MergedFrom != nil {
+			t.forgetMergeStamp(n.Value)
+		}
+		t.moveToDetached(n.Value)
+	})
+	return released
 }
 
 // removedAncestorAt returns the removal of node's nearest removed ancestor,
@@ -3213,9 +3249,10 @@ func (t *Tree) Edit(
 	// Phase 6: Merge — move children to fromParent, set forwarding pointers.
 	// A child a forged lineage would have moved under itself is tombstoned
 	// rather than moved, so those pairs are registered even on the error path.
-	stranded, err := t.mergeNodes(
+	stranded, released, err := t.mergeNodes(
 		fromParent, toBeMovedToFromParents, editedAt,
 	)
+	diff.Sub(released)
 	for _, node := range stranded {
 		pairs = append(pairs, GCPair{
 			Parent: t,
@@ -4001,8 +4038,19 @@ func (t *Tree) mergeNodes(
 	fromParent *TreeNode,
 	toBeMovedToFromParents []*TreeNode,
 	editedAt *time.Ticket,
-) ([]*TreeNode, error) {
+) ([]*TreeNode, resource.DataSize, error) {
+	var released resource.DataSize
 	dest := t.resolveMergeTarget(fromParent)
+
+	// A merge into a detached destination takes the moved nodes into a
+	// subtree a purge took out, and they take its side (takeDetachedSide),
+	// tombstoned with its removal. Checked before anything moves.
+	var detachedAt *time.Ticket
+	if dest.detached {
+		if detachedAt = detachedRemovalOf(dest); detachedAt == nil {
+			return nil, released, fmt.Errorf("merge into detached %s: %w", dest.IDString(), ErrDetachedLive)
+		}
+	}
 
 	var stranded []*TreeNode
 	// Set once the guard below tombstones a subtree that contains dest. The
@@ -4052,6 +4100,12 @@ func (t *Tree) mergeNodes(
 			stranded = append(stranded, t.tombstoneSubtree(node, editedAt)...)
 			continue
 		}
+		// A detached node is not moved into the attached tree: a replica
+		// that purged its subtree has nothing there to move (see
+		// TreeNode.detached).
+		if node.detached && !dest.detached {
+			continue
+		}
 		// Record source parent and merge ticket on the moved child.
 		// Both fields are persisted; MergedAt must be stored explicitly
 		// because source.removedAt can be overwritten by later concurrent
@@ -4077,7 +4131,10 @@ func (t *Tree) mergeNodes(
 			t.noteMergeStamp(node)
 		}
 		if err := dest.Index.MoveChild(node.Index); err != nil {
-			return stranded, err
+			return stranded, released, err
+		}
+		if dest.detached {
+			released.Add(t.takeDetachedSide(node, detachedAt))
 		}
 		// Point this child's original source at the resolved destination,
 		// path-compressing a transitive source (a prior merge whose children
@@ -4107,7 +4164,7 @@ func (t *Tree) mergeNodes(
 			src.mergedInto = dest.id
 		}
 	}
-	return stranded, nil
+	return stranded, released, nil
 }
 
 // tombstoneSubtree tombstones node and every live node below it with editedAt,

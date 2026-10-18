@@ -170,6 +170,7 @@ detached node either, so that gap is the same there.
 | `Edit`, `Style`, `RemoveStyle` with an end in one | that end resolves to the place the subtree was purged from | `TestEditWithOneEndInADetachedSubtree`, `TestStyleWithAnEndInADetachedSubtree` |
 | `Split` of a detached node | the product is detached too | `TestSplitsInADetachedSubtreeStayDetached` |
 | §7.4 move of a split product across a purge | the product takes its new parent's side, released into a detached one | `TestSplitMovedAcrossTheDetachedBoundary` |
+| Phase 6 merge into a detached destination | the moved nodes take its side, released, and nothing detached is moved into the attached tree | `TestMergeIntoADetachedParentTakesItsSide` |
 | §7.4 move of an empty product cut off a node under a removed ancestor | born tombstoned before it moves, as on a replica that released the node | `TestSplitOutOfSightMovesOutATombstone` |
 | `FindTreeNodesWithSplitText`, splits, chain walks | read tombstones as on main | `TestTreeOpsNamingACollectedSubtree` |
 | `dissolveMergeSources`, `mergeStamps` | stamps of the subtree leave the index at the purge | `TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree` |

@@ -1233,8 +1233,17 @@ func TestSplitIntoADetachedParentWithoutARemovalFails(t *testing.T) {
 
 	known := time.NewVersionVector()
 	known.Set(actor, 1000)
+	attached, inB := treeShapeOf(tree), len(b.Index.Children(true))
+	nodes, nextID, prevID := tree.NodeLen(), n.InsNextID, s.InsPrevID
 	_, err = n.Split(tree, 1, next, known)
 	assert.ErrorIs(t, err, ErrDetachedLive)
+
+	assert.Equal(t, attached, treeShapeOf(tree), "the attached tree is untouched")
+	assert.Equal(t, inB, len(b.Index.Children(true)), "nothing moved into b")
+	assert.Equal(t, nodes, tree.NodeLen(), "nothing registered")
+	assert.Equal(t, nextID, n.InsNextID, "the chain is untouched")
+	assert.Equal(t, prevID, s.InsPrevID)
+	assert.Len(t, n.Index.Children(true), 1, "n is not split")
 }
 
 // TestPurgeOfALiveNodeChangesNothing pins that a purge only takes out a
@@ -1331,4 +1340,78 @@ func TestRegisterGCPairCancelsAGCOnlyPairByItsBooking(t *testing.T) {
 	doc.RegisterGCPair(GCPair{Parent: tree, Child: p, GCOnlySize: &booked})
 	assert.Equal(t, 0, doc.GarbageLen())
 	assert.Equal(t, base.GC, doc.DocSize().GC, "cancelling gives the booking back")
+}
+
+// TestMergeIntoADetachedParentTakesItsSide pins the Phase 6 merge into a
+// destination in a subtree a purge took out. In
+// <r><x>12</x><div><p>ab</p></div><q>cd</q></r>, with div removed while p is
+// live, a delete from the end of "ab" to the start of q merges q's "cd" into
+// p. Where div is purged, p is detached and "cd" takes its side: detached,
+// a tombstone, out of Live and indexed with the detached nodes. Where div is
+// not, "cd" moves under the live p, out of sight, until that replica's own
+// collection releases it. Both show the same tree, the ledger equals a
+// rebuild on each, and the two hold the same once both collect.
+func TestMergeIntoADetachedParentTakesItsSide(t *testing.T) {
+	var xmls, shapes []string
+	for _, purge := range []bool{true, false} {
+		actor, err := time.ActorIDFromHex("000000000000000000000001")
+		require.NoError(t, err)
+		lamport := int64(0)
+		next := func() *time.Ticket {
+			lamport++
+			return time.NewTicket(lamport, 0, actor)
+		}
+		n := map[string]*TreeNode{}
+		mk := func(name, typ string, value ...string) *TreeNode {
+			n[name] = NewTreeNode(NewTreeNodeID(next(), 0), typ, nil, value...)
+			return n[name]
+		}
+		root := mk("r", "r")
+		require.NoError(t, root.Append(mk("x", "x"), mk("div", "div"), mk("q", "q")))
+		require.NoError(t, n["x"].Append(mk("12", "text", "12")))
+		require.NoError(t, n["div"].Append(mk("p", "p")))
+		require.NoError(t, n["p"].Append(mk("ab", "text", "ab")))
+		require.NoError(t, n["q"].Append(mk("cd", "text", "cd")))
+		n["div"].remove(next())
+		tree := NewTree(root, next())
+		doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+		doc.Object().Set("t", tree)
+		doc.RegisterElement(tree, doc.Object())
+		vv := time.NewVersionVector()
+		vv.Set(actor, 1000)
+		if purge {
+			_, err := doc.GarbageCollect(vv)
+			require.NoError(t, err)
+			require.True(t, n["p"].detached)
+		}
+
+		from := NewTreePos(n["p"].id, NewTreeNodeID(n["ab"].id.CreatedAt, 2))
+		to := NewTreePos(n["q"].id, n["q"].id)
+		pairs, diff, _, err := tree.Edit(from, to, nil, 0, time.NewTicket(500, 0, actor), next, vv, false)
+		require.NoError(t, err)
+		for _, pair := range pairs {
+			doc.RegisterGCPair(pair)
+		}
+		doc.Acc(diff)
+		assert.Same(t, n["p"], n["cd"].Index.Parent.Value, "purged %v: cd merged into p", purge)
+		if purge {
+			assert.True(t, n["cd"].detached, "cd takes the detached side")
+			assert.True(t, n["cd"].IsRemoved(), "and is released")
+			assert.Equal(t, len(tree.Nodes()), tree.NodeLen(), "NodeMapByID holds only what is reachable")
+		}
+		rebuilt, err := doc.DeepCopy()
+		require.NoError(t, err)
+		assert.Equal(t, rebuilt.DocSize().Live, doc.DocSize().Live, "purged %v: Live equals a rebuild", purge)
+		xmls = append(xmls, tree.ToXML())
+
+		_, err = doc.GarbageCollect(vv)
+		require.NoError(t, err)
+		rebuilt, err = doc.DeepCopy()
+		require.NoError(t, err)
+		assert.Equal(t, rebuilt.DocSize(), doc.DocSize(), "purged %v: after collecting", purge)
+		shapes = append(shapes, treeShapeOf(tree))
+	}
+	assert.Equal(t, "<r><x>12</x></r>", xmls[0])
+	assert.Equal(t, xmls[0], xmls[1], "both replicas show the same tree")
+	assert.Equal(t, shapes[0], shapes[1], "and hold the same once both collect")
 }

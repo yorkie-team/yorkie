@@ -1442,7 +1442,9 @@ result. The JS SDK has to mirror all of the following:
    by ID, as detached nodes do, from an index kept apart from the one of
    reachable nodes. A node inserted under, or split off, a detached node
    is detached too, and an empty split product that §7.4 moves out of a
-   node under a removed ancestor is born a tombstone. The purge records the parent and the sibling the
+   node under a removed ancestor is born a tombstone. A merge into a
+   detached destination releases what it moves there, and a merge moves
+   nothing detached into the attached tree. The purge records the parent and the sibling the
    purged node sat in front of, and a position inside a detached subtree
    resolves there, for an edit or a style; a position whose parent is live
    under a removed ancestor resolves from the topmost removed ancestor.
