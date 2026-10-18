@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/api/converter"
+	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
@@ -136,6 +137,10 @@ func TestRemoteOpNamingADetachedNodeAppliesOnTheClone(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.False(t, p.IsRemoved(), "p is live again under the removed div")
+	// A merge into p the collection below has not seen keeps the subtree.
+	stampUnseenMerge(d, peer, at.Lamport()+100, func(tree *crdt.Tree) *crdt.TreeNode {
+		return tree.Root().Children(true)[0].Children(true)[0]
+	})
 
 	vector := d.doc.VersionVector().DeepCopy()
 	vector.Set(peer, at.Lamport())
@@ -205,6 +210,7 @@ func TestValueCopyOfATreeCarriesNoDetachedNode(t *testing.T) {
 	op := operations.NewRestoreTreeEdit(tree.CreatedAt(), pos, pos, at, spans, crdt.RestoreModeRestore, nil)
 	_, err = op.Execute(d.doc.root, operations.OpSourceRemote, unaware)
 	require.NoError(t, err)
+	stampUnseenMerge(d, peer, at.Lamport()+100, func(*crdt.Tree) *crdt.TreeNode { return p })
 	vector := d.doc.VersionVector().DeepCopy()
 	vector.Set(peer, at.Lamport())
 	_, err = d.doc.GarbageCollect(vector)
@@ -227,4 +233,78 @@ func TestValueCopyOfATreeCarriesNoDetachedNode(t *testing.T) {
 	clone, err := d.doc.root.DeepCopy()
 	require.NoError(t, err)
 	assert.NotNil(t, treeOf(clone).DetachedNode(p.ID()), "the clone does carry it")
+}
+
+// TestADocumentCollectsWithItsOwnVersionVector pins that a document hands
+// its own version vector to the drop, for the root and its clone. A remote
+// restore that did not know the delete revives "ab" under the removed
+// paragraph, and "ab" is stamped merged in by a phantom actor no change
+// carried. The collection that releases it lets it go on both, though no
+// vector will ever cover the forged ticket.
+func TestADocumentCollectsWithItsOwnVersionVector(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	peer, err := time.ActorIDFromHex("0000000000000000000000ee")
+	require.NoError(t, err)
+	phantom, err := time.ActorIDFromHex("0000000000000000000000ab")
+	require.NoError(t, err)
+	d := New("forged-merge")
+	d.SetActor(actor)
+	require.NoError(t, d.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+		}})
+		return nil
+	}))
+	treeOf := func(root *crdt.Root) *crdt.Tree { return root.Object().Get("t").(*crdt.Tree) }
+	p := treeOf(d.doc.root).Root().Children()[0]
+	text := p.Children()[0]
+	require.NoError(t, d.Update(func(root *json.Object, _ *presence.Presence) error {
+		root.GetTree("t").Edit(0, 4, nil, 0)
+		return nil
+	}))
+
+	created := text.ID().CreatedAt
+	unaware := time.NewVersionVector()
+	unaware.Set(created.ActorID(), created.Lamport())
+	at := time.NewTicket(d.doc.VersionVector().VersionOf(actor)+1, 0, peer)
+	pos := crdt.NewTreePos(p.ID(), p.ID())
+	span := &crdt.TreeRestoreSpan{
+		ID: text.ID(), NodeType: "text", IsText: true, Length: 2, Value: "ab", ParentID: p.ID(),
+	}
+	for _, root := range []*crdt.Root{d.cloneRoot, d.doc.root} {
+		op := operations.NewRestoreTreeEdit(treeOf(root).CreatedAt(), pos, pos, at,
+			[]*crdt.TreeRestoreSpan{span}, crdt.RestoreModeRestore, nil)
+		_, err := op.Execute(root, operations.OpSourceRemote, unaware)
+		require.NoError(t, err)
+		revived := treeOf(root).Root().Children(true)[0].Children(true)[0]
+		require.False(t, revived.IsRemoved())
+		revived.MergedAt = time.NewTicket(time.MaxLamport-1, 0, phantom)
+	}
+	d.doc.changeID = d.doc.changeID.SyncClocks(change.NewID(0, 0, at.Lamport(), peer, d.doc.VersionVector()))
+
+	vector := d.doc.VersionVector().DeepCopy()
+	vector.Set(peer, at.Lamport())
+	d.GarbageCollect(vector)
+	require.True(t, text.IsRemoved(), "released with the paragraph")
+	assert.Equal(t, 0, d.GarbageLen(), "and let go in the same collection, the forged ticket counted as seen")
+	assert.Equal(t, 0, d.cloneRoot.GarbageLen())
+}
+
+// stampUnseenMerge stamps the node pick finds, on the root and on the clone
+// when there is one, merged in by a change of actor at lamport that the
+// document applied and a collection's vector, short of it, has not seen,
+// so a subtree holding the node stays after a purge takes it out, as one
+// holding a node a concurrent merge moved in stays. Only the drop reads
+// MergedAt without MergedFrom.
+func stampUnseenMerge(d *Document, actor time.ActorID, lamport int64, pick func(*crdt.Tree) *crdt.TreeNode) {
+	at := time.NewTicket(lamport, 0, actor)
+	for _, root := range []*crdt.Root{d.doc.root, d.cloneRoot} {
+		if root != nil {
+			pick(root.Object().Get("t").(*crdt.Tree)).MergedAt = at
+		}
+	}
+	applied := d.doc.VersionVector().DeepCopy()
+	applied.Set(actor, lamport)
+	d.doc.changeID = d.doc.changeID.SyncClocks(change.NewID(0, 0, lamport, actor, applied))
 }

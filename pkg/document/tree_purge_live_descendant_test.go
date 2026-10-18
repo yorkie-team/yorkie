@@ -94,7 +94,7 @@ func TestTreePurgeWithLiveDescendant(t *testing.T) {
 	require.Len(t, treeCRDT(t, d1).Root().Children(true), 1, "the paragraph is purged")
 	assert.True(t, text.IsRemoved(), `"b" went out with it, as a tombstone`)
 	assertRebuildsSame(t, d1, "after a collection that met the live descendant")
-	assert.Equal(t, 1, d1.GarbageLen(), `"b" is held, released, until the next collection`)
+	assert.Equal(t, 0, d1.GarbageLen(), `"b" goes in the same collection: the vector has seen the paragraph whole`)
 	assert.Equal(t, len(treeCRDT(t, d1).Nodes()), treeCRDT(t, d1).NodeLen(),
 		"every registered node is reachable from the root")
 	rebuilt, err := d1.InternalDocumentForTest().DeepCopy()
@@ -315,11 +315,8 @@ func TestTreeCraftedReviveCannotPinARemovedChain(t *testing.T) {
 	assert.Positive(t, d1.GarbageCollect(vector))
 	assert.Empty(t, treeCRDT(t, d1).Root().Children(true), "the whole chain is purged")
 	assert.True(t, text.IsRemoved())
-	assert.Equal(t, 1, d1.GarbageLen(), "the released text is held until the next collection")
+	assert.Equal(t, 0, d1.GarbageLen(), "the released text goes in the same collection")
 	assertRebuildsSame(t, d1, "after the collection")
-	d1.GarbageCollect(vector)
-	assert.Equal(t, 0, d1.GarbageLen(), "and nothing after it")
-	assertRebuildsSame(t, d1, "after the next collection")
 }
 
 // TestRestoreAfterDetachKeepsTheLedger pins the GC pair of a detached node a
@@ -350,14 +347,18 @@ func TestRestoreAfterDetachKeepsTheLedger(t *testing.T) {
 		root.GetTree("t").Edit(0, 4, nil, 0)
 		return nil
 	}))
+	// d2 also inserts "z" after "a" in the same change, which the
+	// collection below does not cover: its creation keeps the paragraph's
+	// subtree after the purge, as a concurrent split's product would.
 	require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
 		root.GetTree("t").Edit(2, 3, nil, 0)
+		root.GetTree("t").Edit(2, 2, &json.TreeNode{Type: "text", Value: "z"}, 0)
 		return nil
 	}))
 	crossSync(t, d1, d2)
 
 	pieces := treeCRDT(t, d1).Root().Children(true)[0].Children(true)
-	require.Len(t, pieces, 2)
+	require.Len(t, pieces, 3)
 	b := pieces[1]
 	require.Equal(t, a2, b.RemovedAt().ActorID(), "d2's later delete wins the tombstone of b")
 
@@ -367,7 +368,8 @@ func TestRestoreAfterDetachKeepsTheLedger(t *testing.T) {
 	vector.Set(a1, d1.VersionVector().VersionOf(a1))
 	d1.GarbageCollect(vector)
 	require.Len(t, treeCRDT(t, d1).Root().Children(true), 1, "the paragraph is purged")
-	require.Equal(t, 1, d1.GarbageLen(), "the pair of b is still pending")
+	require.Equal(t, 3, d1.GarbageLen(),
+		`the pairs of b and "z" are pending, and "a"'s, which "z" after it holds back`)
 
 	require.NoError(t, d1.Undo())
 	assert.Equal(t, `<doc><p>ab</p><p k="v">cd</p></doc>`, treeXML(t, d1))
@@ -390,7 +392,9 @@ func TestRestoreAfterDetachKeepsTheLedger(t *testing.T) {
 // element to recreate it. d2 removes p's attribute and then p, both after
 // d1's delete of the div, so a collection that covers d1's delete alone
 // purges the div and leaves p detached, with its own pair and its
-// attribute's pending. d1's undo forgets p and recreates it; both pairs go
+// attribute's pending; "z", which d2 inserts into the div in the same
+// change, keeps the subtree, the collection not having seen it. d1's undo
+// forgets p and recreates it; both pairs go
 // with the node, or the root keeps one for a node no longer in the
 // document and its GC drifts from its copy's.
 func TestRestoreForgettingADetachedNodeDropsItsAttributePairs(t *testing.T) {
@@ -414,9 +418,13 @@ func TestRestoreForgettingADetachedNodeDropsItsAttributePairs(t *testing.T) {
 		root.GetTree("t").Edit(0, 6, nil, 0)
 		return nil
 	}))
+	// d2 also inserts "z" into the div in the same change, which the
+	// collection below does not cover: its creation keeps the div's
+	// subtree after the purge, as a concurrent split's product would.
 	require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
 		root.GetTree("t").RemoveStyle(1, 2, []string{"k"})
 		root.GetTree("t").Edit(1, 5, nil, 0)
+		root.GetTree("t").Edit(1, 1, &json.TreeNode{Type: "text", Value: "z"}, 0)
 		return nil
 	}))
 	crossSync(t, d1, d2)
@@ -426,7 +434,7 @@ func TestRestoreForgettingADetachedNodeDropsItsAttributePairs(t *testing.T) {
 	vector.Set(a2, treeCRDT(t, d1).Root().Children(true)[0].RemovedAt().Lamport())
 	d1.GarbageCollect(vector)
 	require.Empty(t, treeCRDT(t, d1).Root().Children(true), "the div is purged")
-	require.Equal(t, 3, d1.GarbageLen(), "p, its removed attribute and the styled one are pending")
+	require.Equal(t, 4, d1.GarbageLen(), `p, its removed attribute, the styled one and "z" are pending`)
 	assertRebuildsSame(t, d1, "after the collection")
 
 	require.NoError(t, d1.Undo())

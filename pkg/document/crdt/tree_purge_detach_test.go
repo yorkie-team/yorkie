@@ -29,8 +29,33 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
+// keeperActor stamps the merge keepDetached records, at a lamport no test
+// vector covers unless it names keeperActor.
+var keeperActor = func() time.ActorID {
+	actor, err := time.ActorIDFromHex("0000000000000000000000cc")
+	if err != nil {
+		panic(err)
+	}
+	return actor
+}()
+
+// keepDetached stamps node with a merge at a ticket of keeperActor that a
+// collection's vector has not seen, so a subtree holding node stays after a
+// purge takes it out, as one holding a node a concurrent merge moved in
+// stays (see Root.dropDetached), for the tests of what resolves against a
+// detached subtree. Only the drop reads MergedAt without MergedFrom, so
+// nothing else the tests check sees the stamp. A vector that names
+// keeperActor at keptUntil lets the subtree go.
+func keepDetached(node *TreeNode) {
+	node.MergedAt = time.NewTicket(keptUntil, 0, keeperActor)
+}
+
+// keptUntil is the lamport of keepDetached's stamp.
+const keptUntil = 1000
+
 // detachFixture builds <r><div><p>ab</p></div></r> with div and p removed and
-// the text live under them, the shape an identity restore leaves.
+// the text live under them, the shape an identity restore leaves. p is
+// stamped (see keepDetached), so the subtree stays after a purge.
 func detachFixture(t *testing.T) (*Tree, *TreeNode, *TreeNode, *TreeNode, *time.Ticket) {
 	t.Helper()
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
@@ -47,6 +72,7 @@ func detachFixture(t *testing.T) (*Tree, *TreeNode, *TreeNode, *TreeNode, *time.
 	require.NoError(t, root.Append(div))
 	require.NoError(t, div.Append(p))
 	require.NoError(t, p.Append(text))
+	keepDetached(p)
 	tree := NewTree(root, nextTicket())
 	removedAt := nextTicket()
 	div.remove(removedAt)
@@ -61,8 +87,8 @@ func detachFixture(t *testing.T) (*Tree, *TreeNode, *TreeNode, *TreeNode, *time.
 // with them: a purge that left it live would detach bytes Live still holds
 // while a rebuild no longer counts them, and holding div for it instead
 // would keep div for as long as a node no one can see stays live. Its
-// bytes move to GC, where the replica holds them until the next collection
-// lets the subtree go.
+// bytes move to GC, where the replica holds them until a collection that
+// has seen the subtree whole, stamp included (see keepDetached), lets it go.
 func TestCollectReleasesALiveDescendantWithItsAncestor(t *testing.T) {
 	tree, div, p, text, removedAt := detachFixture(t)
 	root := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
@@ -89,9 +115,10 @@ func TestCollectReleasesALiveDescendantWithItsAncestor(t *testing.T) {
 	assert.Equal(t, base, live, "the text's bytes left Live with it")
 	assert.Equal(t, text.DataSize(), gc, "for GC, as the tombstone it is now")
 
+	vector.Set(keeperActor, keptUntil)
 	_, err = root.GarbageCollect(vector)
 	require.NoError(t, err)
-	assert.Nil(t, tree.DetachedNode(text.id), "the next collection lets it go")
+	assert.Nil(t, tree.DetachedNode(text.id), "a collection that has seen p's stamp lets it go")
 	assert.Equal(t, 0, root.GarbageLen())
 	gc = root.DocSize().GC
 	assert.Zero(t, (&gc).Total())
@@ -268,17 +295,13 @@ func TestLiveReleaseWaitsForTheBarrier(t *testing.T) {
 	live.Sub(base)
 	assert.Equal(t, text.DataSize(), live)
 
-	assert.Equal(t, 1, collect(50), "barrier covered: div goes")
+	assert.Equal(t, 2, collect(50), "barrier covered: div goes, and the text it released")
 	assert.True(t, text.IsRemoved())
 	assert.True(t, text.detached)
-	assert.Equal(t, 1, doc.GarbageLen(), "the released text is held")
+	assert.Nil(t, tree.DetachedNode(text.id), "the vector has seen the subtree whole: one call lets it go")
+	assert.Equal(t, 0, doc.GarbageLen())
 	live, gc := doc.DocSize().Live, doc.DocSize().GC
 	assert.Equal(t, base, live)
-	assert.Equal(t, text.DataSize(), gc)
-
-	collect(50)
-	assert.Equal(t, 0, doc.GarbageLen())
-	gc = doc.DocSize().GC
 	assert.Zero(t, (&gc).Total())
 }
 
@@ -706,6 +729,7 @@ func halfDetachedFixture(t *testing.T, purge bool) (*Tree, *Root, map[string]*Tr
 	require.NoError(t, n["div"].Append(n["p"]))
 	require.NoError(t, n["p"].Append(n["ab"]))
 	require.NoError(t, n["q"].Append(n["cd"]))
+	keepDetached(n["p"])
 	tree := NewTree(n["r"], next())
 	n["div"].remove(next())
 	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
@@ -940,6 +964,8 @@ func TestRangeBetweenTwoDetachedSubtrees(t *testing.T) {
 		require.NoError(t, n["m"].Append(mk("MM", "text", "MM")))
 		require.NoError(t, n["b"].Append(mk("pb", "pb")))
 		require.NoError(t, n["pb"].Append(mk("cd", "text", "cd")))
+		keepDetached(n["pa"])
+		keepDetached(n["pb"])
 		tree := NewTree(root, next())
 		doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
 		removedAt := next()
@@ -1041,6 +1067,16 @@ func TestSplitMovedAcrossTheDetachedBoundary(t *testing.T) {
 			assert.Equal(t, s.detached, product.detached, "the product takes s's side")
 			if product.detached {
 				assert.True(t, product.IsRemoved(), "a detached product is a tombstone")
+				assert.True(t, product.released, "released, as the purge released what it found there")
+				// Its pair books what Rederive derives for it: its size.
+				var booked *resource.DataSize
+				for _, pair := range tree.drainPendingGCPairs() {
+					if pair.Child == product {
+						booked = pair.GCOnlySize
+					}
+				}
+				require.NotNil(t, booked)
+				assert.Equal(t, product.DataSize(), *booked)
 			}
 			assert.Equal(t, len(tree.Nodes()), tree.NodeLen(), "NodeMapByID holds only what is reachable")
 			assert.Same(t, product, tree.findFloorNode(product.id))
@@ -1131,6 +1167,7 @@ func TestSplitOutOfSightKeepsTheLedger(t *testing.T) {
 		require.NoError(t, root.Append(top, q))
 		require.NoError(t, top.Append(p))
 		require.NoError(t, p.Append(ab))
+		keepDetached(p)
 		require.NoError(t, q.Append(p2))
 		require.NoError(t, p2.Append(cd))
 		top.remove(next())
@@ -1429,6 +1466,7 @@ func TestMergeIntoADetachedParentTakesItsSide(t *testing.T) {
 		require.NoError(t, n["x"].Append(mk("12", "text", "12")))
 		require.NoError(t, n["div"].Append(mk("p", "p")))
 		require.NoError(t, n["p"].Append(mk("ab", "text", "ab")))
+		keepDetached(n["p"])
 		require.NoError(t, n["q"].Append(mk("cd", "text", "cd")))
 		n["div"].remove(next())
 		tree := NewTree(root, next())
@@ -1624,6 +1662,7 @@ func TestSplitOfAReleasedTextKeepsTheLedger(t *testing.T) {
 	require.NoError(t, root.Append(div))
 	require.NoError(t, div.Append(p))
 	require.NoError(t, p.Append(text))
+	keepDetached(p)
 	div.remove(removedAt)
 	tree := NewTree(root, time.NewTicket(5, 0, actor))
 	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
@@ -1648,6 +1687,7 @@ func TestSplitOfAReleasedTextKeepsTheLedger(t *testing.T) {
 	}
 	doc.Acc(diff)
 
+	all.Set(keeperActor, keptUntil)
 	_, err = doc.GarbageCollect(all)
 	require.NoError(t, err)
 	rebuilt, err := doc.Rederive()
@@ -1698,6 +1738,7 @@ func TestSplitOfAMergedInReleasedTextKeepsTheLedger(t *testing.T) {
 	require.NoError(t, root.Append(mk("div", "div"), mk("q", "q")))
 	require.NoError(t, n["div"].Append(mk("p", "p")))
 	require.NoError(t, n["p"].Append(mk("ab", "text", "ab")))
+	keepDetached(n["p"])
 	require.NoError(t, n["q"].Append(mk("cd", "text", "cd")))
 	n["div"].remove(next())
 	tree := NewTree(root, next())
@@ -1726,6 +1767,7 @@ func TestSplitOfAMergedInReleasedTextKeepsTheLedger(t *testing.T) {
 	mid := NewTreePos(n["p"].id, NewTreeNodeID(n["cd"].id.CreatedAt, 1))
 	apply(mid, mid, NewTreeNode(NewTreeNodeID(time.NewTicket(lamport+100, 0, actor), 0), "text", nil, "X"))
 
+	all.Set(keeperActor, keptUntil)
 	_, err = doc.GarbageCollect(all)
 	require.NoError(t, err)
 	rebuilt, err := doc.Rederive()
@@ -1988,6 +2030,7 @@ func TestDeepCopyBooksADetachedTombstonesPendingPair(t *testing.T) {
 	require.NoError(t, div.Append(p))
 	div.remove(time.NewTicket(10, 0, actor))
 	p.remove(time.NewTicket(20, 0, peer))
+	keepDetached(p)
 	tree := NewTree(root, time.NewTicket(4, 0, actor))
 	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
 	doc.Object().Set("t", tree)
@@ -2018,6 +2061,7 @@ func TestDeepCopyBooksADetachedTombstonesPendingPair(t *testing.T) {
 	all := time.NewVersionVector()
 	all.Set(actor, time.MaxLamport)
 	all.Set(peer, time.MaxLamport)
+	all.Set(keeperActor, keptUntil)
 	for _, r := range []*Root{doc, copied} {
 		_, err = r.GarbageCollect(all)
 		require.NoError(t, err)
@@ -2145,6 +2189,7 @@ func TestDeepCopyBooksTheRootsOwnTreePairs(t *testing.T) {
 	require.NoError(t, x.Append(d))
 	x.remove(tk(10))
 	a.remove(tk(20))
+	keepDetached(d)
 	// D, live, holds the ID, so the purge registers it as detached.
 	tree := NewTree(root, tk(5))
 	d.remove(tk(20))
@@ -2210,11 +2255,11 @@ func TestReleaseTicketDoesNotDependOnPurgeOrder(t *testing.T) {
 // TestALaterCollectionDropsADetachedSubtree pins the bound on the detached
 // state a purge leaves. x, removed, holds y, live, and t, a tombstone whose
 // own removal comes later. A collection at v purges x, releasing y and
-// leaving t detached with its pair pending, and keeps them for its own
-// remaining passes. The next, at the same v, which has seen every node in
-// the subtree created, lets the subtree go with t's pair, on the root and
-// on a copy made in between alike, and the ledger is what one derived from
-// the content reports; a position naming y then fails to resolve, as on a
+// leaving t detached with its pair pending, and keeps them, as y is stamped
+// merged in by a change v has not seen (see keepDetached). The next, which
+// has seen it, lets the subtree go with t's pair, on the root and on a copy
+// made in between alike, and the ledger is what one derived from the
+// content reports; a position naming y then fails to resolve, as on a
 // replica that keeps no detached nodes.
 func TestALaterCollectionDropsADetachedSubtree(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
@@ -2228,6 +2273,7 @@ func TestALaterCollectionDropsADetachedSubtree(t *testing.T) {
 	require.NoError(t, x.Append(y, tomb))
 	x.remove(tk(10))
 	tomb.remove(tk(30))
+	keepDetached(y)
 	tree := NewTree(root, tk(5))
 	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
 	doc.Object().Set("t", tree)
@@ -2248,8 +2294,10 @@ func TestALaterCollectionDropsADetachedSubtree(t *testing.T) {
 	require.NoError(t, err)
 	ct := copied.Object().Get("t").(*Tree)
 	require.NotNil(t, ct.DetachedNode(y.id), "the copy carries the subtree")
+	seen := at(20)
+	seen.Set(keeperActor, keptUntil)
 	for _, r := range []*Root{copied, doc} {
-		_, err = r.GarbageCollect(at(20))
+		_, err = r.GarbageCollect(seen)
 		require.NoError(t, err)
 	}
 	for _, tr := range []*Tree{tree, ct} {
@@ -2337,6 +2385,7 @@ func TestDroppingASubtreeUnlinksItsSplitSiblings(t *testing.T) {
 	a.InsNextID, b.InsPrevID = b.id, a.id
 	b.InsNextID, c.InsPrevID = c.id, b.id
 	x.remove(tk(10))
+	keepDetached(b)
 	tree := NewTree(root, tk(6))
 	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
 	doc.Object().Set("t", tree)
@@ -2352,7 +2401,9 @@ func TestDroppingASubtreeUnlinksItsSplitSiblings(t *testing.T) {
 	require.Same(t, b, tree.DetachedNode(b.id))
 	require.Equal(t, b.id, a.InsNextID, "a detached node stays in the chain")
 
-	_, err = doc.GarbageCollect(at(25))
+	seen := at(25)
+	seen.Set(keeperActor, keptUntil)
+	_, err = doc.GarbageCollect(seen)
 	require.NoError(t, err)
 	require.Nil(t, tree.DetachedNode(b.id))
 	assert.Equal(t, c.id, a.InsNextID, "a skips the dropped b")
@@ -2379,6 +2430,7 @@ func TestDroppingASubtreeDropsItsAttributePairs(t *testing.T) {
 	p.SetAttr("k", "v", tk(4))
 	p.RemoveAttr("k", time.NewTicket(50, 0, peer))
 	x.remove(tk(10))
+	keepDetached(p)
 	tree := NewTree(root, tk(5))
 	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
 	doc.Object().Set("t", tree)
@@ -2395,7 +2447,9 @@ func TestDroppingASubtreeDropsItsAttributePairs(t *testing.T) {
 	require.Same(t, p, tree.DetachedNode(p.id))
 	require.Equal(t, 2, doc.GarbageLen(), "p is held, released, and k's pair is pending")
 
-	_, err = doc.GarbageCollect(at(25))
+	seen := at(25)
+	seen.Set(keeperActor, keptUntil)
+	_, err = doc.GarbageCollect(seen)
 	require.NoError(t, err)
 	require.Nil(t, tree.DetachedNode(p.id))
 	copied, err := doc.DeepCopy()
@@ -2439,6 +2493,7 @@ func TestDroppingABornDeadSplitPieceKeepsTheLedger(t *testing.T) {
 	x.remove(removedAt)
 	p.remove(removedAt)
 	text.remove(time.NewTicket(50, 0, peer))
+	keepDetached(p)
 	tree := NewTree(root, tk())
 	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
 	doc.Object().Set("t", tree)
@@ -2464,7 +2519,9 @@ func TestDroppingABornDeadSplitPieceKeepsTheLedger(t *testing.T) {
 	require.Same(t, piece, tree.DetachedNode(piece.id))
 	require.Equal(t, 2, doc.GarbageLen(), "both pieces' pairs are pending")
 
-	_, err = doc.GarbageCollect(at(lamport))
+	seen := at(lamport)
+	seen.Set(keeperActor, keptUntil)
+	_, err = doc.GarbageCollect(seen)
 	require.NoError(t, err)
 	require.Nil(t, tree.DetachedNode(piece.id))
 	object, err := doc.Object().DeepCopy()
@@ -2608,7 +2665,7 @@ func TestDropDetachedStopsAtTheAttachedTree(t *testing.T) {
 
 	vector := time.NewVersionVector()
 	vector.Set(actor, 10)
-	assert.Empty(t, tree.dropDetached(vector))
+	assert.Empty(t, tree.dropDetached(vector, nil))
 	assert.Same(t, p, tree.findFloorNode(p.id), "the attached tree stays")
 	assert.Same(t, root, tree.findFloorNode(root.id))
 }
@@ -2685,6 +2742,7 @@ func TestDroppingReachesAReleasedNodeAnotherHoldsTheIDOf(t *testing.T) {
 	require.NoError(t, root.Append(x, a))
 	require.NoError(t, x.Append(b))
 	x.remove(tk(10))
+	keepDetached(b)
 	doc, tree := releaseFixture(t, root, tk(4))
 	require.Same(t, a, tree.findFloorNode(shared), "a holds the ID")
 
@@ -2699,6 +2757,7 @@ func TestDroppingReachesAReleasedNodeAnotherHoldsTheIDOf(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, doc.DocSize(), copied.DocSize())
 
+	vector.Set(keeperActor, keptUntil)
 	n, err := doc.GarbageCollect(vector)
 	require.NoError(t, err)
 	assert.Equal(t, 1, n, "the count takes in what the drop let go")
@@ -2728,6 +2787,7 @@ func TestARetainedBookingUnderATakenKeyIsKept(t *testing.T) {
 	require.NoError(t, x.Append(b))
 	x.remove(tk(10))
 	a.remove(time.NewTicket(50, 0, peer))
+	keepDetached(b)
 	doc, _ := releaseFixture(t, root, tk(4))
 	require.Equal(t, 2, doc.GarbageLen(), "x and a")
 
@@ -2753,6 +2813,7 @@ func TestARetainedBookingUnderATakenKeyIsKept(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, doc.DocSize(), rederived.DocSize())
 
+	vector.Set(keeperActor, keptUntil)
 	for _, r := range []*Root{doc, copied} {
 		_, err = r.GarbageCollect(vector)
 		require.NoError(t, err)
@@ -2782,6 +2843,7 @@ func TestDroppingAZeroSizedAttributePairKeepsGC(t *testing.T) {
 	p.SetAttr("k", "value", tk(4))
 	x.remove(tk(10))
 	p.remove(time.NewTicket(50, 0, peer))
+	keepDetached(p)
 	doc, tree := releaseFixture(t, root, tk(5))
 
 	// As RemoveStyle books it on a removed node: the dropped value leaves
@@ -2799,6 +2861,7 @@ func TestDroppingAZeroSizedAttributePairKeepsGC(t *testing.T) {
 	_, err = doc.GarbageCollect(vector)
 	require.NoError(t, err)
 	require.Same(t, p, tree.DetachedNode(p.id))
+	vector.Set(keeperActor, keptUntil)
 	_, err = doc.GarbageCollect(vector)
 	require.NoError(t, err)
 	require.Nil(t, tree.DetachedNode(p.id))
@@ -2853,6 +2916,7 @@ func TestCopyCarriesATopNoIndexedNodeHangsUnder(t *testing.T) {
 	require.NoError(t, root.Append(x, a))
 	require.NoError(t, x.Append(b))
 	x.remove(tk(10))
+	keepDetached(b)
 	doc, tree := releaseFixture(t, root, tk(4))
 	require.Same(t, a, tree.findFloorNode(shared))
 
@@ -2878,10 +2942,63 @@ func TestCopyCarriesATopNoIndexedNodeHangsUnder(t *testing.T) {
 	check("before the drop")
 	require.Equal(t, 1, doc.GarbageLen())
 
+	vector.Set(keeperActor, keptUntil)
 	for _, r := range []*Root{doc, copied} {
 		_, err = r.GarbageCollect(vector)
 		require.NoError(t, err)
 	}
 	require.Equal(t, 0, doc.GarbageLen(), "the root drops b")
 	check("after the drop")
+}
+
+// TestAForgedTicketDoesNotKeepADetachedSubtree pins the drop against a
+// ticket no change this replica applied carries: m, under x, is stamped
+// merged in by a phantom actor at a lamport no vector will reach. Every
+// honest node of the subtree is covered, and the replica's own version
+// vector, which knows every honest ticket of a node it holds, does not
+// know m's, so it counts as seen and the subtree goes. Trusting it would
+// keep the subtree, and its bytes in GC, for good.
+func TestAForgedTicketDoesNotKeepADetachedSubtree(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	phantom, err := time.ActorIDFromHex("0000000000000000000000ab")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	m := NewTreeNode(NewTreeNodeID(tk(3), 0), "p", nil)
+	m.MergedFrom, m.MergedAt = x.id, time.NewTicket(time.MaxLamport-1, 0, phantom)
+	require.NoError(t, root.Append(x))
+	require.NoError(t, x.Append(m))
+	x.remove(tk(10))
+	doc, tree := releaseFixture(t, root, tk(4))
+
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	known := time.NewVersionVector()
+	known.Set(actor, 30)
+	_, err = doc.GarbageCollect(vector)
+	require.NoError(t, err)
+	require.Same(t, m, tree.DetachedNode(m.id), "trusted, the forged merge keeps it")
+
+	_, err = doc.GarbageCollectKnown(vector, known)
+	require.NoError(t, err)
+	assert.Nil(t, tree.DetachedNode(m.id), "known does not know it: it counts as seen")
+	assert.Equal(t, 0, doc.GarbageLen())
+}
+
+// TestDeepCopyFailsForATreeItCannotFind pins that Root.DeepCopy fails when
+// the copy of its object holds no element for a Tree the root's element map
+// holds, which only a broken invariant gives, rather than handing back a
+// clone without that tree's detached state.
+func TestDeepCopyFailsForATreeItCannotFind(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+	stray := NewTree(NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil), tk(2))
+	doc.elementMap[stray.CreatedAt().Key()] = stray
+
+	_, err = doc.DeepCopy()
+	assert.ErrorIs(t, err, ErrTreeCopyShape)
 }

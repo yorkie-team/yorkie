@@ -233,8 +233,11 @@ func (d *InternalDocument) ApplyChangePack(pack *change.Pack, disableGC bool) er
 }
 
 // GarbageCollect purge elements that were removed before the given time.
+//
+// The document's own version vector goes with it, so a detached subtree a
+// forged ticket would keep is let go (see crdt.Root.GarbageCollectKnown).
 func (d *InternalDocument) GarbageCollect(vector time.VersionVector) (int, error) {
-	return d.root.GarbageCollect(vector)
+	return d.root.GarbageCollectKnown(vector, d.VersionVector())
 }
 
 // GarbageLen returns the count of removed elements.

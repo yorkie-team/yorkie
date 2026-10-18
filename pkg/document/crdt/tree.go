@@ -430,6 +430,7 @@ func (n *TreeNode) Split(
 						if split.detached && split.removedAt == nil {
 							split.remove(detachedRemovalOr(dest, split.id.CreatedAt))
 							diff.Meta += time.TicketSize
+							split.released = true
 						}
 					}
 				}
@@ -1872,15 +1873,19 @@ func subtreeOf(top *TreeNode) []*TreeNode {
 // seenWhole reports whether vector covers the creation of every node in
 // top's subtree, and the merge that moved in any that a merge did. A change
 // that has seen neither could still name the node: one concurrent with the
-// split that carried text into a subtree a removal took out does.
-func seenWhole(top *TreeNode, vector time.VersionVector) bool {
+// split that carried text into a subtree a removal took out does. A ticket
+// known, the replica's own version vector, does not know is forged and
+// counts as seen (see Root.GarbageCollectKnown).
+func seenWhole(top *TreeNode, vector, known time.VersionVector) bool {
+	seen := func(ticket *time.Ticket) bool {
+		return vector.EqualToOrAfter(ticket) || (known != nil && !time.TicketKnown(known, ticket))
+	}
 	stack := []*index.Node[*TreeNode]{top.Index}
 	for len(stack) > 0 {
 		current := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 		node := current.Value
-		if !vector.EqualToOrAfter(node.id.CreatedAt) ||
-			(node.MergedAt != nil && !vector.EqualToOrAfter(node.MergedAt)) {
+		if !seen(node.id.CreatedAt) || (node.MergedAt != nil && !seen(node.MergedAt)) {
 			return false
 		}
 		stack = append(stack, current.Children(true)...)
@@ -1890,10 +1895,10 @@ func seenWhole(top *TreeNode, vector time.VersionVector) bool {
 
 // dropDetached lets go of the subtrees a purge took out that vector has
 // seen whole (see seenWhole), and returns their nodes (see dropSubtrees).
-func (t *Tree) dropDetached(vector time.VersionVector) []*TreeNode {
+func (t *Tree) dropDetached(vector, known time.VersionVector) []*TreeNode {
 	var tops []*TreeNode
 	for _, top := range t.tops() {
-		if seenWhole(top, vector) {
+		if seenWhole(top, vector, known) {
 			tops = append(tops, top)
 		}
 	}

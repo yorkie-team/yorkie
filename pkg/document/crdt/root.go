@@ -20,6 +20,7 @@
 package crdt
 
 import (
+	"fmt"
 	"maps"
 
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
@@ -596,7 +597,11 @@ func (r *Root) DeepCopy() (*Root, error) {
 		}
 		copiedTree, ok := copied.elementMap[key].(*Tree)
 		if !ok {
-			continue
+			// The copy of the object holds every element the root's map
+			// does, so only a broken invariant gets here; a clone without
+			// the tree's detached state would resolve what the root does
+			// differently.
+			return nil, fmt.Errorf("copy of tree %s: %w", key, ErrTreeCopyShape)
 		}
 		treeCopies, err := copiedTree.copyDetachedFrom(tree)
 		if err != nil {
@@ -780,7 +785,20 @@ func (r *Root) Rederive() (*Root, error) {
 // The repeat also makes the result independent of Go's map iteration order,
 // which decides only how many passes it takes, not what ends up collected.
 func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
-	count := r.dropDetached(vector)
+	return r.GarbageCollectKnown(vector, nil)
+}
+
+// GarbageCollectKnown is GarbageCollect for a replica whose document knows
+// the changes in known, its own version vector. A detached subtree is let
+// go once vector has seen every node in it created and merged in (see
+// dropDetached), and a node this replica holds was created, and merged in,
+// by changes it applied, so known knows every honest ticket of one. A
+// ticket it does not know is forged, a phantom actor or a lamport no change
+// reached, and counts as seen: otherwise it would keep the subtree, and
+// its bytes in GC, for good. A nil known trusts every ticket. The root and
+// its clone are handed the same one.
+func (r *Root) GarbageCollectKnown(vector, known time.VersionVector) (int, error) {
+	count := r.dropDetached(vector, known)
 	for {
 		purged, deferred, err := r.collect(vector)
 		if err != nil {
@@ -789,17 +807,20 @@ func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 		count += purged
 
 		if purged == 0 || deferred == 0 {
-			return count, nil
+			break
 		}
 	}
+	// And after: a subtree this collection took out that its vector has
+	// already seen whole goes now, so one call leaves no garbage the next
+	// at the same vector would collect.
+	return count + r.dropDetached(vector, known), nil
 }
 
 // dropDetached lets go of the detached subtrees vector has seen whole, in
 // every Tree, with the pairs their nodes still hold (see Tree.dropDetached).
-// It runs before the collection, so a subtree outlives the collection that
-// took it out, for a change that names it after the purge, and its bytes
-// stay in GC until then (see TreeNode.released). It reports how many pairs
-// it dropped.
+// It runs before the collection, for subtrees earlier ones took out that
+// the vector has come to cover, and after it, for those it took out that
+// the vector covers already. It reports how many pairs it dropped.
 //
 // A purge at vector V comes after every change concurrent with the removal
 // it collects, by the protocol, but a change that is not concurrent with
@@ -810,10 +831,10 @@ func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 // fails to resolve, as on a replica that keeps no detached nodes. The rule
 // reads the subtree and the vector alone, so the root and its clone, which
 // collect at the same vectors, let go alike.
-func (r *Root) dropDetached(vector time.VersionVector) int {
+func (r *Root) dropDetached(vector, known time.VersionVector) int {
 	count := 0
 	for tree := range r.detachedTrees {
-		count += r.dropNodes(tree, tree.dropDetached(vector))
+		count += r.dropNodes(tree, tree.dropDetached(vector, known))
 		if len(tree.detachedTops) == 0 {
 			delete(r.detachedTrees, tree)
 		}
