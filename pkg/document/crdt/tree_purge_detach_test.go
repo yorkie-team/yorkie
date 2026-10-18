@@ -3291,3 +3291,162 @@ func TestAReleasedTreeStillNamedTracksWhatItsPurgesDetach(t *testing.T) {
 	assert.Empty(t, doc.detachedTrees)
 	assert.Equal(t, 0, doc.GarbageLen())
 }
+
+// TestDeepCopyPairsATreeWhoseKeyAnotherElementShares pins the pairing of a
+// Tree with its copy by its place in the object, not by createdAt: a
+// primitive in a nested object shares the key of a Tree that holds detached
+// state, so the copy's element map can answer that key with the primitive.
+// The copy must neither fail, which would fail every later Update and
+// snapshot build, nor lose the tree's detached state.
+func TestDeepCopyPairsATreeWhoseKeyAnotherElementShares(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	a := NewTreeNode(NewTreeNodeID(tk(3), 0), "p", nil)
+	require.NoError(t, root.Append(x))
+	require.NoError(t, x.Append(a))
+	x.remove(tk(10))
+	keepDetached(a)
+	doc, tree := releaseFixture(t, root, tk(6))
+	nested := NewObject(NewElementRHT(), tk(7))
+	value, err := NewPrimitive("v", tree.CreatedAt())
+	require.NoError(t, err)
+	nested.Set("s", value)
+	doc.Object().Set("o", nested)
+	doc.RegisterElement(nested, doc.Object())
+	require.IsType(t, &Primitive{}, doc.FindByCreatedAt(tree.CreatedAt()), "the key answers with the primitive")
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	_, err = doc.GarbageCollect(vector, nil)
+	require.NoError(t, err)
+	require.Same(t, a, tree.DetachedNode(a.id))
+
+	copied, err := doc.DeepCopy()
+	require.NoError(t, err, "a key shared with another element does not fail the copy")
+	var copiedTree *Tree
+	copied.Object().Descendants(func(elem Element, _ Container) bool {
+		if c, ok := elem.(*Tree); ok {
+			copiedTree = c
+		}
+		return false
+	})
+	require.NotNil(t, copiedTree)
+	assert.NotNil(t, copiedTree.DetachedNode(a.id), "the copy carries the tree's detached state")
+	assert.Equal(t, doc.DocSize(), copied.DocSize())
+	_, err = doc.Rederive()
+	assert.NoError(t, err)
+}
+
+// TestDroppingANodeRedeemsWhatWasHeldAsideForIt pins that DropGCPair gives
+// back the bytes bookRetained held aside for a node whose key another pair
+// held, though a pair of the node's own sits under the key since: both are
+// the node's, and both go with it. Only crafted duplicate IDs reach this.
+func TestDroppingANodeRedeemsWhatWasHeldAsideForIt(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	shared := NewTreeNodeID(tk(3), 0)
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	a := NewTreeNode(shared, "p", nil)
+	b := NewTreeNode(shared, "p", nil)
+	require.NoError(t, root.Append(a, b))
+	a.remove(tk(10))
+	b.remove(tk(10))
+	doc, tree := releaseFixture(t, root, tk(4))
+	sizeA := a.DataSize()
+	doc.gcNodePairMap = map[gcPairKey]GCPair{}
+	doc.docSize.GC = resource.DataSize{}
+	doc.RegisterGCPair(GCPair{Parent: tree, Child: a, GCOnlySize: &sizeA})
+	doc.bookRetained(GCPair{Parent: tree, Child: b})
+	require.Len(t, doc.retainedOff, 1, "b's bytes are held aside, a holds the key")
+	require.True(t, doc.DropGCPair(GCPair{Parent: tree, Child: a}))
+	sizeB := b.DataSize()
+	doc.RegisterGCPair(GCPair{Parent: tree, Child: b, GCOnlySize: &sizeB})
+
+	require.True(t, doc.DropGCPair(GCPair{Parent: tree, Child: b}))
+	assert.Empty(t, doc.retainedOff, "redeemed with the pair")
+	gc := doc.DocSize().GC
+	assert.Zero(t, (&gc).Total())
+}
+
+// TestDeepCopyKeepsOnePairPerKey pins copyTreePairs' booking over a pair
+// the scan booked under the same key: the root holds one pair per key,
+// here the one for a node out of the tree that shares an attached
+// tombstone's ID, and the copy, booking that one for a copy of the node,
+// gives back the scan's, so its GC is the root's.
+func TestDeepCopyKeepsOnePairPerKey(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	shared := NewTreeNodeID(tk(3), 0)
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	a := NewTreeNode(shared, "p", nil)
+	require.NoError(t, root.Append(a))
+	a.remove(tk(10))
+	doc, tree := releaseFixture(t, root, tk(4))
+	out := NewTreeNode(shared, "q", nil, "")
+	out.remove(tk(11))
+	out.detached = true
+	size := out.DataSize()
+	doc.gcNodePairMap[keyOf(GCPair{Parent: tree, Child: a})] = GCPair{Parent: tree, Child: out, GCOnlySize: &size}
+	sizeA := a.DataSize()
+	doc.docSize.GC.Sub(sizeA)
+	doc.docSize.GC.Add(size)
+	require.Equal(t, 1, doc.GarbageLen())
+
+	copied, err := doc.DeepCopy()
+	require.NoError(t, err)
+	assert.Equal(t, doc.GarbageLen(), copied.GarbageLen())
+	assert.Equal(t, doc.DocSize(), copied.DocSize())
+}
+
+// TestDroppingASubtreeRedirectsTheSlotsOfOnesKept pins dropSubtrees on a
+// kept subtree purged from a node of one it lets go: y was purged from x
+// after x's own purge, so y's slot names x. Dropping x's subtree points
+// y's slot at where it resolves, the root before q, so a position inside
+// y resolves the same, and a copy of the tree reaches nothing let go.
+func TestDroppingASubtreeRedirectsTheSlotsOfOnesKept(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	tk := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	root := NewTreeNode(NewTreeNodeID(tk(1), 0), "r", nil)
+	x := NewTreeNode(NewTreeNodeID(tk(2), 0), "div", nil)
+	y := NewTreeNode(NewTreeNodeID(tk(3), 0), "p", nil)
+	c := NewTreeNode(NewTreeNodeID(tk(4), 0), "text", nil, "c")
+	q := NewTreeNode(NewTreeNodeID(tk(5), 0), "q", nil)
+	require.NoError(t, root.Append(x, q))
+	require.NoError(t, x.Append(y))
+	require.NoError(t, y.Append(c))
+	x.remove(tk(10))
+	y.remove(tk(11))
+	keepDetached(c)
+	tree := NewTree(root, tk(6))
+	_, err = tree.purge(x)
+	require.NoError(t, err)
+	_, err = tree.purge(y)
+	require.NoError(t, err)
+	require.Same(t, x, y.purgedFrom, "y's slot names x")
+	want, err := tree.ToIndex(y, c)
+	require.NoError(t, err)
+
+	vector := time.NewVersionVector()
+	vector.Set(actor, 20)
+	dropped := tree.dropDetached(vector, nil)
+	require.Contains(t, dropped, x, "x's subtree, seen whole, goes")
+	require.NotContains(t, dropped, y, "y's is kept by c's merge")
+	assert.Same(t, root, y.purgedFrom, "y's slot is where it resolves")
+	assert.Same(t, q, y.purgedBefore)
+	got, err := tree.ToIndex(y, c)
+	require.NoError(t, err)
+	assert.Equal(t, want, got, "and resolves the same")
+
+	copied, err := tree.DeepCopy()
+	require.NoError(t, err)
+	ct := copied.(*Tree)
+	copies, err := ct.copyDetachedFrom(tree)
+	require.NoError(t, err)
+	_, copiedX := copies[x]
+	assert.False(t, copiedX, "a copy reaches nothing let go")
+}

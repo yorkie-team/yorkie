@@ -460,3 +460,32 @@ func TestAnHonestTicketOfASnapshotWithAnEmptyVectorIsKept(t *testing.T) {
 		assert.NotNil(t, treeOf(root).DetachedNode(text.ID()), "kept: C's ticket is honest")
 	}
 }
+
+// TestUpdateWithAKeyATreeShares pins that a document whose Tree shares its
+// createdAt key with an element elsewhere keeps working: every Update
+// rebuilds the clone with Root.DeepCopy, and a copy that failed there would
+// fail every later Update, and every snapshot build on the server.
+func TestUpdateWithAKeyATreeShares(t *testing.T) {
+	d := New("shared-key")
+	require.NoError(t, d.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "doc", Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+		}})
+		root.SetNewObject("o").SetString("s", "v")
+		return nil
+	}))
+	tree := d.doc.root.Object().Get("t").(*crdt.Tree)
+	nested := d.doc.root.Object().Get("o").(*crdt.Object)
+	value := nested.Get("s")
+	value.SetCreatedAt(tree.CreatedAt())
+	d.doc.root.RegisterElement(value, nested)
+	require.IsType(t, &crdt.Primitive{}, d.doc.root.FindByCreatedAt(tree.CreatedAt()))
+
+	d.invalidateClone()
+	require.NoError(t, d.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetString("k", "v")
+		return nil
+	}), "the clone is rebuilt")
+	_, err := d.doc.root.DeepCopy()
+	assert.NoError(t, err)
+}

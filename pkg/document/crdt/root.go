@@ -20,7 +20,7 @@
 package crdt
 
 import (
-	"fmt"
+	"errors"
 	"maps"
 
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
@@ -618,19 +618,14 @@ func (r *Root) DeepCopy() (*Root, error) {
 	all := make(map[*Tree]*Tree)
 	trees := make(map[*Tree]*Tree)
 	copies := make(map[*TreeNode]*TreeNode)
-	// Each Tree is paired with its copy by walking the root's object as
-	// NewRoot walks the copy's, not through elementMap: elementMap can hold
-	// a Tree the object no longer reaches, a member a peer added to a
-	// container this replica removed and an undo then replaced, and the
-	// copy holds nothing for such a tree, so it carries none of its state.
-	for key, tree := range reachableTrees(r.object) {
-		copiedTree, ok := copied.elementMap[key].(*Tree)
-		if !ok {
-			// The same walk over a copy reaches the same trees, so only a
-			// broken copy gets here; a clone without the tree's detached
-			// state would resolve what the root does differently.
-			return nil, fmt.Errorf("copy of tree %s: %w", key, ErrTreeCopyShape)
-		}
+	// Each Tree is paired with its copy by its place in the object, the two
+	// walked in lockstep, not through elementMap or by createdAt alone:
+	// elementMap can hold a Tree the object no longer reaches, a member a
+	// peer added to a container this replica removed and an undo then
+	// replaced, and a key can be shared, with another Tree or another kind
+	// of element. A Tree that does not pair keeps the pairs NewRoot's scan
+	// books for its copy and no detached state, as main's copy does.
+	for tree, copiedTree := range pairedTrees(r.object, copied.object) {
 		all[tree] = copiedTree
 		// A Tree with no detached state has nothing the scan misses but a
 		// pair whose node left the tree, which copyTreePairs books on its
@@ -639,6 +634,12 @@ func (r *Root) DeepCopy() (*Root, error) {
 			continue
 		}
 		treeCopies, err := copiedTree.copyDetachedFrom(tree)
+		if errors.Is(err, ErrTreeCopyShape) {
+			// Only a broken invariant gets here. The copy keeps the scan's
+			// pairs and no detached state, so a late change naming a node
+			// in a detached subtree fails on it rather than every copy.
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -658,18 +659,109 @@ func (r *Root) DeepCopy() (*Root, error) {
 	return copied, nil
 }
 
-// reachableTrees returns the Trees the object reaches by createdAt key, the
-// one a later visit reaches winning a key two share, as NewRoot's indexing
-// of the same object picks it (see registerLive).
-func reachableTrees(object *Object) map[string]*Tree {
-	trees := make(map[string]*Tree)
-	object.Descendants(func(elem Element, _ Container) bool {
-		if tree, ok := elem.(*Tree); ok {
-			trees[tree.CreatedAt().Key()] = tree
+// pairedTrees pairs each Tree the source object reaches with its copy in
+// copied, a copy of it, by place: an object's members by their member key
+// and createdAt, the n-th of several alike with the n-th, an array's
+// elements by their order in the list. A createdAt can be shared, with
+// another Tree or another kind of element, so it alone does not pair.
+func pairedTrees(source, copied *Object) map[*Tree]*Tree {
+	pairs := make(map[*Tree]*Tree)
+	pairElements(source, copied, pairs)
+	return pairs
+}
+
+// pairElements pairs from with to, its copy, and what they hold.
+func pairElements(from, to Element, pairs map[*Tree]*Tree) {
+	switch f := from.(type) {
+	case *Tree:
+		if t, ok := to.(*Tree); ok {
+			pairs[f] = t
 		}
-		return false
-	})
-	return trees
+	case *Object:
+		t, ok := to.(*Object)
+		if !ok {
+			return
+		}
+		type place struct{ key, createdAt string }
+		slots := make(map[place][]Element)
+		for _, node := range t.memberNodes.Nodes() {
+			at := place{node.Key(), node.Element().CreatedAt().Key()}
+			slots[at] = append(slots[at], node.Element())
+		}
+		for _, node := range f.memberNodes.Nodes() {
+			at := place{node.Key(), node.Element().CreatedAt().Key()}
+			if len(slots[at]) == 0 {
+				continue
+			}
+			pairElements(node.Element(), slots[at][0], pairs)
+			slots[at] = slots[at][1:]
+		}
+	case *Array:
+		t, ok := to.(*Array)
+		if !ok {
+			return
+		}
+		fromNodes, toNodes := f.elements.Nodes(), t.elements.Nodes()
+		if len(fromNodes) != len(toNodes) {
+			return
+		}
+		for i, node := range fromNodes {
+			if node.Element().CreatedAt().Compare(toNodes[i].Element().CreatedAt()) == 0 {
+				pairElements(node.Element(), toNodes[i].Element(), pairs)
+			}
+		}
+	}
+}
+
+// dropScanPairs takes out the pairs NewRoot's scan booked for the Trees
+// copyTreePairs pairs node by node, and for their nodes' attributes, with
+// their share of GC: those Trees book the source's own.
+func (r *Root) dropScanPairs(trees map[*Tree]*Tree, copies map[*TreeNode]*TreeNode) {
+	if len(trees) == 0 {
+		return
+	}
+	copiedTrees := make(map[GCParent]struct{}, len(trees))
+	for _, c := range trees {
+		copiedTrees[c] = struct{}{}
+	}
+	copiedNodes := make(map[*TreeNode]struct{}, len(copies))
+	for _, c := range copies {
+		copiedNodes[c] = struct{}{}
+	}
+	for key, pair := range r.gcNodePairMap {
+		_, owned := copiedTrees[pair.Parent]
+		if node, ok := pair.Parent.(*TreeNode); ok {
+			_, owned = copiedNodes[node]
+		}
+		if !owned {
+			continue
+		}
+		if pair.GCOnlySize != nil {
+			r.docSize.GC.Sub(*pair.GCOnlySize)
+		} else {
+			r.docSize.GC.Sub(pair.Child.DataSize())
+		}
+		delete(r.gcNodePairMap, key)
+	}
+}
+
+// bookCopiedPair books a pair copyTreePairs carries over, the child's size
+// to GC. A pair the scan booked under the key, for a node of the copied
+// tree that shares the ID of one out of it, gives its share back: the root
+// holds one pair per key, this one.
+func (r *Root) bookCopiedPair(parent GCParent, child GCChild) {
+	size := child.DataSize()
+	pair := GCPair{Parent: parent, Child: child, GCOnlySize: &size}
+	key := keyOf(pair)
+	if prev, ok := r.gcNodePairMap[key]; ok {
+		if prev.GCOnlySize != nil {
+			r.docSize.GC.Sub(*prev.GCOnlySize)
+		} else {
+			r.docSize.GC.Sub(prev.Child.DataSize())
+		}
+	}
+	r.gcNodePairMap[key] = pair
+	r.docSize.GC.Add(size)
 }
 
 // copyTreePairs replaces the pairs NewRoot's scan booked for the copied
@@ -686,39 +778,8 @@ func reachableTrees(object *Object) map[string]*Tree {
 // nodes to its copy, so one pass over each pair map does it all. A Tree with
 // no detached state keeps the scan's pairs.
 func (r *Root) copyTreePairs(src *Root, all, trees map[*Tree]*Tree, copies map[*TreeNode]*TreeNode) {
-	copiedTrees := make(map[GCParent]struct{}, len(trees))
-	for _, c := range trees {
-		copiedTrees[c] = struct{}{}
-	}
-	copiedNodes := make(map[*TreeNode]struct{}, len(copies))
-	for _, c := range copies {
-		copiedNodes[c] = struct{}{}
-	}
-	for key, pair := range r.gcNodePairMap {
-		if len(trees) == 0 {
-			break
-		}
-		_, owned := copiedTrees[pair.Parent]
-		if node, ok := pair.Parent.(*TreeNode); ok {
-			_, owned = copiedNodes[node]
-		}
-		if !owned {
-			continue
-		}
-		if pair.GCOnlySize != nil {
-			r.docSize.GC.Sub(*pair.GCOnlySize)
-		} else {
-			r.docSize.GC.Sub(pair.Child.DataSize())
-		}
-		delete(r.gcNodePairMap, key)
-	}
-
-	book := func(parent GCParent, child GCChild) {
-		size := child.DataSize()
-		pair := GCPair{Parent: parent, Child: child, GCOnlySize: &size}
-		r.gcNodePairMap[keyOf(pair)] = pair
-		r.docSize.GC.Add(size)
-	}
+	r.dropScanPairs(trees, copies)
+	book := r.bookCopiedPair
 	// copyOf answers the copy of a node, copying one no longer in its tree
 	// on its own. Only a node out of every tree has none: an attached one
 	// was copied with its tree.
@@ -801,12 +862,10 @@ func (r *Root) Rederive() (*Root, error) {
 		return nil, err
 	}
 	copied := NewRoot(copiedObject.(*Object))
-	for key, tree := range reachableTrees(r.object) {
-		copiedTree, ok := copied.elementMap[key].(*Tree)
-		if !ok {
-			return nil, fmt.Errorf("copy of tree %s: %w", key, ErrTreeCopyShape)
-		}
-		if _, err := copiedTree.copyDetachedFrom(tree); err != nil {
+	for tree, copiedTree := range pairedTrees(r.object, copied.object) {
+		if _, err := copiedTree.copyDetachedFrom(tree); errors.Is(err, ErrTreeCopyShape) {
+			continue
+		} else if err != nil {
 			return nil, err
 		}
 		// Walked from the tops, as the drop is, not from detachedByID, which
@@ -1201,21 +1260,23 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 // pair is registered under the key, or the one registered is another
 // child's, and the child holds no size in retainedOff either.
 func (r *Root) DropGCPair(pair GCPair) bool {
+	dropped := false
 	key := keyOf(pair)
-	p, ok := r.gcNodePairMap[key]
-	if !ok || p.Child != pair.Child {
-		if node, isNode := pair.Child.(*TreeNode); isNode {
-			if size, held := r.retainedOff[node]; held {
-				r.docSize.GC.Sub(size)
-				delete(r.retainedOff, node)
-				return true
-			}
-		}
-		return false
+	if p, ok := r.gcNodePairMap[key]; ok && p.Child == pair.Child {
+		r.docSize.GC.Sub(p.Child.DataSize())
+		delete(r.gcNodePairMap, key)
+		dropped = true
 	}
-	r.docSize.GC.Sub(p.Child.DataSize())
-	delete(r.gcNodePairMap, key)
-	return true
+	// Held aside under a key another pair took (see bookRetained), and
+	// redeemed whether or not a pair of the node's own sits under it since.
+	if node, isNode := pair.Child.(*TreeNode); isNode {
+		if size, held := r.retainedOff[node]; held {
+			r.docSize.GC.Sub(size)
+			delete(r.retainedOff, node)
+			dropped = true
+		}
+	}
+	return dropped
 }
 
 // UnregisterGCPair removes a GC pair whose child has been restored

@@ -1361,11 +1361,13 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 	return next.Value.id.CreatedAt
 }
 
-// Purge implements GCParent: it detaches child, with its subtree, from the
-// tree, releasing the live nodes under it as purgeChild does. It cannot
-// report their size; Root, which keeps the size ledger, purges through
-// purgeChild instead (see GCLiveRelease). See
-// TreeNode.detached for what a detached node is.
+// Purge implements GCParent: it detaches child, a tombstone, with its
+// subtree, from the tree, releasing the live nodes under it as purgeChild
+// does. A child that is not a tombstone is left where it is and nil
+// returned, as its GC pair claims a removal it does not have (see
+// purgeReleasing). It cannot report what it released; Root, which keeps
+// the size ledger, purges through purgeChild instead (see GCLiveRelease).
+// See TreeNode.detached for what a detached node is.
 func (t *Tree) Purge(child GCChild) error {
 	_, _, err := t.purgeReleasing(child.(*TreeNode))
 	return err
@@ -1922,6 +1924,28 @@ func (t *Tree) dropSubtrees(tops []*TreeNode) []*TreeNode {
 	for _, top := range tops {
 		nodes = append(nodes, subtreeOf(top)...)
 		delete(t.detachedTops, top)
+	}
+	// A subtree kept can have been purged from, or in front of, a node of
+	// one let go. Its slot is pointed at where it resolves, an attached
+	// parent and sibling, before the nodes go, so it resolves the same and
+	// nothing reaches what is let go through it.
+	if len(nodes) > 0 && len(t.detachedTops) > 0 {
+		gone := make(map[*TreeNode]struct{}, len(nodes))
+		for _, n := range nodes {
+			gone[n] = struct{}{}
+		}
+		for _, kept := range t.tops() {
+			_, fromGone := gone[kept.purgedFrom]
+			_, beforeGone := gone[kept.purgedBefore]
+			if !fromGone && !beforeGone {
+				continue
+			}
+			parent, before, ok := t.purgedSlot(kept)
+			if !ok {
+				parent, before = nil, nil
+			}
+			kept.purgedFrom, kept.purgedBefore = parent, before
+		}
 	}
 	// Every link is rewritten while all of them still resolve: a split
 	// link names its neighbour by ID, and the floor of one already let go
