@@ -783,6 +783,37 @@ func TestPurgedSlotOverPurgeOrders(t *testing.T) {
 	}
 }
 
+// TestPurgedSlotIsAChildOfItsParent pins that the sibling purgedSlot
+// returns is a child of the parent it returns, or nil for the end. A merge
+// that moved the sibling the subtree was purged in front of out of the
+// parent leaves the recorded one under another parent.
+func TestPurgedSlotIsAChildOfItsParent(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	lamport := int64(0)
+	next := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, actor)
+	}
+	mk := func(typ string, value ...string) *TreeNode {
+		return NewTreeNode(NewTreeNodeID(next(), 0), typ, nil, value...)
+	}
+	root, p, gone, s, q := mk("r"), mk("p"), mk("text", "ab"), mk("text", "cd"), mk("q")
+	require.NoError(t, root.Append(p, q))
+	require.NoError(t, p.Append(gone, s))
+	tree := NewTree(root, next())
+	gone.remove(next())
+	require.NoError(t, tree.Purge(gone))
+	require.Same(t, s, gone.purgedBefore)
+
+	require.NoError(t, p.Index.RemoveChild(s.Index))
+	require.NoError(t, q.Append(s))
+	parent, before, ok := tree.purgedSlot(gone)
+	require.True(t, ok)
+	assert.Same(t, p, parent)
+	assert.Nil(t, before, "s now sits under q")
+}
+
 // TestToTreePosReportsAPurgeWithoutASlot pins the guard behind #2008 now
 // that every purge records where it took a node from: a detached node with
 // no recorded purge above it fails the lookup with ErrNodeNotFound instead

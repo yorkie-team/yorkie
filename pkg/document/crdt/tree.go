@@ -1526,11 +1526,11 @@ func removedAncestorAt(node *TreeNode) *time.Ticket {
 // front of, nil for the end. A sibling purged since is passed over to the
 // one it sat in front of in turn, and a parent purged since resolves to its
 // own place, so the slot is always in the attached tree. A sibling that has
-// left the parent some other way, by a merge moving it out, is not found
-// among its children, and the caller then counts to the end, as for nil:
-// whether a replica that has not purged the subtree moved it along depends
-// on which side of the merging range it sat, which is not recorded. ok is false only
-// for a detached node with no purge recorded above it.
+// left the parent some other way, by a merge moving it out, is no child of
+// it, and the slot is then the end, as for nil: whether a replica that has
+// not purged the subtree moved it along depends on which side of the
+// merging range it sat, which is not recorded. ok is false only for a
+// detached node with no purge recorded above it.
 func (t *Tree) purgedSlot(node *TreeNode) (*TreeNode, *TreeNode, bool) {
 	// The recorded parents and siblings of honest purges never loop, but a
 	// node can be placed under a subtree it was purged from; a walk that
@@ -1560,6 +1560,9 @@ func (t *Tree) purgedSlot(node *TreeNode) (*TreeNode, *TreeNode, bool) {
 			before = before.purgedBefore
 		}
 		if !parent.detached {
+			if before != nil && before.Index.Parent != parent.Index {
+				before = nil
+			}
 			return parent, before, true
 		}
 		top = parent
