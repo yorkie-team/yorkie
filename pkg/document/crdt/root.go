@@ -806,35 +806,17 @@ func (r *Root) ChargeTreeOp(tree *Tree) func() {
 // which counts a removed element in GC whole, has them, so an operation on
 // the content, a revive, a recreate, an insert or a style, moves them there
 // and not to Live (yorkie#2251). Pairs the operation booked keep their own
-// part of GC; only the Live side moves. A live element is left as it is.
+// part of GC; only the Live side moves.
 //
-// A zero charge is not a charge: release records one to say neither side of
-// the ledger holds a released element any more, and index retires that record
-// only while it is still exactly zero (see release and index). Such an element
-// is orphaned -- displaced from the container that addressed it -- so a
-// rebuild, which derives the ledger from the document's content, counts it on
-// neither side, and the operation's delta belongs on neither either. Topping
-// the record up would make it indistinguishable from a tombstone's own charge
-// and leave the released subtree uncollectable; leaving the delta in Live
-// would charge Live for bytes release has already taken out of it, and a
-// delete inside the orphan would then subtract those bytes a second time and
-// drive the recorded live size below the real one -- under the limit
-// CheckLiveSize reads, which only Live feeds. So the delta is dropped: Live
-// goes back to liveBefore and the record stays exactly zero.
+// Where the delta lands is chargeToElement's decision, the same one
+// AccMovedElement makes for a move: a live element keeps it in Live, a
+// removed one takes it onto its charge, and a released orphan, whose zero
+// record says neither side holds it, drops it.
 func (r *Root) ChargeToRemovedElement(elem Element, liveBefore resource.DataSize) {
-	charged, ok := r.sizeInGC[elem]
-	if !ok {
-		return
-	}
 	delta := r.docSize.Live
 	delta.Sub(liveBefore)
 	r.docSize.Live = liveBefore
-	if charged == (resource.DataSize{}) {
-		return
-	}
-	r.docSize.GC.Add(delta)
-	charged.Add(delta)
-	r.sizeInGC[elem] = charged
+	r.chargeToElement(elem, delta)
 }
 
 // AccMovedElement books the diff a move stamped on the given element into the
@@ -844,21 +826,46 @@ func (r *Root) ChargeToRemovedElement(elem Element, liveBefore resource.DataSize
 // already a tombstone -- the ordinary outcome of a concurrent remove and move --
 // is not: a rebuild charges a tombstone's whole DataSize, movedAt included, to
 // GC, so Live would keep the ticket forever while a rebuild put it in GC.
-//
-// The recorded charge has to rise with it. deregisterElement subtracts exactly
-// what sizeInGC recorded when the tombstone is collected, so a GC top-up that
-// left the record alone would only move the stray bytes from Live to GC. An
-// element with no record is one Live is still holding (deregisterElement makes
-// the same split), so it is charged to Live.
 func (r *Root) AccMovedElement(elem Element, diff resource.DataSize) {
-	if elem == nil || elem.RemovedAt() == nil {
+	if elem == nil {
 		r.docSize.Live.Add(diff)
 		return
 	}
+	r.chargeToElement(elem, diff)
+}
 
+// chargeToElement books diff into the ledger side that is actually holding the
+// given element's bytes, which is the one decision ChargeToRemovedElement and
+// AccMovedElement both make.
+//
+// An element with no charge of its own is one Live is holding --
+// deregisterElement and release make the same split -- so its diff goes to
+// Live. One with a charge is in GC, because it is a tombstone, because a
+// container above it is removed or because it was born under one, so its diff
+// goes to GC. The recorded charge has to rise with it: deregisterElement
+// subtracts exactly what sizeInGC recorded when the element is collected, so a
+// GC top-up that left the record alone would only move the stray bytes from
+// Live to GC.
+//
+// A zero charge is not a charge: release records one to say neither side of
+// the ledger holds a released element any more, and index retires that record
+// only while it is still exactly zero (see release and index). Such an element
+// is orphaned -- displaced from the container that addressed it -- so a
+// rebuild, which derives the ledger from the document's content, counts it on
+// neither side, and the diff belongs on neither either. Topping the record up
+// would make it indistinguishable from a tombstone's own charge and leave the
+// released subtree uncollectable; charging Live would charge it for bytes
+// release has already taken out of it, and a delete inside the orphan would
+// then subtract those bytes a second time and drive the recorded live size
+// below the real one -- under the limit CheckLiveSize reads, which only Live
+// feeds. So the diff is dropped.
+func (r *Root) chargeToElement(elem Element, diff resource.DataSize) {
 	charged, ok := r.sizeInGC[elem]
 	if !ok {
 		r.docSize.Live.Add(diff)
+		return
+	}
+	if charged == (resource.DataSize{}) {
 		return
 	}
 

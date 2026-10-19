@@ -539,12 +539,25 @@ both. The two orders still disagree on whether the element is live, because
 applies the restore second; that is the pre-existing gap between an
 identity revive and a concurrent remove, not the lineage.
 
-This rule, like `Restore`'s rule of leaving a node a tombstone under a
-removal the change knew (`Tree.knownRemovalAbove`), trusts the pushed
-change's version vector: a forged one that claims a concurrent merge or
-removal makes the outcome depend on the order replicas apply the two, and
-closing that needs the server to validate pushed version vectors
-(#2234).
+This rule trusts the pushed change's version vector: a forged one that claims
+a concurrent merge or removal makes the outcome depend on the order replicas
+apply the two, and closing that needs the server to validate pushed version
+vectors (#2234).
+
+**Every rule here reads the same untrusted vector.** The vector is whatever
+the pushing client put on the wire, and the server does not validate it, so
+each rule that reads one is a place a forged vector steers persisted state:
+the dissolution above (`Tree.dissolveMergeSources`, which clears `MergedFrom`
+and `MergedAt`), `Tree.knownRemovalAbove` (whether a span is revived or stays
+a tombstone), rung (a) of the recreate rule (`Tree.concurrentSplitHome`,
+which element a recreated range lands under) and the retombstone cascade.
+None of them lets a change reach content it could not otherwise address —
+each decides only how the change's own spans resolve, and the worst outcome
+is the one a lagging honest vector already produces: replicas that disagree
+on the shape until a later edit, which is what the divergence classes below
+record. The gap is the validation itself, which is the server's to add
+(#2234); until it does, a client that lies about what it has seen is a
+client that can diverge its own document.
 
 A snapshot written before this fix can still carry undissolved stamps that
 name a revived, live source. They stay inert while it is live; if a later

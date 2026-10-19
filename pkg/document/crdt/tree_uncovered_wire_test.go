@@ -29,11 +29,25 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
-// TestUncoveredTextSpansSurviveTheWire pins that every part uncoveredTextSpans
-// emits has a Length equal to the UTF-16 length of its Value, which the wire
-// decoder requires of a text span, so a reverse operation carrying the parts
-// round-trips through the converter. The spans cover a surrogate pair cut by
-// a cover and a span whose Value holds fewer code units than its Length.
+// wantPart is one part uncoveredTextSpans is expected to emit: the offset and
+// length it recreates, the text it carries and the anchors on either side, with
+// noAnchor for an end that keeps the original span's own anchor.
+type wantPart struct {
+	offset, length int
+	value          string
+	left, right    int
+}
+
+const noAnchor = -1
+
+// TestUncoveredTextSpansSurviveTheWire pins the parts uncoveredTextSpans emits
+// one by one -- offset, length, text and both anchors -- so a part it drops or
+// a text it corrupts fails here, and then that the parts round-trip through the
+// converter: the wire decoder requires a text span's Length to be the UTF-16
+// length of its Value, so a reverse operation carrying one that is not could
+// not be decoded. The cases cover an ordinary two-part split, a cover that cuts
+// a surrogate pair and a span whose Value holds fewer code units than its
+// Length claims.
 func TestUncoveredTextSpansSurviveTheWire(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
@@ -50,16 +64,58 @@ func TestUncoveredTextSpansSurviveTheWire(t *testing.T) {
 		name   string
 		span   *crdt.TreeRestoreSpan
 		covers [][2]int
-		parts  int
+		want   []wantPart
 	}{
-		{"a cover inside a surrogate pair", text(4, "a😀b"), [][2]int{{2, 3}}, 2},
-		{"a Value shorter than its Length", text(4, "ab"), [][2]int{{1, 2}}, 1},
+		{
+			// Both sides of the cover come back, the far side anchored on the
+			// covered character in front of it.
+			"a cover in the middle", text(4, "abcd"), [][2]int{{1, 2}},
+			[]wantPart{
+				{offset: 0, length: 1, value: "a", left: noAnchor, right: 1},
+				{offset: 2, length: 2, value: "cd", left: 1, right: noAnchor},
+			},
+		},
+		{
+			// The pair goes whole to the part holding its leading half rather
+			// than decoding to a replacement character on either side of the
+			// cut; the second part starts past it.
+			"a cover inside a surrogate pair", text(4, "a😀b"), [][2]int{{2, 3}},
+			[]wantPart{
+				{offset: 0, length: 3, value: "a😀", left: noAnchor, right: 3},
+				{offset: 3, length: 1, value: "b", left: 2, right: noAnchor},
+			},
+		},
+		{
+			// Offsets [2,4) name content this Value does not carry -- a shape
+			// the wire rejects, since it requires Length to be the UTF-16
+			// length of Value -- so the gap over them describes nothing and
+			// emits no part. Only the part the Value does cover comes back.
+			"a Value shorter than its Length", text(4, "ab"), [][2]int{{1, 2}},
+			[]wantPart{{offset: 0, length: 1, value: "a", left: noAnchor, right: 1}},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			parts := crdt.UncoveredTextSpansForTest(tc.span, tc.covers)
-			require.Len(t, parts, tc.parts)
-			for _, part := range parts {
+			require.Len(t, parts, len(tc.want))
+			for i, want := range tc.want {
+				part := parts[i]
+				assert.Equal(t, want.offset, part.ID.Offset, "part %d offset", i)
+				assert.Equal(t, want.length, part.Length, "part %d length", i)
+				assert.Equal(t, want.value, part.Value, "part %d value", i)
 				assert.Equal(t, len(utf16.Encode([]rune(part.Value))), part.Length, part.Value)
+
+				if want.left == noAnchor {
+					assert.Equal(t, tc.span.LeftSiblingID, part.LeftSiblingID, "part %d left", i)
+				} else {
+					require.NotNil(t, part.LeftSiblingID, "part %d left", i)
+					assert.Equal(t, want.left, part.LeftSiblingID.Offset, "part %d left", i)
+				}
+				if want.right == noAnchor {
+					assert.Equal(t, tc.span.RightSiblingID, part.RightSiblingID, "part %d right", i)
+				} else {
+					require.NotNil(t, part.RightSiblingID, "part %d right", i)
+					assert.Equal(t, want.right, part.RightSiblingID.Offset, "part %d right", i)
+				}
 			}
 
 			at := time.NewTicket(10, 0, actor)

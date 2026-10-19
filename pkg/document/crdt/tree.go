@@ -23,6 +23,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf16"
 
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
@@ -1915,23 +1916,46 @@ func uncoveredTextSpans(span *TreeRestoreSpan, covers [][2]int) []*TreeRestoreSp
 	encoded := utf16.Encode([]rune(span.Value))
 	parts := make([]*TreeRestoreSpan, 0, len(gaps))
 	for _, gap := range gaps {
-		from, to := min(gap[0]-start, len(encoded)), min(gap[1]-start, len(encoded))
+		from := pastSurrogateTail(encoded, min(gap[0]-start, len(encoded)))
+		to := pastSurrogateTail(encoded, min(gap[1]-start, len(encoded)))
 		if from >= to {
 			continue
 		}
 		part := *span.copy()
-		part.ID = &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: gap[0]}
+		part.ID = &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: start + from}
 		part.Length = to - from
 		part.Value = string(utf16.Decode(encoded[from:to]))
-		if gap[0] > start {
-			part.LeftSiblingID = &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: gap[0] - 1}
+		if from > 0 {
+			part.LeftSiblingID = &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: start + from - 1}
 		}
-		if gap[1] < end {
-			part.RightSiblingID = &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: gap[1]}
+		if start+to < end {
+			part.RightSiblingID = &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: start + to}
 		}
 		parts = append(parts, &part)
 	}
 	return parts
+}
+
+// pastSurrogateTail moves an index that falls on the trailing half of a
+// surrogate pair past that pair, and leaves every other index as it is.
+//
+// uncoveredTextSpans slices Value by UTF-16 index, and a slice that cuts a
+// pair decodes to a replacement character on both sides of the cut, which
+// would have the reverse operation write text the forward one never did.
+// Moving both ends of every gap the same way keeps the parts disjoint and in
+// order: the character goes to the part that holds its leading half, and a
+// part that would begin on the trailing half alone skips it rather than
+// recreating half a character. A cover is another text span's own offset
+// range and split refuses a mid-pair index (ErrInvalidUTF16Index), so this
+// guards a shape no replica should reach rather than one it does.
+func pastSurrogateTail(encoded []uint16, at int) int {
+	if at <= 0 || at >= len(encoded) {
+		return at
+	}
+	if utf16.DecodeRune(rune(encoded[at-1]), rune(encoded[at])) == unicode.ReplacementChar {
+		return at
+	}
+	return at + 1
 }
 
 // retombstoneUnknownSplitSiblings applies the §4.1 cascade to an element
