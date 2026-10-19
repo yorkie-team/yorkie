@@ -789,6 +789,37 @@ func (r *Root) Acc(diff resource.DataSize) {
 	r.docSize.Live.Add(diff)
 }
 
+// ChargeTreeOp starts an operation on tree's content and returns the func
+// that ends it, for a defer: whatever the operation nets in Live goes to
+// the tree's GC charge when the tree is removed (see ChargeToRemovedElement).
+// Every path that writes tree content calls it, the local proxy and the
+// operations a change replays alike, so the root and its clone book the
+// same operation the same way.
+func (r *Root) ChargeTreeOp(tree *Tree) func() {
+	liveBefore := r.docSize.Live
+	return func() { r.ChargeToRemovedElement(tree, liveBefore) }
+}
+
+// ChargeToRemovedElement moves what Live gained or lost since liveBefore to
+// the GC charge of elem when elem is itself in GC, removed or under a
+// removed container: its content's bytes are in that charge, as a rebuild,
+// which counts a removed element in GC whole, has them, so an operation on
+// the content, a revive, a recreate, an insert or a style, moves them there
+// and not to Live (yorkie#2251). Pairs the operation booked keep their own
+// part of GC; only the Live side moves. A live element is left as it is.
+func (r *Root) ChargeToRemovedElement(elem Element, liveBefore resource.DataSize) {
+	charged, ok := r.sizeInGC[elem]
+	if !ok {
+		return
+	}
+	delta := r.docSize.Live
+	delta.Sub(liveBefore)
+	r.docSize.Live = liveBefore
+	r.docSize.GC.Add(delta)
+	charged.Add(delta)
+	r.sizeInGC[elem] = charged
+}
+
 // AccMovedElement books the diff a move stamped on the given element into the
 // ledger that is actually holding that element's bytes.
 //

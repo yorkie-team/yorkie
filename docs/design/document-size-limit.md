@@ -110,6 +110,17 @@ replica:
   been added to it, so `Live`, the figure the server's
   `MaxSizePerDocument` gate reads, fell below a rebuild by that content
   (`TestTreeInsertUnderARemovedParentKeepsLive`).
+- **Content of a removed Tree element.** An edit or a style inside a Tree
+  element that is itself removed, a revive, a recreate or an insert,
+  charges what it makes live to the element's GC charge, not to `Live`, as
+  a rebuild counts a removed element in GC whole (`Root.ChargeTreeOp`,
+  which the local proxy and the replayed operations share,
+  `TestTreeOpsInsideARemovedTreeElement`,
+  `TestLocalTreeOpsOnARemovedElementKeepTheCloneWithTheRoot`, yorkie#2251);
+  main charged it to `Live`, which kept it for good. The charge is exact
+  for a Tree that has one: a Tree a peer adds into a container already
+  removed never went through a removal, has no charge, and sits in `Live`,
+  edits to it included, until its container is collected, as on main.
 
 **Unknown admits.** A zero `live_size` — no snapshot yet, a snapshot written
 before the field existed, or a document just compacted — admits the push. The
