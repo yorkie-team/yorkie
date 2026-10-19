@@ -2030,11 +2030,17 @@ func (t *Tree) Edit(
 	var info TreeEditReverseInfo
 
 	// Phase 1: Position Resolution — resolve CRDTTreePos to tree nodes.
-	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt)
+	// Only an empty range is a pure insert position (§1.3); both ends of a
+	// non-empty range are boundaries its client drew around whole elements.
+	mode := BoundaryInsert
+	if from.ParentID.Equal(to.ParentID) && from.LeftSiblingID.Equal(to.LeftSiblingID) {
+		mode = BoundaryPureInsert
+	}
+	fromParent, fromLeft, diffFrom, err := t.FindTreeNodesWithSplitText(from, editedAt, mode)
 	if err != nil {
 		return t.drainPendingGCPairs(), diff, info, err
 	}
-	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt)
+	toParent, toLeft, diffTo, err := t.FindTreeNodesWithSplitText(to, editedAt, mode)
 	if err != nil {
 		diff.Add(diffFrom)
 		return t.drainPendingGCPairs(), diff, info, err
@@ -2558,24 +2564,74 @@ func (t *Tree) reversedFromAnchorRecovery(
 // crafted chain that loops back on itself, and a text link cuts it because an
 // element is never split off a text node.
 func (t *Tree) isSplitProductOf(node, origin *TreeNode) bool {
-	current := node
-	var walker insNextWalker
-	walker.visit(current)
-	for current != nil {
-		if current == origin {
-			return true
+	return t.splitLineageOf(origin).reaches(node)
+}
+
+// splitLineage answers, for one origin, whether nodes were split off it,
+// memoizing every node a walk back along InsPrevID visits. It is the one
+// implementation of that walk: isSplitProductOf asks it once, and step 04
+// asks it for every sibling of one position, where the products of repeated
+// splits at one anchor are both the siblings and the links of the chain, so
+// the memo keeps those questions at O(siblings + chain) in all.
+type splitLineage struct {
+	tree  *Tree
+	known map[*TreeNode]bool
+}
+
+// splitLineageOf returns the split lineage of origin.
+func (t *Tree) splitLineageOf(origin *TreeNode) *splitLineage {
+	return &splitLineage{tree: t, known: map[*TreeNode]bool{origin: true}}
+}
+
+// reaches reports whether walking InsPrevID back from node arrives at the
+// origin. The walk may start at a text node, but only ever steps onto an
+// element: an element is never split off a text node. A crafted chain that
+// loops back on itself reaches no origin.
+func (l *splitLineage) reaches(node *TreeNode) bool {
+	var path []*TreeNode
+	onPath := make(map[*TreeNode]struct{})
+	answer := false
+	for current := node; ; {
+		if result, ok := l.known[current]; ok {
+			answer = result
+			break
 		}
+		if _, ok := onPath[current]; ok {
+			break
+		}
+		path = append(path, current)
+		onPath[current] = struct{}{}
+
 		if current.InsPrevID == nil {
-			return false
+			break
 		}
-		prev := t.findFloorNode(current.InsPrevID)
-		if prev == nil || prev.IsText() || !walker.visit(prev) {
-			return false
+		prev := l.tree.findFloorNode(current.InsPrevID)
+		if prev == nil || prev.IsText() {
+			break
 		}
 		current = prev
 	}
+	for _, n := range path {
+		l.known[n] = answer
+	}
+	return answer
+}
 
-	return false
+// splitProductTest returns a test for whether a sibling the step-04 walk of
+// FindTreeNodesWithSplitText is about to pass was split off left, the element
+// the position anchors on, sharing one splitLineage across the walk. Only an
+// element sibling with an InsPrevID can be one, and only an element anchor has
+// split products; a left-most position anchors on its parent, not on a
+// sibling.
+func (t *Tree) splitProductTest(left *TreeNode, isLeftMost bool) func(next *TreeNode) bool {
+	if isLeftMost || left.IsText() {
+		return func(*TreeNode) bool { return false }
+	}
+
+	lineage := t.splitLineageOf(left)
+	return func(next *TreeNode) bool {
+		return !next.IsText() && next.InsPrevID != nil && lineage.reaches(next)
+	}
 }
 
 // declaredAncestryHas walks the CURRENT ancestry of the element a position
@@ -4292,6 +4348,13 @@ const (
 	// tombstone, so a style range neither grows over nor shrinks past
 	// nodes concurrently inserted at that anchor.
 	BoundaryRange
+
+	// BoundaryPureInsert is a pure insert position, both ends of an empty
+	// Edit range. It resolves as BoundaryInsert does, and step 04 also passes
+	// over a split product of the left element (§1.3): only a pure insert
+	// lands between the element and its product. A caller has to ask for it;
+	// one that does not keeps the plain walk.
+	BoundaryPureInsert
 )
 
 // FindTreeNodesWithSplitText finds TreeNode of the given crdt.TreePos and
@@ -4389,11 +4452,37 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 		idx = realParentNode.Index.OffsetOfChild(leftNode.Index) + 1
 	}
 
+	// A split product of the left element is not a concurrent insert at this
+	// position even though its createdAt is newer: it is the right half of the
+	// element the position names, and §7.4 places a position after the left
+	// half before that right half. Taking it as the anchor would move the
+	// position past content the editor saw on the far side of the element.
+	//
+	// Passed over rather than walked away from: the product is skipped as an
+	// anchor, but the walk continues through it. Ending the walk here would
+	// also hide the genuine concurrent inserts that follow it, which a replica
+	// that has not applied the split still walks past -- it sees them as
+	// siblings of the unsplit element -- so the two sides would anchor the
+	// same insert on different nodes.
+	//
+	// Only a pure insert position does this (BoundaryPureInsert). Any other
+	// boundary after the element -- a style range's (BoundaryRange) or
+	// either end of a non-empty Edit range (BoundaryInsert) -- was drawn
+	// after the whole element its client saw, unsplit, so the walk takes the
+	// product as it always has, and the caller's split handling starts from
+	// there.
+	var isSplitProduct func(*TreeNode) bool
+	if mode == BoundaryPureInsert {
+		isSplitProduct = t.splitProductTest(leftNode, isLeftMost)
+	}
 	parentChildren := realParentNode.Index.Children(true)
 	for i := idx; i < len(parentChildren); i++ {
 		next := parentChildren[i].Value
 		if !next.id.CreatedAt.After(editedAt) {
 			break
+		}
+		if isSplitProduct != nil && isSplitProduct(next) {
+			continue
 		}
 		leftNode = next
 	}
