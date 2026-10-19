@@ -24,6 +24,7 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/key"
@@ -35,6 +36,11 @@ import (
 // by operation kind alone and is conservative: only removals are known not to
 // grow. A change with no operations (presence-only) cannot grow the root.
 //
+// An identity-preserving edit revives one of its two span sets and removes
+// the other, and its restore mode says which: a retombstone-mode edit revives
+// its retombstone spans (see TreeEdit.Execute and Edit.Execute). It can grow
+// the document when the set its mode revives is not empty.
+//
 // A deletion can still add a little node metadata where it splits a text or
 // tree node at the range boundary. That growth is bounded by the content
 // already in the document, since each position can be deleted only once.
@@ -44,11 +50,19 @@ func canGrow(cn *change.Change) bool {
 		case *operations.Remove:
 			continue
 		case *operations.Edit:
-			if o.Content() == "" && len(o.Attributes()) == 0 && len(o.RestoreSpans()) == 0 {
+			revived := len(o.RestoreSpans())
+			if o.RestoreMode() == crdt.RestoreModeRetombstone {
+				revived = len(o.RetombstoneSpans())
+			}
+			if o.Content() == "" && len(o.Attributes()) == 0 && revived == 0 {
 				continue
 			}
 		case *operations.TreeEdit:
-			if len(o.Contents()) == 0 && o.SplitLevel() == 0 && len(o.RestoreSpans()) == 0 {
+			revived := len(o.RestoreSpans())
+			if o.RestoreMode() == crdt.RestoreModeRetombstone {
+				revived = len(o.RetombstoneSpans())
+			}
+			if len(o.Contents()) == 0 && o.SplitLevel() == 0 && revived == 0 {
 				continue
 			}
 		}
