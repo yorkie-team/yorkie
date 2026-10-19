@@ -121,6 +121,17 @@ replica:
   for a Tree that has one: a Tree a peer adds into a container already
   removed never went through a removal, has no charge, and sits in `Live`,
   edits to it included, until its container is collected, as on main.
+- **Content of a released Tree element.** A restore under a `createdAt` a
+  tombstone already answers to orphans that tombstone's subtree: `release`
+  takes its bytes out of whichever side was holding them and records a zero
+  charge, and a rebuild, which can reach the orphan from nothing, counts it
+  on neither side. An edit inside it is charged to neither. Not to `GC`:
+  that would top the release record up past zero, make it
+  indistinguishable from a tombstone's own charge and leave the subtree
+  uncollectable (`index`). Not to `Live` either: a delete there would
+  subtract bytes `release` has already taken out, dropping the figure the
+  gate reads below the real live size, so the orphan's delta is dropped
+  (`TestChargeToRemovedElementKeepsAReleaseRecordZero`).
 
 **Unknown admits.** A zero `live_size` — no snapshot yet, a snapshot written
 before the field existed, or a document just compacted — admits the push. The

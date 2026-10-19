@@ -3,7 +3,7 @@
   "id": "gen-all-193-min",
   "issues": ["yorkie#2099"],
   "status": { "go": "known-fail", "js": "known-fail" },
-  "note": "Minimised from gen-all-n2-s24-193 (a parity all row). Off mode converges on <doc><p></p></doc>; minvv mode does not (I4 fails). Likely cause: a merge or split rule depends on tombstones GC has collected on one replica only.",
+  "note": "Minimised from gen-all-n2-s24-193 (a parity all row). Off mode converges on <doc><p></p></doc>; minvv mode does not (I4 fails). Likely cause: a merge or split rule depends on tombstones GC has collected on one replica only. Not of the lagging-minVV class: it fails under the ordinary minvv mode, on main's rules too, and the class is recorded under the Known divergence heading for an anchor resolved through a collected tombstone in docs/design/concurrent-merge-split.md.",
   "replicas": 2,
   "init": "abcd",
   "steps": [
