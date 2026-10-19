@@ -2640,6 +2640,8 @@ func (t *Tree) visibleRangeOf(node *TreeNode) (from, to int, ok bool) {
 		}
 	}
 
+	// A reported index, of a node every ancestor of which is live (checked
+	// above), so rangeIndex would answer the same.
 	to, err := t.ToIndex(node.Index.Parent.Value, node)
 	if err != nil || to < 0 {
 		return 0, 0, false
@@ -3644,6 +3646,9 @@ func (t *Tree) Edit(
 	// Gated, not moved: the capture point stays exactly here for every caller
 	// that does need it. Only the caller that reads nothing back skips it.
 	if needsReverseInfo {
+		// A reported index, in the visible-index space the undo/redo
+		// reconciliation adjusts other stack entries in, as JS's
+		// preEditFromIdx is; it selects no content itself.
 		preEditFromIdx, err := t.ToIndex(fromParent, fromLeft)
 		if err != nil {
 			return t.drainPendingGCPairs(), diff, info, err
@@ -4114,11 +4119,15 @@ func (t *Tree) reversedFromAnchorRecovery(
 	// exactly on the end one, and covering nothing loses the client's range
 	// just as completely as covering it backwards. Unless the client's own
 	// range was empty, in which case covering nothing is right.
-	fromIdx, err := t.ToIndex(fromParent, fromLeft)
+	//
+	// Range ends: whether the range collapsed is decided by the resolver the
+	// traversal it guards uses (traverseInPosRange), or the two can disagree
+	// on the order of the same ends.
+	fromIdx, err := t.rangeIndex(fromParent, fromLeft, false)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	toIdx, err := t.ToIndex(toParent, toLeft)
+	toIdx, err := t.rangeIndex(toParent, toLeft, false)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -4312,6 +4321,8 @@ func (t *Tree) beginsAtOrInside(node, declaredFromParent, declaredFromLeft *Tree
 	if err != nil {
 		return false
 	}
+	// Counted with tombstones, against nodeIdx, which is too; rangeIndex
+	// differs from ToIndex only when tombstones are left out.
 	declaredIdx, err := t.ToIndex(declaredFromParent, declaredFromLeft, true)
 	if err != nil || declaredIdx < 0 {
 		return false
@@ -5397,11 +5408,11 @@ func (t *Tree) traverseInPosRange(fromParent, fromLeft, toParent, toLeft *TreeNo
 ) error {
 	include := len(includeRemoved) > 0 && includeRemoved[0]
 
-	fromIdx, err := t.ToIndex(fromParent, fromLeft, include)
+	fromIdx, err := t.rangeIndex(fromParent, fromLeft, include)
 	if err != nil {
 		return err
 	}
-	toIdx, err := t.ToIndex(toParent, toLeft, include)
+	toIdx, err := t.rangeIndex(toParent, toLeft, include)
 	if err != nil {
 		return err
 	}
@@ -5630,11 +5641,11 @@ func (t *Tree) boundaryRangeCovers(
 		return false, nil
 	}
 
-	fromIdx, err := t.ToIndex(fromParent, fromLeft)
+	fromIdx, err := t.rangeIndex(fromParent, fromLeft, false)
 	if err != nil {
 		return false, err
 	}
-	toIdx, err := t.ToIndex(toParent, toLeft)
+	toIdx, err := t.rangeIndex(toParent, toLeft, false)
 	if err != nil {
 		return false, err
 	}
@@ -6169,12 +6180,16 @@ func (t *Tree) afterPurgedText(floor *TreeNode, id *TreeNodeID) bool {
 // If includeRemoved is true, it includes removed nodes in the calculation.
 func (t *Tree) toTreePos(parentNode, leftNode *TreeNode, includeRemoved ...bool) (*index.TreePos[*TreeNode], error) {
 	include := len(includeRemoved) > 0 && includeRemoved[0]
-	return t.toTreePosIn(parentNode, leftNode, include)
+	return t.toTreePosIn(parentNode, leftNode, include, false)
 }
 
-// toTreePosIn is toTreePos, with include already read.
+// toTreePosIn is toTreePos. With outOfSight set, a live parent under a
+// removed ancestor resolves from the topmost removed one, as a replica that
+// has released it resolves it; only the range an operation acts on needs
+// that (see traverseInPosRange), so positions reported to users keep their
+// index.
 func (t *Tree) toTreePosIn(
-	parentNode, leftNode *TreeNode, include bool,
+	parentNode, leftNode *TreeNode, include, outOfSight bool,
 ) (*index.TreePos[*TreeNode], error) {
 	if parentNode == nil || leftNode == nil {
 		return nil, nil
@@ -6204,6 +6219,17 @@ func (t *Tree) toTreePosIn(
 			return &index.TreePos[*TreeNode]{Node: slotParent.Index, Offset: offset}, nil
 		}
 		parentNode = slotParent
+	}
+
+	if !include && outOfSight {
+		// A live parent under a removed ancestor is out of sight too, as on
+		// a replica that collected the ancestor and released it: resolve
+		// from the topmost removed ancestor, as for a removed parent.
+		for n := parentNode.Index.Parent; n != nil; n = n.Parent {
+			if n.Value.IsRemoved() {
+				parentNode = n.Value
+			}
+		}
 	}
 
 	if !include && parentNode.IsRemoved() {
@@ -6263,7 +6289,21 @@ func (t *Tree) toTreePosIn(
 	}, nil
 }
 
-// ToIndex converts the given CRDTTreePos to the index of the tree.
+// rangeIndex is ToIndex for an end of the range an operation acts on: a
+// position whose live parent sits under a removed ancestor counts from the
+// topmost removed one, so the range reaches the same attached content as on
+// a replica that has released that parent (see toTreePosIn).
+func (t *Tree) rangeIndex(parentNode, leftNode *TreeNode, include bool) (int, error) {
+	treePos, err := t.toTreePosIn(parentNode, leftNode, include, true)
+	if err != nil {
+		return 0, err
+	}
+	if treePos == nil {
+		return -1, nil
+	}
+	return t.IndexTree.IndexOf(treePos, include)
+}
+
 // ToIndex converts the given CRDTTreePos to the index of the tree.
 // If includeRemoved is true, it includes removed nodes in the calculation.
 func (t *Tree) ToIndex(parentNode, leftSiblingNode *TreeNode, includeRemoved ...bool) (int, error) {

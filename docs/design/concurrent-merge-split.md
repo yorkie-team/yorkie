@@ -1445,7 +1445,8 @@ result. The JS SDK has to mirror all of the following:
    detached destination releases what it moves there, and a merge moves
    nothing detached into the attached tree. The purge records the parent and the sibling the
    purged node sat in front of, and a position inside a detached subtree
-   resolves there, for an edit or a style.
+   resolves there, for an edit or a style; a position whose parent is live
+   under a removed ancestor resolves from the topmost removed ancestor.
    `Restore` resolves a span naming a
    detached node as if the node were purged: it unregisters and unlinks
    the node, which stays a tombstone, and recreates the span if its

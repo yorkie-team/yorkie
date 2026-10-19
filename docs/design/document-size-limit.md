@@ -158,9 +158,13 @@ only the attached tree (yorkie#2244). The rule that keeps the two equal:
   was purged from (`Tree.purgedSlot`): the purge records the parent and the
   sibling it sat in front of. A replica that has not purged the subtree
   resolves the same position at that place too, as the subtree is out of
-  sight there. So a range with one end in a detached subtree deletes
-  without merging the same attached content on both
-  (`TestEditWithOneEndInADetachedSubtree`). A delete that merges out of the
+  sight there, and a live node under a removed ancestor resolves as from
+  the topmost removed one. So a range with one end in a detached subtree
+  styles, or deletes without merging, the same attached content on both
+  (`TestEditWithOneEndInADetachedSubtree`,
+  `TestStyleWithAnEndInADetachedSubtree`), and so does a range with its two
+  ends in two purged subtrees, over the attached content between them
+  (`TestRangeBetweenTwoDetachedSubtrees`). A delete that merges out of the
   subtree does not converge: a replica that has not purged it moves the
   hidden content after the range end into view, and one that purged it has
   nothing to move (`TestEditMergingOutOfADetachedSubtree`). Only a late or
@@ -334,7 +338,7 @@ moves the gate's figure toward a rebuild, never away from it.
 | `Retombstone`, the §4.1 cascade, `refreshSpanAnchors` | skipped: no cascade, the span keeps its anchors | `TestRetombstoneLeavesADetachedNodeAlone` |
 | `Edit` insert under a detached or removed parent | born tombstoned and detached, GC only | `TestEditUnderADetachedParentNamingAReleasedNode`, `TestTreeOpsNamingACollectedSubtree` |
 | `Edit` delete over one | tombstones only; no ledger change | `TestTreeOpsNamingACollectedSubtree` |
-| `Edit`, `Style`, `RemoveStyle` with an end in one | that end resolves to the place the subtree was purged from | `TestEditWithOneEndInADetachedSubtree` |
+| `Edit`, `Style`, `RemoveStyle` with an end in one | that end resolves to the place the subtree was purged from | `TestEditWithOneEndInADetachedSubtree`, `TestStyleWithAnEndInADetachedSubtree` |
 | `Split` of a detached node | the product is detached too | `TestSplitsInADetachedSubtreeStayDetached` |
 | §7.4 move of a split product across a purge | the product takes its new parent's side, released into a detached one | `TestSplitMovedAcrossTheDetachedBoundary` |
 | Phase 6 merge into a detached destination | the moved nodes take its side, released, and nothing detached is moved into the attached tree | `TestMergeIntoADetachedParentTakesItsSide` |

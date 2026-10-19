@@ -588,6 +588,65 @@ func TestSplitsInADetachedSubtreeStayDetached(t *testing.T) {
 	}
 }
 
+// TestStyleWithAnEndInADetachedSubtree pins how a Style or RemoveStyle
+// resolves an end inside a detached subtree: at the place the subtree was
+// purged from, as for an edit. On <r><x>12</x><div><p>ab</p></div><q>cd</q></r>
+// with div removed and p live under it, a style from the start of the root
+// to the end of "ab" styles x, and no attached node after div, on the
+// replica that purged div and on the one that did not. The purged replica
+// writes nothing into the detached subtree; once the other collects too,
+// both hold the same attributes on every node, and a removal of the style
+// clears x on both.
+func TestStyleWithAnEndInADetachedSubtree(t *testing.T) {
+	attached := []string{"r", "x", "12", "q", "cd"}
+	attrsOf := func(n map[string]*TreeNode, names []string) string {
+		var sb strings.Builder
+		for _, name := range names {
+			sb.WriteString(name + "=" + n[name].Attributes() + ";")
+		}
+		return sb.String()
+	}
+	purged, pdoc, pn, pnext := halfDetachedFixture(t, true)
+	kept, kdoc, kn, knext := halfDetachedFixture(t, false)
+	type replica struct {
+		tree *Tree
+		doc  *Root
+		n    map[string]*TreeNode
+		next func() *time.Ticket
+	}
+	replicas := []replica{{purged, pdoc, pn, pnext}, {kept, kdoc, kn, knext}}
+	rangeOf := func(r replica) (*TreePos, *TreePos, time.VersionVector) {
+		vv := time.NewVersionVector()
+		vv.Set(r.n["r"].id.CreatedAt.ActorID(), 1000)
+		return NewTreePos(r.n["r"].id, r.n["r"].id),
+			NewTreePos(r.n["p"].id, NewTreeNodeID(r.n["ab"].id.CreatedAt, 2)), vv
+	}
+
+	for _, r := range replicas {
+		from, to, vv := rangeOf(r)
+		actor := r.n["r"].id.CreatedAt.ActorID()
+		_, _, _, err := r.tree.Style(from, to, map[string]string{"k": "v"}, time.NewTicket(500, 0, actor), vv)
+		require.NoError(t, err)
+		assert.Equal(t, `<r><x k="v">12</x><q>cd</q></r>`, r.tree.ToXML())
+	}
+	assert.Equal(t, attrsOf(pn, attached), attrsOf(kn, attached), "the same attached nodes are styled")
+	assert.Equal(t, `r=;x= k="v";12=;q=;cd=;`, attrsOf(pn, attached))
+	assert.Equal(t, "div=;p=;ab=;", attrsOf(pn, []string{"div", "p", "ab"}),
+		"nothing in the detached subtree is styled")
+
+	for _, r := range replicas {
+		from, to, vv := rangeOf(r)
+		actor := r.n["r"].id.CreatedAt.ActorID()
+		_, _, _, err := r.tree.RemoveStyle(from, to, []string{"k"}, time.NewTicket(600, 0, actor), vv)
+		require.NoError(t, err)
+		assert.Equal(t, "<r><x>12</x><q>cd</q></r>", r.tree.ToXML())
+		_, err = r.doc.GarbageCollect(vv, nil)
+		require.NoError(t, err)
+	}
+	assert.Equal(t, attrsOf(pn, attached), attrsOf(kn, attached))
+	assert.Equal(t, treeShapeOf(purged), treeShapeOf(kept), "the same tree once both collect")
+}
+
 // TestEditWithOneEndInADetachedSubtree pins how a range with exactly one end
 // in a detached subtree resolves: at the place the subtree was purged from,
 // where a replica that has not purged it counts the subtree from. The tree
@@ -879,6 +938,87 @@ func TestADetachedNodeCarriesIndexedLineage(t *testing.T) {
 	assert.True(t, stamped)
 }
 
+// TestRangeBetweenTwoDetachedSubtrees pins a range whose two ends sit in two
+// different purged subtrees with attached content between them. In
+// <r><a><pa>ab</pa></a><m>MM</m><b><pb>cd</pb></b></r>, with a and b
+// removed while pa and pb are live, one replica purges a and b and the
+// other does not. A delete and a style from the end of "ab" to the end of
+// "cd" each resolve their ends where the subtrees sit, so both reach m on
+// both replicas, and the two agree once both collect.
+func TestRangeBetweenTwoDetachedSubtrees(t *testing.T) {
+	build := func(t *testing.T, purge bool) (*Tree, *Root, map[string]*TreeNode, func() *time.Ticket) {
+		actor, err := time.ActorIDFromHex("000000000000000000000001")
+		require.NoError(t, err)
+		lamport := int64(0)
+		next := func() *time.Ticket {
+			lamport++
+			return time.NewTicket(lamport, 0, actor)
+		}
+		n := map[string]*TreeNode{}
+		mk := func(name, typ string, value ...string) *TreeNode {
+			n[name] = NewTreeNode(NewTreeNodeID(next(), 0), typ, nil, value...)
+			return n[name]
+		}
+		root := mk("r", "r")
+		require.NoError(t, root.Append(mk("a", "a"), mk("m", "m"), mk("b", "b")))
+		require.NoError(t, n["a"].Append(mk("pa", "pa")))
+		require.NoError(t, n["pa"].Append(mk("ab", "text", "ab")))
+		require.NoError(t, n["m"].Append(mk("MM", "text", "MM")))
+		require.NoError(t, n["b"].Append(mk("pb", "pb")))
+		require.NoError(t, n["pb"].Append(mk("cd", "text", "cd")))
+		keepDetached(n["pa"])
+		keepDetached(n["pb"])
+		tree := NewTree(root, next())
+		doc := NewRoot(NewObject(NewElementRHT(), time.InitialTicket))
+		removedAt := next()
+		for _, name := range []string{"a", "b"} {
+			n[name].remove(removedAt)
+			size := n[name].DataSize()
+			doc.RegisterGCPair(GCPair{Parent: tree, Child: n[name], GCOnlySize: &size})
+		}
+		if purge {
+			vector := time.NewVersionVector()
+			vector.Set(actor, lamport)
+			_, err := doc.GarbageCollect(vector, nil)
+			require.NoError(t, err)
+			require.True(t, n["pa"].detached)
+			require.True(t, n["pb"].detached)
+		}
+		return tree, doc, n, next
+	}
+
+	for _, style := range []bool{false, true} {
+		var shapes, attrs []string
+		for _, purge := range []bool{true, false} {
+			tree, doc, n, next := build(t, purge)
+			actor := n["r"].id.CreatedAt.ActorID()
+			vv := time.NewVersionVector()
+			vv.Set(actor, 1000)
+			from := NewTreePos(n["pa"].id, NewTreeNodeID(n["ab"].id.CreatedAt, 2))
+			to := NewTreePos(n["pb"].id, NewTreeNodeID(n["cd"].id.CreatedAt, 2))
+			at := time.NewTicket(500, 0, actor)
+			if style {
+				_, _, _, err := tree.Style(from, to, map[string]string{"k": "v"}, at, vv)
+				require.NoError(t, err)
+				assert.Equal(t, `<r><m k="v">MM</m></r>`, tree.ToXML(), "purged %v", purge)
+			} else {
+				pairs, _, _, err := tree.Edit(from, to, nil, 0, at, next, vv, false)
+				require.NoError(t, err)
+				assert.Equal(t, "<r></r>", tree.ToXML(), "purged %v", purge)
+				for _, pair := range pairs {
+					doc.RegisterGCPair(pair)
+				}
+			}
+			_, err := doc.GarbageCollect(vv, nil)
+			require.NoError(t, err)
+			shapes = append(shapes, treeShapeOf(tree))
+			attrs = append(attrs, n["m"].Attributes())
+		}
+		assert.Equal(t, shapes[0], shapes[1], "style %v: the same tree once both collect", style)
+		assert.Equal(t, attrs[0], attrs[1], "style %v: the same attributes on m", style)
+	}
+}
+
 // TestSplitMovedAcrossTheDetachedBoundary pins §7.4's move of an empty split
 // product next to its InsNext sibling when the two sit on different sides of
 // a purge. n, in a, and its earlier split product s, in b, are linked; one of
@@ -944,6 +1084,30 @@ func TestSplitMovedAcrossTheDetachedBoundary(t *testing.T) {
 			assert.Same(t, product, tree.findFloorNode(product.id))
 		})
 	}
+}
+
+// TestToIndexUnderARemovedAncestorKeepsItsIndex pins that only the range an
+// operation acts on resolves a live parent under a removed ancestor from the
+// topmost removed one. ToIndex, which reports positions to users, still
+// counts the parent where it sits, as it always has.
+func TestToIndexUnderARemovedAncestorKeepsItsIndex(t *testing.T) {
+	tree, _, n, _ := halfDetachedFixture(t, false)
+	p, div := n["p"], n["div"]
+
+	reported, err := tree.ToIndex(p, p)
+	require.NoError(t, err)
+	where, err := tree.IndexTree.IndexOf(&index.TreePos[*TreeNode]{Node: p.Index, Offset: 0}, false)
+	require.NoError(t, err)
+	assert.Equal(t, where, reported, "ToIndex counts p where it sits")
+
+	ranged, err := tree.rangeIndex(p, p, false)
+	require.NoError(t, err)
+	offset, err := tree.Root().Index.FindOffset(div.Index, false)
+	require.NoError(t, err)
+	at, err := tree.IndexTree.IndexOf(&index.TreePos[*TreeNode]{Node: tree.Root().Index, Offset: offset}, false)
+	require.NoError(t, err)
+	assert.Equal(t, at, ranged, "a range end counts from div's place")
+	assert.NotEqual(t, reported, ranged, "the two resolutions differ here")
 }
 
 // TestDropGCPairGivesBackThePurgeAmount pins Root.DropGCPair's accounting:
