@@ -166,3 +166,43 @@ func TestCheckDocSize(t *testing.T) {
 		}
 	}
 }
+
+// TestRepairShrinkIsAdmitted builds the shape the repair paths hand the gate:
+// UpdateDocument and RestoreRevision rebuild the document and replace its
+// whole root, so the content they drop sits in GC, uncollected, at the moment
+// they measure. A repair that brings an over-quota document back under the
+// limit must be admitted, not refused for the garbage the repair itself
+// booked.
+//
+// The gate reads the total, Live and GC, so it refuses that repair and the
+// over-quota document has no way back under the limit. Closing this means
+// measuring the live size on these three call sites — server/packs/size_gate.go,
+// server/documents/documents.go and server/revisions/revisions.go — which this
+// test cannot reach from here.
+func TestRepairShrinkIsAdmitted(t *testing.T) {
+	// A fix round may not change those files, so the reproducer is kept and
+	// switched off rather than removed.
+	t.Skip("still reproduces: CheckDocSize (Live+GC) refuses a repair that " +
+		"shrinks an over-quota document, for the garbage the repair created")
+
+	limit := 1024
+	doc := document.New("d")
+	require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+		r.SetString("big", strings.Repeat("a", 4*limit))
+		return nil
+	}))
+	before := doc.DocSize()
+	require.Greater(t, before.Live.Total(), limit, "the document starts over quota")
+
+	// The repair: replace the root with a small one, as SetYSON does.
+	require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+		r.Delete("big")
+		r.SetString("small", "v")
+		return nil
+	}))
+
+	size := doc.DocSize()
+	require.LessOrEqual(t, size.Live.Total(), limit, "the repair brings Live under the limit")
+	require.Greater(t, size.Total(), limit, "but its own garbage keeps the total over it")
+	assert.NoError(t, CheckDocSize("d", size, limit))
+}
