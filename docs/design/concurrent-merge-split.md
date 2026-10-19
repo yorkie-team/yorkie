@@ -1427,7 +1427,11 @@ result. The JS SDK has to mirror all of the following:
 6. **Recreate.** A recreated text piece is spliced back into its
    insertion's `InsPrevID`/`InsNextID` chain between the nearest surviving
    predecessor and what that points at, or, with none, to an adjacent
-   successor whose own predecessor is missing or unregistered.
+   successor whose own predecessor is missing or unregistered. Rung (a)
+   follows a same-insertion successor into the element it now sits under
+   when every split between that element and the span's parent is unknown
+   to the restoring change, and a born-tombstoned recreate takes the
+   removal of the parent it actually lands under.
 
 ## Key Design Decisions
 

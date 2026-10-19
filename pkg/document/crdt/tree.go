@@ -1387,7 +1387,7 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 				}
 				continue
 			}
-			created, cErr := t.recreateFromSpan(span, span.ID.Offset, span.Length)
+			created, cErr := t.recreateFromSpan(span, span.ID.Offset, span.Length, versionVector)
 			if cErr != nil {
 				return nil, nil, nil, diff, nil, cErr
 			}
@@ -1433,7 +1433,7 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 				if pieceIdx < len(pieces) {
 					gapEnd = min(pieces[pieceIdx].id.Offset, end)
 				}
-				created, cErr := t.recreateFromSpan(span, cursor, gapEnd-cursor)
+				created, cErr := t.recreateFromSpan(span, cursor, gapEnd-cursor, versionVector)
 				if cErr != nil {
 					return nil, nil, nil, diff, nil, cErr
 				}
@@ -2214,7 +2214,12 @@ func (t *Tree) survivingInsPrev(node *TreeNode, start int) *TreeNode {
 // ids, identical on every replica). A span recreateParent refuses is skipped
 // (B1). The JS CRDTTree.recreateFromSpan must apply the same rules
 // (yorkie-js-sdk#1471).
-func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*TreeNode, error) {
+//
+// versionVector is that of the restoring change. Rung (a) reads it for a
+// successor that a split the change did not know moved out of the parent.
+func (t *Tree) recreateFromSpan(
+	span *TreeRestoreSpan, offset, length int, versionVector time.VersionVector,
+) (*TreeNode, error) {
 	id := &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: offset}
 	parent := t.recreateParent(span, id)
 	if parent == nil {
@@ -2296,8 +2301,8 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 		// overwritable by the eventual LWW winner, and it is: a later
 		// concurrent removal with a higher ticket reaches the tombstoned
 		// node and overwrites it.
-		if parent.IsRemoved() {
-			node.remove(parent.RemovedAt())
+		if home := node.Index.Parent.Value; home.IsRemoved() {
+			node.remove(home.RemovedAt())
 			// Born tombstoned: it is not reported as recreated, so the caller
 			// never accounts it to Live. GCOnlySize is how a pair says "add to
 			// GC, take nothing out of Live" -- see Root.RegisterGCPair.
@@ -2315,8 +2320,19 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 	// (a) same-insertion successor / predecessor piece (text): exact slot.
 	if span.IsText {
 		succ := t.findFloorNode(&TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: offset + length})
-		if succ != nil && succ.IsText() && sameParent(succ) && succ.id.Offset == offset+length {
-			return attach(func() error { return parent.InsertAt(node, childIndex(succ)) })
+		if succ != nil && succ.IsText() && succ.id.Offset == offset+length {
+			if sameParent(succ) {
+				return attach(func() error { return parent.InsertAt(node, childIndex(succ)) })
+			}
+			if home := t.concurrentSplitHome(succ, parent, versionVector); home != nil {
+				return attach(func() error {
+					idx := slices.Index(home.Children(true), succ)
+					if idx < 0 {
+						idx = len(home.Children(true))
+					}
+					return home.InsertAt(node, idx)
+				})
+			}
 		}
 		if offset > span.ID.Offset || offset > 0 {
 			pred := t.findFloorNode(&TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: offset - 1})
@@ -2349,6 +2365,45 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 		}
 	}
 	return attach(func() error { return parent.InsertAt(node, insertIdx) })
+}
+
+// concurrentSplitHome returns the element succ, the same-insertion successor
+// of a text range being recreated, now sits under when splits the restoring
+// change did not know carried it there out of parent; nil otherwise.
+//
+// Had the range survived as a tombstone, such a split would have carried it
+// along too: it sat between the split point, which the successor is past, and
+// the successor. A replica that applies the split after this recreate does
+// exactly that, so the range goes before the successor here as well, wherever
+// its predecessor stayed. Every split between parent and the successor's
+// element has to be one the change did not know. A split it knew happened
+// before the change recorded the span under parent, so the range was left of
+// it and the successor had already been carried off; that is left to the
+// other rungs.
+func (t *Tree) concurrentSplitHome(succ, parent *TreeNode, versionVector time.VersionVector) *TreeNode {
+	if succ.Index.Parent == nil {
+		return nil
+	}
+
+	home := succ.Index.Parent.Value
+	if home.IsText() || home == parent {
+		return nil
+	}
+
+	var walker insNextWalker
+	walker.visit(home)
+	for current := home; current != parent; {
+		if time.TicketKnown(versionVector, current.id.CreatedAt) || current.InsPrevID == nil {
+			return nil
+		}
+		prev := t.findFloorNode(current.InsPrevID)
+		if prev == nil || prev.IsText() || !walker.visit(prev) {
+			return nil
+		}
+		current = prev
+	}
+
+	return home
 }
 
 // MetaSize returns the size of the metadata of this element.

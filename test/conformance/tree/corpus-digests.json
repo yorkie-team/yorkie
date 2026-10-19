@@ -216,8 +216,8 @@
     "xmlDigest": "db41bf8a0a546ab6"
   },
   "ri-restore-element-and-text-in-one-change-around-enter.json": {
-    "result": "fail",
-    "checks": "11101",
+    "result": "pass",
+    "checks": "11111",
     "digest": "77582d75c090dca5",
     "xmlDigest": "6e31b3d8840af0bb"
   },
@@ -234,8 +234,8 @@
     "xmlDigest": "5ac19d8ea0efe58d"
   },
   "ri-restore-text-at-enter.json": {
-    "result": "fail",
-    "checks": "11101",
+    "result": "pass",
+    "checks": "11111",
     "digest": "28dc9ee6a053b748",
     "xmlDigest": "9b500465a5f6d46e"
   },
