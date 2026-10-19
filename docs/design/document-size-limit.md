@@ -152,10 +152,15 @@ The decision is to **refuse growth only**:
   Classification is by operation kind (`canGrow`), because the push path has
   no root to execute against, and is conservative: everything grows except
   - `Remove`;
-  - `Edit` with no content, no attributes and no restore spans (a text
+  - `Edit` with no content, no attributes and nothing to revive (a text
     deletion);
-  - `TreeEdit` with no contents, no split and no restore spans (a tree
+  - `TreeEdit` with no contents, no split and nothing to revive (a tree
     deletion);
+
+  An identity-preserving edit revives the span set its restore mode names:
+  a restore-mode edit its restore spans, a retombstone-mode edit its
+  retombstone spans. The other set is removed, so only the revived set
+  counts as growth (yorkie#2252).
   - a change with no operations (presence only).
 - The refusal is `document.ErrDocumentSizeExceedsLimit`, the error the SDK
   already raises for its local check, now carrying the code
