@@ -1424,6 +1424,10 @@ result. The JS SDK has to mirror all of the following:
    its left anchor on the first part and its right anchor on the last;
    between parts, each is anchored on the covered characters of its
    insertion on either side of its gap.
+6. **Recreate.** A recreated text piece is spliced back into its
+   insertion's `InsPrevID`/`InsNextID` chain between the nearest surviving
+   predecessor and what that points at, or, with none, to an adjacent
+   successor whose own predecessor is missing or unregistered.
 
 ## Key Design Decisions
 

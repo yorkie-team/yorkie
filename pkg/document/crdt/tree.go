@@ -2127,6 +2127,84 @@ func (t *Tree) recreateParent(span *TreeRestoreSpan, id *TreeNodeID) *TreeNode {
 	return parent
 }
 
+// relinkRecreatedText splices a recreated text piece back into the
+// InsPrevID/InsNextID chain of its insertion. Purge unlinked the piece and
+// joined its neighbours to each other; a recreated piece that stays out of
+// the chain is invisible to the walks that follow it, and the next split of
+// a neighbour hands the right half an InsNextID that skips it.
+//
+// The splice goes between the nearest piece of the insertion that SURVIVES
+// before this one and whatever that piece currently points forward at, not
+// between the pieces that are exactly adjacent by offset. After a purge the
+// chain's neighbours are the nearest survivors — Purge joined them to each
+// other — and the exactly-adjacent ones may be the pieces that are gone.
+// Both ends of the splice are rewritten together: linking only the one that
+// happened to be exactly adjacent would leave the chain asymmetric, with the
+// predecessor pointing at the recreated piece while the piece beyond the gap
+// still claimed the predecessor as its own, which is worse than no link.
+func (t *Tree) relinkRecreatedText(node *TreeNode) {
+	start := node.id.Offset
+	end := start + node.Len()
+
+	pred := t.survivingInsPrev(node, start)
+	if pred == nil {
+		// Nothing of the insertion survives in front of this piece, so there
+		// is no chain position to splice into. The successor is still linked
+		// if it is exactly adjacent and has no surviving predecessor of its
+		// own -- none at all, or one that names a piece no longer registered
+		// -- and both ends of that link are written here.
+		succ := t.findFloorNode(&TreeNodeID{CreatedAt: node.id.CreatedAt, Offset: end})
+		if succ != nil && succ != node && succ.IsText() &&
+			succ.id.Offset == end && !t.registersExactly(succ.InsPrevID) {
+			node.InsNextID = succ.id
+			succ.InsPrevID = node.id
+		}
+		return
+	}
+
+	succID := pred.InsNextID
+	// A predecessor still pointing at this ID names an earlier node under
+	// it, gone now; linking to it would point the node at itself.
+	if succID != nil && succID.Equal(node.id) {
+		succID = nil
+	}
+	node.InsPrevID = pred.id
+	node.InsNextID = succID
+	pred.InsNextID = node.id
+	if succID != nil {
+		if succ := t.findFloorNode(succID); succ != nil && succ != node && succ.id.Equal(succID) {
+			succ.InsPrevID = node.id
+		}
+	}
+}
+
+// registersExactly reports whether a node is registered under exactly id.
+func (t *Tree) registersExactly(id *TreeNodeID) bool {
+	if id == nil {
+		return false
+	}
+	node := t.findFloorNode(id)
+	return node != nil && node.id.Equal(id)
+}
+
+// survivingInsPrev returns the nearest piece of node's insertion that is still
+// registered in front of offset start, or nil when none is. It is the chain
+// position a recreated piece splices in after: a purge of the pieces between
+// moves it further back, but never past the start of the insertion, since
+// findFloorNode only answers with a node of the same CreatedAt.
+func (t *Tree) survivingInsPrev(node *TreeNode, start int) *TreeNode {
+	if start <= 0 {
+		return nil
+	}
+
+	pred := t.findFloorNode(&TreeNodeID{CreatedAt: node.id.CreatedAt, Offset: start - 1})
+	if pred == nil || pred == node || !pred.IsText() || pred.id.Offset+pred.Len() > start {
+		return nil
+	}
+
+	return pred
+}
+
 // recreateFromSpan rebuilds a purged node (or purged text sub-range) under its
 // original identity and attaches it via the anchor ladder (floor-lookup +
 // parent-identity check at each rung): (a) same-insertion successor/
@@ -2194,6 +2272,9 @@ func (t *Tree) recreateFromSpan(span *TreeRestoreSpan, offset, length int) (*Tre
 			return nil, err
 		}
 		t.putNode(node)
+		if span.IsText {
+			t.relinkRecreatedText(node)
+		}
 		t.pendingGCPairs = append(t.pendingGCPairs, recreatedAttrPairs...)
 		// The parent has been tombstoned since this node was purged, so the
 		// node is born tombstoned rather than live. This mirrors the
@@ -5211,8 +5292,9 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 // exactly floor.InsNextID, be text of the same insertion, and point back at
 // floor. An insertion's pieces cover its offsets without holes, and splits
 // keep neighbours contiguous, so this replica's chain holds such a gap only
-// where it took pieces out and joined the survivors, which Purge does. The
-// offset is accepted when floor's end < offset <= next's start. A position names the
+// where it took pieces out and joined the survivors: Purge, or a restore that
+// recreated a piece and relinkRecreatedText spliced it in. The offset is
+// accepted when floor's end < offset <= next's start. A position names the
 // character before its offset, so offset next.start is the one after the
 // last character of the gap; ToTreeNodes resolves that ID, next's own, to
 // the piece before next, which is floor. Every other offset past floor is
