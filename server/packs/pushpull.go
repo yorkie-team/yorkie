@@ -79,7 +79,7 @@ type PushPullOptions struct {
 
 	// SizeChecked marks a push whose caller has already measured the
 	// resulting document against the project's MaxSizePerDocument with
-	// packs.CheckLiveSize. The server-side repair paths (admin document
+	// packs.CheckDocSize. The server-side repair paths (admin document
 	// update, revision restore) rebuild the whole root, so they know the
 	// exact result; the snapshot-based push gate only knows the document is
 	// over quota and would refuse them, leaving an over-quota document with

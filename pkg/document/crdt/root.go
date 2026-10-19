@@ -856,9 +856,9 @@ func (r *Root) AccMovedElement(elem Element, diff resource.DataSize) {
 // would make it indistinguishable from a tombstone's own charge and leave the
 // released subtree uncollectable; charging Live would charge it for bytes
 // release has already taken out of it, and a delete inside the orphan would
-// then subtract those bytes a second time and drive the recorded live size
-// below the real one -- under the limit CheckLiveSize reads, which only Live
-// feeds. So the diff is dropped.
+// then subtract those bytes a second time and drive the recorded size below
+// the real one -- under the limit the size gates read. So the diff is
+// dropped.
 func (r *Root) chargeToElement(elem Element, diff resource.DataSize) {
 	charged, ok := r.sizeInGC[elem]
 	if !ok {

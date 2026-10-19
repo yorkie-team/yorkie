@@ -31,7 +31,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend"
 )
 
-// canGrow reports whether the change may increase the document's live size.
+// canGrow reports whether the change may increase the document's size.
 // The push path has no document to execute the change against, so this goes
 // by operation kind alone and is conservative: only removals are known not to
 // grow. A change with no operations (presence-only) cannot grow the root.
@@ -75,6 +75,9 @@ func canGrow(cn *change.Change) bool {
 //
 // The size comes from the latest snapshot, so it lags the document by up to
 // one SnapshotInterval of changes; see docs/design/document-size-limit.md.
+// It is what the document holds, Live and GC, the figure the SDK's own
+// MaxSizeLimit check reads, so growth a removed element books to GC is
+// bounded too.
 // A document without a measured size (no snapshot yet, a snapshot written
 // before sizes were recorded, or one just compacted) is admitted. Only a
 // document strictly over the limit refuses, and only changes that can grow
@@ -99,18 +102,19 @@ func checkDocumentSize(
 	if err != nil {
 		return err
 	}
-	if info.LiveSize <= int64(maxSize) {
+	if info.Size <= int64(maxSize) {
 		return nil
 	}
 
 	return fmt.Errorf(
-		"push to %s: live size %d bytes at server seq %d exceeds %d: %w",
-		docKey, info.LiveSize, info.ServerSeq, maxSize, document.ErrDocumentSizeExceedsLimit,
+		"push to %s: size %d bytes at server seq %d exceeds %d: %w",
+		docKey, info.Size, info.ServerSeq, maxSize, document.ErrDocumentSizeExceedsLimit,
 	)
 }
 
-// CheckLiveSize enforces the project's MaxSizePerDocument against a document
-// the caller already holds in full.
+// CheckDocSize enforces the project's MaxSizePerDocument against a document
+// the caller already holds in full, on its size, Live and GC, as the push
+// gate reads it.
 //
 // The server-side write paths that build the whole root themselves — the admin
 // document create and update RPCs and the revision restore — measure the
@@ -118,14 +122,14 @@ func checkDocumentSize(
 // That gate refuses every growing change on an over-quota document, which
 // would refuse the very writes meant to bring such a document back under the
 // limit; measuring the result admits a shrink and still refuses an overrun.
-func CheckLiveSize(docKey key.Key, size resource.DocSize, maxSize int) error {
-	liveSize := size.Live.Total()
-	if maxSize <= 0 || liveSize <= maxSize {
+func CheckDocSize(docKey key.Key, size resource.DocSize, maxSize int) error {
+	total := size.Total()
+	if maxSize <= 0 || total <= maxSize {
 		return nil
 	}
 
 	return fmt.Errorf(
-		"update %s: live size %d bytes exceeds %d: %w",
-		docKey, liveSize, maxSize, document.ErrDocumentSizeExceedsLimit,
+		"update %s: size %d bytes exceeds %d: %w",
+		docKey, total, maxSize, document.ErrDocumentSizeExceedsLimit,
 	)
 }

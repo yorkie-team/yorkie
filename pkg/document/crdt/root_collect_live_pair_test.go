@@ -88,9 +88,9 @@ func TestChargeToRemovedElementKeepsAReleaseRecordZero(t *testing.T) {
 	assert.Equal(t, liveBefore, doc.DocSize().Live,
 		"an orphan is on neither side of the ledger, so its writes are charged to neither")
 
-	// The shrinking direction is the one the size gate feels: CheckLiveSize
-	// reads Live alone, so a delete inside the orphan that reached Live would
-	// take the recorded live size below the real one -- here below zero --
+	// The shrinking direction is the one the size gate feels: a delete inside
+	// the orphan that reached Live would take the recorded size below the
+	// real one -- here Live below zero --
 	// and admit a document the limit should turn away.
 	end = doc.ChargeTreeOp(tree)
 	doc.Acc(resource.DataSize{Data: -40})

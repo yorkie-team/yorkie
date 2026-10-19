@@ -2469,11 +2469,13 @@ func (c *Client) FindChangeInfosBetweenServerSeqs(
 	return store.ChangesInRange(from, to), nil
 }
 
-// CreateSnapshotInfo stores the snapshot of the given document.
+// CreateSnapshotInfo stores the snapshot of the given document, recording
+// size for the push gate.
 func (c *Client) CreateSnapshotInfo(
 	ctx context.Context,
 	docRefKey types.DocRefKey,
 	doc *document.InternalDocument,
+	size int64,
 ) error {
 	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
 	if err != nil {
@@ -2500,7 +2502,6 @@ func (c *Client) CreateSnapshotInfo(
 
 	serverSeq := doc.Checkpoint().ServerSeq
 	hasExternalBody := len(compressed) > database.SnapshotBodyThreshold
-	liveSize := doc.DocSize().Live
 
 	docFields := bson.M{
 		"project_id":        docRefKey.ProjectID,
@@ -2509,7 +2510,7 @@ func (c *Client) CreateSnapshotInfo(
 		"lamport":           doc.Lamport(),
 		"version_vector":    vv,
 		"has_external_body": hasExternalBody,
-		"live_size":         int64(liveSize.Total()),
+		"live_size":         size,
 		"created_at":        gotime.Now(),
 	}
 

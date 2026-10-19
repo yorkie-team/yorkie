@@ -230,7 +230,7 @@ func Restore(
 	// project quota directly. The snapshot-based push gate only knows the
 	// document is over quota and would refuse the restore, including one that
 	// brings the document back under the limit.
-	if err := packs.CheckLiveSize(
+	if err := packs.CheckDocSize(
 		docInfo.Key,
 		doc.DocSize(),
 		project.MaxSizePerDocument,

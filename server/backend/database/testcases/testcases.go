@@ -868,7 +868,7 @@ func RunFindChangeInfosBetweenServerSeqsTest(
 		assert.NoError(t, doc.ApplyChangePack(pack))
 		assert.Equal(t, int64(6), doc.Checkpoint().ServerSeq)
 
-		assert.NoError(t, db.CreateSnapshotInfo(ctx, refKey, doc.InternalDocumentForTest()))
+		assert.NoError(t, db.CreateSnapshotInfo(ctx, refKey, doc.InternalDocumentForTest(), sizeOf(doc)))
 
 		// 03. Find changeInfos with snapshot that reflect the latest doc info
 		snapshotInfo, _ := db.FindClosestSnapshotInfo(
@@ -1034,21 +1034,21 @@ func RunFindClosestSnapshotInfoTest(t *testing.T, db database.Database, projectI
 
 		docRefKey := docInfo.RefKey()
 
-		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocumentForTest()))
+		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocumentForTest(), sizeOf(doc)))
 		snapshot, err := db.FindClosestSnapshotInfo(ctx, docRefKey, change.MaxCheckpoint.ServerSeq, true)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(0), snapshot.ServerSeq)
 
 		pack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(1), nil, doc.VersionVector(), nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
-		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocumentForTest()))
+		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocumentForTest(), sizeOf(doc)))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docRefKey, change.MaxCheckpoint.ServerSeq, true)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), snapshot.ServerSeq)
 
 		pack = change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(2), nil, doc.VersionVector(), nil)
 		assert.NoError(t, doc.ApplyChangePack(pack))
-		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocumentForTest()))
+		assert.NoError(t, db.CreateSnapshotInfo(ctx, docRefKey, doc.InternalDocumentForTest(), sizeOf(doc)))
 		snapshot, err = db.FindClosestSnapshotInfo(ctx, docRefKey, change.MaxCheckpoint.ServerSeq, true)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(2), snapshot.ServerSeq)
@@ -2808,7 +2808,7 @@ func setupCompaction(
 
 	ack := change.NewPack(doc.Key(), doc.Checkpoint().NextServerSeq(3), nil, doc.VersionVector(), nil)
 	assert.NoError(t, doc.ApplyChangePack(ack))
-	assert.NoError(t, db.CreateSnapshotInfo(ctx, refKey, doc.InternalDocumentForTest()))
+	assert.NoError(t, db.CreateSnapshotInfo(ctx, refKey, doc.InternalDocumentForTest(), sizeOf(doc)))
 	_, err = db.UpdateMinVersionVector(ctx, clientInfo, refKey, doc.VersionVector())
 	assert.NoError(t, err)
 
@@ -2970,10 +2970,10 @@ func RunCompactChangeInfosAcrossNodesTest(
 	})
 }
 
-// RunSnapshotLiveSizeTest runs the tests for the live size a snapshot records,
+// RunSnapshotSizeTest runs the tests for the size a snapshot records,
 // which the push path reads to enforce MaxSizePerDocument.
-func RunSnapshotLiveSizeTest(t *testing.T, db database.Database, projectID types.ID) {
-	t.Run("snapshot records the live size test", func(t *testing.T) {
+func RunSnapshotSizeTest(t *testing.T, db database.Database, projectID types.ID) {
+	t.Run("snapshot records the size test", func(t *testing.T) {
 		ctx := context.Background()
 		docInfo, _ := setupCompaction(t, db, projectID)
 		refKey := docInfo.RefKey()
@@ -2982,17 +2982,24 @@ func RunSnapshotLiveSizeTest(t *testing.T, db database.Database, projectID types
 		info, err := db.FindClosestSnapshotInfo(ctx, refKey, docInfo.ServerSeq, false)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(3), info.ServerSeq)
-		assert.Positive(t, info.LiveSize)
+		assert.Positive(t, info.Size)
 
 		withBody, err := db.FindSnapshotInfo(ctx, refKey, info.ServerSeq)
 		assert.NoError(t, err)
-		assert.Equal(t, info.LiveSize, withBody.LiveSize)
+		assert.Equal(t, info.Size, withBody.Size)
 
 		// Compaction purges the snapshots, so the size is unknown again rather
 		// than the pre-compaction one.
 		assert.NoError(t, db.CompactChangeInfos(ctx, docInfo, docInfo.ServerSeq, compactedChanges(t, docInfo)))
 		info, err = db.FindClosestSnapshotInfo(ctx, refKey, docInfo.ServerSeq, false)
 		assert.NoError(t, err)
-		assert.Equal(t, int64(0), info.LiveSize)
+		assert.Equal(t, int64(0), info.Size)
 	})
+}
+
+// sizeOf is the size CreateSnapshotInfo records for doc in these tests, which
+// collect nothing: what the document holds.
+func sizeOf(doc *document.Document) int64 {
+	size := doc.DocSize()
+	return int64(size.Total())
 }
