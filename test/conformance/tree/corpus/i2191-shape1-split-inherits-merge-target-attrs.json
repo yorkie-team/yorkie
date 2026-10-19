@@ -1,0 +1,30 @@
+{
+  "v": 2,
+  "id": "i2191-shape1-split-inherits-merge-target-attrs",
+  "issues": ["yorkie#2191"],
+  "status": { "go": "known-diverge", "js": "known-diverge" },
+  "note": "d1 merges a bold span with a plain one; d2 concurrently splits the plain span. d1 gives the split product the bold attribute of the merge target, d2 keeps it plain: a split copies the attributes of the node it physically splits.",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p",
+        "children": [
+          {
+            "type": "span",
+            "attributes": { "bold": "true" },
+            "children": [{ "type": "text", "value": "ab" }]
+          },
+          { "type": "span", "children": [{ "type": "text", "value": "cd" }] }
+        ]
+      }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "edit", "from": 4, "to": 6 },
+    { "r": 1, "op": "edit", "from": 7, "to": 7, "split": 1 },
+    { "op": "exchange" }
+  ]
+}
