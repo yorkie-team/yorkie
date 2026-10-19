@@ -6,10 +6,10 @@
     "yorkie-js-sdk#1418"
   ],
   "status": {
-    "go": "known-fail",
+    "go": "pass",
     "js": "known-fail"
   },
-  "note": "d1 types abc one character at a time, d2 inserts XYZ before it, d1 undoes all three inserts and redoes one. In the minvv run the undone characters are purged before the redo, so the redo recreates 'a' from its span: the span's left anchor still named the paragraph start captured before XYZ arrived, which put 'a' ahead of XYZ while the off run keeps XYZa (I4). JS status assumed from Go before the fix (yorkie-js-sdk#1466 was closed unmerged); verify with the JS runner.",
+  "note": "d1 types abc one character at a time, d2 inserts XYZ before it, d1 undoes all three inserts and redoes one. In the minvv run the undone characters are purged before the redo, so the redo recreates 'a' from its span: the span's left anchor still named the paragraph start captured before XYZ arrived, which put 'a' ahead of XYZ while the off run keeps XYZa (I4). Retombstone now refreshes the span's anchors to the node's neighbours right before it removes it. JS status assumed from Go before the fix (yorkie-js-sdk#1466 was closed unmerged); verify with the JS runner.",
   "replicas": 2,
   "delivery": "exchange",
   "init": {

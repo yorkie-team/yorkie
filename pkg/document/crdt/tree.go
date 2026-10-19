@@ -982,6 +982,17 @@ type TreeRestoreSpan struct {
 	RightSiblingID *TreeNodeID
 }
 
+// copy returns a copy of the span that shares nothing mutable with it: the
+// IDs are never written once made, and the attribute snapshot is copied, so a
+// reverse operation built from it never aliases the operation's payload.
+func (s *TreeRestoreSpan) copy() *TreeRestoreSpan {
+	copied := *s
+	if s.Attributes != nil {
+		copied.Attributes = s.Attributes.DeepCopy()
+	}
+	return &copied
+}
+
 // kindAgrees reports whether the span's IsText flag matches its NodeType, as
 // it always does on a span an honest replica captured. A span that disagrees
 // would recreate a node of the wrong kind -- an element carrying a Value is
@@ -1440,6 +1451,86 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 	return untombstoned, recreated, nil, diff, edits, nil
 }
 
+// refreshSpanAnchors returns a span like the given one whose parent and
+// sibling anchors point at the neighbours the span's range has now, right
+// after Retombstone removed it. The anchors were captured when the span was
+// first recorded; content a peer inserted next to the range since then is
+// what the range sits beside now, and a later Restore that has to recreate it
+// after GC must land it there, not at the stale anchor (#2169). A removal
+// leaves every node in place as a tombstone, so reading the neighbours after
+// it reads what was there before it.
+//
+// Each anchor is read off the piece that bounds the range on its side, live
+// or not: the left one off the first piece, the right one off the last. A
+// piece a peer had already removed is skipped by the removal but still
+// bounds the range, and anchoring on the first piece the removal touched
+// instead would name a neighbour inside the range. A removed piece that
+// straddles a boundary is not split here. At the start, its own last
+// character before the range is the left neighbour; at the end, the piece
+// starts inside the span, so there is no right anchor, which never names a
+// node that starts inside the range. A purged end leaves the neighbour of
+// the nearest surviving piece, which is what now sits beside the gap. A text
+// span is read at exactly its Length, so an empty one keeps its anchors.
+//
+// The three anchors are always replaced together, under the first piece's
+// parent (see anchorsOf): recreateFromSpan honours a sibling anchor only
+// under the span's ParentID and tries the left one first, so a fresh parent
+// beside a stale left anchor would land the range at the stale place. A
+// right anchor under another parent -- the span was split across elements --
+// is dropped rather than paired with the wrong one.
+//
+// It never writes through the pointer it is given, and returns a copy on
+// every path. The spans Retombstone
+// receives are the TreeEdit operation's own payload — the same objects
+// to_pb serializes at push time, the clone and the root execution both run,
+// and the reverse operation shares — so a refresh written in place would
+// retroactively rewrite an unpushed change with anchors derived from local
+// state. Only the copy reaches the reverse operation this execution builds.
+func (t *Tree) refreshSpanAnchors(span *TreeRestoreSpan) *TreeRestoreSpan {
+	// Always a copy, refreshed or not, so the reverse operation never shares
+	// a span with the operation's own payload.
+	fresh := *span.copy()
+
+	var first, last *TreeNode
+	start, end := span.ID.Offset, span.ID.Offset+span.Length
+	if span.IsText {
+		// A text span names exactly its Length; an empty one has no piece
+		// to read anchors off.
+		if span.Length <= 0 {
+			return &fresh
+		}
+		pieces := t.findPiecesOverlapping(span.ID.CreatedAt, start, end)
+		if len(pieces) == 0 {
+			return &fresh
+		}
+		first, last = pieces[0], pieces[len(pieces)-1]
+	} else if n := t.findFloorNode(span.ID); n != nil && n.id.Equal(span.ID) {
+		first, last = n, n
+	} else {
+		return &fresh
+	}
+
+	parentID, leftID, _, ok := anchorsOf(first)
+	if !ok {
+		return &fresh
+	}
+	if span.IsText && first.id.Offset < start {
+		leftID = NewTreeNodeID(span.ID.CreatedAt, start-1)
+	}
+
+	// A removed piece that straddles the span's end starts inside the span,
+	// so it is no right anchor: it is left out, and the left anchor and the
+	// same-insertion rung of recreateFromSpan place the range.
+	var rightID *TreeNodeID
+	if lastParentID, _, lastRightID, ok := anchorsOf(last); ok && lastParentID.Equal(parentID) &&
+		(!span.IsText || last.id.Offset+last.Length() <= end) {
+		rightID = lastRightID
+	}
+
+	fresh.ParentID, fresh.LeftSiblingID, fresh.RightSiblingID = parentID, leftID, rightID
+	return &fresh
+}
+
 // isolateTextRange splits piece so that a node exactly covering the absolute
 // offset interval [from, to) of its insertion exists, and returns it. Splitting
 // at the caller's boundaries — rather than skipping a straddler — is what lets
@@ -1485,22 +1576,37 @@ func (t *Tree) isolateTextRange(
 // deletion per visible node it removed, each measured right before the removal
 // so they apply one after another (see TreeVisibleEdit). Mirrors the JS
 // CRDTTree.retombstone.
+//
+// It also returns the spans describing everything it removed, for the reverse
+// operation the caller builds: one entry per input span, the input itself or
+// a copy with refreshed anchors (see refreshSpanAnchors). The inputs
+// themselves are never modified.
 func (t *Tree) Retombstone(
 	spans []*TreeRestoreSpan, executedAt *time.Ticket, measure bool,
-) ([]GCPair, resource.DataSize, []TreeVisibleEdit, error) {
+) ([]GCPair, resource.DataSize, []TreeVisibleEdit, []*TreeRestoreSpan, error) {
 	var pairs []GCPair
 	var diff resource.DataSize
 	var edits []TreeVisibleEdit
+	applied := make([]*TreeRestoreSpan, 0, len(spans))
 	for _, span := range spans {
 		if !span.kindAgrees() {
+			// Skipped, but reported as a copy like every other span, so the
+			// reverse operation never shares the operation's payload.
+			applied = append(applied, span.copy())
 			continue
 		}
 		start := span.ID.Offset
 		length := max(span.Length, 1)
 		end := start + length
 
+		// A text span names exactly its Length, as Restore reads it: an
+		// empty one removes nothing, where reading it as one character would
+		// remove a character its reverse, which reports Length 0, could not
+		// bring back.
 		var pieces []*TreeNode
-		if span.IsText {
+		if span.IsText && span.Length <= 0 {
+			pieces = nil
+		} else if span.IsText {
 			pieces = t.findPiecesOverlapping(span.ID.CreatedAt, start, end)
 		} else if n := t.findFloorNode(span.ID); n != nil && n.id.Equal(span.ID) {
 			pieces = []*TreeNode{n}
@@ -1517,7 +1623,7 @@ func (t *Tree) Retombstone(
 				var iErr error
 				target, iErr = t.isolateTextRange(piece, from, to, &diff)
 				if iErr != nil {
-					return nil, resource.DataSize{}, nil, iErr
+					return nil, resource.DataSize{}, nil, nil, iErr
 				}
 			}
 			// Measure while target is still visible.
@@ -1533,8 +1639,12 @@ func (t *Tree) Retombstone(
 				}
 			}
 		}
+		// Refreshed whether or not anything was live: a span whose pieces a
+		// peer already removed sits next to whatever is beside those
+		// tombstones now, just as one this call removed does (#2169).
+		applied = append(applied, t.refreshSpanAnchors(span))
 	}
-	return pairs, diff, edits, nil
+	return pairs, diff, edits, applied, nil
 }
 
 // visibleRangeOf returns the visible-index range [from, to) node covers, or
@@ -2523,22 +2633,40 @@ func restoreSpanOf(node *TreeNode) *TreeRestoreSpan {
 		span.Attributes = node.Attrs.DeepCopy()
 	}
 
-	if node.Index.Parent == nil {
+	parentID, leftID, rightID, ok := anchorsOf(node)
+	if !ok {
 		return span
+	}
+	span.ParentID = parentID
+	span.LeftSiblingID = leftID
+	span.RightSiblingID = rightID
+
+	return span
+}
+
+// anchorsOf reads where node sits among its siblings right now: the ID of its
+// parent and the left/right sibling anchors a restore span puts it back by.
+// ok is false when node has no parent to read them from. The three are only
+// ever read together: recreateFromSpan honours a sibling anchor solely when
+// it is still a child of the span's ParentID (see its sameParent check), so a
+// span that mixes a fresh anchor with a stale parent silently falls back to
+// id-order placement.
+func anchorsOf(node *TreeNode) (parentID, leftID, rightID *TreeNodeID, ok bool) {
+	if node.Index.Parent == nil {
+		return nil, nil, nil, false
 	}
 
 	parent := node.Index.Parent.Value
-	span.ParentID = parent.id
 	siblings := parent.Index.Children(true)
 	idx := slices.Index(siblings, node.Index)
 	if idx > 0 {
-		span.LeftSiblingID = leftAnchorID(siblings[idx-1].Value)
+		leftID = leftAnchorID(siblings[idx-1].Value)
 	}
 	if idx >= 0 && idx < len(siblings)-1 {
-		span.RightSiblingID = siblings[idx+1].Value.id
+		rightID = siblings[idx+1].Value.id
 	}
 
-	return span
+	return parent.id, leftID, rightID, true
 }
 
 // leftAnchorID returns the ID to store as a restore span's left-sibling

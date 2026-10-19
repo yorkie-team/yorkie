@@ -96,9 +96,23 @@ func TestTreeRetombstoneThenRestore(t *testing.T) {
 	spans := []*crdt.TreeRestoreSpan{elementSpan(p, tree.Root()), textSpan(text, p)}
 
 	// Retombstone (redo of a deletion undo): the live subtree is removed.
-	pairs, _, removed, rErr := tree.Retombstone(spans, helper.TimeT(ctx), true)
+	spansBefore := []crdt.TreeRestoreSpan{*spans[0], *spans[1]}
+	pairs, _, removed, applied, rErr := tree.Retombstone(spans, helper.TimeT(ctx), true)
 	assert.NoError(t, rErr)
 	assert.NotEmpty(t, pairs, "removing live nodes yields GC pairs")
+	// The spans are the acting operation's own payload, shared with its
+	// reverse and serialized at push time: Retombstone reports its refreshed
+	// anchors through fresh objects instead of writing through them.
+	assert.Equal(t, spansBefore[0], *spans[0], "the input span is not mutated")
+	assert.Equal(t, spansBefore[1], *spans[1], "the input span is not mutated")
+	assert.Len(t, applied, 2, "one applied span per input span")
+	for i, span := range applied {
+		assert.NotSame(t, spans[i], span, "a refreshed span is a copy")
+		assert.Equal(t, spans[i].ID, span.ID)
+		// The anchors travel together: a refreshed sibling anchor paired with
+		// a stale ParentID silently loses the anchor in recreateFromSpan.
+		assert.Equal(t, spans[i].ParentID, span.ParentID, "ParentID is refreshed with them")
+	}
 	assert.Equal(t, "<r></r>", tree.ToXML())
 	// <p> is measured with its text while still visible; the text is then
 	// already under a removed ancestor and takes no room of its own.
@@ -353,9 +367,11 @@ func TestTreeRetombstoneKindMismatchSkip(t *testing.T) {
 			span := textSpan(text, p)
 			span.IsText, span.NodeType = tc.isText, tc.nodeType
 
-			pairs, _, _, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), true)
+			pairs, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), true)
 			assert.NoError(t, err)
 			assert.Empty(t, pairs, "a mismatched span re-tombstones nothing")
+			assert.Equal(t, []*crdt.TreeRestoreSpan{span}, applied,
+				"a skipped span is reported back unchanged")
 			assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(), "tree is untouched")
 		})
 	}
@@ -736,4 +752,178 @@ func TestTreeRestoreConvergesUnderConcurrentEdit(t *testing.T) {
 		"the undo revives the original text and the concurrent insert survives")
 	assertLengthCacheSound(t, r1, "replica 1")
 	assertLengthCacheSound(t, r2, "replica 2")
+}
+
+// TestTreeRetombstoneAnchorsOnTheSpansFirstPiece pins where Retombstone reads
+// a text span's refreshed anchors: off the pieces that bound the span, even
+// one a peer already removed, not off the first piece the retombstone removed
+// itself. Anchoring on that one would name a piece of the span as the span's
+// own left neighbour.
+func TestTreeRetombstoneAnchorsOnTheSpansFirstPiece(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+	p := tree.Root().Children()[0]
+	createdAt := p.Children()[0].ID().CreatedAt
+
+	// The span covers "ell", offsets 1 to 4 of the insertion.
+	span := &crdt.TreeRestoreSpan{
+		ID:       crdt.NewTreeNodeID(createdAt, 1),
+		NodeType: "text",
+		IsText:   true,
+		Length:   3,
+		Value:    "ell",
+		ParentID: p.ID(),
+	}
+
+	// A peer already removed "e", the span's first piece.
+	editT(t, tree, ctx, 2, 3, nil)
+	assert.Equal(t, "<r><p>hllo</p></r>", tree.ToXML())
+
+	_, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), false)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>ho</p></r>", tree.ToXML())
+	assert.Len(t, applied, 1)
+	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 0), applied[0].LeftSiblingID,
+		`the left anchor is "h", the neighbour of the removed first piece`)
+	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 4), applied[0].RightSiblingID,
+		`the right anchor is "o"`)
+	assert.Equal(t, p.ID(), applied[0].ParentID)
+}
+
+// TestTreeRetombstoneAnchorsTravelTogether pins that Retombstone replaces a
+// span's three anchors together. A peer already removed "he", a piece that
+// straddles the start of the span "ell" and that the retombstone does not
+// split. The left anchor is then the piece's own last character before the
+// span, not the one the span was recorded with: recreateFromSpan honours the
+// left anchor first, so a stale one beside a fresh ParentID would land the
+// range at the stale place.
+func TestTreeRetombstoneAnchorsTravelTogether(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+	p := tree.Root().Children()[0]
+	createdAt := p.Children()[0].ID().CreatedAt
+
+	stale := crdt.NewTreeNodeID(helper.TimeT(ctx), 0)
+	span := &crdt.TreeRestoreSpan{
+		ID:             crdt.NewTreeNodeID(createdAt, 1),
+		NodeType:       "text",
+		IsText:         true,
+		Length:         3,
+		Value:          "ell",
+		ParentID:       p.ID(),
+		LeftSiblingID:  stale,
+		RightSiblingID: stale,
+	}
+
+	// "he" goes as one piece, straddling the span's start.
+	editT(t, tree, ctx, 1, 3, nil)
+	assert.Equal(t, "<r><p>llo</p></r>", tree.ToXML())
+
+	_, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), false)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>o</p></r>", tree.ToXML())
+	assert.Len(t, applied, 1)
+	assert.Equal(t, p.ID(), applied[0].ParentID)
+	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 0), applied[0].LeftSiblingID,
+		`the left anchor is "h", inside the straddling piece`)
+	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 4), applied[0].RightSiblingID,
+		`the right anchor is "o"`)
+}
+
+// TestTreeRetombstoneRefreshesAnAlreadyRemovedSpan pins that Retombstone
+// refreshes a span's anchors even when a peer already removed every piece of
+// it and the call removes nothing: the tombstones still sit where they are,
+// and the recorded anchors may be stale (#2169).
+func TestTreeRetombstoneRefreshesAnAlreadyRemovedSpan(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+	p := tree.Root().Children()[0]
+	createdAt := p.Children()[0].ID().CreatedAt
+
+	stale := crdt.NewTreeNodeID(helper.TimeT(ctx), 0)
+	span := &crdt.TreeRestoreSpan{
+		ID:             crdt.NewTreeNodeID(createdAt, 1),
+		NodeType:       "text",
+		IsText:         true,
+		Length:         3,
+		Value:          "ell",
+		ParentID:       p.ID(),
+		LeftSiblingID:  stale,
+		RightSiblingID: stale,
+	}
+
+	editT(t, tree, ctx, 2, 5, nil)
+	assert.Equal(t, "<r><p>ho</p></r>", tree.ToXML())
+
+	pairs, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), false)
+	assert.NoError(t, err)
+	assert.Empty(t, pairs, "nothing was live to remove")
+	assert.Len(t, applied, 1)
+	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 0), applied[0].LeftSiblingID)
+	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 4), applied[0].RightSiblingID)
+	assert.Equal(t, p.ID(), applied[0].ParentID)
+}
+
+// TestTreeRetombstoneSpanEdgeCases pins three edges of the anchor refresh: a
+// span that names nothing in the tree still comes back as a copy, so the
+// reverse operation never shares the operation's payload; an empty text span
+// is read at its length, not widened to one character, and keeps its
+// anchors; and a removed piece straddling the span's end is no right anchor,
+// since it starts inside the span.
+func TestTreeRetombstoneSpanEdgeCases(t *testing.T) {
+	setup := func(t *testing.T) (*crdt.Tree, *change.Context, *crdt.TreeNode, *time.Ticket, *crdt.TreeNodeID) {
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+		p := tree.Root().Children()[0]
+		return tree, ctx, p, p.Children()[0].ID().CreatedAt, crdt.NewTreeNodeID(helper.TimeT(ctx), 0)
+	}
+	retombstone := func(
+		t *testing.T, tree *crdt.Tree, ctx *change.Context, span *crdt.TreeRestoreSpan,
+	) *crdt.TreeRestoreSpan {
+		_, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), false)
+		assert.NoError(t, err)
+		assert.Len(t, applied, 1)
+		return applied[0]
+	}
+
+	t.Run("a span naming nothing is still copied", func(t *testing.T) {
+		tree, ctx, p, _, stale := setup(t)
+		span := &crdt.TreeRestoreSpan{ID: stale, NodeType: "p", ParentID: p.ID()}
+		got := retombstone(t, tree, ctx, span)
+		assert.NotSame(t, span, got)
+		assert.Equal(t, *span, *got)
+	})
+
+	t.Run("a span whose kind does not agree is still copied", func(t *testing.T) {
+		tree, ctx, p, _, stale := setup(t)
+		span := &crdt.TreeRestoreSpan{ID: stale, NodeType: "p", IsText: true, ParentID: p.ID()}
+		got := retombstone(t, tree, ctx, span)
+		assert.NotSame(t, span, got)
+		assert.Equal(t, *span, *got)
+	})
+
+	t.Run("an empty text span keeps its anchors", func(t *testing.T) {
+		tree, ctx, p, createdAt, stale := setup(t)
+		span := &crdt.TreeRestoreSpan{
+			ID: crdt.NewTreeNodeID(createdAt, 2), NodeType: "text", IsText: true,
+			ParentID: p.ID(), LeftSiblingID: stale, RightSiblingID: stale,
+		}
+		got := retombstone(t, tree, ctx, span)
+		assert.NotSame(t, span, got)
+		assert.Equal(t, *span, *got, "it is not read as a one-character span")
+	})
+
+	t.Run("a piece straddling the end is no right anchor", func(t *testing.T) {
+		tree, ctx, p, createdAt, stale := setup(t)
+		// A peer removed "llo" as one piece; the span "el" ends inside it.
+		editT(t, tree, ctx, 3, 6, nil)
+		assert.Equal(t, "<r><p>he</p></r>", tree.ToXML())
+		span := &crdt.TreeRestoreSpan{
+			ID: crdt.NewTreeNodeID(createdAt, 1), NodeType: "text", IsText: true,
+			Length: 2, Value: "el", ParentID: p.ID(), RightSiblingID: stale,
+		}
+		got := retombstone(t, tree, ctx, span)
+		assert.Equal(t, crdt.NewTreeNodeID(createdAt, 0), got.LeftSiblingID)
+		assert.Nil(t, got.RightSiblingID)
+	})
 }
