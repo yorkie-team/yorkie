@@ -88,6 +88,14 @@ as the deletion is measured. Since `Live <= Total`, the server's gate is also
 never stricter than the SDK's own check against the same limit, so an honest
 client's local check trips first.
 
+**Live has to equal a rebuild.** The stored size is the running ledger of
+the document the server built, so it must match what rebuilding the same
+document reports (a snapshot load), or the gate refuses writes for bytes
+the document no longer holds. The ledger tests check the running ledger
+against `Root.Rederive`, a copy whose ledger is derived from the content by
+`NewRoot`'s scan rather than copied from the document's own
+(`assertRebuildsSame`).
+
 **Unknown admits.** A zero `live_size` — no snapshot yet, a snapshot written
 before the field existed, or a document just compacted — admits the push. The
 first snapshot after that arms the gate.

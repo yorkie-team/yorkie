@@ -555,6 +555,14 @@ func (r *Root) DeepCopy() (*Root, error) {
 	return NewRoot(copiedObject.(*Object)), nil
 }
 
+// Rederive returns a copy of the root whose ledger is derived from the
+// copy's own content, as an oracle for the running one: NewRoot's scan of
+// the copied object. For tests and diagnostics; exported for the tests of
+// package document, which check a document's ledger with it.
+func (r *Root) Rederive() (*Root, error) {
+	return r.DeepCopy()
+}
+
 // GarbageCollect purge elements that were removed before the given time.
 //
 // A pass can hold a purge back (see GCBarrier), and holding one back can be the
