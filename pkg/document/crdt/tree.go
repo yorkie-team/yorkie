@@ -1365,6 +1365,8 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 	// (#2189). It runs on the success path only: a restore that fails part
 	// way leaves the lineage of spans it never applied alone.
 	var mergeSources []*TreeNodeID
+
+	underKnownRemoval := t.knownRemovalAbove(versionVector)
 	for _, span := range spans {
 		if !span.kindAgrees() {
 			continue
@@ -1380,7 +1382,7 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 
 			node := t.findFloorNode(span.ID)
 			if node != nil && node.id.Equal(span.ID) {
-				if node.IsRemoved() {
+				if node.IsRemoved() && !underKnownRemoval(node) {
 					node.unremove()
 					untombstoned = append(untombstoned, node)
 					revived(node)
@@ -1419,7 +1421,7 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 				if iErr != nil {
 					return nil, nil, nil, diff, nil, iErr
 				}
-				if target.IsRemoved() {
+				if target.IsRemoved() && !underKnownRemoval(target) {
 					target.unremove()
 					untombstoned = append(untombstoned, target)
 					revived(target)
@@ -1449,6 +1451,66 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 	t.dissolveMergeSources(mergeSources, versionVector)
 
 	return untombstoned, recreated, nil, diff, edits, nil
+}
+
+// knownRemovalAbove returns a test, for one Restore call, of whether a node
+// sits under a removed ancestor whose removal the restoring change knew.
+//
+// Restore leaves such a node a tombstone. The restoring change saw its
+// ancestor go, so a revive there would bring back a node no one can see,
+// and whether it then came back with the ancestor would depend on when each
+// replica collected: one that had already purged the ancestor leaves the
+// node out with it, while one that had not keeps the node live until its
+// own purge of the ancestor takes the node out too, and shows it again if
+// the ancestor is restored first. A restore concurrent with the ancestor's removal still
+// revives, as before: every replica applies it before the minimum synced
+// vector lets one purge the ancestor, so they all decide alike. An ancestor
+// revived earlier in the same call is live, so restoring a subtree
+// parent-first revives it whole.
+// An empty vector is read as knowing every removal, as TicketKnown reads it:
+// every change with operations carries its author's vector, so only a crafted
+// one comes without, and failing open there would bring the GC-timing
+// dependence back.
+//
+// Each node's nearest such ancestor is memoized and re-checked when read,
+// since a revive in the call can end it; a node found to have none keeps
+// none, since a revive never removes anything.
+//
+// The rule trusts the restoring change's version vector, as the §6.4
+// dissolution does: a forged one claiming a concurrent removal makes the
+// outcome depend on apply order, which needs server-side validation of
+// pushed version vectors to close (#2234).
+func (t *Tree) knownRemovalAbove(versionVector time.VersionVector) func(*TreeNode) bool {
+	memo := make(map[*TreeNode]*TreeNode)
+	// Iterative, as the depth is the client's to choose. Every node the
+	// walk passes on the way up has the same nearest such ancestor: the
+	// walk moves to a parent only when that parent's removal is not one the
+	// change knew.
+	nearest := func(n *TreeNode) *TreeNode {
+		var chain []*TreeNode
+		var found *TreeNode
+		for current := n; ; {
+			if f, ok := memo[current]; ok && (f == nil || f.IsRemoved()) {
+				found = f
+				break
+			}
+			chain = append(chain, current)
+			if current.Index == nil || current.Index.Parent == nil {
+				break
+			}
+			parent := current.Index.Parent.Value
+			if parent.removedAt != nil && time.TicketKnown(versionVector, parent.removedAt) {
+				found = parent
+				break
+			}
+			current = parent
+		}
+		for _, c := range chain {
+			memo[c] = found
+		}
+		return found
+	}
+	return func(n *TreeNode) bool { return nearest(n) != nil }
 }
 
 // isolateTextRange splits piece so that a node exactly covering the absolute
@@ -4185,8 +4247,8 @@ func (t *Tree) appendUnknownSplitSiblings(
 		} else {
 			// Cascade through the full subtree, not just immediate children,
 			// parent before child: the order becomes the reverse operation's
-			// spans, and a Restore after GC recreates a child only under a
-			// parent an earlier span brought back.
+			// spans, and Restore revives a child only once its parent is live
+			// again (see knownRemovalAbove).
 			// Iterative, as the subtree's depth is the client's to choose.
 			stack := []*index.Node[*TreeNode]{next.Index}
 			for len(stack) > 0 {
