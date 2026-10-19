@@ -115,7 +115,7 @@ func CreateDocument(
 	// This path writes the initial root straight through CompactChangeInfos, so
 	// it never meets the push gate in pushPack. Measure the root the caller
 	// supplied against the project quota here instead.
-	if err = packs.CheckDocSize(
+	if err = packs.CheckLiveSize(
 		docInfo.Key,
 		newDoc.DocSize(),
 		project.MaxSizePerDocument,
@@ -482,7 +482,7 @@ func UpdateDocument(
 	// over quota and would refuse this write, including one that shrinks the
 	// document back under the limit, so measure the rebuilt root instead.
 	if updateMode == UpdateModeRootOnly || updateMode == UpdateModeBoth {
-		if err = packs.CheckDocSize(
+		if err = packs.CheckLiveSize(
 			docInfo.Key,
 			doc.DocSize(),
 			project.MaxSizePerDocument,

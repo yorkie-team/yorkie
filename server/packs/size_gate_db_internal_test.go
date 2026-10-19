@@ -143,9 +143,9 @@ func TestCheckDocumentSizeCountsGarbage(t *testing.T) {
 	})
 }
 
-// TestCheckDocSize pins the gate the server-side repair paths use: it reads
-// the document's total, Live and GC, as the push gate does.
-func TestCheckDocSize(t *testing.T) {
+// TestCheckLiveSize pins the gate the server-side repair paths use: it reads
+// the document's Live alone, unlike the push gate, so garbage does not count.
+func TestCheckLiveSize(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		size    resource.DocSize
@@ -156,9 +156,9 @@ func TestCheckDocSize(t *testing.T) {
 		{"garbage over the limit", resource.DocSize{
 			Live: resource.DataSize{Data: 10},
 			GC:   resource.DataSize{Data: 200},
-		}, true},
+		}, false},
 	} {
-		err := CheckDocSize("d", tc.size, 100)
+		err := CheckLiveSize("d", tc.size, 100)
 		if tc.refused {
 			assert.ErrorIs(t, err, document.ErrDocumentSizeExceedsLimit, tc.name)
 		} else {
@@ -174,17 +174,9 @@ func TestCheckDocSize(t *testing.T) {
 // limit must be admitted, not refused for the garbage the repair itself
 // booked.
 //
-// The gate reads the total, Live and GC, so it refuses that repair and the
-// over-quota document has no way back under the limit. Closing this means
-// measuring the live size on these three call sites — server/packs/size_gate.go,
-// server/documents/documents.go and server/revisions/revisions.go — which this
-// test cannot reach from here.
+// The repair paths therefore measure Live (CheckLiveSize), not the total the
+// push gate reads.
 func TestRepairShrinkIsAdmitted(t *testing.T) {
-	// A fix round may not change those files, so the reproducer is kept and
-	// switched off rather than removed.
-	t.Skip("still reproduces: CheckDocSize (Live+GC) refuses a repair that " +
-		"shrinks an over-quota document, for the garbage the repair created")
-
 	limit := 1024
 	doc := document.New("d")
 	require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
@@ -204,5 +196,5 @@ func TestRepairShrinkIsAdmitted(t *testing.T) {
 	size := doc.DocSize()
 	require.LessOrEqual(t, size.Live.Total(), limit, "the repair brings Live under the limit")
 	require.Greater(t, size.Total(), limit, "but its own garbage keeps the total over it")
-	assert.NoError(t, CheckDocSize("d", size, limit))
+	assert.NoError(t, CheckLiveSize("d", size, limit))
 }
