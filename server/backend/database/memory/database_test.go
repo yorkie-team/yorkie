@@ -150,8 +150,8 @@ func TestDB(t *testing.T) {
 		testcases.RunCompactChangeInfosTest(t, db, projectID)
 	})
 
-	t.Run("SnapshotLiveSize test", func(t *testing.T) {
-		testcases.RunSnapshotLiveSizeTest(t, db, projectID)
+	t.Run("SnapshotSize test", func(t *testing.T) {
+		testcases.RunSnapshotSizeTest(t, db, projectID)
 	})
 
 	t.Run("UpdateClientInfoAfterPushPull test", func(t *testing.T) {
