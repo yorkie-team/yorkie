@@ -1,0 +1,360 @@
+{
+  "fam": "ud",
+  "n": 2,
+  "steps": 24,
+  "seed0": 1,
+  "runs": 50,
+  "diverged": 9,
+  "rows": [
+    {
+      "seed": 1,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "512e3e357917a56c",
+      "xmlDigest": "2ade6bf66cac604b"
+    },
+    {
+      "seed": 2,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "17803498f54262e8",
+      "xmlDigest": "f3e6889019199643"
+    },
+    {
+      "seed": 3,
+      "result": "fail",
+      "checks": "11101",
+      "digest": "21477c4501e663ec",
+      "xmlDigest": "cf9197d892b181dd"
+    },
+    {
+      "seed": 4,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "31e461e5a95acae7",
+      "xmlDigest": "d8c3c9081e4f0bf2"
+    },
+    {
+      "seed": 5,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "07564f09216c5b9c",
+      "xmlDigest": "9565fc34439a2c22"
+    },
+    {
+      "seed": 6,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "c738db73771ebe8d",
+      "xmlDigest": "d7e1fc08a2285a90"
+    },
+    {
+      "seed": 7,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "5d21a1dc1aa7ee32",
+      "xmlDigest": "b1abd444016b418a"
+    },
+    {
+      "seed": 8,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "955492c61d1d18af",
+      "xmlDigest": "c8f94a8bfe330440"
+    },
+    {
+      "seed": 9,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "fe3297844d33bec2",
+      "xmlDigest": "aa2285e5403ad199"
+    },
+    {
+      "seed": 10,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "01651908518c5044",
+      "xmlDigest": "e62a72fdbaaa3439"
+    },
+    {
+      "seed": 11,
+      "result": "error",
+      "checks": "10101",
+      "digest": "132f6df394f4f1cc",
+      "xmlDigest": "132f6df394f4f1cc"
+    },
+    {
+      "seed": 12,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "434f60339825401e",
+      "xmlDigest": "f9ee70a3f216d544"
+    },
+    {
+      "seed": 13,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "d03566745ee68590",
+      "xmlDigest": "0039646a1afe999d"
+    },
+    {
+      "seed": 14,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "c2dea8e015ea9fd8",
+      "xmlDigest": "0f51fb9270d31171"
+    },
+    {
+      "seed": 15,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "a1cda1b7dad23fc4",
+      "xmlDigest": "d8a0b35e4cdd39ea"
+    },
+    {
+      "seed": 16,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "5fe4650a9b761e76",
+      "xmlDigest": "188a73634b90f6c4"
+    },
+    {
+      "seed": 17,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "1192258f81bb1d02",
+      "xmlDigest": "69831fc90d0ff689"
+    },
+    {
+      "seed": 18,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "9acab21cb6ff2432",
+      "xmlDigest": "0a67b1df76e67c4c"
+    },
+    {
+      "seed": 19,
+      "result": "diverged",
+      "checks": "01101",
+      "digest": "31263225e71a1e4f",
+      "xmlDigest": "882f5f54b4997f68"
+    },
+    {
+      "seed": 20,
+      "result": "diverged",
+      "checks": "01101",
+      "digest": "30b15afbaa5e59b1",
+      "xmlDigest": "e6eee819234f032c"
+    },
+    {
+      "seed": 21,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "d9debb726910f13e",
+      "xmlDigest": "811d679bd29f1cd3"
+    },
+    {
+      "seed": 22,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "5354bfa77da84d07",
+      "xmlDigest": "66371a498f53e4f2"
+    },
+    {
+      "seed": 23,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "a151fff172acec68",
+      "xmlDigest": "22b1ced1392cf011"
+    },
+    {
+      "seed": 24,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "2ffed76650aadba4",
+      "xmlDigest": "2d9119667823e000"
+    },
+    {
+      "seed": 25,
+      "result": "diverged",
+      "checks": "01101",
+      "digest": "a70bfbf6feb18424",
+      "xmlDigest": "81111e0eb423250b"
+    },
+    {
+      "seed": 26,
+      "result": "diverged",
+      "checks": "01101",
+      "digest": "8d754e3557597a6e",
+      "xmlDigest": "d29fee5b10df3b96"
+    },
+    {
+      "seed": 27,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "47689a73e4833cb8",
+      "xmlDigest": "1c961851402c30c9"
+    },
+    {
+      "seed": 28,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "c40759413a39499a",
+      "xmlDigest": "fedf6e32e215c7e6"
+    },
+    {
+      "seed": 29,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "100d9c7c1fc57ff1",
+      "xmlDigest": "b411081967a44715"
+    },
+    {
+      "seed": 30,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "60c50829442be134",
+      "xmlDigest": "0c003f755b35e843"
+    },
+    {
+      "seed": 31,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "c63b8762c0838fbf",
+      "xmlDigest": "0a18ddd22fd0380c"
+    },
+    {
+      "seed": 32,
+      "result": "diverged",
+      "checks": "01101",
+      "digest": "f2f873e13b0d37f0",
+      "xmlDigest": "df460deb61e40056"
+    },
+    {
+      "seed": 33,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "4858b4d5ac60fe75",
+      "xmlDigest": "3b5b09c49dcdb369"
+    },
+    {
+      "seed": 34,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "e91177c26e774073",
+      "xmlDigest": "e3d74e0f29cf6b5e"
+    },
+    {
+      "seed": 35,
+      "result": "diverged",
+      "checks": "01101",
+      "digest": "02cb7d821c33fa60",
+      "xmlDigest": "cfde5734fc6f132c"
+    },
+    {
+      "seed": 36,
+      "result": "diverged",
+      "checks": "01101",
+      "digest": "0d79cf1a29699308",
+      "xmlDigest": "38b6c6bcbf6af4b7"
+    },
+    {
+      "seed": 37,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "b38b1f8bb9b6f30e",
+      "xmlDigest": "dd8d5c2eb348317a"
+    },
+    {
+      "seed": 38,
+      "result": "error",
+      "checks": "10101",
+      "digest": "e1b375d4bf89d015",
+      "xmlDigest": "e1b375d4bf89d015"
+    },
+    {
+      "seed": 39,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "3c2b5d7aa71e95e4",
+      "xmlDigest": "fdce8bb23606f9f5"
+    },
+    {
+      "seed": 40,
+      "result": "diverged",
+      "checks": "01101",
+      "digest": "6a34562282712a0e",
+      "xmlDigest": "93d59c1e56d6c678"
+    },
+    {
+      "seed": 41,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "0029190725291281",
+      "xmlDigest": "408f82425b3840b7"
+    },
+    {
+      "seed": 42,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "baadc677b41825ce",
+      "xmlDigest": "a379c878f0234143"
+    },
+    {
+      "seed": 43,
+      "result": "fail",
+      "checks": "11101",
+      "digest": "b4aefabf1f66ee06",
+      "xmlDigest": "ce35e51c1a5103b0"
+    },
+    {
+      "seed": 44,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "84494f220a774f20",
+      "xmlDigest": "9c559abf93a705ef"
+    },
+    {
+      "seed": 45,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "e2957a8ecf36c66d",
+      "xmlDigest": "0e6c9e19b7541358"
+    },
+    {
+      "seed": 46,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "3aa390665a0e5da3",
+      "xmlDigest": "6d714acd922a23b5"
+    },
+    {
+      "seed": 47,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "dad5d50ab5912c82",
+      "xmlDigest": "149e8c2b8770ee47"
+    },
+    {
+      "seed": 48,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "52eb3fbf7fffd217",
+      "xmlDigest": "d78a92d2bf359951"
+    },
+    {
+      "seed": 49,
+      "result": "diverged",
+      "checks": "01101",
+      "digest": "66a7579bdf03b551",
+      "xmlDigest": "9421daba944d05a3"
+    },
+    {
+      "seed": 50,
+      "result": "pass",
+      "checks": "11111",
+      "digest": "8031e2f5fc7e49ca",
+      "xmlDigest": "0d0d99b6efa38a2a"
+    }
+  ]
+}
