@@ -564,14 +564,25 @@ func TestTreeLengthCacheChecker(t *testing.T) {
 // TestTreeRestoreLengthCacheIntegrity pins unremove()'s ancestor bookkeeping.
 // remove() decrements ancestor VisibleLength and stops at the first removed
 // ancestor; unremove() must mirror that exactly, in EITHER span order, or the
-// index cache silently drifts.
+// index cache silently drifts. A change concurrent with the delete revives
+// the text even when it is listed before its paragraph, so that order still
+// reaches unremove() under a removed parent. A change that knew the delete,
+// or one without clocks, leaves a text listed first a tombstone.
 func TestTreeRestoreLengthCacheIntegrity(t *testing.T) {
+	other, err := time.ActorIDFromHex("000000000000000000000009")
+	assert.NoError(t, err)
+	concurrent := time.NewVersionVector()
+	concurrent.Set(other, 1)
+
 	for _, tc := range []struct {
 		name       string
 		childFirst bool
+		vv         time.VersionVector
+		want       string
 	}{
-		{"parent before child", false},
-		{"child before parent", true},
+		{"parent before child", false, nil, "<r><p>hello</p></r>"},
+		{"child before parent, concurrent", true, concurrent, "<r><p>hello</p></r>"},
+		{"child before parent, without clocks", true, nil, "<r><p></p></r>"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := helper.TextChangeContext(helper.TestRoot())
@@ -589,11 +600,15 @@ func TestTreeRestoreLengthCacheIntegrity(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, "<r></r>", tree.ToXML())
 
-			_, _, _, _, _, err = tree.Restore(spans, true, nil)
+			_, _, _, _, _, err = tree.Restore(spans, true, tc.vv)
 			assert.NoError(t, err)
 
-			assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
-			assert.Equal(t, before, tree.Root().Len(), "visible length is restored exactly")
+			assert.Equal(t, tc.want, tree.ToXML())
+			if tc.want == "<r><p>hello</p></r>" {
+				assert.Equal(t, before, tree.Root().Len(), "visible length is restored exactly")
+			} else {
+				assert.True(t, text.IsRemoved())
+			}
 			assertLengthCacheSound(t, tree, tc.name)
 		})
 	}
@@ -1266,4 +1281,93 @@ func TestTreeRestoreAfterGCPlacesASplitInsertionByPart(t *testing.T) {
 	}, false, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "<r><p>ab</p><p>cd</p></r>", tree.ToXML())
+}
+
+// TestTreeRestoreUnderAKnownRemoval pins Restore's rule for a node under a
+// removed ancestor. A change that knew the paragraph's removal leaves its
+// text a tombstone when it names the text alone, but revives both when it
+// names the paragraph first, as an undo of the paragraph's delete does: a
+// paragraph revived earlier in the call is live. A change without clocks is
+// read as knowing every removal, as TicketKnown reads it, so it too leaves
+// the text alone a tombstone.
+func TestTreeRestoreUnderAKnownRemoval(t *testing.T) {
+	setup := func(t *testing.T) (*crdt.Tree, *crdt.TreeNode, *crdt.TreeNode, time.VersionVector) {
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
+		p := tree.Root().Children()[0]
+		text := p.Children()[0]
+		editT(t, tree, ctx, 0, 7, nil)
+		assert.True(t, p.IsRemoved())
+		assert.True(t, text.IsRemoved())
+		at := helper.TimeT(ctx)
+		known := time.NewVersionVector()
+		known.Set(at.ActorID(), at.Lamport())
+		return tree, p, text, known
+	}
+
+	t.Run("the text alone stays a tombstone", func(t *testing.T) {
+		tree, p, text, known := setup(t)
+		untombstoned, _, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{textSpan(text, p)}, false, known)
+		assert.NoError(t, err)
+		assert.Empty(t, untombstoned)
+		assert.True(t, text.IsRemoved())
+	})
+
+	t.Run("the paragraph first revives both", func(t *testing.T) {
+		tree, p, text, known := setup(t)
+		spans := []*crdt.TreeRestoreSpan{elementSpan(p, tree.Root()), textSpan(text, p)}
+		untombstoned, _, _, _, _, err := tree.Restore(spans, false, known)
+		assert.NoError(t, err)
+		assert.Len(t, untombstoned, 2)
+		assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML())
+	})
+
+	t.Run("a change without clocks leaves the text a tombstone", func(t *testing.T) {
+		tree, p, text, _ := setup(t)
+		untombstoned, _, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{textSpan(text, p)}, false, nil)
+		assert.NoError(t, err)
+		assert.Empty(t, untombstoned)
+		assert.True(t, text.IsRemoved())
+	})
+
+	// <r><p><q>ab</q></p></r> with "a" and "b" deleted apart, the paragraph
+	// removed by a known delete and q revived by a concurrent change: the
+	// first text's walk finds the paragraph through live q, and the second
+	// must look again once the paragraph is revived between them.
+	t.Run("a revived ancestor is looked at again", func(t *testing.T) {
+		ctx := helper.TextChangeContext(helper.TestRoot())
+		tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+		editT(t, tree, ctx, 0, 0, crdt.NewTreeNode(helper.PosT(ctx), "p", nil))
+		editT(t, tree, ctx, 1, 1, crdt.NewTreeNode(helper.PosT(ctx), "q", nil))
+		editT(t, tree, ctx, 2, 2, textNode(ctx, "ab"))
+		editT(t, tree, ctx, 2, 3, nil)
+		editT(t, tree, ctx, 2, 3, nil)
+		p := tree.Root().Children()[0]
+		q := p.Children()[0]
+		x1, x2 := q.Children(true)[0], q.Children(true)[1]
+		assert.Equal(t, "a", x1.Value)
+		assert.Equal(t, "b", x2.Value)
+		editT(t, tree, ctx, 0, 4, nil)
+		assert.Equal(t, "<r></r>", tree.ToXML())
+
+		other, err := time.ActorIDFromHex("000000000000000000000009")
+		assert.NoError(t, err)
+		concurrent := time.NewVersionVector()
+		concurrent.Set(other, 1)
+		_, _, _, _, _, err = tree.Restore([]*crdt.TreeRestoreSpan{elementSpan(q, p)}, false, concurrent)
+		assert.NoError(t, err)
+		assert.False(t, q.IsRemoved())
+		assert.True(t, p.IsRemoved())
+
+		at := helper.TimeT(ctx)
+		known := time.NewVersionVector()
+		known.Set(at.ActorID(), at.Lamport())
+		spans := []*crdt.TreeRestoreSpan{textSpan(x1, q), elementSpan(p, tree.Root()), textSpan(x2, q)}
+		_, _, _, _, _, err = tree.Restore(spans, false, known)
+		assert.NoError(t, err)
+		assert.True(t, x1.IsRemoved(), "listed before the paragraph's revive")
+		assert.False(t, x2.IsRemoved(), "listed after it")
+		assert.Equal(t, "<r><p><q>b</q></p></r>", tree.ToXML())
+		assertLengthCacheSound(t, tree, "after the revive")
+	})
 }

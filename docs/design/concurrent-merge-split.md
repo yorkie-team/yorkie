@@ -1432,6 +1432,14 @@ result. The JS SDK has to mirror all of the following:
    when every split between that element and the span's parent is unknown
    to the restoring change, and a born-tombstoned recreate takes the
    removal of the parent it actually lands under.
+7. **Restore under a known removal.** `Restore` leaves a node a
+   tombstone under an ancestor whose removal the restoring change's
+   version vector covers (a change without clocks is treated as knowing
+   every removal, as `TicketKnown` does). It revives in place in span
+   order, so spans must come parent-first, for a revive as for a
+   recreate: a child listed before its removed parent stays a tombstone.
+   Content inserted under a removed parent is booked to GC only (the rule
+   is in `document-size-limit.md`).
 
 ## Key Design Decisions
 
