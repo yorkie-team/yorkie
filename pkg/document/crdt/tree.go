@@ -1319,8 +1319,14 @@ type TreeVisibleEdit struct {
 // identities (identity-preserving Tree undo): live → skip (idempotent),
 // tombstoned → unremove in place, purged → recreate. A span whose kind does
 // not agree with itself is skipped outright (see kindAgrees), as it is in
-// Retombstone. Spans must be in
-// parent-before-child order. Returns (untombstoned, recreated); the caller
+// Retombstone. Spans are applied in parent-before-child order, which this
+// call establishes itself (see parentsFirst): a recreate hangs under a parent
+// an earlier span brought back, and the removal of an ancestor a later span
+// revives is not one this restore leaves standing (see knownRemovalAbove), so
+// a list naming a child ahead of its parent would otherwise revive a
+// different tree than the same list the other way round. A list already in
+// order -- what Retombstone reports and what every ordinary undo carries --
+// is applied exactly as it came. Returns (untombstoned, recreated); the caller
 // un-registers GC pairs for the un-tombstoned nodes and accounts recreated
 // sizes to Live. When measure is set it also returns one insertion per node
 // that became visible, in the order it did, each measured right after that
@@ -1369,6 +1375,11 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 	// (#2189). It runs on the success path only: a restore that fails part
 	// way leaves the lineage of spans it never applied alone.
 	var mergeSources []*TreeNodeID
+
+	// Every span here is one the caller supplied, so none of them is an input
+	// text span that has to stay behind a cascaded one (that precedence is
+	// already baked into the order appendUncoveredSpans reported).
+	spans = parentsFirst(spans, len(spans))
 
 	underKnownRemoval := t.knownRemovalAbove(versionVector)
 	for _, span := range spans {
@@ -1677,13 +1688,14 @@ func (t *Tree) retombstone(
 // restores parent-before-child order where the reordering broke it, keeping
 // that precedence.
 //
+// It runs over the input spans whether or not the cascade captured anything:
+// Restore needs parent-before-child order to revive a whole subtree (see
+// knownRemovalAbove), and a delete can name a child ahead of its parent on
+// its own, with no cascade to reorder.
+//
 // Coverage is looked up in sorted, merged intervals per (insertion, parent),
 // so the merge costs O(N log N) however the client sized the span list.
 func appendUncoveredSpans(spans, cascaded []*TreeRestoreSpan) []*TreeRestoreSpan {
-	if len(cascaded) == 0 {
-		return spans
-	}
-
 	elements := make(map[string]struct{}, len(spans))
 	covers := make(map[string][][2]int)
 	var inputElements, inputTexts []*TreeRestoreSpan

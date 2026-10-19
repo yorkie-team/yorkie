@@ -1449,8 +1449,10 @@ result. The JS SDK has to mirror all of the following:
    tombstone under an ancestor whose removal the restoring change's
    version vector covers (a change without clocks is treated as knowing
    every removal, as `TicketKnown` does). It revives in place in span
-   order, so spans must come parent-first, for a revive as for a
-   recreate: a child listed before its removed parent stays a tombstone.
+   order, and parent-first order is what the rule needs, for a revive as
+   for a recreate; `Restore` establishes that order itself, over the spans
+   it was handed, so a child listed before its parent is still revived
+   under it and the outcome does not depend on how the list was ordered.
    Content inserted under a removed parent is booked to GC only (the rule
    is in `document-size-limit.md`).
 
@@ -1479,6 +1481,38 @@ runs — every one of these scripts converges. Closing it means making a
 recreate's anchor choice independent of which tombstones the replica
 still holds, which rules 4 and 6 do not yet do; the JS mirror of those
 rules inherits the same gap.
+
+The mode is not hypothetical, though: it models yorkie#2110, where a
+reply's `minVV` is taken after another client's push landed while the
+reply carries changes read before it, so a replica collects a tombstone a
+change still in flight names. Rules 4 and 6 widen what that race costs
+from an apply error to a divergence, and nothing in the document rules can
+narrow it back — the fix is server-side, in how a pull's `minVV` is read
+against the changes it ships. So the two halves are ordered against each
+other, and this is the order:
+
+- yorkie#2110 is a prerequisite of rules 4 and 6, not a parallel
+  work item: the class above closes when it does, and until then the five
+  scripts and the two seeds stay pinned as the measure of how wide it is.
+- The pins are the gate. They are asserted on every run of the
+  conformance suite, so the class cannot grow — a sixth script joining it
+  fails the suite rather than being discovered later — and cannot shrink
+  unnoticed either: when #2110's fix lands, these pins start failing as
+  passes and are removed in that change, which is what re-measures the
+  class rather than assuming it.
+- The JS mirror inherits the same gap, so it inherits the same order:
+  rules 4 and 6 are mirrored with this section, and the pins travel with
+  them: each script's `status` names both runners, so a script pinned
+  `known-fail` for Go and `pass` for JS is itself the record of which half
+  is where, and no SDK carries the class silently.
+
+What is shipped ahead of that fix is therefore a bounded, measured and
+asserted class under a race that already breaks applies today, against the
+corpus scripts these rules turn from failing to passing with the minimum
+advancing correctly. Shipping them behind a runtime switch was
+rejected: a rule that changes which node an anchor resolves to has to be
+the same on every replica, so a switch would create a second, unmeasured
+divergence class between replicas on either side of it.
 
 ### Known divergence: an anchor resolved through a collected tombstone
 

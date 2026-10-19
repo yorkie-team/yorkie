@@ -564,10 +564,10 @@ func TestTreeLengthCacheChecker(t *testing.T) {
 // TestTreeRestoreLengthCacheIntegrity pins unremove()'s ancestor bookkeeping.
 // remove() decrements ancestor VisibleLength and stops at the first removed
 // ancestor; unremove() must mirror that exactly, in EITHER span order, or the
-// index cache silently drifts. A change concurrent with the delete revives
-// the text even when it is listed before its paragraph, so that order still
-// reaches unremove() under a removed parent. A change that knew the delete,
-// or one without clocks, leaves a text listed first a tombstone.
+// index cache silently drifts. The outcome itself does not depend on that
+// order: Restore sorts the spans parent-first, so a paragraph listed after
+// its text is still revived before it, and the text comes back under a live
+// parent whatever the restoring change knew about the delete.
 func TestTreeRestoreLengthCacheIntegrity(t *testing.T) {
 	other, err := time.ActorIDFromHex("000000000000000000000009")
 	assert.NoError(t, err)
@@ -582,7 +582,7 @@ func TestTreeRestoreLengthCacheIntegrity(t *testing.T) {
 	}{
 		{"parent before child", false, nil, "<r><p>hello</p></r>"},
 		{"child before parent, concurrent", true, concurrent, "<r><p>hello</p></r>"},
-		{"child before parent, without clocks", true, nil, "<r><p></p></r>"},
+		{"child before parent, without clocks", true, nil, "<r><p>hello</p></r>"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := helper.TextChangeContext(helper.TestRoot())
