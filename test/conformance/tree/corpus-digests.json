@@ -294,10 +294,10 @@
     "xmlDigest": "9bd77c4321c0e102"
   },
   "ri-retombstone-element-split-by-enter.json": {
-    "result": "error",
-    "checks": "10101",
-    "digest": "57e4ca2f7dce33ca",
-    "xmlDigest": "57e4ca2f7dce33ca"
+    "result": "pass",
+    "checks": "11111",
+    "digest": "06a30b000827c5f0",
+    "xmlDigest": "44c0bbd5c4e59da5"
   },
   "ri-retombstone-text-ending-at-enter.json": {
     "result": "pass",

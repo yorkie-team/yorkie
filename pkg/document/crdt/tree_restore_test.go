@@ -97,7 +97,7 @@ func TestTreeRetombstoneThenRestore(t *testing.T) {
 
 	// Retombstone (redo of a deletion undo): the live subtree is removed.
 	spansBefore := []crdt.TreeRestoreSpan{*spans[0], *spans[1]}
-	pairs, _, removed, applied, rErr := tree.Retombstone(spans, helper.TimeT(ctx), true)
+	pairs, _, removed, applied, rErr := tree.Retombstone(spans, helper.TimeT(ctx), true, nil)
 	assert.NoError(t, rErr)
 	assert.NotEmpty(t, pairs, "removing live nodes yields GC pairs")
 	// The spans are the acting operation's own payload, shared with its
@@ -367,7 +367,7 @@ func TestTreeRetombstoneKindMismatchSkip(t *testing.T) {
 			span := textSpan(text, p)
 			span.IsText, span.NodeType = tc.isText, tc.nodeType
 
-			pairs, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), true)
+			pairs, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), true, nil)
 			assert.NoError(t, err)
 			assert.Empty(t, pairs, "a mismatched span re-tombstones nothing")
 			assert.Equal(t, []*crdt.TreeRestoreSpan{span}, applied,
@@ -779,7 +779,7 @@ func TestTreeRetombstoneAnchorsOnTheSpansFirstPiece(t *testing.T) {
 	editT(t, tree, ctx, 2, 3, nil)
 	assert.Equal(t, "<r><p>hllo</p></r>", tree.ToXML())
 
-	_, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), false)
+	_, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), false, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "<r><p>ho</p></r>", tree.ToXML())
 	assert.Len(t, applied, 1)
@@ -788,6 +788,133 @@ func TestTreeRetombstoneAnchorsOnTheSpansFirstPiece(t *testing.T) {
 	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 4), applied[0].RightSiblingID,
 		`the right anchor is "o"`)
 	assert.Equal(t, p.ID(), applied[0].ParentID)
+}
+
+// TestTreeRetombstoneCascadesToUnknownSplitProducts pins the §4.1 cascade in
+// Retombstone and the spans it adds to the reverse operation.
+//
+// A split the retombstoning change did not know cut <div><p>XY</p></div> in
+// two at level 2, so the product is a subtree three levels deep. The
+// retombstone takes the product with the element, and reports one span per
+// cascaded node, parent before child: the reverse revives them in that order,
+// and once GC has purged them it recreates each under the parent an earlier
+// span brought back. A child listed before its parent finds no parent and is
+// dropped from the undo.
+func TestTreeRetombstoneCascadesToUnknownSplitProducts(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+	editT(t, tree, ctx, 0, 0, crdt.NewTreeNode(helper.PosT(ctx), "div", nil))
+	editT(t, tree, ctx, 1, 1, crdt.NewTreeNode(helper.PosT(ctx), "p", nil))
+	editT(t, tree, ctx, 2, 2, textNode(ctx, "XY"))
+	assert.Equal(t, "<r><div><p>XY</p></div></r>", tree.ToXML())
+
+	div := tree.Root().Children()[0]
+	divSpan := elementSpan(div, tree.Root())
+	// The retombstoning change knew everything of this context's actor, and
+	// nothing of the peer whose split comes next.
+	known := time.NewVersionVector()
+	at := helper.TimeT(ctx)
+	known.Set(at.ActorID(), at.Lamport())
+
+	peer, err := time.ActorIDFromHex("0000000000000000000000ff")
+	assert.NoError(t, err)
+	lamport := at.Lamport()
+	peerTicket := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, peer)
+	}
+	_, _, err = tree.EditT(3, 3, nil, 2, peerTicket(), peerTicket)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><div><p>X</p></div><div><p>Y</p></div></r>", tree.ToXML())
+	product := tree.Root().Children()[1]
+	productP := product.Children()[0]
+	productText := productP.Children()[0]
+
+	_, _, edits, applied, err := tree.Retombstone(
+		[]*crdt.TreeRestoreSpan{divSpan}, helper.TimeT(ctx), true, known,
+	)
+	assert.NoError(t, err)
+	// Measured against the tree as each removal finds it: the element's
+	// five tokens, then the product's five, now at the same index. The
+	// product's p and "Y" go out of sight with it and report nothing.
+	assert.Equal(t, []crdt.TreeVisibleEdit{{From: 0, To: 5}, {From: 0, To: 5}}, edits,
+		"the cascade reports the product's removal as a visible edit")
+	assert.Equal(t, "<r></r>", tree.ToXML(), "the unknown product goes with the element")
+
+	assert.Len(t, applied, 4, "the element's span, then one per cascaded node")
+	cascaded := applied[1:]
+	var order []string
+	for _, span := range cascaded {
+		order = append(order, span.NodeType)
+	}
+	assert.Equal(t, []string{"div", "p", "text"}, order, "parent before child")
+	assert.Equal(t, product.ID(), cascaded[0].ID)
+
+	// Purge the cascaded nodes, deepest first, so the undo has to recreate
+	// them from the spans alone.
+	for _, node := range []*crdt.TreeNode{productText, productP, product} {
+		assert.NoError(t, tree.Purge(node))
+	}
+	assert.Len(t, tree.Root().Children(true), 1, "only the element is left")
+
+	_, recreated, _, _, _, err := tree.Restore(applied, false, nil)
+	assert.NoError(t, err)
+	assert.Len(t, recreated, 3, "every cascaded node comes back")
+	assert.Equal(t, "<r><div><p>X</p></div><div><p>Y</p></div></r>", tree.ToXML())
+}
+
+// TestTreeRestoreAfterGCPutsTheCascadedPieceFirst pins the order of the
+// spans a retombstone reports when the cascade's text sits deeper than the
+// input text of the same insertion.
+//
+// <div><p>XY</p></div> is split at level 2 by a change the retombstone did
+// not know. The input names div, the product's p and "XY" under the
+// original p, but not the product div, which the cascade adds, with "Y"
+// under the product's p. That puts the product's p ahead of its parent, so
+// the spans are re-sorted by depth; "XY" counts no ancestor in the list,
+// "Y" two. Once GC has purged the text, a Restore that reaches "XY" first
+// brings "Y" back under the original p, and the product's piece then finds
+// it there and is declined: the product's p comes back empty.
+func TestTreeRestoreAfterGCPutsTheCascadedPieceFirst(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+	editT(t, tree, ctx, 0, 0, crdt.NewTreeNode(helper.PosT(ctx), "div", nil))
+	editT(t, tree, ctx, 1, 1, crdt.NewTreeNode(helper.PosT(ctx), "p", nil))
+	editT(t, tree, ctx, 2, 2, textNode(ctx, "XY"))
+	div := tree.Root().Children()[0]
+	p := div.Children()[0]
+	text := p.Children()[0]
+	textAll := textSpan(text, p)
+
+	known := time.NewVersionVector()
+	at := helper.TimeT(ctx)
+	known.Set(at.ActorID(), at.Lamport())
+	peer, err := time.ActorIDFromHex("0000000000000000000000ff")
+	assert.NoError(t, err)
+	lamport := at.Lamport()
+	peerTicket := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, peer)
+	}
+	_, _, err = tree.EditT(3, 3, nil, 2, peerTicket(), peerTicket)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><div><p>X</p></div><div><p>Y</p></div></r>", tree.ToXML())
+	product := tree.Root().Children()[1]
+	productP := product.Children()[0]
+	productText := productP.Children()[0]
+
+	_, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{
+		elementSpan(div, tree.Root()), elementSpan(productP, product), textAll,
+	}, helper.TimeT(ctx), false, known)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r></r>", tree.ToXML())
+
+	for _, node := range []*crdt.TreeNode{productText, text} {
+		assert.NoError(t, tree.Purge(node))
+	}
+	_, _, _, _, _, err = tree.Restore(applied, false, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><div><p>X</p></div><div><p>Y</p></div></r>", tree.ToXML())
 }
 
 // TestTreeRetombstoneAnchorsTravelTogether pins that Retombstone replaces a
@@ -819,7 +946,7 @@ func TestTreeRetombstoneAnchorsTravelTogether(t *testing.T) {
 	editT(t, tree, ctx, 1, 3, nil)
 	assert.Equal(t, "<r><p>llo</p></r>", tree.ToXML())
 
-	_, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), false)
+	_, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), false, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "<r><p>o</p></r>", tree.ToXML())
 	assert.Len(t, applied, 1)
@@ -855,13 +982,60 @@ func TestTreeRetombstoneRefreshesAnAlreadyRemovedSpan(t *testing.T) {
 	editT(t, tree, ctx, 2, 5, nil)
 	assert.Equal(t, "<r><p>ho</p></r>", tree.ToXML())
 
-	pairs, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), false)
+	pairs, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), false, nil)
 	assert.NoError(t, err)
 	assert.Empty(t, pairs, "nothing was live to remove")
 	assert.Len(t, applied, 1)
 	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 0), applied[0].LeftSiblingID)
 	assert.Equal(t, crdt.NewTreeNodeID(createdAt, 4), applied[0].RightSiblingID)
 	assert.Equal(t, p.ID(), applied[0].ParentID)
+}
+
+// TestTreeRetombstoneDoesNotDuplicateASpan pins that the spans Retombstone
+// reports name each node once. The input spans hold an element and a split
+// product cut off it, as a delete's do; the §4.1 cascade from the element
+// reaches the product before the product's own span. Fed back through
+// repeated undo/redo cycles, a duplicate would grow the list by one copy per
+// cycle.
+func TestTreeRetombstoneDoesNotDuplicateASpan(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+	editT(t, tree, ctx, 0, 0, crdt.NewTreeNode(helper.PosT(ctx), "p", nil))
+	editT(t, tree, ctx, 1, 1, textNode(ctx, "ab"))
+	at := helper.TimeT(ctx)
+	known := time.NewVersionVector()
+	known.Set(at.ActorID(), at.Lamport())
+
+	peer, err := time.ActorIDFromHex("0000000000000000000000ff")
+	assert.NoError(t, err)
+	lamport := at.Lamport()
+	peerTicket := func() *time.Ticket {
+		lamport++
+		return time.NewTicket(lamport, 0, peer)
+	}
+	_, _, err = tree.EditT(2, 2, nil, 1, peerTicket(), peerTicket)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>a</p><p>b</p></r>", tree.ToXML())
+
+	left, product := tree.Root().Children()[0], tree.Root().Children()[1]
+	spans := []*crdt.TreeRestoreSpan{
+		elementSpan(left, tree.Root()),
+		textSpan(left.Children()[0], left),
+		elementSpan(product, tree.Root()),
+		textSpan(product.Children()[0], product),
+	}
+
+	for cycle := range 3 {
+		_, _, _, applied, err := tree.Retombstone(spans, helper.TimeT(ctx), false, known)
+		assert.NoError(t, err)
+		assert.Equal(t, "<r></r>", tree.ToXML())
+		assert.Len(t, applied, len(spans), "cycle %d: one span per node", cycle)
+
+		_, _, _, _, _, err = tree.Restore(applied, false, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "<r><p>a</p><p>b</p></r>", tree.ToXML())
+		spans = applied
+	}
 }
 
 // TestTreeRetombstoneSpanEdgeCases pins three edges of the anchor refresh: a
@@ -880,7 +1054,7 @@ func TestTreeRetombstoneSpanEdgeCases(t *testing.T) {
 	retombstone := func(
 		t *testing.T, tree *crdt.Tree, ctx *change.Context, span *crdt.TreeRestoreSpan,
 	) *crdt.TreeRestoreSpan {
-		_, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), false)
+		_, _, _, applied, err := tree.Retombstone([]*crdt.TreeRestoreSpan{span}, helper.TimeT(ctx), false, nil)
 		assert.NoError(t, err)
 		assert.Len(t, applied, 1)
 		return applied[0]
@@ -926,4 +1100,44 @@ func TestTreeRetombstoneSpanEdgeCases(t *testing.T) {
 		assert.Equal(t, crdt.NewTreeNodeID(createdAt, 0), got.LeftSiblingID)
 		assert.Nil(t, got.RightSiblingID)
 	})
+}
+
+// TestTreeRestoreAfterGCPlacesASplitInsertionByPart pins why the merged
+// retombstone spans put a cascaded text part ahead of the input text span
+// that overlaps it. "abcd" was split into <p>ab</p><p>cd</p>, deleted and
+// purged. The input span still names all of "abcd" under p, the cascade's
+// span names "cd" under the product. Restored in that order, "cd" comes
+// back under the product first, and the input span finds it there and
+// recreates only "ab" under p.
+func TestTreeRestoreAfterGCPlacesASplitInsertionByPart(t *testing.T) {
+	ctx := helper.TextChangeContext(helper.TestRoot())
+	tree := crdt.NewTree(crdt.NewTreeNode(helper.PosT(ctx), "r", nil), helper.TimeT(ctx))
+	editT(t, tree, ctx, 0, 0, crdt.NewTreeNode(helper.PosT(ctx), "p", nil))
+	editT(t, tree, ctx, 1, 1, textNode(ctx, "abcd"))
+	p := tree.Root().Children()[0]
+	createdAt := p.Children()[0].ID().CreatedAt
+	_, _, err := tree.EditT(3, 3, nil, 1, helper.TimeT(ctx), issueTicket(ctx))
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>ab</p><p>cd</p></r>", tree.ToXML())
+	product := tree.Root().Children()[1]
+
+	// <r>0<p>1ab3</p>4<p>5cd7</p>8</r>: delete both texts, purge both.
+	editT(t, tree, ctx, 5, 7, nil)
+	editT(t, tree, ctx, 1, 3, nil)
+	for _, parent := range []*crdt.TreeNode{p, product} {
+		assert.NoError(t, tree.Purge(parent.Children(true)[0]))
+	}
+	assert.Equal(t, "<r><p></p><p></p></r>", tree.ToXML())
+
+	span := func(offset int, value string, parent *crdt.TreeNode) *crdt.TreeRestoreSpan {
+		return &crdt.TreeRestoreSpan{
+			ID: crdt.NewTreeNodeID(createdAt, offset), NodeType: "text", IsText: true,
+			Length: len(value), Value: value, ParentID: parent.ID(),
+		}
+	}
+	_, _, _, _, _, err = tree.Restore([]*crdt.TreeRestoreSpan{
+		span(2, "cd", product), span(0, "abcd", p),
+	}, false, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "<r><p>ab</p><p>cd</p></r>", tree.ToXML())
 }

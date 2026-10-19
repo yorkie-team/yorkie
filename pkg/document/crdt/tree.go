@@ -1451,6 +1451,511 @@ func (t *Tree) Restore(spans []*TreeRestoreSpan, measure bool, versionVector tim
 	return untombstoned, recreated, nil, diff, edits, nil
 }
 
+// isolateTextRange splits piece so that a node exactly covering the absolute
+// offset interval [from, to) of its insertion exists, and returns it. Splitting
+// at the caller's boundaries — rather than skipping a straddler — is what lets
+// concurrent restores converge on identical text-node segmentation across
+// replicas (the tree analogue of RGATreeSplit.isolateRange). A live split's
+// metadata overhead is added to diff; a removed split buffers a pending GC pair
+// internally (zero here). Requires pieceStart <= from < to <= pieceEnd. Mirrors
+// the JS CRDTTree.isolateTextRange.
+func (t *Tree) isolateTextRange(
+	piece *TreeNode, from, to int, diff *resource.DataSize,
+) (*TreeNode, error) {
+	node := piece
+	if from > node.id.Offset {
+		d, err := node.Split(t, from-node.id.Offset, nil, nil)
+		if err != nil {
+			return nil, err
+		}
+		diff.Add(d)
+		// Split's right half is registered under offset `from`; pick it up.
+		node = t.findFloorNode(&TreeNodeID{CreatedAt: node.id.CreatedAt, Offset: from})
+		if node == nil {
+			return nil, ErrNodeNotFound
+		}
+	}
+	if to < node.id.Offset+node.Length() {
+		d, err := node.Split(t, to-node.id.Offset, nil, nil)
+		if err != nil {
+			return nil, err
+		}
+		diff.Add(d)
+	}
+	return node, nil
+}
+
+// Retombstone re-removes the nodes described by spans (redo of an
+// identity-preserving undo). Live pieces only; idempotent. A piece that
+// straddles a span boundary is split at that boundary so only the in-span range
+// is re-removed (symmetric with Restore's isolate, so undo/redo stay mirror
+// images and segmentation stays convergent). A span whose kind does not agree
+// with itself is skipped, exactly as Restore skips it, so neither direction
+// acts on what the other ignores. Returns the GC pairs for the newly
+// tombstoned nodes, the live-split overhead, and, when measure is set, one
+// deletion per visible node it removed, each measured right before the removal
+// so they apply one after another (see TreeVisibleEdit). Mirrors the JS
+// CRDTTree.retombstone.
+//
+// It also returns the spans describing everything it removed, for the reverse
+// operation the caller builds: one entry per input span, the input itself or
+// a copy with refreshed anchors (see refreshSpanAnchors), followed by one
+// freshly captured span per node the §4.1 cascade took with its element. The
+// inputs themselves are never modified.
+func (t *Tree) Retombstone(
+	spans []*TreeRestoreSpan, executedAt *time.Ticket, measure bool, versionVector time.VersionVector,
+) ([]GCPair, resource.DataSize, []TreeVisibleEdit, []*TreeRestoreSpan, error) {
+	return t.retombstone(spans, executedAt, measure, versionVector, nil)
+}
+
+// retombstone is Retombstone, also counting into steps, when given, the
+// split siblings its §4.1 cascades walk.
+func (t *Tree) retombstone(
+	spans []*TreeRestoreSpan, executedAt *time.Ticket, measure bool, versionVector time.VersionVector,
+	steps *int,
+) ([]GCPair, resource.DataSize, []TreeVisibleEdit, []*TreeRestoreSpan, error) {
+	var pairs []GCPair
+	var diff resource.DataSize
+	var edits []TreeVisibleEdit
+	applied := make([]*TreeRestoreSpan, 0, len(spans))
+	var cascaded []*TreeRestoreSpan
+	// The split siblings the §4.1 cascade has walked in this call. A later
+	// span's cascade stops where an earlier one already went, so the call
+	// walks each chain once however many of its elements the spans name.
+	walked := make(map[*TreeNode]struct{})
+	for _, span := range spans {
+		if !span.kindAgrees() {
+			// Skipped, but reported as a copy like every other span, so the
+			// reverse operation never shares the operation's payload.
+			applied = append(applied, span.copy())
+			continue
+		}
+		start := span.ID.Offset
+		length := max(span.Length, 1)
+		end := start + length
+
+		// A text span names exactly its Length, as Restore reads it: an
+		// empty one removes nothing, where reading it as one character would
+		// remove a character its reverse, which reports Length 0, could not
+		// bring back.
+		var pieces []*TreeNode
+		if span.IsText && span.Length <= 0 {
+			pieces = nil
+		} else if span.IsText {
+			pieces = t.findPiecesOverlapping(span.ID.CreatedAt, start, end)
+		} else if n := t.findFloorNode(span.ID); n != nil && n.id.Equal(span.ID) {
+			pieces = []*TreeNode{n}
+		}
+
+		for _, piece := range pieces {
+			if piece.IsRemoved() {
+				// The §4.1 cascade still runs for an element a peer already
+				// removed, as the forward delete's does: whether it reaches
+				// the unknown split products must not depend on whether the
+				// peer's delete arrived first.
+				pairs, edits, cascaded = t.retombstoneUnknownSplitSiblings(
+					piece, executedAt, measure, versionVector, walked, steps, pairs, edits, cascaded,
+				)
+				continue
+			}
+			target := piece
+			if piece.IsText() {
+				from := max(piece.id.Offset, start)
+				to := min(piece.id.Offset+piece.Length(), end)
+				var iErr error
+				target, iErr = t.isolateTextRange(piece, from, to, &diff)
+				if iErr != nil {
+					return nil, resource.DataSize{}, nil, nil, iErr
+				}
+			}
+			// Measure while target is still visible.
+			var from, to int
+			visible := false
+			if measure {
+				from, to, visible = t.visibleRangeOf(target)
+			}
+			if target.remove(executedAt) {
+				pairs = append(pairs, GCPair{Parent: t, Child: target})
+				if visible {
+					edits = append(edits, TreeVisibleEdit{From: from, To: to})
+				}
+			}
+			pairs, edits, cascaded = t.retombstoneUnknownSplitSiblings(
+				target, executedAt, measure, versionVector, walked, steps, pairs, edits, cascaded,
+			)
+		}
+		// Refreshed whether or not anything was live: a span whose pieces a
+		// peer already removed sits next to whatever is beside those
+		// tombstones now, just as one this call removed does (#2169).
+		applied = append(applied, t.refreshSpanAnchors(span))
+	}
+	return pairs, diff, edits, appendUncoveredSpans(applied, cascaded), nil
+}
+
+// appendUncoveredSpans merges the spans the §4.1 cascade captured into the
+// input spans: every cascaded span, or the part of it, that names what the
+// input spans do not already describe -- an element by its ID, a text range
+// by the text spans of the same insertion under the same parent. The input
+// spans of a delete routinely include a split product together with the
+// element it was cut off, and the cascade from the element reaches the
+// product before its own span does; without this the reverse operation
+// would carry the product twice, and one more copy on every undo/redo that
+// toggles it.
+//
+// A cascaded text piece under a split product can overlap an input span of
+// its insertion recorded under the original element. The merged list puts
+// every input element first, then the kept cascaded spans, then the input
+// text spans, so that a Restore after GC recreates the product's piece under
+// the product before the input span reaches that range, finds it there, and
+// recreates only the rest under the original element. parentsFirst then
+// restores parent-before-child order where the reordering broke it, keeping
+// that precedence.
+//
+// Coverage is looked up in sorted, merged intervals per (insertion, parent),
+// so the merge costs O(N log N) however the client sized the span list.
+func appendUncoveredSpans(spans, cascaded []*TreeRestoreSpan) []*TreeRestoreSpan {
+	if len(cascaded) == 0 {
+		return spans
+	}
+
+	elements := make(map[string]struct{}, len(spans))
+	covers := make(map[string][][2]int)
+	var inputElements, inputTexts []*TreeRestoreSpan
+	for _, span := range spans {
+		// A span whose kind disagrees was skipped, and Restore skips it
+		// too, so it describes nothing a cascaded span could leave to it.
+		describes := span.kindAgrees()
+		if span.IsText {
+			inputTexts = append(inputTexts, span)
+			if describes && span.Length > 0 {
+				key := textCoverKey(span)
+				covers[key] = append(covers[key], [2]int{span.ID.Offset, span.ID.Offset + span.Length})
+			}
+		} else {
+			inputElements = append(inputElements, span)
+			if describes {
+				elements[span.ID.toIDString()] = struct{}{}
+			}
+		}
+	}
+	for key, intervals := range covers {
+		covers[key] = mergeIntervals(intervals)
+	}
+
+	var kept []*TreeRestoreSpan
+	for _, span := range cascaded {
+		if !span.IsText {
+			if _, ok := elements[span.ID.toIDString()]; !ok {
+				kept = append(kept, span)
+			}
+			continue
+		}
+		kept = append(kept, uncoveredTextSpans(span, covers[textCoverKey(span)])...)
+	}
+
+	merged := make([]*TreeRestoreSpan, 0, len(spans)+len(kept))
+	merged = append(merged, inputElements...)
+	merged = append(merged, kept...)
+	inputTextsFrom := len(merged)
+	merged = append(merged, inputTexts...)
+	return parentsFirst(merged, inputTextsFrom)
+}
+
+// mergeIntervals sorts half-open intervals and merges the ones that overlap
+// or touch.
+func mergeIntervals(intervals [][2]int) [][2]int {
+	slices.SortFunc(intervals, func(a, b [2]int) int { return a[0] - b[0] })
+	merged := intervals[:0]
+	for _, iv := range intervals {
+		if n := len(merged); n > 0 && iv[0] <= merged[n-1][1] {
+			merged[n-1][1] = max(merged[n-1][1], iv[1])
+			continue
+		}
+		merged = append(merged, iv)
+	}
+	return merged
+}
+
+// parentsFirst returns spans in parent-before-child order, as Restore needs
+// them: once GC has purged the nodes, each is recreated under a parent an
+// earlier span brought back, and one whose parent is not there yet is
+// declined. Leaving out a cascaded element an input span already names can
+// put the input span of one of its descendants ahead of the cascaded spans
+// it hangs under. Spans already in order are returned as they are;
+// otherwise they are stably sorted by how many of their ancestors the list
+// itself holds, which keeps the order of every span against its siblings.
+//
+// The spans from inputTextsFrom on are input text spans, which have to stay
+// behind every earlier text span of the same insertion (see
+// appendUncoveredSpans), however deep that one sits. So an input text span
+// sorts at the depth of the deepest of those at least, and the stable sort
+// keeps it after them on a tie, as the list has it. The input text spans
+// also keep their own order, as a later one can anchor on an earlier one:
+// each sorts at least as deep as every input text span before it. A text
+// span is no span's parent, so moving it later keeps every parent ahead of
+// its children.
+func parentsFirst(spans []*TreeRestoreSpan, inputTextsFrom int) []*TreeRestoreSpan {
+	position := make(map[string]int, len(spans))
+	for i, span := range spans {
+		if !span.IsText {
+			position[span.ID.toIDString()] = i
+		}
+	}
+	parentOf := func(span *TreeRestoreSpan) (int, bool) {
+		if span.ParentID == nil {
+			return 0, false
+		}
+		i, ok := position[span.ParentID.toIDString()]
+		return i, ok
+	}
+
+	inOrder := true
+	for i, span := range spans {
+		if j, ok := parentOf(span); ok && j > i {
+			inOrder = false
+			break
+		}
+	}
+	if inOrder {
+		return spans
+	}
+
+	// Each span's depth is computed once and reused by its descendants, so
+	// the whole list costs O(n). A crafted span set can name its parents in
+	// a cycle; a span reached again while its own depth is pending ends the
+	// chain there, at depth 0.
+	const (
+		unvisited = iota
+		pending
+		done
+	)
+	depth := make([]int, len(spans))
+	state := make([]int, len(spans))
+	var chain []int
+	for i := range spans {
+		chain = chain[:0]
+		base := 0
+		for current := i; ; {
+			if state[current] == done {
+				base = depth[current] + 1
+				break
+			}
+			if state[current] == pending {
+				break
+			}
+			state[current] = pending
+			chain = append(chain, current)
+			j, ok := parentOf(spans[current])
+			if !ok {
+				break
+			}
+			current = j
+		}
+		for k := len(chain) - 1; k >= 0; k-- {
+			depth[chain[k]] = base
+			state[chain[k]] = done
+			base++
+		}
+	}
+
+	deepest := make(map[string]int)
+	for i, span := range spans[:inputTextsFrom] {
+		if span.IsText {
+			key := span.ID.CreatedAt.Key()
+			if d, ok := deepest[key]; !ok || depth[i] > d {
+				deepest[key] = depth[i]
+			}
+		}
+	}
+	floor := 0
+	for i := inputTextsFrom; i < len(spans); i++ {
+		if d, ok := deepest[spans[i].ID.CreatedAt.Key()]; ok && d > depth[i] {
+			depth[i] = d
+		}
+		floor = max(floor, depth[i])
+		depth[i] = floor
+	}
+
+	order := make([]int, len(spans))
+	for i := range order {
+		order[i] = i
+	}
+	slices.SortStableFunc(order, func(a, b int) int { return depth[a] - depth[b] })
+	sorted := make([]*TreeRestoreSpan, len(spans))
+	for i, j := range order {
+		sorted[i] = spans[j]
+	}
+	return sorted
+}
+
+// textCoverKey groups text spans that can cover one another: the same
+// insertion under the same parent. A piece of the insertion that a split
+// carried under its product is not what an input span recorded under the
+// original element describes, though their offsets overlap: Restore would
+// bring that span back under the original element and leave the product's
+// piece removed.
+func textCoverKey(span *TreeRestoreSpan) string {
+	parent := ""
+	if span.ParentID != nil {
+		parent = span.ParentID.toIDString()
+	}
+	return span.ID.CreatedAt.Key() + "|" + parent
+}
+
+// uncoveredTextSpans returns the parts of the text span that none of covers,
+// sorted and merged intervals, holds, each as a span of its own. A part
+// keeps the span's left anchor only if it starts where the span does, and
+// its right anchor only if it ends there too; between parts, the anchors are
+// the covered characters of the same insertion on either side. A Restore
+// after GC recreates the parts before the covering spans, so a part past
+// the first places itself after the part before it (the floor of the
+// character in front of its gap), not after the span's left neighbour,
+// which would put it ahead of that part.
+func uncoveredTextSpans(span *TreeRestoreSpan, covers [][2]int) []*TreeRestoreSpan {
+	// An empty span covers no range for another span to cover; it is kept as
+	// it is rather than dropped from the reverse operation.
+	if span.Length <= 0 {
+		return []*TreeRestoreSpan{span}
+	}
+	start, end := span.ID.Offset, span.ID.Offset+span.Length
+
+	var gaps [][2]int
+	cursor := start
+	// The first cover that ends past start: covers are disjoint and sorted,
+	// so their ends are sorted too.
+	first, _ := slices.BinarySearchFunc(covers, start, func(iv [2]int, at int) int {
+		if iv[1] <= at {
+			return -1
+		}
+		return 1
+	})
+	for i := first; i < len(covers) && covers[i][0] < end; i++ {
+		if covers[i][0] > cursor {
+			gaps = append(gaps, [2]int{cursor, covers[i][0]})
+		}
+		cursor = max(cursor, covers[i][1])
+	}
+	if cursor < end {
+		gaps = append(gaps, [2]int{cursor, end})
+	}
+
+	if len(gaps) == 1 && gaps[0] == [2]int{start, end} {
+		return []*TreeRestoreSpan{span}
+	}
+	// Value is sliced on its own bounds too, should it carry fewer code
+	// units than its Length claims, and each part's Length is what its
+	// Value holds: the wire decoder rejects a text span whose Length is not
+	// the UTF-16 length of its Value, so a reverse operation carrying one
+	// could not be decoded. A part left with nothing describes nothing.
+	encoded := utf16.Encode([]rune(span.Value))
+	parts := make([]*TreeRestoreSpan, 0, len(gaps))
+	for _, gap := range gaps {
+		from, to := min(gap[0]-start, len(encoded)), min(gap[1]-start, len(encoded))
+		if from >= to {
+			continue
+		}
+		part := *span.copy()
+		part.ID = &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: gap[0]}
+		part.Length = to - from
+		part.Value = string(utf16.Decode(encoded[from:to]))
+		if gap[0] > start {
+			part.LeftSiblingID = &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: gap[0] - 1}
+		}
+		if gap[1] < end {
+			part.RightSiblingID = &TreeNodeID{CreatedAt: span.ID.CreatedAt, Offset: gap[1]}
+		}
+		parts = append(parts, &part)
+	}
+	return parts
+}
+
+// retombstoneUnknownSplitSiblings applies the §4.1 cascade to an element
+// Retombstone just removed: the split products a concurrent split cut off it,
+// which the acting change did not know, go with it, as they do when an
+// ordinary delete removes the element. Without it a replica that applied the
+// concurrent split before the retombstone keeps the product live while one
+// that applied it after splits an already removed element and gets a removed
+// product.
+//
+// Every sibling it actually tombstones is appended to cascaded as its own
+// restore span, captured right before the removal. The forward delete path
+// records a span for every node in toBeRemoveds, and this cascade owes the
+// same: the spans the acting operation carries describe only the element, so
+// without an entry of its own a cascaded sibling would be removed by the redo
+// and left tombstoned by the matching undo.
+//
+// Unlike the forward delete's cascade, it needs no merge-boundary exclusion:
+// that one keeps the split siblings of a node whose children the same edit
+// moves by a merge, and an edit that merges records no identity spans
+// (TreeEditReverseInfo.SpansComplete), so no span a retombstone acts on ever
+// names such a node.
+//
+// The spans go out parent before child, as Restore requires: once GC has
+// purged the cascade, the undo recreates each node under a parent an earlier
+// span brought back, and declines one whose parent is not there yet.
+// appendUnknownSplitSiblings lists each sibling's subtree in postorder, so
+// the spans are collected per node and emitted by a preorder walk of every
+// sibling it returned.
+func (t *Tree) retombstoneUnknownSplitSiblings(
+	target *TreeNode,
+	executedAt *time.Ticket,
+	measure bool,
+	versionVector time.VersionVector,
+	walked map[*TreeNode]struct{},
+	steps *int,
+	pairs []GCPair,
+	edits []TreeVisibleEdit,
+	cascaded []*TreeRestoreSpan,
+) ([]GCPair, []TreeVisibleEdit, []*TreeRestoreSpan) {
+	if target.IsText() || target.InsNextID == nil {
+		return pairs, edits, cascaded
+	}
+
+	neverEnclosed := func(*TreeNode) bool { return false }
+	siblings := t.appendUnknownSplitSiblings(nil, target, versionVector, neverEnclosed, walked, steps)
+	// What it allocates is bounded by what the operation reaches: the
+	// unknown products of its own target and their subtrees, each a node it
+	// removes, and a span only for one it does remove, not for a tombstone
+	// it passes over.
+	spans := make(map[*TreeNode]*TreeRestoreSpan)
+	for _, sibling := range siblings {
+		if sibling.removedAt != nil {
+			// Already a tombstone: the later removal still wins its ticket.
+			sibling.remove(executedAt)
+			continue
+		}
+		var from, to int
+		visible := false
+		if measure {
+			from, to, visible = t.visibleRangeOf(sibling)
+		}
+		span := restoreSpanOf(sibling)
+		if sibling.remove(executedAt) {
+			pairs = append(pairs, GCPair{Parent: t, Child: sibling})
+			spans[sibling] = span
+			if visible {
+				edits = append(edits, TreeVisibleEdit{From: from, To: to})
+			}
+		}
+	}
+
+	// siblings lists every product followed by its subtree, parent before
+	// child, so one pass over it emits the spans in that order. A later link
+	// of the chain can sit inside an earlier product's subtree and so appear
+	// twice; its span is taken out once emitted, so each node is reported
+	// once.
+	for _, sibling := range siblings {
+		if steps != nil {
+			*steps++
+		}
+		if span, ok := spans[sibling]; ok {
+			cascaded = append(cascaded, span)
+			delete(spans, sibling)
+		}
+	}
+	return pairs, edits, cascaded
+}
+
 // refreshSpanAnchors returns a span like the given one whose parent and
 // sibling anchors point at the neighbours the span's range has now, right
 // after Retombstone removed it. The anchors were captured when the span was
@@ -1529,122 +2034,6 @@ func (t *Tree) refreshSpanAnchors(span *TreeRestoreSpan) *TreeRestoreSpan {
 
 	fresh.ParentID, fresh.LeftSiblingID, fresh.RightSiblingID = parentID, leftID, rightID
 	return &fresh
-}
-
-// isolateTextRange splits piece so that a node exactly covering the absolute
-// offset interval [from, to) of its insertion exists, and returns it. Splitting
-// at the caller's boundaries — rather than skipping a straddler — is what lets
-// concurrent restores converge on identical text-node segmentation across
-// replicas (the tree analogue of RGATreeSplit.isolateRange). A live split's
-// metadata overhead is added to diff; a removed split buffers a pending GC pair
-// internally (zero here). Requires pieceStart <= from < to <= pieceEnd. Mirrors
-// the JS CRDTTree.isolateTextRange.
-func (t *Tree) isolateTextRange(
-	piece *TreeNode, from, to int, diff *resource.DataSize,
-) (*TreeNode, error) {
-	node := piece
-	if from > node.id.Offset {
-		d, err := node.Split(t, from-node.id.Offset, nil, nil)
-		if err != nil {
-			return nil, err
-		}
-		diff.Add(d)
-		// Split's right half is registered under offset `from`; pick it up.
-		node = t.findFloorNode(&TreeNodeID{CreatedAt: node.id.CreatedAt, Offset: from})
-		if node == nil {
-			return nil, ErrNodeNotFound
-		}
-	}
-	if to < node.id.Offset+node.Length() {
-		d, err := node.Split(t, to-node.id.Offset, nil, nil)
-		if err != nil {
-			return nil, err
-		}
-		diff.Add(d)
-	}
-	return node, nil
-}
-
-// Retombstone re-removes the nodes described by spans (redo of an
-// identity-preserving undo). Live pieces only; idempotent. A piece that
-// straddles a span boundary is split at that boundary so only the in-span range
-// is re-removed (symmetric with Restore's isolate, so undo/redo stay mirror
-// images and segmentation stays convergent). A span whose kind does not agree
-// with itself is skipped, exactly as Restore skips it, so neither direction
-// acts on what the other ignores. Returns the GC pairs for the newly
-// tombstoned nodes, the live-split overhead, and, when measure is set, one
-// deletion per visible node it removed, each measured right before the removal
-// so they apply one after another (see TreeVisibleEdit). Mirrors the JS
-// CRDTTree.retombstone.
-//
-// It also returns the spans describing everything it removed, for the reverse
-// operation the caller builds: one entry per input span, the input itself or
-// a copy with refreshed anchors (see refreshSpanAnchors). The inputs
-// themselves are never modified.
-func (t *Tree) Retombstone(
-	spans []*TreeRestoreSpan, executedAt *time.Ticket, measure bool,
-) ([]GCPair, resource.DataSize, []TreeVisibleEdit, []*TreeRestoreSpan, error) {
-	var pairs []GCPair
-	var diff resource.DataSize
-	var edits []TreeVisibleEdit
-	applied := make([]*TreeRestoreSpan, 0, len(spans))
-	for _, span := range spans {
-		if !span.kindAgrees() {
-			// Skipped, but reported as a copy like every other span, so the
-			// reverse operation never shares the operation's payload.
-			applied = append(applied, span.copy())
-			continue
-		}
-		start := span.ID.Offset
-		length := max(span.Length, 1)
-		end := start + length
-
-		// A text span names exactly its Length, as Restore reads it: an
-		// empty one removes nothing, where reading it as one character would
-		// remove a character its reverse, which reports Length 0, could not
-		// bring back.
-		var pieces []*TreeNode
-		if span.IsText && span.Length <= 0 {
-			pieces = nil
-		} else if span.IsText {
-			pieces = t.findPiecesOverlapping(span.ID.CreatedAt, start, end)
-		} else if n := t.findFloorNode(span.ID); n != nil && n.id.Equal(span.ID) {
-			pieces = []*TreeNode{n}
-		}
-
-		for _, piece := range pieces {
-			if piece.IsRemoved() {
-				continue
-			}
-			target := piece
-			if piece.IsText() {
-				from := max(piece.id.Offset, start)
-				to := min(piece.id.Offset+piece.Length(), end)
-				var iErr error
-				target, iErr = t.isolateTextRange(piece, from, to, &diff)
-				if iErr != nil {
-					return nil, resource.DataSize{}, nil, nil, iErr
-				}
-			}
-			// Measure while target is still visible.
-			var from, to int
-			visible := false
-			if measure {
-				from, to, visible = t.visibleRangeOf(target)
-			}
-			if target.remove(executedAt) {
-				pairs = append(pairs, GCPair{Parent: t, Child: target})
-				if visible {
-					edits = append(edits, TreeVisibleEdit{From: from, To: to})
-				}
-			}
-		}
-		// Refreshed whether or not anything was live: a span whose pieces a
-		// peer already removed sits next to whatever is beside those
-		// tombstones now, just as one this call removed does (#2169).
-		applied = append(applied, t.refreshSpanAnchors(span))
-	}
-	return pairs, diff, edits, applied, nil
 }
 
 // visibleRangeOf returns the visible-index range [from, to) node covers, or
@@ -3586,7 +3975,7 @@ func (t *Tree) collectBetween(
 					if !node.IsText() && node.InsNextID != nil &&
 						!slices.Contains(toBeMergedNodes, node) {
 						toBeRemoveds = t.appendUnknownSplitSiblings(
-							toBeRemoveds, node, versionVector, enclosed,
+							toBeRemoveds, node, versionVector, enclosed, nil, nil,
 						)
 					}
 				}
@@ -3632,27 +4021,50 @@ func (t *Tree) appendUnknownSplitSiblings(
 	node *TreeNode,
 	versionVector time.VersionVector,
 	enclosed func(*TreeNode) bool,
+	walked map[*TreeNode]struct{},
+	steps *int,
 ) []*TreeNode {
 	var walker insNextWalker
 	walker.visit(node)
 	next := t.findFloorNode(node.InsNextID)
 	// Stop on a chain that loops back on itself; see insNextWalker.
-	// Unbounded here would also grow toBeRemoveds without limit.
+	// Unbounded here would also grow toBeRemoveds without limit. With walked
+	// set, also stop at a sibling an earlier walk of the same call passed:
+	// the chain from there on was walked then.
 	for next != nil && walker.visit(next) {
+		if walked != nil {
+			if _, ok := walked[next]; ok {
+				break
+			}
+			walked[next] = struct{}{}
+		}
+		if steps != nil {
+			*steps++
+		}
 		if time.TicketKnown(versionVector, next.ID().CreatedAt) {
 			seenGone := next.removedAt != nil && time.TicketKnown(versionVector, next.removedAt)
 			if !seenGone && !enclosed(next) {
 				break
 			}
 		} else {
-			toBeRemoveds = append(toBeRemoveds, next)
-			// Cascade through the full subtree, not just immediate children.
-			sibling := next
-			index.TraverseNode(sibling.Index, func(n *index.Node[*TreeNode], _ int) {
-				if n.Value != sibling {
-					toBeRemoveds = append(toBeRemoveds, n.Value)
+			// Cascade through the full subtree, not just immediate children,
+			// parent before child: the order becomes the reverse operation's
+			// spans, and a Restore after GC recreates a child only under a
+			// parent an earlier span brought back.
+			// Iterative, as the subtree's depth is the client's to choose.
+			stack := []*index.Node[*TreeNode]{next.Index}
+			for len(stack) > 0 {
+				n := stack[len(stack)-1]
+				stack = stack[:len(stack)-1]
+				toBeRemoveds = append(toBeRemoveds, n.Value)
+				if steps != nil {
+					*steps++
 				}
-			})
+				children := n.Children(true)
+				for i := len(children) - 1; i >= 0; i-- {
+					stack = append(stack, children[i])
+				}
+			}
 		}
 		if next.InsNextID == nil {
 			break
