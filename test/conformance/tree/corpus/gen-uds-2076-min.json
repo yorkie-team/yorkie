@@ -1,8 +1,9 @@
 {
   "v": 1,
   "id": "gen-uds-2076-min",
+  "issues": ["yorkie#2256"],
   "status": { "go": "known-fail", "js": "pass" },
-  "note": "Minimised from gen-uds-n2-s24-2076 (a uds large-run seed). It passes under main's rules (js status assumed from them, as the JS SDK mirrors main); under the relink of a recreated text piece into its insertion chain (Rollout item 6, relinkRecreatedText) the minvv run ends on another tree than the off run (I4). Pinned so the class cannot grow unnoticed; the class is recorded under the Known divergence heading for rules 4 and 6 under a lagging minimum version vector in docs/design/concurrent-merge-split.md.",
+  "note": "Minimised from gen-uds-n2-s24-2076 (a uds large-run seed). It passes under main's rules (js status assumed from them, as the JS SDK mirrors main); under the relink of a recreated text piece into its insertion chain (Rollout item 6, relinkRecreatedText) the minvv run ends on another tree than the off run (I4). Pinned so the class cannot grow unnoticed, and tracked in yorkie#2256; the class is recorded under the Known divergence heading for rules 4 and 6 under a lagging minimum version vector in docs/design/concurrent-merge-split.md.",
   "replicas": 2,
   "init": "abcd",
   "steps": [
