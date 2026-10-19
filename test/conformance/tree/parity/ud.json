@@ -22,8 +22,8 @@
     },
     {
       "seed": 3,
-      "result": "fail",
-      "checks": "11101",
+      "result": "pass",
+      "checks": "11111",
       "digest": "21477c4501e663ec",
       "xmlDigest": "cf9197d892b181dd"
     },
@@ -302,8 +302,8 @@
     },
     {
       "seed": 43,
-      "result": "fail",
-      "checks": "11101",
+      "result": "pass",
+      "checks": "11111",
       "digest": "b4aefabf1f66ee06",
       "xmlDigest": "ce35e51c1a5103b0"
     },
