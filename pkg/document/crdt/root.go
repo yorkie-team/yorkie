@@ -123,13 +123,23 @@ type Root struct {
 	// out of docSize.Live that Live was never holding -- which is how docSize
 	// goes negative. One slot per element has room for both.
 	//
-	// A zero size is not the same as no record. It says this element has been
-	// released: charged to neither side, because its subtree was orphaned by a
-	// restore and nothing will ever collect it. Anything that later charges it
-	// again has to know Live is not the side to take it from. Such a record
+	// A record of zero is not the same as no record. It says this element is
+	// charged to neither side, which is what released marks.
+	sizeInGC map[Element]resource.DataSize
+
+	// released holds every element that has been released: charged to neither
+	// side of the ledger, because its subtree was orphaned by a restore and
+	// nothing will ever collect it. Anything that later charges one of these
+	// again has to know Live is not the side to take it from. Such a mark
 	// lives only as long as its element is addressable: index retires it when
 	// a restored copy takes the element's elementMap slot over.
-	sizeInGC map[Element]resource.DataSize
+	//
+	// It is a set of its own rather than the zero record release writes into
+	// sizeInGC, because a charge can sum to exactly zero without the element
+	// having been released -- a negative diff that cancels the charge it is
+	// booked against -- and reading that back as a release marker would drop
+	// every later charge and leave the record for index to retire.
+	released map[Element]struct{}
 }
 
 // NewRoot creates a new instance of Root.
@@ -139,6 +149,7 @@ func NewRoot(root *Object) *Root {
 		gcElementPairMap: make(map[string]ElementPair),
 		gcNodePairMap:    make(map[gcPairKey]GCPair),
 		sizeInGC:         make(map[Element]resource.DataSize),
+		released:         make(map[Element]struct{}),
 		docSize: resource.DocSize{
 			Live: resource.DataSize{
 				Data: 0,
@@ -270,14 +281,15 @@ func (r *Root) registerLive(element Element) {
 // alive per remove/undo cycle. A member only the tombstone carries keeps its
 // slot and its record.
 //
-// Only a zero record is a release record. A tombstone with a charge of its
-// own is still on the collection worklist, and collecting it is what
+// Only a released element carries a release record. A tombstone with a charge
+// of its own is still on the collection worklist, and collecting it is what
 // retires that record.
 func (r *Root) index(elem Element) {
 	key := elem.CreatedAt().Key()
 	if prev, ok := r.elementMap[key]; ok && prev != elem {
-		if charged, ok := r.sizeInGC[prev]; ok && charged == (resource.DataSize{}) {
+		if _, ok := r.released[prev]; ok {
 			delete(r.sizeInGC, prev)
+			delete(r.released, prev)
 		}
 	}
 	r.elementMap[key] = elem
@@ -354,6 +366,7 @@ func (r *Root) deregisterElement(element Element) int {
 		if charged, ok := r.sizeInGC[elem]; ok {
 			r.docSize.GC.Sub(charged)
 			delete(r.sizeInGC, elem)
+			delete(r.released, elem)
 		} else {
 			r.docSize.Live.Sub(elem.DataSize())
 		}
@@ -503,12 +516,13 @@ func (r *Root) release(elem Element) {
 	// addressable -- that is the whole point of not deregistering it -- so a
 	// peer that has not seen the restore can still remove something inside
 	// this subtree, and moveSizeToGC would then take its size out of Live for
-	// a second time and drive docSize negative. A zero charge says Live is
+	// a second time and drive docSize negative. A release mark says Live is
 	// not holding it. A copy restored under the same createdAt has a slot of
 	// its own and is still charged normally. Registering that copy is also
 	// what retires this record, once the copy takes the element's elementMap
 	// slot over and nothing can address it any more (see index).
 	r.sizeInGC[elem] = resource.DataSize{}
+	r.released[elem] = struct{}{}
 
 	if pair, ok := r.gcElementPairMap[createdAt]; ok && pair.elem == elem {
 		delete(r.gcElementPairMap, createdAt)
@@ -524,6 +538,10 @@ func (r *Root) release(elem Element) {
 //
 // Another element sharing this createdAt has a charge of its own, and it is not
 // this one's: this element is still in Live and moves in full.
+//
+// A released element topped up here is released no longer: GC is holding its
+// size again, so a later charge belongs on that side (see chargeToElement) and
+// collecting it has to subtract what GC took.
 func (r *Root) moveSizeToGC(elem Element) bool {
 	size := elem.DataSize()
 
@@ -532,6 +550,7 @@ func (r *Root) moveSizeToGC(elem Element) bool {
 		diff.Sub(charged)
 		r.docSize.GC.Add(diff)
 		r.sizeInGC[elem] = size
+		delete(r.released, elem)
 		return false
 	}
 
@@ -810,8 +829,8 @@ func (r *Root) ChargeTreeOp(tree *Tree) func() {
 //
 // Where the delta lands is chargeToElement's decision, the same one
 // AccMovedElement makes for a move: a live element keeps it in Live, a
-// removed one takes it onto its charge, and a released orphan, whose zero
-// record says neither side holds it, drops it.
+// removed one takes it onto its charge, and a released orphan, which neither
+// side holds, drops it.
 func (r *Root) ChargeToRemovedElement(elem Element, liveBefore resource.DataSize) {
 	delta := r.docSize.Live
 	delta.Sub(liveBefore)
@@ -847,25 +866,30 @@ func (r *Root) AccMovedElement(elem Element, diff resource.DataSize) {
 // GC top-up that left the record alone would only move the stray bytes from
 // Live to GC.
 //
-// A zero charge is not a charge: release records one to say neither side of
-// the ledger holds a released element any more, and index retires that record
-// only while it is still exactly zero (see release and index). Such an element
-// is orphaned -- displaced from the container that addressed it -- so a
-// rebuild, which derives the ledger from the document's content, counts it on
-// neither side, and the diff belongs on neither either. Topping the record up
-// would make it indistinguishable from a tombstone's own charge and leave the
-// released subtree uncollectable; charging Live would charge it for bytes
-// release has already taken out of it, and a delete inside the orphan would
-// then subtract those bytes a second time and drive the recorded size below
-// the real one -- under the limit the size gates read. So the diff is
-// dropped.
+// A released element is a charge of neither side: release marks it to say
+// neither side of the ledger holds it any more, and index retires that mark
+// (see release and index). Such an element is orphaned -- displaced from the
+// container that addressed it -- so a rebuild, which derives the ledger from
+// the document's content, counts it on neither side, and the diff belongs on
+// neither either. Topping the record up would make it indistinguishable from
+// a tombstone's own charge and leave the released subtree uncollectable;
+// charging Live would charge it for bytes release has already taken out of
+// it, and a delete inside the orphan would then subtract those bytes a second
+// time and drive the recorded size below the real one -- under the limit the
+// size gates read. So the diff is dropped.
+//
+// The release mark is read from released, not from a charge that happens to
+// be zero: a negative diff can cancel the charge it is booked against exactly,
+// and writing that back as a zero record would turn a live tombstone's charge
+// into a release marker -- index would then retire the record while GC still
+// counts the element, and every later charge on it would be dropped.
 func (r *Root) chargeToElement(elem Element, diff resource.DataSize) {
 	charged, ok := r.sizeInGC[elem]
 	if !ok {
 		r.docSize.Live.Add(diff)
 		return
 	}
-	if charged == (resource.DataSize{}) {
+	if _, released := r.released[elem]; released {
 		return
 	}
 
