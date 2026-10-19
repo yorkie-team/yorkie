@@ -20,6 +20,9 @@
 package crdt
 
 import (
+	"errors"
+	"maps"
+
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
@@ -90,6 +93,11 @@ func gcParentsAreComparable() {
 
 var _ = gcParentsAreComparable
 
+// Root.collect releases a Tree's live nodes only through this assertion, so
+// a Tree that stops implementing it would book purges by the plain path,
+// silently; this fails the build instead.
+var _ gcLiveRelease[GCChild] = (*Tree)(nil)
+
 // Root is a structure represents the root of JSON. It has a hash table of
 // all JSON elements to find a specific element when applying remote changes
 // received from server.
@@ -102,6 +110,16 @@ type Root struct {
 	gcElementPairMap map[string]ElementPair
 	gcNodePairMap    map[gcPairKey]GCPair
 	docSize          resource.DocSize
+
+	// detachedTrees holds the Trees whose purges left detached subtrees, so
+	// a collection lets them go without walking every element (see
+	// GarbageCollect).
+	detachedTrees map[*Tree]struct{}
+
+	// retainedOff holds the GC size of a released node whose pair key
+	// another node's pair holds, which only crafted duplicate IDs give (see
+	// bookRetained); DropGCPair gives it back when the node is let go.
+	retainedOff map[*TreeNode]resource.DataSize
 
 	// sizeInGC maps every registered element whose size counts toward
 	// docSize.GC rather than docSize.Live to the exact amount charged. Each
@@ -138,6 +156,8 @@ func NewRoot(root *Object) *Root {
 		elementMap:       make(map[string]Element),
 		gcElementPairMap: make(map[string]ElementPair),
 		gcNodePairMap:    make(map[gcPairKey]GCPair),
+		detachedTrees:    make(map[*Tree]struct{}),
+		retainedOff:      make(map[*TreeNode]resource.DataSize),
 		sizeInGC:         make(map[Element]resource.DataSize),
 		docSize: resource.DocSize{
 			Live: resource.DataSize{
@@ -278,6 +298,23 @@ func (r *Root) index(elem Element) {
 	if prev, ok := r.elementMap[key]; ok && prev != elem {
 		if charged, ok := r.sizeInGC[prev]; ok && charged == (resource.DataSize{}) {
 			delete(r.sizeInGC, prev)
+			// A released Tree kept its detached subtrees only while a
+			// change could still name them through it (see release); with
+			// its slot taken over, nothing can, so they go now, with the
+			// pairs and the retained bytes their nodes hold, and so do the
+			// pairs of its attached tombstones, which nothing would
+			// otherwise collect before a pass at a vector covering them.
+			// Set, release's one caller, registers the restored copy right
+			// after, so every released element the copy has a counterpart
+			// of is displaced here. One it has none of, a member a peer
+			// added to the removed container, keeps its slot, as on main,
+			// and its detached state stays in detachedTrees, which the
+			// coverage drop reaches like any other.
+			if tree, isTree := prev.(*Tree); isTree {
+				r.dropNodes(tree, tree.dropSubtrees(tree.tops()))
+				r.dropNodes(tree, subtreeOf(tree.Root()))
+				delete(r.detachedTrees, tree)
+			}
 		}
 	}
 	r.elementMap[key] = elem
@@ -346,6 +383,14 @@ func (r *Root) deregisterElement(element Element) int {
 
 	deregister := func(elem Element) {
 		createdAt := elem.CreatedAt().Key()
+		if tree, ok := elem.(*Tree); ok {
+			// Its detached subtrees go with it, and the pairs their nodes
+			// hold: collect leaves a released node's to the drop, which a
+			// tree out of the document no longer gets.
+			r.dropNodes(tree, tree.dropSubtrees(tree.tops()))
+			delete(r.detachedTrees, tree)
+			tree.collected = true
+		}
 		// Subtract the size from wherever it is actually counted, and by the
 		// amount actually charged. A descendant created inside an
 		// already-removed container never passed through a removal, so it
@@ -460,10 +505,15 @@ func (r *Root) RegisterRemovedElementPair(parent Container, elem Element) {
 // the restored copy that RegisterElement is about to charge to Live as the only
 // thing accounted for.
 //
-// Collection entries belonging to the subtree's own tombstones go with it, for
-// the same reason: nothing can reach them to collect them, so leaving them
-// would hold GarbageLen above zero forever and let a later pass subtract a cost
-// this call has already released.
+// The element collection entries of the subtree's own removed members go with
+// it, for the same reason: nothing can reach them to collect them, so leaving
+// them would hold GarbageLen above zero forever and let a later pass subtract
+// a cost this call has already released. A released Tree keeps its
+// detached subtrees, which a change can still name, until a collection's
+// coverage lets them go (see release), and the pairs of its attached
+// tombstones, which hold their own share of GC, until a collection covering
+// them purges them; once a restored copy takes its slot and nothing can name
+// it, both go at once (see index).
 func (r *Root) UnregisterRemovedElementPair(createdAt *time.Ticket) bool {
 	pair, ok := r.gcElementPairMap[createdAt.Key()]
 	if !ok {
@@ -513,6 +563,16 @@ func (r *Root) release(elem Element) {
 	if pair, ok := r.gcElementPairMap[createdAt]; ok && pair.elem == elem {
 		delete(r.gcElementPairMap, createdAt)
 	}
+
+	// A released Tree's charge is gone, so what a later release or edit
+	// inside it moves is booked to neither side (see bookRelease,
+	// ChargeToRemovedElement). It stays addressable, unlike a deregistered
+	// one, so a change that has not seen a node of its detached subtrees can
+	// still name it: they stay, with the pairs their nodes hold, until a
+	// collection's coverage lets them go, as for any other (dropDetached).
+	if tree, ok := elem.(*Tree); ok {
+		tree.collected = true
+	}
 }
 
 // moveSizeToGC moves the size of the given element from Live to GC, and
@@ -547,20 +607,325 @@ func (r *Root) DocSize() resource.DocSize {
 }
 
 // DeepCopy copies itself deeply.
+//
+// The copy is the document's clone, which a change runs on before the root,
+// so it also carries the subtrees each Tree's purges took out (see
+// Tree.copyDetachedFrom): an op the root resolves through a detached node
+// resolves on the clone alike. Each Tree's pairs are the root's own, booked
+// for the copies of their nodes (see copyTreePairs). A Tree that does not
+// pair with its copy, or whose copy does not match it in shape, which no
+// honest document produces, keeps the scan's pairs and no detached state;
+// the copy itself never fails on it.
 func (r *Root) DeepCopy() (*Root, error) {
-	copiedObject, err := r.object.DeepCopy()
+	return r.deepCopyWith(realCopiers())
+}
+
+// copiers are what DeepCopy and Rederive copy the object and each detached
+// top with: the real ones, or, in a test, ones that hand back a copy that
+// does not match, to reach the fallback.
+type copiers struct {
+	object func(*Object) (Element, error)
+	top    func(*TreeNode) (*TreeNode, error)
+}
+
+// realCopiers returns the copiers every caller but a test uses.
+func realCopiers() copiers {
+	return copiers{
+		object: func(object *Object) (Element, error) { return object.DeepCopy() },
+		top:    func(top *TreeNode) (*TreeNode, error) { return top.DeepCopy() },
+	}
+}
+
+// deepCopyWith is DeepCopy with the given copiers.
+func (r *Root) deepCopyWith(with copiers) (*Root, error) {
+	copiedObject, err := with.object(r.object)
 	if err != nil {
 		return nil, err
 	}
-	return NewRoot(copiedObject.(*Object)), nil
+	copied := NewRoot(copiedObject.(*Object))
+	all := make(map[*Tree]*Tree)
+	trees := make(map[*Tree]*Tree)
+	copies := make(map[*TreeNode]*TreeNode)
+	// Each Tree is paired with its copy by its place in the object, the two
+	// walked in lockstep, not through elementMap or by createdAt alone:
+	// elementMap can hold a Tree the object no longer reaches, a member a
+	// peer added to a container this replica removed and an undo then
+	// replaced, and a key can be shared, with another Tree or another kind
+	// of element. A Tree that does not pair keeps the pairs NewRoot's scan
+	// books for its copy and no detached state, as main's copy does.
+	for tree, copiedTree := range pairedTrees(r.object, copied.object) {
+		all[tree] = copiedTree
+		// A Tree with no detached state has nothing the scan misses but a
+		// pair whose node left the tree, which copyTreePairs books on its
+		// own; it is not paired node by node, the common case and main's.
+		if tree.detachedByID.Len() == 0 && len(tree.detachedTops) == 0 {
+			continue
+		}
+		treeCopies, err := copiedTree.copyDetachedFromWith(tree, with.top)
+		if errors.Is(err, ErrTreeCopyShape) {
+			// Only a broken invariant gets here. The copy keeps the scan's
+			// pairs and no detached state, none of its nodes' pairs either,
+			// so a late change naming a node in a detached subtree fails
+			// on it rather than every copy.
+			delete(all, tree)
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		trees[tree] = copiedTree
+		maps.Copy(copies, treeCopies)
+		if _, ok := r.detachedTrees[tree]; ok {
+			copied.detachedTrees[copiedTree] = struct{}{}
+		}
+	}
+	copied.copyTreePairs(r, all, trees, copies)
+	for node, size := range r.retainedOff {
+		if c := copies[node]; c != nil {
+			copied.retainedOff[c] = size
+			copied.docSize.GC.Add(size)
+		}
+	}
+	return copied, nil
+}
+
+// pairedTrees pairs each Tree the source object reaches with its copy in
+// copied, a copy of it, by place: an object's members by their member key
+// and createdAt, the n-th of several alike with the n-th, an array's
+// elements by their order in the list. A createdAt can be shared, with
+// another Tree or another kind of element, so it alone does not pair.
+func pairedTrees(source, copied *Object) map[*Tree]*Tree {
+	pairs := make(map[*Tree]*Tree)
+	pairElements(source, copied, pairs)
+	return pairs
+}
+
+// pairElements pairs from with to, its copy, and what they hold.
+func pairElements(from, to Element, pairs map[*Tree]*Tree) {
+	switch f := from.(type) {
+	case *Tree:
+		if t, ok := to.(*Tree); ok {
+			pairs[f] = t
+		}
+	case *Object:
+		t, ok := to.(*Object)
+		if !ok {
+			return
+		}
+		type place struct{ key, createdAt string }
+		slots := make(map[place][]Element)
+		for _, node := range t.memberNodes.Nodes() {
+			at := place{node.Key(), node.Element().CreatedAt().Key()}
+			slots[at] = append(slots[at], node.Element())
+		}
+		for _, node := range f.memberNodes.Nodes() {
+			at := place{node.Key(), node.Element().CreatedAt().Key()}
+			if len(slots[at]) == 0 {
+				continue
+			}
+			pairElements(node.Element(), slots[at][0], pairs)
+			slots[at] = slots[at][1:]
+		}
+	case *Array:
+		t, ok := to.(*Array)
+		if !ok {
+			return
+		}
+		fromNodes, toNodes := f.elements.Nodes(), t.elements.Nodes()
+		if len(fromNodes) != len(toNodes) {
+			return
+		}
+		for i, node := range fromNodes {
+			if node.Element().CreatedAt().Compare(toNodes[i].Element().CreatedAt()) == 0 {
+				pairElements(node.Element(), toNodes[i].Element(), pairs)
+			}
+		}
+	}
+}
+
+// dropScanPairs takes out the pairs NewRoot's scan booked for the Trees
+// copyTreePairs pairs node by node, and for their nodes' attributes, with
+// their share of GC: those Trees book the source's own.
+func (r *Root) dropScanPairs(trees map[*Tree]*Tree, copies map[*TreeNode]*TreeNode) {
+	if len(trees) == 0 {
+		return
+	}
+	copiedTrees := make(map[GCParent]struct{}, len(trees))
+	for _, c := range trees {
+		copiedTrees[c] = struct{}{}
+	}
+	copiedNodes := make(map[*TreeNode]struct{}, len(copies))
+	for _, c := range copies {
+		copiedNodes[c] = struct{}{}
+	}
+	for key, pair := range r.gcNodePairMap {
+		_, owned := copiedTrees[pair.Parent]
+		if node, ok := pair.Parent.(*TreeNode); ok {
+			_, owned = copiedNodes[node]
+		}
+		if !owned {
+			continue
+		}
+		if pair.GCOnlySize != nil {
+			r.docSize.GC.Sub(*pair.GCOnlySize)
+		} else {
+			r.docSize.GC.Sub(pair.Child.DataSize())
+		}
+		delete(r.gcNodePairMap, key)
+	}
+}
+
+// bookCopiedPair books a pair copyTreePairs carries over, the child's size
+// to GC. A pair the scan booked under the key, for a node of the copied
+// tree that shares the ID of one out of it, gives its share back: the root
+// holds one pair per key, this one.
+func (r *Root) bookCopiedPair(parent GCParent, child GCChild) {
+	size := child.DataSize()
+	pair := GCPair{Parent: parent, Child: child, GCOnlySize: &size}
+	key := keyOf(pair)
+	if prev, ok := r.gcNodePairMap[key]; ok {
+		if prev.GCOnlySize != nil {
+			r.docSize.GC.Sub(*prev.GCOnlySize)
+		} else {
+			r.docSize.GC.Sub(prev.Child.DataSize())
+		}
+	}
+	r.gcNodePairMap[key] = pair
+	r.docSize.GC.Add(size)
+}
+
+// copyTreePairs replaces the pairs NewRoot's scan booked for the copied
+// Trees with the ones src holds for their sources, booked for the copies of
+// their nodes. The scan reaches the attached tree only and books through
+// RegisterGCPair, whose second registration under a key cancels the first,
+// so two nodes sharing an ID would leave the copy with neither; src's own
+// entries are what it collects, so the copy collects the same. A pair whose
+// node has no copy, one no longer in its tree, is booked for a copy of the
+// node alone, which collect purges as it does the original.
+//
+// all maps each reachable source Tree to its copy; trees, those with
+// detached state, which were paired node by node, and copies each of their
+// nodes to its copy, so one pass over each pair map does it all. A Tree with
+// no detached state keeps the scan's pairs.
+func (r *Root) copyTreePairs(src *Root, all, trees map[*Tree]*Tree, copies map[*TreeNode]*TreeNode) {
+	r.dropScanPairs(trees, copies)
+	book := r.bookCopiedPair
+	// copyOf answers the copy of a node, copying one no longer in its tree
+	// on its own. Only a node out of every tree has none: an attached one
+	// was copied with its tree.
+	copyOf := func(node *TreeNode) *TreeNode {
+		if c := copies[node]; c != nil {
+			return c
+		}
+		if !node.detached && node.Index != nil && node.Index.Parent != nil {
+			return nil
+		}
+		c, err := node.DeepCopy()
+		if err != nil {
+			return nil
+		}
+		copies[node] = c
+		return c
+	}
+	attrsOf := make(map[*TreeNode]map[string]*RHTNode)
+	for _, pair := range src.gcNodePairMap {
+		if tree, ok := pair.Parent.(*Tree); ok {
+			node, isNode := pair.Child.(*TreeNode)
+			if !isNode {
+				continue
+			}
+			copiedTree, paired := trees[tree]
+			if !paired {
+				// A Tree the scan alone books. Defensive: a tree without
+				// detached state holds no pair for a node out of it, as a
+				// purge deletes the pair of the node it takes out and
+				// detaches nothing else; were one there, the scan would not
+				// reach it, so it is copied on its own.
+				attached := !node.detached && node.Index != nil && node.Index.Parent != nil
+				if copiedTree, ok = all[tree]; !ok || attached {
+					continue
+				}
+			}
+			if c := copyOf(node); c != nil {
+				book(copiedTree, c)
+			}
+			continue
+		}
+		node, ok := pair.Parent.(*TreeNode)
+		if !ok {
+			continue
+		}
+		if _, ours := copies[node]; !ours && !node.detached {
+			// An attached node of a Tree not in trees: the scan booked it.
+			continue
+		}
+		c := copyOf(node)
+		if c == nil || c.Attrs == nil {
+			continue
+		}
+		byID, ok := attrsOf[c]
+		if !ok {
+			byID = make(map[string]*RHTNode)
+			for _, attr := range c.Attrs.Nodes() {
+				byID[attr.IDString()] = attr
+			}
+			attrsOf[c] = byID
+		}
+		if attr := byID[pair.Child.IDString()]; attr != nil {
+			book(c, attr)
+		}
+	}
 }
 
 // Rederive returns a copy of the root whose ledger is derived from the
 // copy's own content, as an oracle for the running one: NewRoot's scan of
-// the copied object. For tests and diagnostics; exported for the tests of
+// the attached trees, and for the detached subtrees each Tree carries,
+// walked from their tops, the pending pair of every node that is a
+// tombstone, released ones included, and those of their removed
+// attributes. DeepCopy takes the root's own pairs
+// instead, so it cannot tell a ledger that drifted from one that did not.
+// For tests and diagnostics, as NodeLen is; exported for the tests of
 // package document, which check a document's ledger with it.
 func (r *Root) Rederive() (*Root, error) {
-	return r.DeepCopy()
+	return r.rederiveWith(realCopiers())
+}
+
+// rederiveWith is Rederive with the given copiers.
+func (r *Root) rederiveWith(with copiers) (*Root, error) {
+	copiedObject, err := with.object(r.object)
+	if err != nil {
+		return nil, err
+	}
+	copied := NewRoot(copiedObject.(*Object))
+	for tree, copiedTree := range pairedTrees(r.object, copied.object) {
+		if _, err := copiedTree.copyDetachedFromWith(tree, with.top); errors.Is(err, ErrTreeCopyShape) {
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+		// Walked from the tops, as the drop is, not from detachedByID, which
+		// does not index a node another holds the ID of. A top's own pair
+		// was purged with it; the rest of its subtree, but for nodes a
+		// restore forgot, holds a pair each, booked as bookRetained does
+		// one, and those of their removed attributes.
+		for _, top := range copiedTree.tops() {
+			for _, node := range subtreeOf(top) {
+				if node.forgotten {
+					continue
+				}
+				if node != top && node.removedAt != nil {
+					copied.bookRetained(GCPair{Parent: copiedTree, Child: node})
+				}
+				for _, pair := range node.GCPairs() {
+					copied.RegisterGCPair(pair)
+				}
+			}
+		}
+		if len(copiedTree.detachedTops) > 0 {
+			copied.detachedTrees[copiedTree] = struct{}{}
+		}
+	}
+	return copied, nil
 }
 
 // GarbageCollect purge elements that were removed before the given time.
@@ -574,20 +939,151 @@ func (r *Root) Rederive() (*Root, error) {
 //
 // The repeat also makes the result independent of Go's map iteration order,
 // which decides only how many passes it takes, not what ends up collected.
-func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
-	count := 0
-
+//
+// A detached subtree is let go once vector has seen every node in it created
+// and merged in (see dropDetached). clock is what the replica's document has
+// applied; a ticket it cannot have applied is forged and counts as seen,
+// since no vector would ever cover it (see DocumentClock). A nil clock
+// trusts every ticket, so a forged one keeps its subtree, and the subtree's
+// bytes in GC, for good: only a caller with no document to read one from,
+// a test of the collection itself, passes nil. The root and its clone are
+// handed the same clock.
+func (r *Root) GarbageCollect(vector time.VersionVector, clock *DocumentClock) (int, error) {
+	count := r.dropDetached(vector, clock)
 	for {
 		purged, deferred, err := r.collect(vector)
 		if err != nil {
-			return 0, err
+			// What the drop let go is gone already; say so.
+			return count, err
 		}
 		count += purged
 
 		if purged == 0 || deferred == 0 {
-			return count, nil
+			break
 		}
 	}
+	// And after: a subtree this collection took out that its vector has
+	// already seen whole goes now, so one call leaves no garbage the next
+	// at the same vector would collect.
+	return count + r.dropDetached(vector, clock), nil
+}
+
+// DocumentClock is what a replica's document has applied: its version
+// vector and its lamport, which every change it applies raises to its own
+// at least. A ticket is forged when the vector does not know it and its
+// lamport is above the document's: no change the document applied carries
+// one, so no node it holds was made by one. The lamport bound is what keeps
+// an honest ticket from looking forged when the vector lacks its actor's
+// entry, which a snapshot stored with an emptied vector (an opt-out-only
+// document, see disable-gc-on-attach.md) and the changes applied after it
+// leave: the snapshot's lamport, and each change's, still bound every
+// ticket in it. An empty vector knows every ticket.
+type DocumentClock struct {
+	Vector  time.VersionVector
+	Lamport int64
+}
+
+// forged reports whether ticket is one no change clock has applied carried.
+func (c *DocumentClock) forged(ticket *time.Ticket) bool {
+	return c != nil && !time.TicketKnown(c.Vector, ticket) && ticket.Lamport() > c.Lamport
+}
+
+// dropDetached lets go of the detached subtrees vector has seen whole, in
+// every Tree, with the pairs their nodes still hold (see Tree.dropDetached).
+// It runs before the collection, for subtrees earlier ones took out that
+// the vector has come to cover, and after it, for those it took out that
+// the vector covers already. It reports how many pairs it dropped.
+//
+// A purge at vector V comes after every change concurrent with the removal
+// it collects, by the protocol, but a change that is not concurrent with
+// the removal can still name a node a concurrent split carried into the
+// subtree, or a merge moved there, as long as it has not seen that split or
+// merge. So a subtree is kept until a collection whose vector covers the
+// creation and merge of every node in it; a change naming it after that
+// fails to resolve, as on a replica that keeps no detached nodes. The rule
+// reads the subtree and the vector alone, so the root and its clone, which
+// collect at the same vectors, let go alike.
+func (r *Root) dropDetached(vector time.VersionVector, clock *DocumentClock) int {
+	count := 0
+	for tree := range r.detachedTrees {
+		count += r.dropNodes(tree, tree.dropDetached(vector, clock))
+		if len(tree.detachedTops) == 0 {
+			delete(r.detachedTrees, tree)
+		}
+	}
+	return count
+}
+
+// bookRelease books what a purge in a Tree released (see gcLiveRelease). The
+// released bytes leave whichever ledger holds them: Live, or, for a Tree
+// element that is itself removed, the GC charge its removal moved them to
+// (sizeInGC), and each released node's pair holds its tombstone in GC from
+// then on. A Tree the collection has already deregistered took its charge,
+// those bytes included, with it, so nothing is booked and the tree is not
+// tracked again; the pending pairs of its nodes are collected as they come
+// due, as on main. Taking the bytes from the element's charge is exact
+// because whatever an operation makes live inside a removed Tree element is
+// charged there too, not to Live (ChargeToRemovedElement, yorkie#2251).
+func (r *Root) bookRelease(parent GCParent, result purgeResult) {
+	tree, isTree := parent.(*Tree)
+	if isTree && tree.collected {
+		// A released tree a change can still name keeps what the purge
+		// detached for the coverage drop, though it books nothing.
+		if len(tree.detachedTops) > 0 && r.elementMap[tree.CreatedAt().Key()] == tree {
+			r.detachedTrees[tree] = struct{}{}
+		}
+		return
+	}
+	if charged, inGC := r.sizeInGC[tree]; isTree && inGC {
+		charged.Sub(result.Released)
+		r.sizeInGC[tree] = charged
+		r.docSize.GC.Sub(result.Released)
+	} else {
+		r.docSize.Live.Sub(result.Released)
+	}
+	for _, node := range result.ReleasedNodes {
+		r.bookRetained(GCPair{Parent: parent, Child: node})
+	}
+	if isTree && len(tree.detachedTops) > 0 {
+		r.detachedTrees[tree] = struct{}{}
+	}
+}
+
+// bookRetained books the pair of a node a purge released, its tombstone's
+// size to GC alone: the purge has taken its live bytes off Live, so the
+// booking has to land. Inserted, not registered, so a key another node
+// holds is not cancelled; when one does, which only crafted duplicate IDs
+// reach, the size is held in retainedOff instead, for DropGCPair to give
+// back when the node is let go.
+func (r *Root) bookRetained(pair GCPair) {
+	size := pair.Child.DataSize()
+	r.docSize.GC.Add(size)
+	key := keyOf(pair)
+	if _, ok := r.gcNodePairMap[key]; ok {
+		if node, isNode := pair.Child.(*TreeNode); isNode {
+			r.retainedOff[node] = size
+		}
+		return
+	}
+	pair.GCOnlySize = &size
+	r.gcNodePairMap[key] = pair
+}
+
+// dropNodes drops the pairs the nodes a Tree let go still hold, their own
+// and those of their removed attributes, and reports how many it dropped.
+func (r *Root) dropNodes(tree *Tree, nodes []*TreeNode) int {
+	count := 0
+	for _, node := range nodes {
+		if r.DropGCPair(GCPair{Parent: tree, Child: node}) {
+			count++
+		}
+		for _, pair := range node.GCPairs() {
+			if r.DropGCPair(pair) {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 // collect runs one collection pass, reporting how much it purged and how much
@@ -649,6 +1145,12 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 	// is purge-dependent today; using the key already in hand means none has
 	// to stay that way.
 	for key, pair := range r.gcNodePairMap {
+		// A released node's pair holds its bytes until its subtree is let
+		// go, not until its removal is covered (see TreeNode.released).
+		if node, ok := pair.Child.(*TreeNode); ok && node.released {
+			continue
+		}
+
 		// A pair whose child is not removed claims a tombstone that is not
 		// there, as for an element above; it is left on the worklist rather
 		// than dereferenced or purged.
@@ -663,7 +1165,22 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 			}
 		}
 
-		if err := pair.Parent.Purge(pair.Child); err != nil {
+		// Live nodes under the child go with it, off Live (see
+		// gcLiveRelease), so the purge detaches tombstones only. Only a Tree
+		// purges a subtree; every other GC parent purges a leaf -- a text or
+		// list node, an attribute -- with nothing under it to release.
+		if parent, ok := pair.Parent.(gcLiveRelease[GCChild]); ok {
+			result, err := parent.purgeChild(pair.Child)
+			if err != nil {
+				return 0, 0, err
+			}
+			// Defensive; unreachable because the check above skips a pair
+			// whose child has no removal, the only purge that does not happen.
+			if !result.Purged {
+				continue
+			}
+			r.bookRelease(pair.Parent, result)
+		} else if err := pair.Parent.Purge(pair.Child); err != nil {
 			return 0, 0, err
 		}
 
@@ -756,6 +1273,48 @@ func (r *Root) RegisterGCPair(pair GCPair) {
 	}
 }
 
+// DropGCPair removes the pending GC pair of a child that has left the
+// document without being purged, such as a detached node a restore forgot,
+// taking out of GC what purging the child would have: its size. That is
+// what GC holds for it by the time a node can be forgotten, GCOnlySize or
+// not. A piece split off a removed node is booked with GCOnlySize, its split
+// overhead alone, while the bytes it took from its sibling stay in GC under
+// the sibling's charge; the sibling's own purge gives back only its own
+// size, which leaves those bytes for the piece's purge, by its size, to
+// give back.
+//
+// RegisterGCPair's cancel branch (#1874) gives back GCOnlySize instead, for
+// a split piece registered a second time under its key, which keeps the
+// piece's content bytes with the sibling that carried them in. The two
+// differ because they end different things: a cancel, as #1874 has it,
+// takes the pair off a piece whose content its sibling's charge is taken to
+// cover still, while a drop takes off one whose node has left the document,
+// as a purge would, after the sibling's purge may already have given back
+// only the sibling's own size. No path of this change reaches
+// that cancel for a split piece: a forgotten node's pair is dropped before
+// anything registers under its key. It is a no-op, reporting false, when no
+// pair is registered under the key, or the one registered is another
+// child's, and the child holds no size in retainedOff either.
+func (r *Root) DropGCPair(pair GCPair) bool {
+	dropped := false
+	key := keyOf(pair)
+	if p, ok := r.gcNodePairMap[key]; ok && p.Child == pair.Child {
+		r.docSize.GC.Sub(p.Child.DataSize())
+		delete(r.gcNodePairMap, key)
+		dropped = true
+	}
+	// Held aside under a key another pair took (see bookRetained), and
+	// redeemed whether or not a pair of the node's own sits under it since.
+	if node, isNode := pair.Child.(*TreeNode); isNode {
+		if size, held := r.retainedOff[node]; held {
+			r.docSize.GC.Sub(size)
+			delete(r.retainedOff, node)
+			dropped = true
+		}
+	}
+	return dropped
+}
+
 // UnregisterGCPair removes a GC pair whose child has been restored
 // (un-tombstoned) by an identity-preserving undo, moving its size GC→Live.
 func (r *Root) UnregisterGCPair(pair GCPair) {
@@ -810,6 +1369,14 @@ func (r *Root) ChargeTreeOp(tree *Tree) func() {
 func (r *Root) ChargeToRemovedElement(elem Element, liveBefore resource.DataSize) {
 	charged, ok := r.sizeInGC[elem]
 	if !ok {
+		return
+	}
+	if tree, isTree := elem.(*Tree); isTree && tree.collected {
+		// Defensive. An operation resolves its Tree through elementMap, and a
+		// collected tree has left it, a released one has its slot taken over
+		// by the restored copy, so none reaches one here. Were one to, its
+		// content would be charged to neither side, as release left it.
+		r.docSize.Live = liveBefore
 		return
 	}
 	delta := r.docSize.Live

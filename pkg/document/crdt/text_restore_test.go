@@ -237,7 +237,7 @@ func TestTextRestoreExecuteAfterGC(t *testing.T) {
 		assert.Equal(t, "0189", text.String())
 
 		// Purge tombstones: the "234567" run is physically removed.
-		n, err := root.GarbageCollect(helper.MaxVersionVector(restoreActor))
+		n, err := root.GarbageCollect(helper.MaxVersionVector(restoreActor), nil)
 		assert.NoError(t, err)
 		assert.Positive(t, n, "some tombstones should be purged")
 
@@ -317,7 +317,7 @@ func TestTextRestoreDocSizeAccounting(t *testing.T) {
 
 	// Purge the two remaining tombstones [2,4) and [6,8). If the target's
 	// pair accounting leaked, docSize.GC would retain the "45" size here.
-	_, err = root.GarbageCollect(helper.MaxVersionVector(restoreActor))
+	_, err = root.GarbageCollect(helper.MaxVersionVector(restoreActor), nil)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, root.GarbageLen())
 
@@ -364,7 +364,7 @@ func TestTextRestoreAfterGCKeepsOrderAcrossInsertions(t *testing.T) {
 	assert.Equal(t, "hello  is", text.String())
 
 	// Purge the tombstones so restore must recreate rather than un-tombstone.
-	n, err := root.GarbageCollect(helper.MaxVersionVector(restoreActor))
+	n, err := root.GarbageCollect(helper.MaxVersionVector(restoreActor), nil)
 	assert.NoError(t, err)
 	assert.Positive(t, n, "the deleted run should be purged")
 
@@ -500,7 +500,7 @@ func TestTextRestoreTwoReplicaPurgedInsertion(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "", text.String())
 
-		n, err := root.GarbageCollect(helper.MaxVersionVector(restoreActor))
+		n, err := root.GarbageCollect(helper.MaxVersionVector(restoreActor), nil)
 		assert.NoError(t, err)
 		assert.Positive(t, n, "the whole insertion should be purged")
 		return root, text, textTicket

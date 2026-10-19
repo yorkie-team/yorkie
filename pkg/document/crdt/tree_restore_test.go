@@ -162,7 +162,7 @@ func TestTreeRestoreExecuteAfterGC(t *testing.T) {
 
 	// Purge: the tombstones are physically removed, so restore cannot
 	// un-tombstone them — it must recreate.
-	n, err := root.GarbageCollect(helper.MaxVersionVector())
+	n, err := root.GarbageCollect(helper.MaxVersionVector(), nil)
 	assert.NoError(t, err)
 	assert.Positive(t, n, "the deleted subtree should be purged")
 
@@ -636,7 +636,7 @@ func TestTreeRestoreRecreateKeepsTreeEditable(t *testing.T) {
 	_, err = operations.NewTreeEdit(parent, from, to, nil, 0,
 		helper.TimeT(ctx)).Execute(root, operations.OpSourceRemote, nil)
 	assert.NoError(t, err)
-	n, err := root.GarbageCollect(helper.MaxVersionVector())
+	n, err := root.GarbageCollect(helper.MaxVersionVector(), nil)
 	assert.NoError(t, err)
 	assert.Positive(t, n, "the deleted subtree should be purged")
 

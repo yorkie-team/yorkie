@@ -802,7 +802,7 @@ func TestTreeEdit(t *testing.T) {
 		assert.Equal(t, tree.Root().Index.VisibleLength, 8)
 		assert.Equal(t, tree.Root().Index.TotalLength, 12)
 
-		n, err := root.GarbageCollect(helper.MaxVersionVector())
+		n, err := root.GarbageCollect(helper.MaxVersionVector(), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, 2, n)
 		assert.Equal(t, 0, root.GarbageLen())

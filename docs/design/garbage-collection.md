@@ -77,6 +77,10 @@ GC responsibility is split between server and client depending on the response t
 
 This means the server must always GC the document before building a snapshot response. Without this, tombstones from applied changes would leak into the snapshot and persist on the client, since the client does not run GC for snapshot responses by design.
 
+## Purging a Tree Node
+
+Purging a removed Tree node takes its whole subtree out of the tree. A node under it can still be live, inserted or restored concurrently with the removal, so the purge tombstones each live node with the removal of its nearest removed ancestor and moves its bytes from `Live` to `GC`: everything a purge takes out is a tombstone, a reload reports the `Live` the running ledger does, and what the replica keeps is counted in `GC`. The subtree is kept, detached, so a change that names one of its nodes after the purge resolves as on a replica that has not purged, while a collection's vector, the purging one's included, has not seen every node in it created and merged in, a ticket the replica's document cannot have applied, unknown to its version vector and above its lamport, counting as seen; then it is let go with the pairs its nodes hold, which takes their bytes out of `GC`. See [document-size-limit.md](document-size-limit.md) for the rules and the cases they cover.
+
 ## An example of garbage collection:
 
 ### State 1

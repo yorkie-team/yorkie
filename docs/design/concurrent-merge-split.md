@@ -1414,8 +1414,9 @@ result. The JS SDK has to mirror all of the following:
    under the first piece's parent. A removed piece straddling the start
    gives the left anchor its last character before the span; one
    straddling the end gives no right anchor, nor does a right neighbour
-   under another parent. An empty text span keeps its anchors. Every
-   reported span is a copy; the input spans are never modified.
+   under another parent. An empty text span keeps its anchors, and so does
+   a span whose first or last piece is detached. Every reported span is a
+   copy; the input spans are never modified.
 5. **Retombstone cascade.** Retombstoning an element applies the §4.1
    cascade to its unknown split products, with the subtree, and reports a
    span for each node it removed, parent before child, leaving out any
@@ -1423,7 +1424,8 @@ result. The JS SDK has to mirror all of the following:
    disagrees describes nothing. A cascaded text span cut into parts keeps
    its left anchor on the first part and its right anchor on the last;
    between parts, each is anchored on the covered characters of its
-   insertion on either side of its gap.
+   insertion on either side of its gap. A detached node starts no cascade
+   and is not removed again.
 6. **Recreate.** A recreated text piece is spliced back into its
    insertion's `InsPrevID`/`InsNextID` chain between the nearest surviving
    predecessor and what that points at, or, with none, to an adjacent
@@ -1431,15 +1433,31 @@ result. The JS SDK has to mirror all of the following:
    follows a same-insertion successor into the element it now sits under
    when every split between that element and the span's parent is unknown
    to the restoring change, and a born-tombstoned recreate takes the
-   removal of the parent it actually lands under.
-7. **Restore under a known removal.** `Restore` leaves a node a
-   tombstone under an ancestor whose removal the restoring change's
-   version vector covers (a change without clocks is treated as knowing
-   every removal, as `TicketKnown` does). It revives in place in span
-   order, so spans must come parent-first, for a revive as for a
-   recreate: a child listed before its removed parent stays a tombstone.
-   Content inserted under a removed parent is booked to GC only (the rule
-   is in `document-size-limit.md`).
+   removal of the parent it actually lands under. A span whose parent is
+   detached is not recreated, as one whose parent was purged.
+7. **Purge accounting.** Purging a removed element tombstones every live
+   node under it with the element's `removedAt` and takes their size off
+   `Live`, in the purge itself, so a purge only ever detaches tombstones
+   and nothing is held back for a live node. Released nodes still resolve
+   by ID, as detached nodes do, from an index kept apart from the one of
+   reachable nodes. A node inserted under, or split off, a detached node
+   is detached too. A merge into a
+   detached destination releases what it moves there, and a merge moves
+   nothing detached into the attached tree. The purge records the parent and the sibling the
+   purged node sat in front of, and a position inside a detached subtree
+   resolves there, for an edit or a style.
+   `Restore` resolves a span naming a
+   detached node as if the node were purged: it unregisters and unlinks
+   the node, which stays a tombstone, and recreates the span if its
+   parent is there; recreate never places a node under a detached
+   element, through rung (a)'s split home either. `Restore` also leaves a
+   node a tombstone under an ancestor whose
+   removal the restoring change's version vector covers (a change without
+   clocks is treated as knowing every removal, as `TicketKnown` does). It
+   revives in place in span order, so spans must come parent-first, for a
+   revive as for a recreate: a child listed before its removed parent stays
+   a tombstone. Content inserted under a removed parent is booked to GC
+   only (yorkie#2244; the rule is in `document-size-limit.md`).
 
 ## Key Design Decisions
 

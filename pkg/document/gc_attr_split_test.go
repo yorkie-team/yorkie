@@ -34,7 +34,8 @@ import (
 // document rebuilt from that content reports the same numbers. A rebuilt
 // document is what every client joining an existing document holds, and what
 // the server replays from a snapshot. The rebuilt ledger is derived from the
-// content (crdt.Root.Rederive), not copied from the document's own.
+// content (crdt.Root.Rederive), the pending pairs of the detached nodes a
+// running replica carries included, not copied from the document's own.
 func assertRebuildsSame(t *testing.T, doc *document.Document, msg string) {
 	t.Helper()
 

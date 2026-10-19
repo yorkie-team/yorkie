@@ -814,7 +814,7 @@ func TestDocumentSize(t *testing.T) {
 		// collection -- so a rebuilt root that cannot collect would strand the
 		// charge with nothing reporting it as garbage.
 		assert.Equal(t, 1, clone.GarbageLen())
-		n, err := clone.GarbageCollect(helper.MaxVersionVector(doc.ActorID()))
+		n, err := clone.GarbageCollect(helper.MaxVersionVector(doc.ActorID()), nil)
 		assert.NoError(t, err)
 		assert.Equal(t, 1, n)
 		assert.Equal(t, resource.DataSize{}, clone.DocSize().GC)

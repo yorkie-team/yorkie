@@ -43,7 +43,7 @@ func TestCollectLeavesAPairOfALiveNode(t *testing.T) {
 
 	vector := time.NewVersionVector()
 	vector.Set(actor, 10)
-	n, err := doc.GarbageCollect(vector)
+	n, err := doc.GarbageCollect(vector, nil)
 	require.NoError(t, err)
 	assert.Zero(t, n)
 	assert.Equal(t, 1, doc.GarbageLen(), "the pair stays")

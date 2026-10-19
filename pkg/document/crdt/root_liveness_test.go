@@ -56,7 +56,7 @@ func TestGarbageCollectSkipsLiveRegisteredElement(t *testing.T) {
 	// and stops being a tombstone. Nothing in the Element path does this yet.
 	obj.SetRemovedAt(nil)
 
-	n, err := root.GarbageCollect(helper.MaxVersionVector())
+	n, err := root.GarbageCollect(helper.MaxVersionVector(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, 0, n, "collection purged an element that is not removed")
 	assert.Equal(t, obj, root.FindByCreatedAt(obj.CreatedAt()),

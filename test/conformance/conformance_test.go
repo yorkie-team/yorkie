@@ -565,6 +565,26 @@ func TestObserverOnlySyncs(t *testing.T) {
 	}
 }
 
+// TestASubtreeASplitFedStaysForItsAuthor pins merge seed 528, where the
+// detached state of a purge must outlive more than one collection. d1
+// deletes a paragraph while d2 splits it, carrying text into a product the
+// delete's cascade takes; d1, which never saw the split, then merges across
+// that text, naming it where d1 last saw it. d2 has purged the product by
+// then, at a vector that covers the delete and not the split, so a drop that
+// waited only for a later vector failed d1's change with "node not found".
+// The seed diverges, on main too; what this pins is that it does not error.
+// Its subtree holds nodes the vector has seen neither created nor merged in,
+// so either coverage check alone keeps it; each is pinned on its own by
+// TestADetachedSubtreeStaysUntilItsNodesAreSeen.
+func TestASubtreeASplitFedStaysForItsAuthor(t *testing.T) {
+	f, ok := FamilyByName("merge")
+	require.True(t, ok)
+	for _, opts := range []Options{{}, {LaggingMinVV: true}} {
+		fx := runFamilyWith(f, 528, 1, opts)
+		assert.NotEqual(t, "error", fx.Rows[0].Result, "lagging %v", opts.LaggingMinVV)
+	}
+}
+
 // TestLaggingRaceApplyErrors pins the two large-run seeds whose apply fails
 // only under the lagging minVV of yorkie#2110, which no record or corpus
 // script can express. A collection there has let go of a tombstone a change

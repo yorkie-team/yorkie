@@ -289,7 +289,7 @@ func TestMergeNodesRejectsLiveSource(t *testing.T) {
 	f.text.MergedFrom = f.p3.id // exact ID, and p3 is live
 	f.text.MergedAt = f.nextTicket()
 
-	stranded, err := f.tree.mergeNodes(f.p1, []*TreeNode{f.text}, f.nextTicket())
+	stranded, _, err := f.tree.mergeNodes(f.p1, []*TreeNode{f.text}, f.nextTicket())
 	require.NoError(t, err)
 	assert.Empty(t, stranded, "an ordinary merge tombstones nothing")
 
@@ -314,7 +314,7 @@ func TestMergeNodesRejectsForgedSource(t *testing.T) {
 	// An ordinary merge of p2 into p1 moves the child that carries the forged
 	// lineage; the child keeps it, because MergedFrom is stamped only on a
 	// first move.
-	stranded, err := f.tree.mergeNodes(f.p1, []*TreeNode{f.text}, f.nextTicket())
+	stranded, _, err := f.tree.mergeNodes(f.p1, []*TreeNode{f.text}, f.nextTicket())
 	require.NoError(t, err)
 	assert.Empty(t, stranded, "an ordinary merge tombstones nothing")
 
@@ -370,7 +370,7 @@ func TestMergeNodesStrandsLaterChildrenOfATombstonedDest(t *testing.T) {
 	// c is stranded by the guard (it contains the destination d); y, collected
 	// from the second source q, comes after it in the same list.
 	editedAt := nextTicket()
-	stranded, err := tree.mergeNodes(a, []*TreeNode{c, y}, editedAt)
+	stranded, _, err := tree.mergeNodes(a, []*TreeNode{c, y}, editedAt)
 	require.NoError(t, err)
 
 	assert.Same(t, q.Index, y.Index.Parent,
