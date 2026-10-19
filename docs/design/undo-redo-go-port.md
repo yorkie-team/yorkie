@@ -206,8 +206,9 @@ Rules that must match JS:
   is the identity-preserving restore introduced in #1875/#1893 and hardened
   through v0.7.16. A `TreeEdit` reverse flips the direction the same way, but
   its retombstoned half is the span list `Tree.Retombstone` reports: each
-  input span with its anchors re-read (see the Rollout and
-  Cross-implementation section of `concurrent-merge-split.md`).
+  input span with its anchors re-read, plus a span per node the §4.1 cascade
+  took with an element (see the Rollout and Cross-implementation section of
+  `concurrent-merge-split.md`).
 - An undo operation refines its positions before executing
   (`text.refinePos(this.fromPos)`).
 - `TreeEdit` undo calls `reissueContentIDs()` before execution. A

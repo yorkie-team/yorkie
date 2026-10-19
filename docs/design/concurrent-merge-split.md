@@ -1416,6 +1416,14 @@ result. The JS SDK has to mirror all of the following:
    straddling the end gives no right anchor, nor does a right neighbour
    under another parent. An empty text span keeps its anchors. Every
    reported span is a copy; the input spans are never modified.
+5. **Retombstone cascade.** Retombstoning an element applies the §4.1
+   cascade to its unknown split products, with the subtree, and reports a
+   span for each node it removed, parent before child, leaving out any
+   node an input span already describes; an input span whose kind
+   disagrees describes nothing. A cascaded text span cut into parts keeps
+   its left anchor on the first part and its right anchor on the last;
+   between parts, each is anchored on the covered characters of its
+   insertion on either side of its gap.
 
 ## Key Design Decisions
 

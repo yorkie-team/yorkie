@@ -236,7 +236,7 @@ func (e *TreeEdit) Execute(
 			// 1. Re-remove (retombstone) by identity. Isolating a straddling
 			// piece splits it (live-split overhead accounted to diff).
 			retombstonePairs, retombstoneDiff, retombstoneEdits, retombstoned, err := obj.Retombstone(
-				toRetombstone, e.executedAt, measure,
+				toRetombstone, e.executedAt, measure, versionVector,
 			)
 			if err != nil {
 				return ExecutionResult{}, err
@@ -251,7 +251,8 @@ func (e *TreeEdit) Execute(
 			// The retombstoned half is taken from what Retombstone reports it
 			// removed rather than from the stored field: those spans carry
 			// anchors refreshed against the neighbours the nodes had at
-			// removal time, so the reverse revives everything this execution
+			// removal time, plus an entry per node the §4.1 cascade took with
+			// its element, so the reverse revives everything this execution
 			// removed. They are fresh objects; the operation's own payload,
 			// which is also what gets serialized at push time, is untouched.
 			reverseRestore, reverseRetombstone := e.restoreSpans, e.retombstoneSpans
