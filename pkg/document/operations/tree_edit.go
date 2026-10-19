@@ -197,6 +197,10 @@ func (e *TreeEdit) Execute(
 
 	switch obj := parent.(type) {
 	case *crdt.Tree:
+		// In a Tree element that is itself removed, what the edit makes live
+		// is charged to the element's GC charge, not to Live (yorkie#2251).
+		defer root.ChargeTreeOp(obj)()
+
 		// Identity-preserving restore/retombstone path (mirrors Edit).
 		// restoreMode selects direction; an undo revives restoreSpans and
 		// re-removes retombstoneSpans, the redo does the opposite. Both span
