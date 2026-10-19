@@ -53,12 +53,15 @@ func TestCollectLeavesAPairOfALiveNode(t *testing.T) {
 }
 
 // TestChargeToRemovedElementKeepsAReleaseRecordZero pins that a write into a
-// released subtree leaves release's marker alone.
+// released subtree leaves release's marker alone and reaches neither ledger.
 //
-// release records a zero DataSize to say Live is no longer holding the
-// element, and index retires that record only while it is still exactly zero.
-// Charging a tree op onto it would make it look like a tombstone's own charge,
-// so the record -- and the dead subtree behind it -- would never be retired.
+// release records a zero DataSize to say neither side is holding the element,
+// and index retires that record only while it is still exactly zero. Charging
+// a tree op onto it would make it look like a tombstone's own charge, so the
+// record -- and the dead subtree behind it -- would never be retired. Leaving
+// the delta in Live is the other way to get it wrong: release has already
+// taken the orphan's bytes out of Live, so a delete inside it would subtract
+// them a second time and drive the recorded live size below the real one.
 func TestChargeToRemovedElementKeepsAReleaseRecordZero(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000001")
 	require.NoError(t, err)
@@ -82,8 +85,21 @@ func TestChargeToRemovedElementKeepsAReleaseRecordZero(t *testing.T) {
 	assert.Equal(t, resource.DataSize{}, doc.sizeInGC[tree],
 		"a release record stays zero so index can still retire it")
 	assert.Equal(t, gcBefore, doc.DocSize().GC, "nothing moves into GC")
-	assert.Equal(t, liveBefore.Data+12, doc.DocSize().Live.Data,
-		"the write stays on the side release left it on")
+	assert.Equal(t, liveBefore, doc.DocSize().Live,
+		"an orphan is on neither side of the ledger, so its writes are charged to neither")
+
+	// The shrinking direction is the one the size gate feels: CheckLiveSize
+	// reads Live alone, so a delete inside the orphan that reached Live would
+	// take the recorded live size below the real one -- here below zero --
+	// and admit a document the limit should turn away.
+	end = doc.ChargeTreeOp(tree)
+	doc.Acc(resource.DataSize{Data: -40})
+	end()
+
+	assert.Equal(t, liveBefore, doc.DocSize().Live,
+		"a delete inside a released subtree does not subtract from Live twice")
+	assert.GreaterOrEqual(t, doc.DocSize().Live.Data, 0, "the recorded live size stays non-negative")
+	assert.Equal(t, gcBefore, doc.DocSize().GC, "and nothing moves into GC either")
 
 	// The copy restored under the same createdAt takes the slot over, which
 	// is what retires the record. A topped-up record would survive this.

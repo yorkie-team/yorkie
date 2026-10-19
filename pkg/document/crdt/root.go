@@ -808,20 +808,30 @@ func (r *Root) ChargeTreeOp(tree *Tree) func() {
 // and not to Live (yorkie#2251). Pairs the operation booked keep their own
 // part of GC; only the Live side moves. A live element is left as it is.
 //
-// A zero charge is not a charge: release records one to say Live is not
-// holding a released element any more, and index retires that record only
-// while it is still exactly zero (see release and index). Topping such a
-// record up would make it indistinguishable from a tombstone's own charge
-// and leave the released subtree uncollectable, so a released element is
-// left to Live, as it was before this ledger existed.
+// A zero charge is not a charge: release records one to say neither side of
+// the ledger holds a released element any more, and index retires that record
+// only while it is still exactly zero (see release and index). Such an element
+// is orphaned -- displaced from the container that addressed it -- so a
+// rebuild, which derives the ledger from the document's content, counts it on
+// neither side, and the operation's delta belongs on neither either. Topping
+// the record up would make it indistinguishable from a tombstone's own charge
+// and leave the released subtree uncollectable; leaving the delta in Live
+// would charge Live for bytes release has already taken out of it, and a
+// delete inside the orphan would then subtract those bytes a second time and
+// drive the recorded live size below the real one -- under the limit
+// CheckLiveSize reads, which only Live feeds. So the delta is dropped: Live
+// goes back to liveBefore and the record stays exactly zero.
 func (r *Root) ChargeToRemovedElement(elem Element, liveBefore resource.DataSize) {
 	charged, ok := r.sizeInGC[elem]
-	if !ok || charged == (resource.DataSize{}) {
+	if !ok {
 		return
 	}
 	delta := r.docSize.Live
 	delta.Sub(liveBefore)
 	r.docSize.Live = liveBefore
+	if charged == (resource.DataSize{}) {
+		return
+	}
 	r.docSize.GC.Add(delta)
 	charged.Add(delta)
 	r.sizeInGC[elem] = charged

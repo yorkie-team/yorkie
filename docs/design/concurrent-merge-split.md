@@ -1460,12 +1460,26 @@ that mode off (the harness reports it as I4). They are pinned
 | `gen-uds3-1298-min.json` | 6 rung (a), `concurrentSplitHome` |
 
 The pinned seeds in `TestLaggingRaceApplyErrors` record the same class.
-All of it is confined to that mode: with the lagging minimum off — which
-is what a server advancing its minimum synced version correctly runs —
-every one of these scripts converges. Closing it means making a
+All of that class is confined to that mode: with the lagging minimum off
+— which is what a server advancing its minimum synced version correctly
+runs — every one of these scripts converges. Closing it means making a
 recreate's anchor choice independent of which tombstones the replica
 still holds, which rules 4 and 6 do not yet do; the JS mirror of those
 rules inherits the same gap.
+
+### Known divergence: an anchor resolved through a collected tombstone
+
+Two further minimised scripts, `gen-all-132-min.json` and
+`gen-all-193-min.json`, are pinned `known-fail` for both SDKs. They are
+not of the class above and these rules neither cause nor close them:
+both converge with garbage collection off and end on different XML under
+the ordinary minvv mode, on the rules this document described before
+rules 4 and 6 as well as under them, and the JS SDK fails them the same
+way. The shape is yorkie#2099 — a split or merge rule resolving an
+anchor through a tombstone one replica has already collected — so a
+correctly advancing minimum reaches it too, unlike the lagging-minVV
+class. They are pinned for the same reason: to measure the class rather
+than to close it.
 
 ## Key Design Decisions
 
