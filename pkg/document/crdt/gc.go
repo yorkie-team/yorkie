@@ -43,6 +43,7 @@ type GCPair struct {
 	//   - an array dead position node, which holds no element;
 	//   - a node recreated under a removed parent, born tombstoned and never
 	//     reported as recreated;
+	//   - content an Edit inserts under a removed parent, born tombstoned;
 	//   - a live attribute removed from a node that is ALREADY a tombstone,
 	//     whose bytes are inside that node's charge -- this one carries zero.
 	GCOnlySize *resource.DataSize
