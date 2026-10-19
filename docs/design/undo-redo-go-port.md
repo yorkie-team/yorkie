@@ -31,6 +31,11 @@ document breaks in production.
   document.
 - Keep the port behavior-identical to JS, including JS's known defects. Fixing a
   defect in Go alone would widen the gap the port exists to close.
+  This goal held for the port itself. Later Tree convergence fixes that touch
+  undo (the restore rules in concurrent-merge-split.md, Rollout items 3-7)
+  land in Go first by design. They ship together with their yorkie-js-sdk
+  mirror, and the rollout section lists every rule to port, so the gap is
+  closed in one release rather than left open.
 
 ### Non-Goals
 
@@ -39,6 +44,9 @@ document breaks in production.
 - Fixing the open items listed in [undo-redo.md](undo-redo.md) — overlapping
   undo content duplication, Tree reconciliation Cases 3–6, `ArraySet` + `Move`
   undo, GC vs. undo (#664). These stay broken identically in both SDKs.
+  The Tree part of GC vs. undo is since addressed by the restore rules in
+  concurrent-merge-split.md (Rollout items 3-7), which are released together
+  with the JS SDK change.
 - Emitting local change events from `Undo` / `Redo`. The Go SDK's `Update` does
   not emit local events today; that pre-existing difference is out of scope.
 - Fixing defects found while porting Task 7 (presence in the history) that
