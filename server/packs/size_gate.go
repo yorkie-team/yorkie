@@ -112,9 +112,8 @@ func checkDocumentSize(
 	)
 }
 
-// CheckDocSize enforces the project's MaxSizePerDocument against a document
-// the caller already holds in full, on its size, Live and GC, as the push
-// gate reads it.
+// CheckLiveSize enforces the project's MaxSizePerDocument against a document
+// the caller already holds in full, on its live size.
 //
 // The server-side write paths that build the whole root themselves — the admin
 // document create and update RPCs and the revision restore — measure the
@@ -122,14 +121,21 @@ func checkDocumentSize(
 // That gate refuses every growing change on an over-quota document, which
 // would refuse the very writes meant to bring such a document back under the
 // limit; measuring the result admits a shrink and still refuses an overrun.
-func CheckDocSize(docKey key.Key, size resource.DocSize, maxSize int) error {
-	total := size.Total()
-	if maxSize <= 0 || total <= maxSize {
+//
+// It reads Live, not the total the push gate reads. Two of the paths replace
+// the whole root, which leaves every byte of the previous content in GC,
+// uncollected, at the moment they measure: on the total, a repair that
+// shrinks an over-quota document would be refused for the garbage the repair
+// itself booked. The result's Live is the content the repair wrote, and its
+// garbage is collected like any other.
+func CheckLiveSize(docKey key.Key, size resource.DocSize, maxSize int) error {
+	liveSize := size.Live.Total()
+	if maxSize <= 0 || liveSize <= maxSize {
 		return nil
 	}
 
 	return fmt.Errorf(
-		"update %s: size %d bytes exceeds %d: %w",
-		docKey, total, maxSize, document.ErrDocumentSizeExceedsLimit,
+		"update %s: live size %d bytes exceeds %d: %w",
+		docKey, liveSize, maxSize, document.ErrDocumentSizeExceedsLimit,
 	)
 }

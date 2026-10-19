@@ -232,10 +232,15 @@ result exactly:
   refuse them on exactly the over-quota documents they exist to repair —
   including a restore that brings the document back under the limit.
 
-All three call `packs.CheckDocSize` on the document they hold, which measures
-`DocSize().Total()` against `MaxSizePerDocument`, as the push gate reads it,
-and raises the same
-`ErrDocumentSizeExceedsLimit`. The two push paths then set
+All three call `packs.CheckLiveSize` on the document they hold, which measures
+`DocSize().Live` against `MaxSizePerDocument` and raises the same
+`ErrDocumentSizeExceedsLimit`. They read `Live`, not the total the push gate
+reads: `UpdateDocument` and `RestoreRevision` replace the whole root, which
+leaves every byte of the previous content in `GC`, uncollected, at the moment
+they measure, so on the total a repair that shrinks an over-quota document
+would be refused for the garbage the repair itself booked
+(`TestRepairShrinkIsAdmitted`). That garbage is then collected like any
+other, and the push gate counts it until then. The two push paths then set
 `PushPullOptions.SizeChecked`, which skips the lagging gate for that push
 only. `SizeChecked` is never set from a client request.
 
