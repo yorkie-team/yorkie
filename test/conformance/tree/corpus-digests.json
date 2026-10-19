@@ -80,8 +80,8 @@
   "i2189-delete-empty-p-after-undo.json": {
     "result": "fail",
     "checks": "11101",
-    "digest": "2f80ef7574bf4c05",
-    "xmlDigest": "d5df3a6b72396302"
+    "digest": "cbca304db5f53002",
+    "xmlDigest": "5701978835d219a3"
   },
   "i2190-concurrent-multilevel-deletes.json": {
     "result": "diverged",
