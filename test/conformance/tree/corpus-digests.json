@@ -72,8 +72,8 @@
     "xmlDigest": "0255001f8de8fee1"
   },
   "i2169-redo-after-peer-insert-gc.json": {
-    "result": "fail",
-    "checks": "11101",
+    "result": "pass",
+    "checks": "11111",
     "digest": "28e2f59f05701b1b",
     "xmlDigest": "f49a9321f5e8b0a9"
   },
