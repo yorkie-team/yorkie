@@ -649,7 +649,10 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 	// is purge-dependent today; using the key already in hand means none has
 	// to stay that way.
 	for key, pair := range r.gcNodePairMap {
-		if !vector.EqualToOrAfter(pair.Child.RemovedAt()) {
+		// A pair whose child is not removed claims a tombstone that is not
+		// there, as for an element above; it is left on the worklist rather
+		// than dereferenced or purged.
+		if removedAt := pair.Child.RemovedAt(); removedAt == nil || !vector.EqualToOrAfter(removedAt) {
 			continue
 		}
 
