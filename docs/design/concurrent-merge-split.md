@@ -1456,15 +1456,21 @@ result. The JS SDK has to mirror all of the following:
    Content inserted under a removed parent is booked to GC only (the rule
    is in `document-size-limit.md`).
 
-### Known divergence: rules 4 and 6 under a lagging minimum version vector
+### Known divergence: rules 4 and 6 under minimum-version-vector collection
 
 Five minimised corpus scripts converge under the rules this document
-described before rules 4 and 6, and diverge under them, but only in the
-conformance harness's lagging-minVV mode: a replica whose garbage
-collection runs against a minimum version vector that trails the one it
-has actually seen ends on a different tree than the same script with
-that mode off (the harness reports it as I4). They are pinned
-`"go": "known-fail"` so the class is measured and cannot grow unnoticed:
+described before rules 4 and 6, and diverge under them in the conformance
+harness's ordinary `minvv` mode: garbage collection at the minimum synced
+version vector, advanced as the protocol requires, with no lagging race
+(`TestCorpus` runs every script with the lagging minimum off). The off
+run, which collects nothing, converges; the `minvv` run ends on another
+tree than the off run (the harness reports it as I4). So the divergence
+needs nothing but ordinary collection: whether a recreate's anchor, or a
+refreshed span anchor, lands on one node or another depends on which
+tombstones the replica has already collected, which rules 4 and 6 do not
+yet make independent of collection. The JS mirror of those rules inherits
+the same gap. They are pinned `"go": "known-fail"` so the class is
+measured and cannot grow unnoticed:
 
 | script | rule |
 | --- | --- |
@@ -1474,45 +1480,33 @@ that mode off (the harness reports it as I4). They are pinned
 | `gen-uall-1785-min.json` | 6 rung (a), `concurrentSplitHome` |
 | `gen-uds3-1298-min.json` | 6 rung (a), `concurrentSplitHome` |
 
-The pinned seeds in `TestLaggingRaceApplyErrors` record the same class.
-All of that class is confined to that mode: with the lagging minimum off
-— which is what a server advancing its minimum synced version correctly
-runs — every one of these scripts converges. Closing it means making a
-recreate's anchor choice independent of which tombstones the replica
-still holds, which rules 4 and 6 do not yet do; the JS mirror of those
-rules inherits the same gap.
+A separate pair of large-run seeds, pinned in
+`TestLaggingRaceApplyErrors`, fails to apply only under the harness's
+lagging-minVV mode, which models yorkie#2110: a reply's `minVV` is taken
+after another client's push landed while the reply carries changes read
+before it, so a replica collects a tombstone a change still in flight
+names. Rule 6's relink moves which node that change then resolves to. That
+pair is tied to #2110 and closes with its server-side fix; the five
+scripts above are not, and do not.
 
-The mode is not hypothetical, though: it models yorkie#2110, where a
-reply's `minVV` is taken after another client's push landed while the
-reply carries changes read before it, so a replica collects a tombstone a
-change still in flight names. Rules 4 and 6 widen what that race costs
-from an apply error to a divergence, and nothing in the document rules can
-narrow it back — the fix is server-side, in how a pull's `minVV` is read
-against the changes it ships. So the two halves are ordered against each
-other, and this is the order:
-
-- yorkie#2110 is a prerequisite of rules 4 and 6, not a parallel
-  work item: the class above closes when it does, and until then the five
-  scripts and the two seeds stay pinned as the measure of how wide it is.
 - The pins are the gate. They are asserted on every run of the
   conformance suite, so the class cannot grow — a sixth script joining it
   fails the suite rather than being discovered later — and cannot shrink
-  unnoticed either: when #2110's fix lands, these pins start failing as
-  passes and are removed in that change, which is what re-measures the
-  class rather than assuming it.
-- The JS mirror inherits the same gap, so it inherits the same order:
-  rules 4 and 6 are mirrored with this section, and the pins travel with
-  them: each script's `status` names both runners, so a script pinned
-  `known-fail` for Go and `pass` for JS is itself the record of which half
-  is where, and no SDK carries the class silently.
+  unnoticed either: a change that makes one converge fails its pin as a
+  pass and removes it, which is what re-measures the class rather than
+  assuming it.
+- The JS mirror inherits the same gap, so it inherits the pins: rules 4
+  and 6 are mirrored with this section, and each script's `status` names
+  both runners, so a script pinned `known-fail` for Go and `pass` for JS
+  is itself the record of which half is where, and no SDK carries the
+  class silently.
 
-What is shipped ahead of that fix is therefore a bounded, measured and
-asserted class under a race that already breaks applies today, against the
-corpus scripts these rules turn from failing to passing with the minimum
-advancing correctly. Shipping them behind a runtime switch was
-rejected: a rule that changes which node an anchor resolves to has to be
-the same on every replica, so a switch would create a second, unmeasured
-divergence class between replicas on either side of it.
+What is shipped is therefore a bounded, measured and asserted class,
+against the corpus scripts these rules turn from failing to passing.
+Shipping them behind a runtime switch was rejected: a rule that changes
+which node an anchor resolves to has to be the same on every replica, so a
+switch would create a second, unmeasured divergence class between
+replicas on either side of it.
 
 ### Known divergence: an anchor resolved through a collected tombstone
 
