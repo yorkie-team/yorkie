@@ -4435,8 +4435,12 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 		}
 	}
 
-	// 03. Split text node if the left node is text node.
-	if leftNode.IsText() {
+	// 03. Split text node if the left node is text node, unless the position
+	// is past purged pieces (see afterPurgedText): those were tombstones every
+	// replica had seen removed, so a position after them is a position after
+	// the floor piece, and there is nothing to split. Any other offset past
+	// the piece is out of range and fails the split.
+	if leftNode.IsText() && !t.afterPurgedText(leftNode, pos.LeftSiblingID) {
 		diff2, err := leftNode.Split(t, pos.LeftSiblingID.Offset-leftNode.id.Offset, nil, nil)
 		if err != nil {
 			return nil, nil, diff, err
@@ -4488,6 +4492,42 @@ func (t *Tree) FindTreeNodesWithSplitText(pos *TreePos, editedAt *time.Ticket, b
 	}
 
 	return realParentNode, leftNode, diff, nil
+}
+
+// afterPurgedText reports whether id, a left sibling ID that resolved to the
+// text piece floor, names an offset inside a gap of floor's insertion that
+// only its own chain explains, so that step 03 anchors after floor rather
+// than splitting it out of range.
+//
+// The gap is the run between floor and next, floor's neighbour in the
+// insertion's InsPrevID/InsNextID chain: next has to be registered under
+// exactly floor.InsNextID, be text of the same insertion, and point back at
+// floor. An insertion's pieces cover its offsets without holes, and splits
+// keep neighbours contiguous, so this replica's chain holds such a gap only
+// where it took pieces out and joined the survivors, which Purge does. The
+// offset is accepted when floor's end < offset <= next's start. A position names the
+// character before its offset, so offset next.start is the one after the
+// last character of the gap; ToTreeNodes resolves that ID, next's own, to
+// the piece before next, which is floor. Every other offset past floor is
+// rejected: past the end of an insertion's last surviving piece (nothing
+// tells a purged tail from an offset the insertion never had), or with
+// neighbours that are contiguous or not linked to each other both ways.
+//
+// The tree records no length of what it purged, so a gap's existence is the
+// only evidence; its length cannot be checked against content that existed.
+func (t *Tree) afterPurgedText(floor *TreeNode, id *TreeNodeID) bool {
+	floorEnd := floor.id.Offset + floor.Len()
+	if id.Offset <= floorEnd || floor.InsNextID == nil {
+		return false
+	}
+
+	next := t.findFloorNode(floor.InsNextID)
+	if next == nil || next == floor || !next.IsText() || !next.id.Equal(floor.InsNextID) ||
+		next.id.CreatedAt.Compare(floor.id.CreatedAt) != 0 ||
+		next.InsPrevID == nil || !next.InsPrevID.Equal(floor.id) {
+		return false
+	}
+	return floorEnd < next.id.Offset && id.Offset <= next.id.Offset
 }
 
 // toTreePos converts the given crdt.TreePos to local index.TreePos<CRDTTreeNode>.

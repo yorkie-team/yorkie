@@ -267,10 +267,10 @@
     },
     {
       "seed": 38,
-      "result": "error",
-      "checks": "10101",
-      "digest": "e1b375d4bf89d015",
-      "xmlDigest": "e1b375d4bf89d015"
+      "result": "pass",
+      "checks": "11111",
+      "digest": "2dde346cff11ff24",
+      "xmlDigest": "96638f1ddded115f"
     },
     {
       "seed": 39,
