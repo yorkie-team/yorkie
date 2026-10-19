@@ -98,6 +98,34 @@ When a merge redirect places the `to` position before `from` in tree
 order, the range is inverted. This is treated as a no-op
 (`if fromIdx > toIdx { return nil }`).
 
+### §1.3 Step 04: Split Products of the Left Element
+
+Step 04 walks the siblings after the left anchor whose `CreatedAt` is
+newer than the edit, as RGA orders concurrent inserts after the same
+node. A split product of the left element is newer too, but it is not a
+concurrent insert at this position: it is the right half of the element
+the position names. Taking it as the anchor would move the position past
+content the editor saw on the far side of that element.
+
+The product is therefore **passed over, not walked away from**: it is
+never taken as the anchor, but the walk continues through it to the
+concurrent inserts that follow. Stopping the walk at the product would
+also hide those inserts. A replica that has not applied the split yet
+sees them as siblings of the unsplit element and walks past them, so the
+two replicas would anchor the same insert on different nodes. The check
+reads only tree structure (`isSplitProductOf` walks `InsPrevID`), so it
+needs no version vector. Pinned by the corpus scripts
+`split-order-older-*` (a product is not the anchor) and
+`split-product-walk-past-concurrent-insert` (the walk goes on past it).
+
+The rule applies to a pure insert position (`BoundaryPureInsert`) only:
+both ends of an empty Edit range, which is the one caller that asks for it.
+A `BoundaryRange` position (§9.3), a style range's boundary, and a default
+`BoundaryInsert` position, either end of a non-empty Edit range, were
+drawn after the whole element as their client saw it, so the walk takes
+the product as before and the caller's split handling (§9.1/§9.2, §4.1)
+deals with it.
+
 ## Phase 2: Split Sibling Advance
 
 **Function**: `advancePastUnknownSplitSiblings`
@@ -321,7 +349,9 @@ tombstones preserves the source's full RGA sequence in the target, so
 a concurrent insert anchored on a removed sibling (e.g. `c` in a
 `cd → c,d` split whose `c` was deleted) resolves in the target through
 the normal path and is ordered against the other concurrent inserts by
-the RGA `CreatedAt` tie-break (`FindTreeNodesWithSplitText` step 04).
+the RGA `CreatedAt` tie-break (`FindTreeNodesWithSplitText` step 04,
+which passes over split products of the left element at an insert
+position, §1.3).
 This is what makes the merging replica converge with a replica that
 applied the insert *before* the merge, including when several clients
 insert at the same anchor.
@@ -826,7 +856,9 @@ outside its range, after the then-live parent. Replicas then diverge
 on attributes.
 
 `FindTreeNodesWithSplitText` takes a boundary mode: `BoundaryInsert`
-(default, §1.1 behavior for edits) and `BoundaryRange`, used by
+(default, §1.1 behavior, used for either end of a non-empty Edit range),
+`BoundaryPureInsert` (both ends of an empty Edit range: §1.1 behavior plus
+§1.3's split-product skip), and `BoundaryRange`, used by
 `Style`/`RemoveStyle`, which resolves the position to right after the
 merge-source tombstone. In visible coordinates this lands before both
 the concurrent inserts and the moved children, so a range end excludes
@@ -1214,6 +1246,25 @@ set. Until it does, the divergence is the one described above.
   (declared-parent deletion should take the insert with it), but both
   interactions widen `MergedFrom`'s original "physically moved"
   meaning.
+
+## Rollout and Cross-implementation
+
+The rules below are replicated: every SDK has to apply them the same way,
+and the Go server applies them too, since it rebuilds documents by
+replaying stored changes through this code (`server/packs/snapshot.go`,
+`server/packs/pushpull.go`) and compaction replaces a document's history
+with such a rebuild (`server/packs/compaction.go`). A server and SDK built
+with them must therefore ship together with the matching yorkie-js-sdk
+change. Until both run them, a JS client and the Go server can derive
+different trees from the same changes, and a compaction keeps the Go
+result. The JS SDK has to mirror all of the following:
+
+1. **§1.3 step 04.** At an insert position (both ends of an empty Edit
+   range), the walk passes over a split product of the left element
+   instead of taking it as the anchor, and goes on to the concurrent
+   inserts after it (`BoundaryPureInsert`, asked for explicitly). Either
+   end of a non-empty Edit range (the default `BoundaryInsert`) and a style
+   boundary (`BoundaryRange`) keep the plain walk.
 
 ## Key Design Decisions
 
