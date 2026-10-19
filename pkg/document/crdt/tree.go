@@ -1251,6 +1251,16 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 func (t *Tree) Purge(child GCChild) error {
 	node := child.(*TreeNode)
 
+	// The node leaves the document, so its merge stamp leaves the index;
+	// those of the nodes under it stay, as they stay on a replica that has
+	// not purged (see mergeStamps). This runs before the detached-node return
+	// below, not after the unlinking: a node whose ancestor was purged first
+	// is still leaving by its own purge, and an entry left behind on that
+	// path would pin the node in mergeStamps for the life of the tree.
+	if node.MergedFrom != nil {
+		t.forgetMergeStamp(node)
+	}
+
 	// A parentless node cannot be detached: purging is removal from a parent's
 	// child list. GCPairs never books one, but a pair outlives the tree state
 	// it was booked against (it sits in gcNodePairMap until the minimum synced
@@ -1269,13 +1279,6 @@ func (t *Tree) Purge(child GCChild) error {
 	if key, registered := t.NodeMapByID.Floor(node.id); registered == node && key.Equal(node.id) {
 		t.NodeMapByID.Remove(node.id)
 	}
-	// The node leaves the document, so its merge stamp leaves the index;
-	// those of the nodes under it stay, as they stay on a replica that has
-	// not purged (see mergeStamps).
-	if node.MergedFrom != nil {
-		t.forgetMergeStamp(node)
-	}
-
 	insPrevID := node.InsPrevID
 	insNextID := node.InsNextID
 	// NOTE: findFloorNode may return nil when the insertion neighbor was

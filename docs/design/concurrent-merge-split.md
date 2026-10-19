@@ -1441,6 +1441,32 @@ result. The JS SDK has to mirror all of the following:
    Content inserted under a removed parent is booked to GC only (the rule
    is in `document-size-limit.md`).
 
+### Known divergence: rules 4 and 6 under a lagging minimum version vector
+
+Five minimised corpus scripts converge under the rules this document
+described before rules 4 and 6, and diverge under them, but only in the
+conformance harness's lagging-minVV mode: a replica whose garbage
+collection runs against a minimum version vector that trails the one it
+has actually seen ends on a different tree than the same script with
+that mode off (the harness reports it as I4). They are pinned
+`"go": "known-fail"` so the class is measured and cannot grow unnoticed:
+
+| script | rule |
+| --- | --- |
+| `gen-udm-2131-min.json` | 4, `refreshSpanAnchors` |
+| `gen-ud3-2403-min.json` | 6, `relinkRecreatedText` |
+| `gen-uds-2076-min.json` | 6, `relinkRecreatedText` |
+| `gen-uall-1785-min.json` | 6 rung (a), `concurrentSplitHome` |
+| `gen-uds3-1298-min.json` | 6 rung (a), `concurrentSplitHome` |
+
+The pinned seeds in `TestLaggingRaceApplyErrors` record the same class.
+All of it is confined to that mode: with the lagging minimum off — which
+is what a server advancing its minimum synced version correctly runs —
+every one of these scripts converges. Closing it means making a
+recreate's anchor choice independent of which tombstones the replica
+still holds, which rules 4 and 6 do not yet do; the JS mirror of those
+rules inherits the same gap.
+
 ## Key Design Decisions
 
 | Decision | Reason |

@@ -724,3 +724,30 @@ func TestRestoreKeepsThePointerWithAnUnknownMergesStamp(t *testing.T) {
 	assert.True(t, f.text.MergedFrom.Equal(f.p3.id), "the unknown merge's stamp stays")
 	assert.NotNil(t, f.p3.mergedInto, "and the pointer stays with it")
 }
+
+// TestPurgeForgetsTheMergeStampOfADetachedNode pins that a node already
+// detached when its purge runs still leaves mergeStamps.
+//
+// Purge returns early for a parentless node -- a GC pair outlives the tree
+// state it was booked against, so a node detached in between reaches it --
+// and an entry left behind on that path pins the node in the index for the
+// life of the tree, since nothing else ever drops one.
+func TestPurgeForgetsTheMergeStampOfADetachedNode(t *testing.T) {
+	f := newMergeLineageFixture(t)
+	f.p3.remove(f.nextTicket())
+	f.text.MergedFrom = f.p3.id
+	f.text.MergedAt = f.nextTicket()
+
+	tree := NewTree(f.tree.Root(), f.nextTicket())
+	key := f.p3.id.toIDString()
+	require.Contains(t, tree.mergeStamps[key], f.text,
+		"the stamped node is indexed by the source it names")
+
+	// Detached before the pair booked against it is collected.
+	require.NoError(t, f.p2.Index.RemoveChild(f.text.Index))
+	require.Nil(t, f.text.Index.Parent)
+	require.NoError(t, tree.Purge(f.text))
+
+	assert.NotContains(t, tree.mergeStamps[key], f.text,
+		"a node leaving by its own purge leaves the index, detached or not")
+}
