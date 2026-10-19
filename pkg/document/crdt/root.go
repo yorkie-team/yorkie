@@ -807,9 +807,16 @@ func (r *Root) ChargeTreeOp(tree *Tree) func() {
 // the content, a revive, a recreate, an insert or a style, moves them there
 // and not to Live (yorkie#2251). Pairs the operation booked keep their own
 // part of GC; only the Live side moves. A live element is left as it is.
+//
+// A zero charge is not a charge: release records one to say Live is not
+// holding a released element any more, and index retires that record only
+// while it is still exactly zero (see release and index). Topping such a
+// record up would make it indistinguishable from a tombstone's own charge
+// and leave the released subtree uncollectable, so a released element is
+// left to Live, as it was before this ledger existed.
 func (r *Root) ChargeToRemovedElement(elem Element, liveBefore resource.DataSize) {
 	charged, ok := r.sizeInGC[elem]
-	if !ok {
+	if !ok || charged == (resource.DataSize{}) {
 		return
 	}
 	delta := r.docSize.Live

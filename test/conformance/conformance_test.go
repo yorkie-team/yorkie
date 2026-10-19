@@ -574,7 +574,9 @@ func TestObserverOnlySyncs(t *testing.T) {
 // main's rules too, with the same "split offset out of range"; uds3 2520
 // fails only here, with "node not found". Main's lagging run passes the
 // first and ends the second apart from its off run. Pinned so the class
-// cannot change unnoticed; the issue is to be filed.
+// cannot change unnoticed; the class is recorded under "Known divergence:
+// rules 4 and 6 under a lagging minimum version vector" in
+// concurrent-merge-split.md.
 func TestLaggingRaceApplyErrors(t *testing.T) {
 	for _, c := range []struct {
 		fam  string

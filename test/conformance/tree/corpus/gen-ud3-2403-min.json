@@ -2,7 +2,7 @@
   "v": 1,
   "id": "gen-ud3-2403-min",
   "status": { "go": "known-fail", "js": "pass" },
-  "note": "Minimised from gen-ud-n3-s30-2403 (a ud3 large-run seed). It passes under main's rules (js status assumed from them, as the JS SDK mirrors main); under the relink of a recreated text piece into its insertion chain (Rollout item 6, relinkRecreatedText) the minvv run ends on another tree than the off run (I4). Pinned so the class cannot grow unnoticed; the issue is to be filed.",
+  "note": "Minimised from gen-ud-n3-s30-2403 (a ud3 large-run seed). It passes under main's rules (js status assumed from them, as the JS SDK mirrors main); under the relink of a recreated text piece into its insertion chain (Rollout item 6, relinkRecreatedText) the minvv run ends on another tree than the off run (I4). Pinned so the class cannot grow unnoticed; the class is recorded under the Known divergence heading for rules 4 and 6 under a lagging minimum version vector in docs/design/concurrent-merge-split.md.",
   "replicas": 3,
   "init": "abcd",
   "steps": [
