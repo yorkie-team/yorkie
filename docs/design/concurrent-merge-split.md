@@ -1441,7 +1441,8 @@ result. The JS SDK has to mirror all of the following:
    and nothing is held back for a live node. Released nodes still resolve
    by ID, as detached nodes do, from an index kept apart from the one of
    reachable nodes. A node inserted under, or split off, a detached node
-   is detached too. A merge into a
+   is detached too, and an empty split product that §7.4 moves out of a
+   node under a removed ancestor is born a tombstone. A merge into a
    detached destination releases what it moves there, and a merge moves
    nothing detached into the attached tree. The purge records the parent and the sibling the
    purged node sat in front of, and a position inside a detached subtree

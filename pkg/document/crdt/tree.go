@@ -396,6 +396,19 @@ func (n *TreeNode) Split(
 				if !n.IsText() && insNext.Index.Parent != nil &&
 					insNext.Index.Parent != split.Index.Parent &&
 					len(split.Index.Children(true)) == 0 {
+					// An empty product cut off a node out of sight, under a
+					// removed ancestor, is born tombstoned before it moves, as
+					// content inserted under a removed parent is. A replica
+					// that purged the ancestor holds the node released, a
+					// tombstone, and cuts a tombstone off it; moving a live
+					// one out here would show it on this replica alone. The
+					// product holds no children, so nothing goes with it.
+					if split.removedAt == nil {
+						if at := removedAncestorAt(n); at != nil {
+							split.remove(at)
+							diff.Meta += time.TicketSize
+						}
+					}
 					if err := insNext.Index.Parent.MoveChildBefore(
 						split.Index, insNext.Index,
 					); err != nil {

@@ -342,6 +342,7 @@ moves the gate's figure toward a rebuild, never away from it.
 | `Split` of a detached node | the product is detached too | `TestSplitsInADetachedSubtreeStayDetached` |
 | §7.4 move of a split product across a purge | the product takes its new parent's side, released into a detached one | `TestSplitMovedAcrossTheDetachedBoundary` |
 | Phase 6 merge into a detached destination | the moved nodes take its side, released, and nothing detached is moved into the attached tree | `TestMergeIntoADetachedParentTakesItsSide` |
+| §7.4 move of an empty product cut off a node under a removed ancestor | born tombstoned before it moves, as on a replica that released the node | `TestSplitOutOfSightMovesOutATombstone` |
 | `FindTreeNodesWithSplitText`, splits, chain walks | read tombstones as on main | `TestTreeOpsNamingACollectedSubtree` |
 | `dissolveMergeSources`, `mergeStamps` | stamps of the subtree stay indexed, so a restore dissolves alike on a replica that purged and one that did not; a node's stamp leaves with the node | `TestDissolutionKeepsTheSourcePointerWhetherOrNotPurged`, `TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree` |
 | `Tree.GCPairs` (a rebuild) | not reached: walks the attached tree | `assertRebuildsSame` in the tests above |
