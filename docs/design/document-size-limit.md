@@ -232,6 +232,7 @@ projects that need a tighter bound lower `SnapshotInterval`.
 | Snapshots written before the field existed carry no size | Zero means unknown and admits; the next snapshot records it |
 | Compaction shrinks a document while an old size keeps refusing growth | Compaction purges snapshots, so the size goes back to unknown |
 | Server and client disagree on the number, so an honest client is refused | The server compares `Live`, which is at most the client's `Total`; making the accumulator agree with a rebuild is tracked by the rebuild-drift work |
+| Growth inside a removed Tree element is not gated | Booking it to the element's GC charge keeps `Live` equal to a rebuild, but the gate reads `Live` alone, so such growth arms no quota until the tombstone is collected. A bound on it has to be a gate that reads `GC` too, which is `server/packs/size_gate.go`'s and the snapshot row's to make, not the ledger's; the snapshot body threshold is the only cap on it today |
 | A pack mixing deletions with growth is refused whole and the SDK retries it | The SDKs stop resending it every round; the Go client re-probes once per `RejectedPushRetryDelay`, so a limit raised later is picked up; see above |
 | One more read on the push path | Only for packs that can grow, and only the snapshot's metadata through an index |
 
