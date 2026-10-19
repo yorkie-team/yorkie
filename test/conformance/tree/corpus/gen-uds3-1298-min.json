@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "id": "gen-uds3-1298-min",
+  "status": { "go": "known-fail", "js": "pass" },
+  "note": "Minimised from gen-uds-n3-s30-1298 (a uds3 large-run seed). It passes under main's rules (js status assumed from them, as the JS SDK mirrors main); under rung (a) of the recreate rule, a recreated range placed before a successor a concurrent split moved (Rollout item 6, concurrentSplitHome) the minvv run ends on another tree than the off run (I4). Pinned so the class cannot grow unnoticed; the issue is to be filed.",
+  "replicas": 3,
+  "init": "abcd",
+  "steps": [
+    {"r": 1, "op": "edit", "from": 1, "to": 2},
+    {"r": 0, "op": "edit", "from": 2, "to": 2, "split": 1},
+    {"r": 0, "op": "pull"},
+    {"r": 2, "op": "pull"},
+    {"r": 0, "op": "edit", "from": 4, "to": 4, "split": 1},
+    {"r": 1, "op": "undo"}
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "id": "gen-uall-1785-min",
+  "status": { "go": "known-fail", "js": "pass" },
+  "note": "Minimised from gen-uall-n2-s24-1785 (a uall large-run seed). It passes under main's rules (js status assumed from them, as the JS SDK mirrors main); under rung (a) of the recreate rule, a recreated range placed before a successor a concurrent split moved (Rollout item 6, concurrentSplitHome) the minvv run ends on another tree than the off run (I4). Pinned so the class cannot grow unnoticed; the issue is to be filed.",
+  "replicas": 2,
+  "init": "abcd",
+  "steps": [
+    {"r": 0, "op": "edit", "from": 3, "to": 4},
+    {"r": 1, "op": "edit", "from": 4, "to": 4, "split": 1},
+    {"r": 1, "op": "pull"},
+    {"r": 1, "op": "edit", "from": 1, "to": 1, "text": "h"},
+    {"r": 0, "op": "undo"}
+  ]
+}

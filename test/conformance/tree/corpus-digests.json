@@ -53,17 +53,47 @@
     "digest": "a755c90920f7aea1",
     "xmlDigest": "308ec9336f96205d"
   },
+  "gen-uall-1785-min.json": {
+    "result": "fail",
+    "checks": "11101",
+    "digest": "f4a41f6946ea321f",
+    "xmlDigest": "a53c716e744a5d68"
+  },
+  "gen-ud3-2403-min.json": {
+    "result": "fail",
+    "checks": "11101",
+    "digest": "4f70b23aae0cf5f0",
+    "xmlDigest": "a9e4eddd179cefa2"
+  },
+  "gen-udm-2131-min.json": {
+    "result": "fail",
+    "checks": "11101",
+    "digest": "f7709560499f2c83",
+    "xmlDigest": "425737bb3110bf2c"
+  },
   "gen-uds-102-min.json": {
     "result": "diverged",
     "checks": "01111",
     "digest": "65a8ed287ffe0512",
     "xmlDigest": "5da69ab76c9891f1"
   },
+  "gen-uds-2076-min.json": {
+    "result": "fail",
+    "checks": "11101",
+    "digest": "0756687ec3649cb4",
+    "xmlDigest": "420c14defb4adf72"
+  },
   "gen-uds-50-min.json": {
     "result": "diverged",
     "checks": "01101",
     "digest": "9e313af9e30ee7da",
     "xmlDigest": "83dfd520296664f1"
+  },
+  "gen-uds3-1298-min.json": {
+    "result": "fail",
+    "checks": "11101",
+    "digest": "79ce424fd34fd978",
+    "xmlDigest": "4b231ead0ba85517"
   },
   "gen-undo-4-min.json": {
     "result": "diverged",

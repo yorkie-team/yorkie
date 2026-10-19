@@ -1,0 +1,22 @@
+{
+  "v": 1,
+  "id": "gen-ud3-2403-min",
+  "status": { "go": "known-fail", "js": "pass" },
+  "note": "Minimised from gen-ud-n3-s30-2403 (a ud3 large-run seed). It passes under main's rules (js status assumed from them, as the JS SDK mirrors main); under the relink of a recreated text piece into its insertion chain (Rollout item 6, relinkRecreatedText) the minvv run ends on another tree than the off run (I4). Pinned so the class cannot grow unnoticed; the issue is to be filed.",
+  "replicas": 3,
+  "init": "abcd",
+  "steps": [
+    {"r": 2, "op": "gen", "k": "ins", "f": 0.7943528115283698, "g": 0.44964995235204697, "h": 0.9812102422583848, "v": "e"},
+    {"r": 1, "op": "pull"},
+    {"r": 0, "op": "pull"},
+    {"r": 2, "op": "gen", "k": "del", "f": 0.28248400473967195, "g": 0.44667320884764194, "h": 0.3249252801761031, "v": "g"},
+    {"r": 0, "op": "pull"},
+    {"r": 1, "op": "pull"},
+    {"r": 1, "op": "gen", "k": "ins", "f": 0.35118698072619736, "g": 0.4316161673050374, "h": 0.08451029215939343, "v": "h"},
+    {"r": 2, "op": "undo"},
+    {"r": 2, "op": "gen", "k": "del", "f": 0.3874425166286528, "g": 0.8614538568072021, "h": 0.4177789557725191, "v": "k"},
+    {"r": 1, "op": "pull"},
+    {"r": 1, "op": "undo"},
+    {"r": 1, "op": "gen", "k": "del", "f": 0.08066290616989136, "g": 0.18506684014573693, "h": 0.8573013518471271, "v": "p"}
+  ]
+}
