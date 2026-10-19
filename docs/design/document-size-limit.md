@@ -96,6 +96,11 @@ against `Root.Rederive`, a copy whose ledger is derived from the content by
 `NewRoot`'s scan rather than copied from the document's own
 (`assertRebuildsSame`).
 
+A collection leaves alone a pair whose child is not removed, which no
+honest change produces: it purges nothing and books nothing for it, where
+it would otherwise dereference a missing removal or purge a live node
+(`TestCollectLeavesAPairOfALiveNode`, yorkie#2245).
+
 **Unknown admits.** A zero `live_size` — no snapshot yet, a snapshot written
 before the field existed, or a document just compacted — admits the push. The
 first snapshot after that arms the gate.
