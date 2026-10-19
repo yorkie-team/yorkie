@@ -1265,6 +1265,12 @@ result. The JS SDK has to mirror all of the following:
    inserts after it (`BoundaryPureInsert`, asked for explicitly). Either
    end of a non-empty Edit range (the default `BoundaryInsert`) and a style
    boundary (`BoundaryRange`) keep the plain walk.
+2. **Step 03 past purged text.** A left-sibling offset past the end of the
+   floor text piece skips the split only when it lies in a gap of the
+   insertion's chain: the floor piece's `InsNextID` names exactly a text
+   piece of the same insertion whose `InsPrevID` names the floor piece back,
+   and floor end < offset <= that piece's start. Any other such offset is
+   out of range, as before.
 
 ## Key Design Decisions
 

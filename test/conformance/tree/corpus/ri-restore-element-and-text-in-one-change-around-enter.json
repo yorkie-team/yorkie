@@ -2,8 +2,8 @@
   "v": 2,
   "id": "ri-restore-element-and-text-in-one-change-around-enter",
   "issues": ["yorkie#2222"],
-  "status": { "go": "known-error", "js": "known-error" },
-  "note": "TestTreeUndoRemoteIdentityReconcile/restore element and text in one change around pending enter (tree_undo_remote_identity_reconcile_test.go). In both SDKs the off run holds every expect, but the minvv run throws (Go panics with \"split 1:5:AAAAAAAAAAAAAAAB:0 at 3 of 1: split offset out of range\"; JS: \"split at 3 of 1: offset out of range\").",
+  "status": { "go": "known-fail", "js": "known-error" },
+  "note": "TestTreeUndoRemoteIdentityReconcile/restore element and text in one change around pending enter (tree_undo_remote_identity_reconcile_test.go). In both SDKs the off run holds every expect, but the minvv run fails in Go (it threw until step 03 accepted an offset past purged text and now ends on another tree than the off run, I4; it panicked with \"split 1:5:AAAAAAAAAAAAAAAB:0 at 3 of 1: split offset out of range\"; JS: \"split at 3 of 1: offset out of range\").",
   "replicas": 2,
   "delivery": "exchange",
   "init": {
