@@ -2204,9 +2204,13 @@ func (t *Tree) Edit(
 				// make new nodes as tombstone immediately
 				if fromParent.IsRemoved() {
 					node.Value.remove(editedAt)
+					// Born tombstoned, so never charged to Live: the pair
+					// books its size to GC alone.
+					gcSize := node.Value.DataSize()
 					pairs = append(pairs, GCPair{
-						Parent: t,
-						Child:  node.Value,
+						Parent:     t,
+						Child:      node.Value,
+						GCOnlySize: &gcSize,
 					})
 				} else {
 					diff.Add(node.Value.DataSize())

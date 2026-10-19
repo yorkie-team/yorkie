@@ -101,6 +101,16 @@ honest change produces: it purges nothing and books nothing for it, where
 it would otherwise dereference a missing removal or purge a live node
 (`TestCollectLeavesAPairOfALiveNode`, yorkie#2245).
 
+Tree content a rebuild counts in `GC` must not reach `Live` on the running
+replica:
+
+- **Content born a tombstone.** Content an `Edit` inserts under a removed
+  parent is born a tombstone and booked to `GC` alone. Main booked its
+  pair as an ordinary one, which moved bytes from `Live` that had never
+  been added to it, so `Live`, the figure the server's
+  `MaxSizePerDocument` gate reads, fell below a rebuild by that content
+  (`TestTreeInsertUnderARemovedParentKeepsLive`).
+
 **Unknown admits.** A zero `live_size` — no snapshot yet, a snapshot written
 before the field existed, or a document just compacted — admits the push. The
 first snapshot after that arms the gate.
