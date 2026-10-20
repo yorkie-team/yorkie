@@ -137,7 +137,12 @@ jobs:
 
   build:
     name: build
-    runs-on: ubuntu-latest
+    # Pinned off ubuntu-latest for every job that runs MongoDB. The ubuntu-24.04
+    # image from 20261018 ships kernel 7.0.0, and MongoDB stops at startup on
+    # kernels 6.19 through 7.0.13 (its production notes), so a job that lands on
+    # that image never gets a database. ubuntu-22.04 is on 6.8. Move back once
+    # ubuntu-latest carries 7.0.14 or later.
+    runs-on: ubuntu-22.04
 
     needs: ci-target-check
     if: ${{ github.ref == 'refs/heads/main' || needs.ci-target-check.outputs.build == 'true' }}
@@ -292,7 +297,13 @@ jobs:
         run: node scripts/ci/run-lanes.mjs modernize
 
       - name: Stack
-        run: docker compose -f build/docker/docker-compose.yml up --build -d
+        run: |
+          docker compose -f build/docker/docker-compose.yml up --build -d --wait --wait-timeout 120 || {
+            uname -r
+            docker compose -f build/docker/docker-compose.yml ps -a
+            docker compose -f build/docker/docker-compose.yml logs --no-color mongo | tail -100
+            exit 1
+          }
 
       - name: Test
         # The lane this whole subsystem exists for: `-race` over the
@@ -371,7 +382,7 @@ jobs:
 
   bench:
     name: bench
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04 # MongoDB and the kernel: see the build job
     # A healthy run takes 10-25 minutes. Without a bound a stuck run holds the
     # runner for the 6-hour default: under -bench, `go test` arms neither its
     # -timeout alarm nor its kill timer for the benchmarks, so nothing inside
@@ -445,7 +456,13 @@ jobs:
           fi
 
       - name: Stack
-        run: docker compose -f repo/build/docker/docker-compose.yml up --build -d
+        run: |
+          docker compose -f repo/build/docker/docker-compose.yml up --build -d --wait --wait-timeout 120 || {
+            uname -r
+            docker compose -f repo/build/docker/docker-compose.yml ps -a
+            docker compose -f repo/build/docker/docker-compose.yml logs --no-color mongo | tail -100
+            exit 1
+          }
 
       - name: Bench
         id: curr-bench
@@ -605,7 +622,7 @@ jobs:
 
   complex-test:
     name: complex-test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04 # MongoDB and the kernel: see the build job
     # The same reason the bench job has a wall: an unbounded job holds its runner
     # for the 6-hour default, and the two bench runs that did so left logs nobody
     # could recover. `go test`'s own 10-minute -timeout bounds the test step, but
@@ -652,7 +669,7 @@ jobs:
 
   load-test:
     name: load-test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04 # MongoDB and the kernel: see the build job
     # Bounded for the bench job's reason. k6 drives a docker-compose stack and
     # has no wall of its own here; healthy runs take ~9 minutes on main (Oct
     # 2026), so 30 leaves three times that before the runner is reclaimed.
@@ -681,7 +698,13 @@ jobs:
         with:
           path: repo
       - name: Stack
-        run: docker compose -f repo/build/docker/docker-compose.yml up --build -d
+        run: |
+          docker compose -f repo/build/docker/docker-compose.yml up --build -d --wait --wait-timeout 120 || {
+            uname -r
+            docker compose -f repo/build/docker/docker-compose.yml ps -a
+            docker compose -f repo/build/docker/docker-compose.yml logs --no-color mongo | tail -100
+            exit 1
+          }
 
       - name: Checkout load branch
         uses: actions/checkout@v4

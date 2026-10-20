@@ -6,3 +6,11 @@ services:
     restart: always
     ports:
       - "27017:27017"
+    # `up --wait` in CI waits on this, so a MongoDB that never starts fails the
+    # Stack step at once instead of every test timing out on its ping.
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
