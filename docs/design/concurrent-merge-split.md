@@ -496,6 +496,17 @@ stamp is outside the tree `rebuildMergeState` walks and outside the
 snapshot, so the lineage a restore dissolves is the one a reload of the
 same replica derives either way.
 
+That reaches the dissolution's pointer half, which keeps `mergedInto`
+while a stamp naming the source is left: a purged subtree's stamps are no
+longer among them, so the pointer now goes where a reload of the same
+replica would derive none. That is the rule `mergedInto` is documented by
+— a runtime cache of what `rebuildMergeState` derives — and it is what a
+replica that has collected already holds after any snapshot round trip,
+since `rebuildMergeState` walks the index tree and a detached node is not
+in it. Agreement between replicas on this pointer therefore rests on the
+collection they have each done, as it does across a reload, not on the
+index outliving the tree.
+
 Left undissolved, a later delete of the revived — and by then usually empty
 — element follows the stale pointer and §6.2 tombstones content that delete
 never covered: `<r><p>ab</p></r>` where every other replica holds
