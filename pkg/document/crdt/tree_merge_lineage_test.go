@@ -658,6 +658,11 @@ func TestRestoreWithoutClocksDissolvesNothing(t *testing.T) {
 // pin the child, and the subtree hanging off it, for the life of the tree.
 // MergedFrom is client-supplied, so that is growth a client can ask for
 // repeatedly while the document itself stays small.
+//
+// The stamped descendant here is a tombstone, which is the only shape a purge
+// ever detaches one in: a child is removed with its parent before the pair
+// naming the parent comes due, so the walk has to visit removed children --
+// Children(true) -- or it reaches nothing the purge actually takes out.
 func TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree(t *testing.T) {
 	f := newMergeLineageFixture(t)
 	f.p3.remove(f.nextTicket())
@@ -666,9 +671,11 @@ func TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree(t *testing.T) {
 	tree := NewTree(f.tree.Root(), f.nextTicket())
 	require.Len(t, tree.mergeStamps[f.p3.id.toIDString()], 1)
 
-	// The stamped text goes with its paragraph, which is the node purged. No
-	// pair is ever booked for the text itself.
+	// The stamped text is tombstoned with its paragraph, which is the node
+	// purged. No pair is ever booked for the text itself.
+	f.text.remove(f.nextTicket())
 	f.p2.remove(f.nextTicket())
+	require.True(t, f.text.IsRemoved(), "the descendant the purge detaches is a tombstone")
 	require.NoError(t, tree.Purge(f.p2))
 	assert.Empty(t, tree.mergeStamps, "the detached subtree's entries go with it")
 }
@@ -676,22 +683,36 @@ func TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree(t *testing.T) {
 // TestPurgeOfARepeatedlyMergedSubtreeLeavesNothingIndexed pins the bound the
 // case above gives: a client that merges and collects over and over leaves an
 // index no larger than it found it, whatever MergedFrom it put on the wire.
+//
+// The stamp sits two levels under the purged node and on a tombstone, as a
+// collected merge leaves it: the walk reaches it only by descending past a
+// node that carries no stamp of its own and by taking removed children with
+// it.
 func TestPurgeOfARepeatedlyMergedSubtreeLeavesNothingIndexed(t *testing.T) {
 	f := newMergeLineageFixture(t)
 	tree := f.tree
+	key := f.forgedIDNamingNone(f.p3).toIDString()
 
 	for range 50 {
-		// A fresh paragraph holding a stamped text, as a merge leaves one.
+		// A fresh paragraph holding an unstamped child, which holds the
+		// stamped text, as a merge into a nested element leaves one.
 		para := NewTreeNode(NewTreeNodeID(f.nextTicket(), 0), "p", nil)
+		inner := NewTreeNode(NewTreeNodeID(f.nextTicket(), 0), "p", nil)
 		text := NewTreeNode(NewTreeNodeID(f.nextTicket(), 0), "text", nil, "cd")
 		text.MergedFrom = f.forgedIDNamingNone(f.p3)
 		text.MergedAt = f.nextTicket()
-		require.NoError(t, para.Append(text))
+		require.NoError(t, inner.Append(text))
+		require.NoError(t, para.Append(inner))
 		require.NoError(t, f.p1.Append(para))
 		tree.putNode(para)
+		tree.putNode(inner)
 		tree.putNode(text)
-		require.NotEmpty(t, tree.mergeStamps)
+		require.Len(t, tree.mergeStamps[key], 1, "the merge leaves exactly its own stamp indexed")
 
+		// The text and its parent are tombstoned with the paragraph; only the
+		// paragraph is ever purged in its own right.
+		text.remove(f.nextTicket())
+		inner.remove(f.nextTicket())
 		para.remove(f.nextTicket())
 		require.NoError(t, tree.Purge(para))
 	}

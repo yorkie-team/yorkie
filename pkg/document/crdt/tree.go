@@ -1200,11 +1200,10 @@ func (t *Tree) dissolveMergeSources(sources []*TreeNodeID, versionVector time.Ve
 	for key, id := range ids {
 		stamped := t.mergeStamps[key]
 		for child := range stamped {
-			// Only a node still stamped with this source. One in a subtree a
-			// purge took out counts as an attached one does: whether a purge
-			// has taken the stamp's subtree out must not decide whether the
-			// pointer goes, or a replica that collected would drop what one
-			// that did not keeps.
+			// Only a node still stamped with this source. A node a purge took
+			// out is not among them: its stamp left the index with the
+			// subtree the purge detached (see Purge and mergeStamps), which
+			// is also what this replica's own snapshot no longer carries.
 			if child.MergedFrom == nil || child.MergedFrom.toIDString() != key {
 				delete(stamped, child)
 				continue
@@ -1217,10 +1216,13 @@ func (t *Tree) dissolveMergeSources(sources []*TreeNodeID, versionVector time.Ve
 			child.MergedAt = nil
 			delete(stamped, child)
 		}
-		// The pointer follows the stamps: it goes only when no stamp naming
-		// the source is left, as a reload would then derive none. One that a
-		// merge the restore did not know still stamps keeps it, as a reload
-		// of a removed source would derive it again.
+		// The pointer follows the stamps the tree still holds: it goes only
+		// when no stamp naming the source is left, as a reload would then
+		// derive none. rebuildMergeState walks the index tree, so a stamp a
+		// purge detached with its subtree derives nothing on a reload either,
+		// and the decision here is the one this replica's own snapshot gives.
+		// A stamp from a merge the restore did not know keeps the pointer, as
+		// a reload of a removed source would derive it again.
 		if len(stamped) == 0 {
 			delete(t.mergeStamps, key)
 			if src := t.findFloorNode(id); src != nil && src.id.Equal(id) {
