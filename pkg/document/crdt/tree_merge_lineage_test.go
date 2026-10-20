@@ -650,10 +650,14 @@ func TestRestoreWithoutClocksDissolvesNothing(t *testing.T) {
 
 // TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree pins that the
 // mergeStamps index lets go of a stamped node when the node leaves the
-// document, so it keeps nothing alive past it. A purge that detaches the
-// stamped node with its ancestor keeps the entry, as a replica that has not
-// purged does, so the dissolution decides alike on both; the node's own
-// purge drops it.
+// document, so it keeps nothing alive past it -- the purged node's own entry
+// and those of the descendants the purge detaches with it.
+//
+// Only the node a GC pair names is purged in its own right: a child removed
+// with its parent never gets a purge of its own, so an entry left on it would
+// pin the child, and the subtree hanging off it, for the life of the tree.
+// MergedFrom is client-supplied, so that is growth a client can ask for
+// repeatedly while the document itself stays small.
 func TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree(t *testing.T) {
 	f := newMergeLineageFixture(t)
 	f.p3.remove(f.nextTicket())
@@ -662,13 +666,37 @@ func TestPurgeForgetsTheMergeStampsOfTheDetachedSubtree(t *testing.T) {
 	tree := NewTree(f.tree.Root(), f.nextTicket())
 	require.Len(t, tree.mergeStamps[f.p3.id.toIDString()], 1)
 
-	// The stamped text goes with its paragraph, which is the node purged.
+	// The stamped text goes with its paragraph, which is the node purged. No
+	// pair is ever booked for the text itself.
 	f.p2.remove(f.nextTicket())
-	f.text.remove(f.nextTicket())
 	require.NoError(t, tree.Purge(f.p2))
-	assert.Len(t, tree.mergeStamps[f.p3.id.toIDString()], 1, "the detached text keeps its entry")
-	require.NoError(t, tree.Purge(f.text))
-	assert.Empty(t, tree.mergeStamps, "no entry outlives the node it names")
+	assert.Empty(t, tree.mergeStamps, "the detached subtree's entries go with it")
+}
+
+// TestPurgeOfARepeatedlyMergedSubtreeLeavesNothingIndexed pins the bound the
+// case above gives: a client that merges and collects over and over leaves an
+// index no larger than it found it, whatever MergedFrom it put on the wire.
+func TestPurgeOfARepeatedlyMergedSubtreeLeavesNothingIndexed(t *testing.T) {
+	f := newMergeLineageFixture(t)
+	tree := f.tree
+
+	for range 50 {
+		// A fresh paragraph holding a stamped text, as a merge leaves one.
+		para := NewTreeNode(NewTreeNodeID(f.nextTicket(), 0), "p", nil)
+		text := NewTreeNode(NewTreeNodeID(f.nextTicket(), 0), "text", nil, "cd")
+		text.MergedFrom = f.forgedIDNamingNone(f.p3)
+		text.MergedAt = f.nextTicket()
+		require.NoError(t, para.Append(text))
+		require.NoError(t, f.p1.Append(para))
+		tree.putNode(para)
+		tree.putNode(text)
+		require.NotEmpty(t, tree.mergeStamps)
+
+		para.remove(f.nextTicket())
+		require.NoError(t, tree.Purge(para))
+	}
+
+	assert.Empty(t, tree.mergeStamps, "collection returns the index to where it started")
 }
 
 // TestRestoreDissolvesTheStampOfANodeRefusedItsID pins that a stamped node

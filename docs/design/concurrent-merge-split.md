@@ -485,6 +485,17 @@ all, while stamps elsewhere may still name it. Keying on the source ID also
 means only lineage naming the revived element is touched, with no dependence
 on a pointer that may be a client's (see `findMergeNode`).
 
+**The index is bounded by the document.** `MergedFrom` is client-supplied,
+so an index that outlived the nodes it holds would be growth a client can
+ask for at no cost to the document's size. `Tree.Purge` therefore drops the
+stamps of the whole subtree it takes out, not only of the node the GC pair
+names: a child removed with its parent never gets a purge of its own, so an
+entry left on it would pin that child, and everything hanging off it, for
+the life of the tree. Nothing is lost by dropping them — a detached node's
+stamp is outside the tree `rebuildMergeState` walks and outside the
+snapshot, so the lineage a restore dissolves is the one a reload of the
+same replica derives either way.
+
 Left undissolved, a later delete of the revived — and by then usually empty
 — element follows the stale pointer and §6.2 tombstones content that delete
 never covered: `<r><p>ab</p></r>` where every other replica holds
@@ -1500,6 +1511,13 @@ scripts above are not, and do not.
   both runners, so a script pinned `known-fail` for Go and `pass` for JS
   is itself the record of which half is where, and no SDK carries the
   class silently.
+
+- Closing the class means making both rules resolve their anchor from
+  information a replica cannot have collected — the insertion chain and the
+  removal's own stamps rather than the neighbouring tombstones — in Go and
+  in the JS mirror together, since an anchor rule has to agree on every
+  replica. That is convergence work of its own, not a follow-up edit to
+  these rules, and it is not in this change.
 
 What is shipped is therefore a bounded, measured and asserted class,
 against the corpus scripts these rules turn from failing to passing.

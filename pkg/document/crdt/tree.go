@@ -1028,11 +1028,18 @@ type Tree struct {
 	// node joins the index tree registers it -- NewTree, or putNode, which
 	// indexes a node even when it refuses it the ID lookup -- and mergeNodes
 	// indexes a node it stamps in place, so no stamped node a walk of the
-	// tree reaches is missing. A node in a subtree a purge took out stays
-	// indexed, as it does on a replica that has not purged the subtree; only
-	// a node leaving the document by its own purge leaves it. It is a candidate
-	// set, re-checked when read: an entry for a node that lost its stamp is
-	// dropped then.
+	// tree reaches is missing. Every way a node leaves the document
+	// un-registers it: a purge drops the stamps of the whole subtree it takes
+	// out, not only of the node named by the pair, so the index holds nothing
+	// the tree no longer reaches and cannot grow past the document itself.
+	// MergedFrom is client-supplied (see findMergeNode), so an index that kept
+	// a purged subtree's nodes would let a client grow it without bound over
+	// the life of the tree, at no cost to the document's size. The dissolution
+	// loses nothing by it: a detached node's stamp is read by nobody -- it is
+	// outside the tree rebuildMergeState walks and outside the snapshot -- so
+	// dropping it leaves the same lineage a reload of this replica derives.
+	// It is a candidate set, re-checked when read: an entry for a node that
+	// lost its stamp is dropped then.
 	mergeStamps map[string]map[*TreeNode]struct{}
 }
 
@@ -1252,15 +1259,15 @@ func (t *Tree) PurgeBarrierAt(child GCChild) *time.Ticket {
 func (t *Tree) Purge(child GCChild) error {
 	node := child.(*TreeNode)
 
-	// The node leaves the document, so its merge stamp leaves the index;
-	// those of the nodes under it stay, as they stay on a replica that has
-	// not purged (see mergeStamps). This runs before the detached-node return
-	// below, not after the unlinking: a node whose ancestor was purged first
-	// is still leaving by its own purge, and an entry left behind on that
-	// path would pin the node in mergeStamps for the life of the tree.
-	if node.MergedFrom != nil {
-		t.forgetMergeStamp(node)
-	}
+	// The subtree leaves the document, so its merge stamps leave the index --
+	// the purged node's own and those of every descendant the purge detaches
+	// with it, since nothing ever purges a descendant that was removed with
+	// its parent rather than in its own right. This runs before the
+	// detached-node return below, not after the unlinking: a node whose
+	// ancestor was purged first is still leaving by its own purge, and an
+	// entry left behind on either path would pin the node, and the subtree it
+	// holds, in mergeStamps for the life of the tree (see mergeStamps).
+	t.forgetSubtreeMergeStamps(node)
 
 	// A parentless node cannot be detached: purging is removal from a parent's
 	// child list. GCPairs never books one, but a pair outlives the tree state
@@ -5657,6 +5664,27 @@ func (t *Tree) putNode(node *TreeNode) {
 	}
 
 	t.NodeMapByID.Put(node.id, node)
+}
+
+// forgetSubtreeMergeStamps drops the mergeStamps entries of node and of every
+// node under it, for a subtree leaving the document by a purge. The subtree is
+// walked through the index tree, removed children included, because a purge
+// detaches the whole of it at once: only the node the GC pair names is purged
+// in its own right, and a descendant tombstoned with it never gets a purge of
+// its own to drop its entry.
+func (t *Tree) forgetSubtreeMergeStamps(node *TreeNode) {
+	if node.Index == nil {
+		if node.MergedFrom != nil {
+			t.forgetMergeStamp(node)
+		}
+		return
+	}
+
+	index.TraverseNode(node.Index, func(n *index.Node[*TreeNode], _ int) {
+		if n.Value.MergedFrom != nil {
+			t.forgetMergeStamp(n.Value)
+		}
+	})
 }
 
 // forgetMergeStamp drops node's entry from mergeStamps, for a node leaving
