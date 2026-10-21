@@ -23,12 +23,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/pkg/document"
-	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
-	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 func TestCanGrow(t *testing.T) {
@@ -78,45 +74,5 @@ func TestCanGrow(t *testing.T) {
 			require.Len(t, changes, 2)
 			assert.Equal(t, tc.grows, canGrow(changes[1]))
 		})
-	}
-}
-
-// TestCanGrowReadsTheSpansItsModeRevives pins that an identity-preserving
-// edit grows the document when the span set its restore mode revives is not
-// empty: a restore-mode edit revives its restore spans, a retombstone-mode
-// one its retombstone spans (yorkie#2252), and the other set is removed.
-func TestCanGrowReadsTheSpansItsModeRevives(t *testing.T) {
-	at := time.NewTicket(1, 0, time.InitialActorID)
-	treeSpans := []*crdt.TreeRestoreSpan{{ID: crdt.NewTreeNodeID(at, 0), NodeType: "p"}}
-	textSpans := []*crdt.RestoreSpan{{}}
-	changeOf := func(op operations.Operation) *change.Change {
-		id := change.NewID(1, 0, 1, time.InitialActorID, time.NewVersionVector())
-		return change.New(id, "", []operations.Operation{op}, nil)
-	}
-	pos := crdt.NewTreePos(crdt.NewTreeNodeID(at, 0), crdt.NewTreeNodeID(at, 0))
-	textPos := crdt.NewRGATreeSplitNodePos(crdt.NewRGATreeSplitNodeID(at, 0), 0)
-	for _, tc := range []struct {
-		name            string
-		mode            crdt.RestoreMode
-		restore, retomb bool
-		grows           bool
-	}{
-		{"restore mode reviving its restore spans", crdt.RestoreModeRestore, true, false, true},
-		{"restore mode only removing", crdt.RestoreModeRestore, false, true, false},
-		{"retombstone mode reviving its retombstone spans", crdt.RestoreModeRetombstone, false, true, true},
-		{"retombstone mode only removing", crdt.RestoreModeRetombstone, true, false, false},
-	} {
-		var tr, tt []*crdt.TreeRestoreSpan
-		var xr, xt []*crdt.RestoreSpan
-		if tc.restore {
-			tr, xr = treeSpans, textSpans
-		}
-		if tc.retomb {
-			tt, xt = treeSpans, textSpans
-		}
-		tree := operations.NewRestoreTreeEdit(at, pos, pos, at, tr, tc.mode, tt)
-		assert.Equal(t, tc.grows, canGrow(changeOf(tree)), "tree: %s", tc.name)
-		text := operations.NewRestoreEdit(at, textPos, textPos, at, xr, tc.mode, xt)
-		assert.Equal(t, tc.grows, canGrow(changeOf(text)), "text: %s", tc.name)
 	}
 }

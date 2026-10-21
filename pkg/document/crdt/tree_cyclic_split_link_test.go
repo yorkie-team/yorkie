@@ -170,57 +170,6 @@ func TestTreeCyclicSplitLink(t *testing.T) {
 		})
 	})
 
-	// Step 04 of an insert's position walks InsPrevID back from every newer
-	// sibling it passes, to tell a split product of the left element from a
-	// concurrent insert. The two middle paragraphs now name each other there
-	// too, a lineage that never reaches the first paragraph.
-	t.Run("an insert's step 04 over an InsPrevID cycle terminates", func(t *testing.T) {
-		tree := poisonedTree(t)
-		first := tree.Root().Children()[0]
-		left, right := tree.Root().Children()[1], tree.Root().Children()[2]
-		left.InsPrevID = right.ID()
-		right.InsPrevID = left.ID()
-
-		pos := crdt.NewTreePos(tree.Root().ID(), first.ID())
-		older := time.NewTicket(1, 0, knownActor)
-		mustFinish(t, "FindTreeNodesWithSplitText", func() {
-			_, anchor, _, err := tree.FindTreeNodesWithSplitText(pos, older, crdt.BoundaryPureInsert)
-			assert.NoError(t, err)
-			assert.NotSame(t, first, anchor, "a lineage that loops back is not the first paragraph's")
-		})
-	})
-
-	// Recreating a purged text range follows its same-insertion successor
-	// into the element a concurrent split carried it to, walking that
-	// element's InsPrevID chain back towards the span's parent. The two middle
-	// paragraphs name each other there, so the walk never reaches the first.
-	t.Run("a recreate's split-home walk over an InsPrevID cycle terminates", func(t *testing.T) {
-		tree := poisonedTree(t)
-		first := tree.Root().Children()[0]
-		left, right := tree.Root().Children()[1], tree.Root().Children()[2]
-		left.InsPrevID = right.ID()
-		right.InsPrevID = left.ID()
-
-		// "Y" is offset 1 of an insertion whose offset 0 was purged; it sits
-		// in the middle paragraph that starts the cycle.
-		insertion := time.NewTicket(time.MaxLamport/2, 0, cycleActor)
-		y := crdt.NewTreeNode(crdt.NewTreeNodeID(insertion, 1), "text", nil, "Y")
-		at := time.NewTicket(time.MaxLamport/2+1, 0, knownActor)
-		_, _, _, err := tree.Edit(crdt.NewTreePos(left.ID(), left.ID()), crdt.NewTreePos(left.ID(), left.ID()),
-			[]*crdt.TreeNode{y}, 0, at, func() *time.Ticket { return at }, vector, false)
-		assert.NoError(t, err)
-
-		span := &crdt.TreeRestoreSpan{
-			ID: crdt.NewTreeNodeID(insertion, 0), NodeType: "text", IsText: true,
-			Length: 1, Value: "X", ParentID: first.ID(),
-		}
-		mustFinish(t, "Restore", func() {
-			_, recreated, _, _, _, err := tree.Restore([]*crdt.TreeRestoreSpan{span}, false, vector)
-			assert.NoError(t, err)
-			assert.Len(t, recreated, 1, "placed by a later rung")
-		})
-	})
-
 	t.Run("remove style over the cycle terminates", func(t *testing.T) {
 		tree := poisonedTree(t)
 		from, err := tree.FindPos(0)

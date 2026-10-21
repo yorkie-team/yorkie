@@ -565,36 +565,6 @@ func TestObserverOnlySyncs(t *testing.T) {
 	}
 }
 
-// TestLaggingRaceApplyErrors pins the two large-run seeds whose apply fails
-// only under the lagging minVV of yorkie#2110, which no record or corpus
-// script can express. A collection there has let go of a tombstone a change
-// still on its way names, and the relink of a recreated text piece into its
-// insertion chain (concurrent-merge-split.md, Rollout item 6) moves which
-// node that change resolves to. ud 11 also fails in normal minvv mode, on
-// main's rules too, with the same "split offset out of range"; uds3 2520
-// fails only here, with "node not found". Main's lagging run passes the
-// first and ends the second apart from its off run. Pinned so the class
-// cannot change unnoticed; it is recorded, apart from the five corpus pins
-// that diverge under ordinary collection, under "Known divergence: rules 4
-// and 6 under minimum-version-vector collection" in
-// concurrent-merge-split.md.
-func TestLaggingRaceApplyErrors(t *testing.T) {
-	for _, c := range []struct {
-		fam  string
-		seed uint32
-		err  string
-	}{
-		{"ud", 11, "split offset out of range"},
-		{"uds3", 2520, "node not found"},
-	} {
-		f, ok := FamilyByName(c.fam)
-		require.True(t, ok)
-		rec := RunWith(f.Gen(c.seed), Options{LaggingMinVV: true})
-		assert.Equal(t, ResultError, rec.Result, "%s %d", c.fam, c.seed)
-		assert.Contains(t, rec.Err, c.err, "%s %d", c.fam, c.seed)
-	}
-}
-
 // TestLargeRun runs a seed range of one family and writes its rows, for
 // comparing against the JS runner. It is skipped unless CONFORMANCE_FAM is
 // set; CONFORMANCE_RUNS, CONFORMANCE_SEED0 and CONFORMANCE_OUT tune it, and

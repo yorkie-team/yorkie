@@ -2073,13 +2073,11 @@ func (d *DB) findSnapshotBodyInfo(
 	return raw.(*database.SnapshotBodyInfo).Snapshot, nil
 }
 
-// CreateSnapshotInfo stores the snapshot of the given document, recording
-// size for the push gate.
+// CreateSnapshotInfo stores the snapshot of the given document.
 func (d *DB) CreateSnapshotInfo(
 	_ context.Context,
 	docRefKey types.DocRefKey,
 	doc *document.InternalDocument,
-	size int64,
 ) error {
 	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), doc.AllPresences())
 	if err != nil {
@@ -2127,6 +2125,7 @@ func (d *DB) CreateSnapshotInfo(
 		vv = time.NewVersionVector()
 	}
 
+	liveSize := doc.DocSize().Live
 	if err := txn.Insert(tblSnapshots, &database.SnapshotInfo{
 		ID:              newID(),
 		ProjectID:       docRefKey.ProjectID,
@@ -2136,7 +2135,7 @@ func (d *DB) CreateSnapshotInfo(
 		VersionVector:   vv,
 		Snapshot:        snapshotField,
 		HasExternalBody: hasExternalBody,
-		Size:            size,
+		LiveSize:        int64(liveSize.Total()),
 		CreatedAt:       gotime.Now(),
 	}); err != nil {
 		return fmt.Errorf("create snapshot of %s: %w", docRefKey, err)
@@ -2224,7 +2223,7 @@ func (d *DB) FindClosestSnapshotInfo(
 				Lamport:         info.Lamport,
 				VersionVector:   info.VersionVector,
 				HasExternalBody: info.HasExternalBody,
-				Size:            info.Size,
+				LiveSize:        info.LiveSize,
 				CreatedAt:       info.CreatedAt,
 			}
 			if includeSnapshot {

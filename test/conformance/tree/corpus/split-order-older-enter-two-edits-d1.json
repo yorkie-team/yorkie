@@ -1,8 +1,8 @@
 {
   "v": 2,
   "id": "split-order-older-enter-two-edits-d1",
-  "status": { "go": "pass", "js": "known-diverge" },
-  "note": "TestTreeSameBoundarySplitAfterOlderSplit/the older actor presses Enter as two edits, older split by replica 0 (tree_split_order_test.go). d1 splits <span>abcde</span> after c and both sync; then d1 runs the case's edit while d2 splits the older product's left half at the same boundary. KNOWN, skipped in the original: same shape as the paragraph case. Go converges since FindTreeNodesWithSplitText step 04 stops at a split product of the left element; JS diverges until it mirrors that rule.",
+  "status": { "go": "known-diverge", "js": "known-diverge" },
+  "note": "TestTreeSameBoundarySplitAfterOlderSplit/the older actor presses Enter as two edits, older split by replica 0 (tree_split_order_test.go). d1 splits <span>abcde</span> after c and both sync; then d1 runs the case's edit while d2 splits the older product's left half at the same boundary. KNOWN, skipped in the original: same shape as the paragraph case. Diverges on main too.",
   "replicas": 2,
   "delivery": "exchange",
   "init": {

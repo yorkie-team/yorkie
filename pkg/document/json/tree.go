@@ -195,10 +195,6 @@ func (t *Tree) EditBulkByPath(fromPath []int, toPath []int, contents []*TreeNode
 
 // Style sets the attributes to the elements of the given range.
 func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
-	// In a removed Tree element, what this makes live is charged to the
-	// element's GC charge, as the replayed operation charges it.
-	defer t.context.ChargeTreeOp(t.Tree)()
-
 	if fromIdx > toIdx {
 		panic("from should be less than or equal to to")
 	}
@@ -242,10 +238,6 @@ func (t *Tree) Style(fromIdx, toIdx int, attributes map[string]string) bool {
 
 // RemoveStyle sets the attributes to the elements of the given range.
 func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool {
-	// In a removed Tree element, what this makes live is charged to the
-	// element's GC charge, as the replayed operation charges it.
-	defer t.context.ChargeTreeOp(t.Tree)()
-
 	if fromIdx > toIdx {
 		panic("from should be less than or equal to to")
 	}
@@ -294,10 +286,6 @@ func (t *Tree) RemoveStyle(fromIdx, toIdx int, attributesToRemove []string) bool
 
 // StyleByPath sets the attributes to the elements of the given path range.
 func (t *Tree) StyleByPath(fromPath []int, toPath []int, attributes map[string]string) bool {
-	// In a removed Tree element, what this makes live is charged to the
-	// element's GC charge, as the replayed operation charges it.
-	defer t.context.ChargeTreeOp(t.Tree)()
-
 	if len(fromPath) != len(toPath) {
 		panic(ErrPathLenDiff)
 	}
@@ -351,10 +339,6 @@ func (t *Tree) StyleByPath(fromPath []int, toPath []int, attributes map[string]s
 
 // RemoveStyleByPath removes the attributes from the elements of the given path range.
 func (t *Tree) RemoveStyleByPath(fromPath []int, toPath []int, attributesToRemove []string) bool {
-	// In a removed Tree element, what this makes live is charged to the
-	// element's GC charge, as the replayed operation charges it.
-	defer t.context.ChargeTreeOp(t.Tree)()
-
 	if len(fromPath) != len(toPath) {
 		panic(ErrPathLenDiff)
 	}
@@ -418,10 +402,6 @@ func (t *Tree) Len() int {
 
 // edit edits the tree with the given nodes.
 func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLevel int) bool {
-	// In a removed Tree element, what this makes live is charged to the
-	// element's GC charge, as the replayed operation charges it.
-	defer t.context.ChargeTreeOp(t.Tree)()
-
 	// Refused here rather than in each of Edit/EditBulk/EditByPath/
 	// EditBulkByPath: this is the single funnel all four reach, and the only
 	// place a TreeEdit carrying a split level is constructed, so a fifth entry

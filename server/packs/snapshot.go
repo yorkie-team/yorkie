@@ -248,16 +248,11 @@ func storeSnapshot(
 		doc.ResetPresences()
 	}
 
-	// 05. save the snapshot of the docInfo, with the size the push gate reads.
-	size, err := collectableSize(ctx, be, docRefKey, doc)
-	if err != nil {
-		return err
-	}
+	// 05. save the snapshot of the docInfo
 	if err := be.DB.CreateSnapshotInfo(
 		ctx,
 		docRefKey,
 		doc,
-		size,
 	); err != nil {
 		logging.From(ctx).Errorf(
 			"SNAP: failed to store snapshot '%s', serverSeq: %d: %v",
@@ -351,37 +346,4 @@ func storeRevision(
 	logging.From(ctx).Infof("REV : '%s', label: %s", docInfo.Key, label)
 
 	return nil
-}
-
-// collectableSize returns the size the push gate reads for doc: what it holds,
-// Live and GC, once its garbage is collected at the minimum synced version
-// vector. The stored snapshot keeps its tombstones -- storeSnapshot does not
-// collect -- so measuring doc itself would count every tombstone since the
-// last compaction, garbage every replica has long let go of. A copy is
-// collected the way BuildInternalDocForServerSeq collects the document it
-// serves, so the gate counts only the garbage some attached client still
-// holds back.
-func collectableSize(
-	ctx context.Context,
-	be *backend.Backend,
-	docRefKey types.DocRefKey,
-	doc *document.InternalDocument,
-) (int64, error) {
-	measured := doc
-	if !be.Config.SnapshotDisableGC {
-		copied, err := doc.DeepCopy()
-		if err != nil {
-			return 0, err
-		}
-		vector, err := be.DB.GetMinVersionVector(ctx, docRefKey, copied.VersionVector())
-		if err != nil {
-			return 0, err
-		}
-		if _, err := copied.GarbageCollect(vector); err != nil {
-			return 0, err
-		}
-		measured = copied
-	}
-	size := measured.DocSize()
-	return int64(size.Total()), nil
 }

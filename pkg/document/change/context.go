@@ -155,12 +155,6 @@ func (c *Context) RegisterGCPair(pair crdt.GCPair) {
 	c.root.RegisterGCPair(pair)
 }
 
-// ChargeTreeOp starts a local operation on tree's content, returning the
-// func that ends it, for a defer (see crdt.Root.ChargeTreeOp).
-func (c *Context) ChargeTreeOp(tree *crdt.Tree) func() {
-	return c.root.ChargeTreeOp(tree)
-}
-
 // Acc accumulates the given DataSize to Live size of the root.
 func (c *Context) Acc(diff resource.DataSize) {
 	c.root.Acc(diff)

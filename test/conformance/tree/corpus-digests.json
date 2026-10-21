@@ -53,47 +53,17 @@
     "digest": "a755c90920f7aea1",
     "xmlDigest": "308ec9336f96205d"
   },
-  "gen-uall-1785-min.json": {
-    "result": "fail",
-    "checks": "11101",
-    "digest": "f4a41f6946ea321f",
-    "xmlDigest": "a53c716e744a5d68"
-  },
-  "gen-ud3-2403-min.json": {
-    "result": "fail",
-    "checks": "11101",
-    "digest": "4f70b23aae0cf5f0",
-    "xmlDigest": "a9e4eddd179cefa2"
-  },
-  "gen-udm-2131-min.json": {
-    "result": "fail",
-    "checks": "11101",
-    "digest": "f7709560499f2c83",
-    "xmlDigest": "425737bb3110bf2c"
-  },
   "gen-uds-102-min.json": {
     "result": "diverged",
     "checks": "01111",
     "digest": "65a8ed287ffe0512",
     "xmlDigest": "5da69ab76c9891f1"
   },
-  "gen-uds-2076-min.json": {
-    "result": "fail",
-    "checks": "11101",
-    "digest": "0756687ec3649cb4",
-    "xmlDigest": "420c14defb4adf72"
-  },
   "gen-uds-50-min.json": {
     "result": "diverged",
     "checks": "01101",
     "digest": "9e313af9e30ee7da",
     "xmlDigest": "83dfd520296664f1"
-  },
-  "gen-uds3-1298-min.json": {
-    "result": "fail",
-    "checks": "11101",
-    "digest": "79ce424fd34fd978",
-    "xmlDigest": "4b231ead0ba85517"
   },
   "gen-undo-4-min.json": {
     "result": "diverged",
@@ -102,16 +72,16 @@
     "xmlDigest": "0255001f8de8fee1"
   },
   "i2169-redo-after-peer-insert-gc.json": {
-    "result": "pass",
-    "checks": "11111",
+    "result": "fail",
+    "checks": "11101",
     "digest": "28e2f59f05701b1b",
     "xmlDigest": "f49a9321f5e8b0a9"
   },
   "i2189-delete-empty-p-after-undo.json": {
     "result": "fail",
     "checks": "11101",
-    "digest": "cbca304db5f53002",
-    "xmlDigest": "5701978835d219a3"
+    "digest": "2f80ef7574bf4c05",
+    "xmlDigest": "d5df3a6b72396302"
   },
   "i2190-concurrent-multilevel-deletes.json": {
     "result": "diverged",
@@ -246,10 +216,10 @@
     "xmlDigest": "db41bf8a0a546ab6"
   },
   "ri-restore-element-and-text-in-one-change-around-enter.json": {
-    "result": "pass",
-    "checks": "11111",
-    "digest": "77582d75c090dca5",
-    "xmlDigest": "6e31b3d8840af0bb"
+    "result": "error",
+    "checks": "10101",
+    "digest": "d151092ccf9f9ed8",
+    "xmlDigest": "d151092ccf9f9ed8"
   },
   "ri-restore-element-left-of-enter.json": {
     "result": "pass",
@@ -264,10 +234,10 @@
     "xmlDigest": "5ac19d8ea0efe58d"
   },
   "ri-restore-text-at-enter.json": {
-    "result": "pass",
-    "checks": "11111",
-    "digest": "28dc9ee6a053b748",
-    "xmlDigest": "9b500465a5f6d46e"
+    "result": "error",
+    "checks": "10101",
+    "digest": "4a182a0b1486b5a3",
+    "xmlDigest": "4a182a0b1486b5a3"
   },
   "ri-restore-text-left-of-enter.json": {
     "result": "pass",
@@ -324,10 +294,10 @@
     "xmlDigest": "9bd77c4321c0e102"
   },
   "ri-retombstone-element-split-by-enter.json": {
-    "result": "pass",
-    "checks": "11111",
-    "digest": "06a30b000827c5f0",
-    "xmlDigest": "44c0bbd5c4e59da5"
+    "result": "error",
+    "checks": "10101",
+    "digest": "57e4ca2f7dce33ca",
+    "xmlDigest": "57e4ca2f7dce33ca"
   },
   "ri-retombstone-text-ending-at-enter.json": {
     "result": "pass",
@@ -396,28 +366,28 @@
     "xmlDigest": "8960fcab7610391e"
   },
   "split-order-older-enter-two-edits-d1.json": {
-    "result": "pass",
-    "checks": "11111",
-    "digest": "60d657c30bb9c98d",
-    "xmlDigest": "a06ce13a6bb0cc9b"
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "daa55dd17e82bebe",
+    "xmlDigest": "360acf60765ed3d4"
   },
   "split-order-older-enter-two-edits-d2.json": {
-    "result": "pass",
-    "checks": "11111",
-    "digest": "92a48fc46a13816b",
-    "xmlDigest": "667ad93404b1d969"
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "a3b384af616c6965",
+    "xmlDigest": "b1507191286bb1a6"
   },
   "split-order-older-paragraph-d1.json": {
-    "result": "pass",
-    "checks": "11111",
-    "digest": "c8cbabde5c5215e4",
-    "xmlDigest": "2c2938f00e7f9413"
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "47955296407a82f4",
+    "xmlDigest": "3fa664dece760303"
   },
   "split-order-older-paragraph-d2.json": {
-    "result": "pass",
-    "checks": "11111",
-    "digest": "fbc93cbd8b08ccfd",
-    "xmlDigest": "9d3a38875e72b924"
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "51e168ab8ea725b2",
+    "xmlDigest": "cc66ccf42860ec9a"
   },
   "split-order-older-span-again-d1.json": {
     "result": "pass",

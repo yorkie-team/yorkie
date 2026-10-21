@@ -125,9 +125,6 @@ func (e *TreeStyle) Execute(root *crdt.Root, _ OpSource, versionVector time.Vers
 	if !ok {
 		return ExecutionResult{}, ErrNotApplicableDataType
 	}
-	// As for an edit: in a removed Tree element, the style's Live share is
-	// the element's GC charge's (yorkie#2251).
-	defer root.ChargeTreeOp(obj)()
 
 	reversePrevAttributes := make(map[string]string)
 	var reverseAttrsToRemove []string

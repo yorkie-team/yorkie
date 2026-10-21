@@ -31,11 +31,6 @@ document breaks in production.
   document.
 - Keep the port behavior-identical to JS, including JS's known defects. Fixing a
   defect in Go alone would widen the gap the port exists to close.
-  This goal held for the port itself. Later Tree convergence fixes that touch
-  undo (the restore rules in concurrent-merge-split.md, Rollout items 3-7)
-  land in Go first by design. They ship together with their yorkie-js-sdk
-  mirror, and the rollout section lists every rule to port, so the gap is
-  closed in one release rather than left open.
 
 ### Non-Goals
 
@@ -44,9 +39,6 @@ document breaks in production.
 - Fixing the open items listed in [undo-redo.md](undo-redo.md) — overlapping
   undo content duplication, Tree reconciliation Cases 3–6, `ArraySet` + `Move`
   undo, GC vs. undo (#664). These stay broken identically in both SDKs.
-  The Tree part of GC vs. undo is since addressed by the restore rules in
-  concurrent-merge-split.md (Rollout items 3-7), which are released together
-  with the JS SDK change.
 - Emitting local change events from `Undo` / `Redo`. The Go SDK's `Update` does
   not emit local events today; that pre-existing difference is out of scope.
 - Fixing defects found while porting Task 7 (presence in the history) that
@@ -212,11 +204,7 @@ Rules that must match JS:
 - An `Edit` reverse **keeps the same span sets and flips the direction**
   (restore ↔ retombstone). It does not deep-copy content and re-insert it. This
   is the identity-preserving restore introduced in #1875/#1893 and hardened
-  through v0.7.16. A `TreeEdit` reverse flips the direction the same way, but
-  its retombstoned half is the span list `Tree.Retombstone` reports: each
-  input span with its anchors re-read, plus a span per node the §4.1 cascade
-  took with an element (see the Rollout and Cross-implementation section of
-  `concurrent-merge-split.md`).
+  through v0.7.16.
 - An undo operation refines its positions before executing
   (`text.refinePos(this.fromPos)`).
 - `TreeEdit` undo calls `reissueContentIDs()` before execution. A
@@ -225,15 +213,6 @@ Rules that must match JS:
   identity and must keep their IDs, so the two paths diverge here.
 - Dedup counters produce no reverse operation. HyperLogLog cannot remove an
   actor once added.
-- A `TreeEdit` restore leaves a node a tombstone when the restoring change
-  knew the removal of one of its ancestors (`Tree.knownRemovalAbove`,
-  against the change's version vector; an empty vector knows every
-  removal). Reviving it there would bring back a node no one can see, and
-  whether it came back with the ancestor would depend on when each replica
-  collected. A restore concurrent with the ancestor's removal still
-  revives, and an ancestor revived earlier in the same call is live, so a
-  subtree restored parent-first comes back whole. The rule trusts the
-  change's vector, which needs server-side validation to close (#2234).
 
 ### Layer 3: History
 

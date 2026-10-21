@@ -24,22 +24,16 @@ import (
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
 )
 
-// canGrow reports whether the change may increase the document's size.
+// canGrow reports whether the change may increase the document's live size.
 // The push path has no document to execute the change against, so this goes
 // by operation kind alone and is conservative: only removals are known not to
 // grow. A change with no operations (presence-only) cannot grow the root.
-//
-// An identity-preserving edit revives one of its two span sets and removes
-// the other, and its restore mode says which: a retombstone-mode edit revives
-// its retombstone spans (see TreeEdit.Execute and Edit.Execute). It can grow
-// the document when the set its mode revives is not empty.
 //
 // A deletion can still add a little node metadata where it splits a text or
 // tree node at the range boundary. That growth is bounded by the content
@@ -50,19 +44,11 @@ func canGrow(cn *change.Change) bool {
 		case *operations.Remove:
 			continue
 		case *operations.Edit:
-			revived := len(o.RestoreSpans())
-			if o.RestoreMode() == crdt.RestoreModeRetombstone {
-				revived = len(o.RetombstoneSpans())
-			}
-			if o.Content() == "" && len(o.Attributes()) == 0 && revived == 0 {
+			if o.Content() == "" && len(o.Attributes()) == 0 && len(o.RestoreSpans()) == 0 {
 				continue
 			}
 		case *operations.TreeEdit:
-			revived := len(o.RestoreSpans())
-			if o.RestoreMode() == crdt.RestoreModeRetombstone {
-				revived = len(o.RetombstoneSpans())
-			}
-			if len(o.Contents()) == 0 && o.SplitLevel() == 0 && revived == 0 {
+			if len(o.Contents()) == 0 && o.SplitLevel() == 0 && len(o.RestoreSpans()) == 0 {
 				continue
 			}
 		}
@@ -75,9 +61,6 @@ func canGrow(cn *change.Change) bool {
 //
 // The size comes from the latest snapshot, so it lags the document by up to
 // one SnapshotInterval of changes; see docs/design/document-size-limit.md.
-// It is what the document holds, Live and GC, the figure the SDK's own
-// MaxSizeLimit check reads, so growth a removed element books to GC is
-// bounded too.
 // A document without a measured size (no snapshot yet, a snapshot written
 // before sizes were recorded, or one just compacted) is admitted. Only a
 // document strictly over the limit refuses, and only changes that can grow
@@ -102,18 +85,18 @@ func checkDocumentSize(
 	if err != nil {
 		return err
 	}
-	if info.Size <= int64(maxSize) {
+	if info.LiveSize <= int64(maxSize) {
 		return nil
 	}
 
 	return fmt.Errorf(
-		"push to %s: size %d bytes at server seq %d exceeds %d: %w",
-		docKey, info.Size, info.ServerSeq, maxSize, document.ErrDocumentSizeExceedsLimit,
+		"push to %s: live size %d bytes at server seq %d exceeds %d: %w",
+		docKey, info.LiveSize, info.ServerSeq, maxSize, document.ErrDocumentSizeExceedsLimit,
 	)
 }
 
 // CheckLiveSize enforces the project's MaxSizePerDocument against a document
-// the caller already holds in full, on its live size.
+// the caller already holds in full.
 //
 // The server-side write paths that build the whole root themselves — the admin
 // document create and update RPCs and the revision restore — measure the
@@ -121,13 +104,6 @@ func checkDocumentSize(
 // That gate refuses every growing change on an over-quota document, which
 // would refuse the very writes meant to bring such a document back under the
 // limit; measuring the result admits a shrink and still refuses an overrun.
-//
-// It reads Live, not the total the push gate reads. Two of the paths replace
-// the whole root, which leaves every byte of the previous content in GC,
-// uncollected, at the moment they measure: on the total, a repair that
-// shrinks an over-quota document would be refused for the garbage the repair
-// itself booked. The result's Live is the content the repair wrote, and its
-// garbage is collected like any other.
 func CheckLiveSize(docKey key.Key, size resource.DocSize, maxSize int) error {
 	liveSize := size.Live.Total()
 	if maxSize <= 0 || liveSize <= maxSize {
