@@ -191,6 +191,7 @@ func TestPresenceChangeOfAnUnspecifiedTypeWipesPresence(t *testing.T) {
 // that predates a capability cannot report that it lacks it.
 func TestServerCapabilities(t *testing.T) {
 	assert.True(t, api.HasCapability(api.ServerCapabilities, api.CapPresencePatch))
+	assert.True(t, api.HasCapability(api.ServerCapabilities, api.CapRestoreRemovedBy))
 
 	// The server re-encodes element operations without RestoreMode, so
 	// advertising element restore would let a client's restore be silently

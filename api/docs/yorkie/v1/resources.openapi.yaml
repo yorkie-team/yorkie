@@ -845,6 +845,16 @@ components:
             type: object
           title: nodes
           type: array
+        purgedRemovals:
+          additionalProperties: false
+          description: |-
+            purged_removals is what the removal ledgers of purged pieces still
+             said, so an undo that arrives after GC answers as the ledger would.
+          items:
+            $ref: '#/components/schemas/yorkie.v1.PurgedRemovals'
+            type: object
+          title: purged_removals
+          type: array
         removedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
@@ -1864,6 +1874,38 @@ components:
           type: object
       title: Project
       type: object
+    yorkie.v1.PurgedRemovals:
+      additionalProperties: false
+      description: |-
+        PurgedRemovals is the uncancelled removals of a purged piece
+         [start, end) of the insertion created_at.
+      properties:
+        createdAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: created_at
+          type: object
+        end:
+          additionalProperties: false
+          description: ""
+          title: end
+          type: integer
+        removals:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+            type: object
+          title: removals
+          type: array
+        start:
+          additionalProperties: false
+          description: ""
+          title: start
+          type: integer
+      title: PurgedRemovals
+      type: object
     yorkie.v1.RGANode:
       additionalProperties: false
       description: |-
@@ -1925,6 +1967,24 @@ components:
           type: string
       title: RHTNode
       type: object
+    yorkie.v1.RemovalCancel:
+      additionalProperties: false
+      description: RemovalCancel is an undo that cancelled one removal of a node.
+      properties:
+        cancelledAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: cancelled_at
+          type: object
+        removal:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: removal
+          type: object
+      title: RemovalCancel
+      type: object
     yorkie.v1.RestoreMode:
       description: |-
         RestoreMode selects the identity-preserving path. RESTORE_MODE_UNSPECIFIED
@@ -1982,6 +2042,15 @@ components:
           description: ""
           title: end
           type: integer
+        removedBy:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: |-
+            removed_by is the removal this span undoes. Restore cancels exactly that
+             removal, so a concurrent removal the undo never saw keeps the piece
+             removed. Absent (older clients): restore clears the tombstone.
+          title: removed_by
+          type: object
         start:
           additionalProperties: false
           description: ""
@@ -2147,6 +2216,14 @@ components:
           description: ""
           title: attributes
           type: object
+        hasLedger:
+          additionalProperties: false
+          description: |-
+            The removal ledger: the deletions that removed this node and the undos
+             that cancelled some of them. has_ledger is false when the ledger is just
+             removed_at (the default), which is then not written.
+          title: has_ledger
+          type: boolean
         id:
           $ref: '#/components/schemas/yorkie.v1.TextNodeID'
           additionalProperties: false
@@ -2159,6 +2236,22 @@ components:
           description: ""
           title: ins_prev_id
           type: object
+        removalCancels:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.RemovalCancel'
+            type: object
+          title: removal_cancels
+          type: array
+        removals:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+            type: object
+          title: removals
+          type: array
         removedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false

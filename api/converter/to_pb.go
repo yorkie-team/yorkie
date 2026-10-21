@@ -478,6 +478,7 @@ func toRestoreSpans(spans []*crdt.RestoreSpan) ([]*api.RestoreSpan, error) {
 			End:        int32(span.End),
 			Content:    span.Content,
 			Attributes: span.Attributes,
+			RemovedBy:  ToTimeTicket(span.RemovedBy),
 		})
 	}
 	return pbSpans, nil
