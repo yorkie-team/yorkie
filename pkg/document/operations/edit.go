@@ -386,8 +386,6 @@ func (e *Edit) toReverseOperation(
 	}
 }
 
-// flipRestoreMode returns the direction that undoes the given one: undoing a
-// restore re-removes, and undoing a re-removal restores.
 // withRemovedBy returns copies of the spans naming removedBy as the removal
 // they undo.
 func withRemovedBy(spans []*crdt.RestoreSpan, removedBy *time.Ticket) []*crdt.RestoreSpan {
@@ -403,6 +401,8 @@ func withRemovedBy(spans []*crdt.RestoreSpan, removedBy *time.Ticket) []*crdt.Re
 	return out
 }
 
+// flipRestoreMode returns the direction that undoes the given one: undoing a
+// restore re-removes, and undoing a re-removal restores.
 func flipRestoreMode(mode crdt.RestoreMode) crdt.RestoreMode {
 	if mode == crdt.RestoreModeRetombstone {
 		return crdt.RestoreModeRestore
