@@ -234,6 +234,18 @@ func (p *Array) AddYSON(value any) *Array {
 		t.EditFromYSON(y)
 	case yson.Tree:
 		p.AddNewTree(y.Root)
+	case yson.ZeroTree:
+		schema, err := crdt.ZeroSchemaFromJSON(y.Schema)
+		if err != nil {
+			panic(err)
+		}
+		p.addInternal(func(ticket *time.Ticket) crdt.Element {
+			tree, err := crdt.NewZeroTreeFromContent(ticket, y.Content, schema)
+			if err != nil {
+				panic(err)
+			}
+			return tree
+		})
 	default:
 		switch v := y.(type) {
 		case nil:

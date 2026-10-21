@@ -120,6 +120,16 @@ func validateValue(value any, rule types.Rule) ValidationResult {
 				}},
 			}
 		}
+	case "yorkie.ZeroTree":
+		if _, ok := value.(*crdt.ZeroTree); !ok {
+			return ValidationResult{
+				Valid: false,
+				Errors: []ValidationError{{
+					Path:    rule.Path,
+					Message: fmt.Sprintf("expected yorkie.ZeroTree at path %s", rule.Path),
+				}},
+			}
+		}
 	case "yorkie.Counter":
 		if _, ok := value.(*crdt.Counter); !ok {
 			return ValidationResult{

@@ -576,9 +576,27 @@ type RGATreeSplit[V RGATreeSplitValue] struct {
 	// gone recreates it only when no other deletion remains, the same answer
 	// the piece's own ledger gives on a replica that has not purged it.
 	purgedLedger map[string][]*PurgedLedger
+
+	// ghostPurge (PROTOTYPE, Zero Tree): Purge keeps the node in place as a
+	// ghost -- identity, place, ledger and mutable parts stay, the immutable
+	// content goes -- so an undo after GC revives it where an unpurged
+	// replica has its tombstone and positions anchored on it still resolve.
+	ghostPurge bool
 	// purgedOrder keeps the insertion order of purgedLedger's keys, so the
 	// encoding is deterministic (and the same as the JS Map's).
 	purgedOrder []*time.Ticket
+}
+
+// SetGhostPurge turns ghost purging on (Zero Tree).
+func (s *RGATreeSplit[V]) SetGhostPurge(on bool) {
+	s.ghostPurge = on
+}
+
+// ghostable is a value a ghost purge can strip of its immutable content and a
+// restore can refill.
+type ghostable interface {
+	toGhost()
+	refill(from RGATreeSplitValue, offset int)
 }
 
 // PurgedLedgers calls fn for each insertion's purged ledgers, in the order
@@ -1118,6 +1136,9 @@ func (s *RGATreeSplit[V]) restore(
 						target.SetRemovedAt(nil)
 					}
 					if live {
+						if g, ok := any(target.value).(ghostable); ok {
+							g.refill(span.value, target.id.offset-span.start)
+						}
 						s.treeByIndex.Splay(target.indexNode)
 						untombstoned = append(untombstoned, target)
 					}
@@ -1464,6 +1485,13 @@ func (s *RGATreeSplit[V]) PurgeBarrierAt(child GCChild) *time.Ticket {
 
 func (s *RGATreeSplit[V]) Purge(child GCChild) error {
 	node := child.(*RGATreeSplitNode[V])
+
+	if s.ghostPurge {
+		if g, ok := any(node.value).(ghostable); ok {
+			g.toGhost()
+		}
+		return nil
+	}
 
 	if node.ledgered {
 		start := node.id.offset

@@ -35,6 +35,8 @@ func toOriginal(elem crdt.Element) crdt.Element {
 		return elem.Tree
 	case *crdt.Primitive:
 		return elem
+	case *crdt.ZeroTree:
+		return elem
 	}
 	panic("unsupported type")
 }

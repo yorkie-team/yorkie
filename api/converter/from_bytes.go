@@ -129,6 +129,8 @@ func fromJSONElement(pbElem *api.JSONElement) (crdt.Element, error) {
 		return fromJSONCounter(decoded.Counter)
 	case *api.JSONElement_Tree_:
 		return fromJSONTree(decoded.Tree)
+	case *api.JSONElement_ZeroTree_:
+		return fromJSONZeroTree(decoded.ZeroTree)
 	default:
 		return nil, fmt.Errorf("%s: %w", decoded, ErrUnsupportedElement)
 	}

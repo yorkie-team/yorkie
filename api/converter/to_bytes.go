@@ -113,6 +113,8 @@ func toJSONElement(elem crdt.Element) (*api.JSONElement, error) {
 		return toCounter(elem)
 	case *crdt.Tree:
 		return toTree(elem), nil
+	case *crdt.ZeroTree:
+		return toZeroTree(elem), nil
 	default:
 		return nil, fmt.Errorf("%v: %w", reflect.TypeOf(elem), ErrUnsupportedElement)
 	}
