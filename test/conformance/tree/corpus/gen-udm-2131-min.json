@@ -1,0 +1,26 @@
+{
+  "v": 1,
+  "id": "gen-udm-2131-min",
+  "issues": ["yorkie#2257"],
+  "status": { "go": "known-fail", "js": "pass" },
+  "note": "Minimised from gen-udm-n2-s24-2131 (a udm large-run seed). It passes under main's rules (js status assumed from them, as the JS SDK mirrors main); under the anchors Retombstone refreshes on the spans it reports for the reverse operation (Rollout item 4, refreshSpanAnchors) the minvv run ends on another tree than the off run (I4). Pinned so the class cannot grow unnoticed, and tracked in yorkie#2257; the class is recorded under the heading \"Known divergence: rules 4 and 6 under minimum-version-vector collection\" in docs/design/concurrent-merge-split.md. The divergence needs only ordinary collection at the minimum synced version vector, no lagging race.",
+  "replicas": 2,
+  "init": "abcd",
+  "steps": [
+    {"r": 1, "op": "gen", "k": "ins", "f": 0.7542288359254599, "g": 0.2969669559970498, "h": 0.08811210305429995, "v": "e"},
+    {"r": 1, "op": "gen", "k": "split", "f": 0.44993588887155056, "g": 0.06972339772619307, "h": 0.29062113515101373, "v": "f"},
+    {"r": 0, "op": "pull"},
+    {"r": 1, "op": "gen", "k": "merge", "f": 0.8351272577419877, "g": 0.7923004091717303, "h": 0.09664536104537547, "v": "h"},
+    {"r": 0, "op": "gen", "k": "ins", "f": 0.9484137641265988, "g": 0.2592716033104807, "h": 0.8222951854113489, "v": "i"},
+    {"r": 0, "op": "pull"},
+    {"r": 0, "op": "undo"},
+    {"r": 0, "op": "pull"},
+    {"r": 1, "op": "gen", "k": "split", "f": 0.3340302116703242, "g": 0.23765312461182475, "h": 0.8675901137758046, "v": "k"},
+    {"r": 0, "op": "pull"},
+    {"r": 1, "op": "gen", "k": "merge", "f": 0.47790817078202963, "g": 0.07044037221930921, "h": 0.5234480167273432, "v": "l"},
+    {"r": 1, "op": "pull"},
+    {"r": 1, "op": "pull"},
+    {"r": 0, "op": "pull"},
+    {"r": 0, "op": "redo"}
+  ]
+}

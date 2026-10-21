@@ -22,8 +22,8 @@
     },
     {
       "seed": 3,
-      "result": "fail",
-      "checks": "11101",
+      "result": "pass",
+      "checks": "11111",
       "digest": "21477c4501e663ec",
       "xmlDigest": "cf9197d892b181dd"
     },
@@ -267,10 +267,10 @@
     },
     {
       "seed": 38,
-      "result": "error",
-      "checks": "10101",
-      "digest": "e1b375d4bf89d015",
-      "xmlDigest": "e1b375d4bf89d015"
+      "result": "pass",
+      "checks": "11111",
+      "digest": "2dde346cff11ff24",
+      "xmlDigest": "96638f1ddded115f"
     },
     {
       "seed": 39,
@@ -302,8 +302,8 @@
     },
     {
       "seed": 43,
-      "result": "fail",
-      "checks": "11101",
+      "result": "pass",
+      "checks": "11111",
       "digest": "b4aefabf1f66ee06",
       "xmlDigest": "ce35e51c1a5103b0"
     },

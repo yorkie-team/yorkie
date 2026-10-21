@@ -45,6 +45,15 @@ is the corpus — a seed that caught one is minimized into `corpus/` and
 replayed on every run — so the seed count only has to be wide enough to
 catch a runner that drifts from the other SDK.
 
+That lane runs with `-race`, and the suite is the first thing in the tree
+to build documents on several goroutines at once, so it is what surfaces
+the lazy caches on the package-level `time.InitialTicket`: every
+`document.New` reaches `Ticket.Key`, which fills `cachedKey` in place on
+first use, and two replays starting together read and write it unguarded.
+The report names `crdt.(*Root).index` but the unguarded state is
+`pkg/document/time/ticket.go`; it predates this suite and reproduces on
+`main`. Filling those caches in `NewTicket` would settle it.
+
 ## Script
 
 ```json

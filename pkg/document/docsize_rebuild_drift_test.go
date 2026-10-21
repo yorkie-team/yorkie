@@ -110,7 +110,7 @@ func TestArrayMoveChargesTheMovedAtTicket(t *testing.T) {
 			moveToFrontByValue(t, doc, v)
 		}
 
-		rebuilt, err := doc.InternalDocumentForTest().DeepCopy()
+		rebuilt, err := doc.InternalDocumentForTest().Root().Rederive()
 		require.NoError(t, err)
 		live, rebuiltLive := doc.DocSize().Live, rebuilt.DocSize().Live
 		require.Equal(t, (&rebuiltLive).Total(), (&live).Total())
@@ -282,4 +282,36 @@ func TestAttributeTombstoneRacesTheNodesRemoval(t *testing.T) {
 	assert.Equal(t, 0, d1.GarbageLen())
 	gc := d1.DocSize().GC
 	assert.Zero(t, (&gc).Total(), "collection must not leave the dropped value behind")
+}
+
+// TestMoveUnderARemovedContainerChargesGC pins where the movedAt ticket of a
+// move lands when the moved element is live under a container a concurrent
+// change removed. A rebuild counts the removed container in GC whole, the
+// element and its ticket included, so the running ledger has to book the
+// ticket to GC too, onto the element's own charge, and not to Live.
+func TestMoveUnderARemovedContainerChargesGC(t *testing.T) {
+	for _, removed := range []string{"object", "array"} {
+		d1, d2, _, _ := newReplicas(t)
+		require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			root.SetNewObject("o").SetNewArray("a").AddString("e0").AddString("e1").AddString("e2")
+			return nil
+		}))
+		crossSync(t, d1, d2)
+		require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+			if removed == "object" {
+				root.Delete("o")
+			} else {
+				root.GetObject("o").Delete("a")
+			}
+			return nil
+		}))
+		require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+			arr := root.GetObject("o").GetArray("a")
+			arr.MoveFront(arr.Get(2).CreatedAt())
+			return nil
+		}))
+		crossSync(t, d1, d2)
+		assertRebuildsSame(t, d1, "removed "+removed+", d1")
+		assertRebuildsSame(t, d2, "removed "+removed+", d2")
+	}
 }

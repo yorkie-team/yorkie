@@ -112,9 +112,10 @@ func TestTreeUndoRemoteIdentityReconcile(t *testing.T) {
 		jsDiverges bool
 	}{
 		{
-			// On both SDKs the retombstone misses the half the concurrent
-			// Enter split off, so the replicas differ at "synced" until B's
-			// undo merges it back.
+			// The retombstone takes the half the concurrent Enter split off
+			// with it (§4.1 cascade), so the replicas agree at "synced". The
+			// JS SDK still misses that half and differs there until B's undo
+			// merges it back.
 			name: "retombstone element split by pending enter",
 			seed: seedTwoParagraphs,
 			steps: []riStep{
@@ -125,7 +126,7 @@ func TestTreeUndoRemoteIdentityReconcile(t *testing.T) {
 				riSync(),
 				riCheck("synced",
 					"<doc><p>abcd</p><p>efgh</p></doc>",
-					"<doc><p>abcd</p><p></p><p>efgh</p></doc>"),
+					"<doc><p>abcd</p><p>efgh</p></doc>"),
 				riUndo(1),
 				riCheck("after undo",
 					"<doc><p>abcd</p><p>efgh</p></doc>",

@@ -95,8 +95,8 @@ func TestDocumentSizeGate(t *testing.T) {
 	// limit, so nothing on this side stops an update.
 	doc := document.New(docKey)
 	doc.SetActor(actorID)
-	push := func() error {
-		pbPack, err := converter.ToChangePack(doc.CreateChangePack())
+	pushPack := func(pack *change.Pack) error {
+		pbPack, err := converter.ToChangePack(pack)
 		require.NoError(t, err)
 		req := connect.NewRequest(&api.PushPullChangesRequest{
 			ClientId:   activated.Msg.ClientId,
@@ -112,10 +112,19 @@ func TestDocumentSizeGate(t *testing.T) {
 		require.NoError(t, err)
 		return doc.ApplyChangePack(resPack)
 	}
-	liveSize := func() int64 {
+	push := func() error { return pushPack(doc.CreateChangePack()) }
+	// pull exchanges a pack without the raw client's pending changes, which
+	// the gate would refuse, so the client takes in its peers' changes and
+	// reports what it has seen.
+	pull := func() error {
+		pack := doc.CreateChangePack()
+		pack.Changes = nil
+		return pushPack(pack)
+	}
+	docSize := func() int64 {
 		info, err := svr.Backend().DB.FindClosestSnapshotInfo(ctx, refKey, change.MaxCheckpoint.ServerSeq, false)
 		require.NoError(t, err)
-		return info.LiveSize
+		return info.Size
 	}
 	serverSeq := func() int64 {
 		info, err := svr.Backend().DB.FindDocInfoByRefKey(ctx, refKey)
@@ -164,6 +173,20 @@ func TestDocumentSizeGate(t *testing.T) {
 		}
 	}
 
+	// waitUnderLimit waits until a snapshot measures the document within the
+	// limit. The size counts garbage until a collection at the minimum
+	// synced vector covers it, so every attached client has to have reported
+	// seeing the deletion first; nudge syncs one of them.
+	waitUnderLimit := func(t *testing.T, nudge func()) {
+		waitForSnapshot(t, nudge)
+		deadline := gotime.Now().Add(10 * gotime.Second)
+		for docSize() > int64(sizeLimit) {
+			require.True(t, gotime.Now().Before(deadline), "the garbage was never collected")
+			nudge()
+			waitForSnapshot(t, nudge)
+		}
+	}
+
 	t.Run("growth past the quota is refused", func(t *testing.T) {
 		// No snapshot yet, so the size is unknown and the push goes through.
 		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
@@ -180,7 +203,7 @@ func TestDocumentSizeGate(t *testing.T) {
 			}))
 			require.NoError(t, push())
 		})
-		require.Greater(t, liveSize(), int64(sizeLimit))
+		require.Greater(t, docSize(), int64(sizeLimit))
 
 		before := serverSeq()
 		require.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
@@ -214,10 +237,19 @@ func TestDocumentSizeGate(t *testing.T) {
 		require.NoError(t, cli.Sync(ctx))
 		assert.Equal(t, before+1, serverSeq())
 
-		// Once a snapshot measures the smaller document, growth is admitted
-		// again: the gate does not wedge a document that went over.
+		// The deleted content is garbage the document still holds, and the
+		// gate counts it, as the SDK's own check does, until a collection
+		// covers the deletion (yorkie#2252).
 		waitForSnapshot(t, nudgeWith(t, cli, d2))
-		require.LessOrEqual(t, liveSize(), int64(sizeLimit))
+		require.Greater(t, docSize(), int64(sizeLimit))
+
+		// Once every attached client has seen the deletion, a collection
+		// takes the garbage out and the next snapshot measures the smaller
+		// document, so growth is admitted again: the gate does not wedge a
+		// document that went over.
+		require.NoError(t, pull())
+		require.NoError(t, pull())
+		waitUnderLimit(t, nudgeWith(t, cli, d2))
 		require.NoError(t, d2.Update(func(r *json.Object, p *presence.Presence) error {
 			r.SetString("small", "y")
 			return nil
@@ -238,13 +270,16 @@ func TestDocumentSizeGate(t *testing.T) {
 		d3 := document.New(docKey)
 		require.NoError(t, cli.Attach(ctx, d3))
 		d3.SetMaxSizeLimit(0)
+		// d3 attached with an empty vector, which holds the garbage left
+		// above until it reports what it has seen.
+		waitUnderLimit(t, nudgeWith(t, cli, d3))
 		require.NoError(t, d3.Update(func(r *json.Object, p *presence.Presence) error {
 			r.SetString("big", strings.Repeat("b", 4*sizeLimit))
 			return nil
 		}))
 		require.NoError(t, cli.Sync(ctx))
 		waitForSnapshot(t, nudgeWith(t, cli, d3))
-		require.Greater(t, liveSize(), int64(sizeLimit))
+		require.Greater(t, docSize(), int64(sizeLimit))
 
 		before := serverSeq()
 		pbPack, err := converter.ToChangePack(doc.CreateChangePack())

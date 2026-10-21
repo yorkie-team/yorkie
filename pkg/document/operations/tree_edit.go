@@ -197,6 +197,10 @@ func (e *TreeEdit) Execute(
 
 	switch obj := parent.(type) {
 	case *crdt.Tree:
+		// In a Tree element that is itself removed, what the edit makes live
+		// is charged to the element's GC charge, not to Live (yorkie#2251).
+		defer root.ChargeTreeOp(obj)()
+
 		// Identity-preserving restore/retombstone path (mirrors Edit).
 		// restoreMode selects direction; an undo revives restoreSpans and
 		// re-removes retombstoneSpans, the redo does the opposite. Both span
@@ -223,24 +227,6 @@ func (e *TreeEdit) Execute(
 				toRestore, toRetombstone = e.retombstoneSpans, e.restoreSpans
 			}
 
-			// The reverse of an identity-preserving edit keeps both span sets
-			// and only flips the direction, so undoing a restore re-removes
-			// exactly the nodes it revived, still under their original
-			// identities. Copying their content into a fresh insertion here
-			// would defeat the whole point of the restore path. Built before
-			// the mutation, from state the mutation does not touch.
-			reverseOp := &TreeEdit{
-				parentCreatedAt:  e.parentCreatedAt,
-				from:             e.from,
-				to:               e.to,
-				restoreSpans:     e.restoreSpans,
-				restoreMode:      flipRestoreMode(e.restoreMode),
-				retombstoneSpans: e.retombstoneSpans,
-				isUndoOp:         true,
-				fromIdx:          e.fromIdx,
-				toIdx:            e.toIdx,
-			}
-
 			// Where each node lands is measured for the reconciliation loop
 			// only, which reads it off remote executions alone: a local
 			// undo/redo and a replay skip the index walks.
@@ -249,11 +235,42 @@ func (e *TreeEdit) Execute(
 			var diff resource.DataSize
 			// 1. Re-remove (retombstone) by identity. Isolating a straddling
 			// piece splits it (live-split overhead accounted to diff).
-			retombstonePairs, retombstoneDiff, retombstoneEdits, err := obj.Retombstone(
-				toRetombstone, e.executedAt, measure,
+			retombstonePairs, retombstoneDiff, retombstoneEdits, retombstoned, err := obj.Retombstone(
+				toRetombstone, e.executedAt, measure, versionVector,
 			)
 			if err != nil {
 				return ExecutionResult{}, err
+			}
+
+			// The reverse of an identity-preserving edit keeps both span sets
+			// and only flips the direction, so undoing a restore re-removes
+			// exactly the nodes it revived, still under their original
+			// identities. Copying their content into a fresh insertion here
+			// would defeat the whole point of the restore path.
+			//
+			// The retombstoned half is taken from what Retombstone reports it
+			// removed rather than from the stored field: those spans carry
+			// anchors refreshed against the neighbours the nodes had at
+			// removal time, plus an entry per node the §4.1 cascade took with
+			// its element, so the reverse revives everything this execution
+			// removed. They are fresh objects; the operation's own payload,
+			// which is also what gets serialized at push time, is untouched.
+			reverseRestore, reverseRetombstone := e.restoreSpans, e.retombstoneSpans
+			if e.restoreMode == crdt.RestoreModeRetombstone {
+				reverseRestore = retombstoned
+			} else {
+				reverseRetombstone = retombstoned
+			}
+			reverseOp := &TreeEdit{
+				parentCreatedAt:  e.parentCreatedAt,
+				from:             e.from,
+				to:               e.to,
+				restoreSpans:     reverseRestore,
+				restoreMode:      flipRestoreMode(e.restoreMode),
+				retombstoneSpans: reverseRetombstone,
+				isUndoOp:         true,
+				fromIdx:          e.fromIdx,
+				toIdx:            e.toIdx,
 			}
 			diff.Add(retombstoneDiff)
 			for _, pair := range retombstonePairs {
@@ -269,7 +286,7 @@ func (e *TreeEdit) Execute(
 			// Recreated nodes are brand new, so they only need the Live
 			// addition, plus any live-split overhead. Mirrors Text restore.
 			untombstoned, recreated, restorePairs, restoreDiff, restoreEdits, err := obj.Restore(
-				toRestore, measure,
+				toRestore, measure, versionVector,
 			)
 			if err != nil {
 				return ExecutionResult{}, err

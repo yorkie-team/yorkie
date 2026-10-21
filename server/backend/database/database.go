@@ -382,11 +382,13 @@ type Database interface {
 		to int64,
 	) ([]*ChangeInfo, error)
 
-	// CreateSnapshotInfo stores the snapshot of the given document.
+	// CreateSnapshotInfo stores the snapshot of the given document, recording
+	// size as the size the push gate reads (see SnapshotInfo.Size).
 	CreateSnapshotInfo(
 		ctx context.Context,
 		docRefKey types.DocRefKey,
 		doc *document.InternalDocument,
+		size int64,
 	) error
 
 	// FindSnapshotInfo return the snapshot by the given DocRefKey and serverSeq.

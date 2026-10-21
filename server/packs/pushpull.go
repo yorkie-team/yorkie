@@ -83,7 +83,9 @@ type PushPullOptions struct {
 	// update, revision restore) rebuild the whole root, so they know the
 	// exact result; the snapshot-based push gate only knows the document is
 	// over quota and would refuse them, leaving an over-quota document with
-	// no way back under the limit. Never set from a client request.
+	// no way back under the limit. They measure the result's Live rather
+	// than the total the push gate reads, since replacing the root books the
+	// whole previous content to GC. Never set from a client request.
 	SizeChecked bool
 }
 
