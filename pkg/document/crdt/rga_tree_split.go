@@ -61,6 +61,8 @@ type RestoreSpan struct {
 	End        int
 	Content    string
 	Attributes map[string]string
+	// RemovedBy is the removal this span undoes (nil: an older client).
+	RemovedBy *time.Ticket
 }
 
 // restoreSpanValue is the internal form of a RestoreSpan carrying a real
@@ -70,6 +72,25 @@ type restoreSpanValue[V RGATreeSplitValue] struct {
 	start     int
 	end       int
 	value     V
+	// removedBy is the deletion this span undoes. When set, restore cancels
+	// exactly that deletion instead of clearing the tombstone, so a
+	// concurrent deletion the undo never saw keeps the node removed on every
+	// replica. Nil (a span from an older client): clear the tombstone.
+	removedBy *time.Ticket
+}
+
+// LedgerCancel is an undo that cancelled one deletion of a node.
+type LedgerCancel struct {
+	Deletion    *time.Ticket
+	CancelledAt *time.Ticket
+}
+
+// PurgedLedger is what the removal ledger of a purged piece [Start, End) of
+// one insertion still said: its uncancelled deletions.
+type PurgedLedger struct {
+	Start int
+	End   int
+	Dels  []*time.Ticket
 }
 
 var (
@@ -224,6 +245,14 @@ type RGATreeSplitNode[V RGATreeSplitValue] struct {
 	value     V
 	removedAt *time.Ticket
 
+	// The removal ledger. dels are the deletions that removed this node while
+	// it was live in the deleter's view; cancels are the deletions undo
+	// cancelled. removedAt is the latest uncancelled deletion. !ledgered means
+	// the ledger is just removedAt.
+	ledgered bool
+	dels     []*time.Ticket
+	cancels  []LedgerCancel
+
 	prev    *RGATreeSplitNode[V]
 	next    *RGATreeSplitNode[V]
 	insPrev *RGATreeSplitNode[V]
@@ -277,9 +306,130 @@ func (s *RGATreeSplitNode[V]) RemovedAt() *time.Ticket {
 	return s.removedAt
 }
 
-// SetRemovedAt sets the removal time of this node.
+// SetRemovedAt sets the removal time of this node. It drops the ledger.
 func (s *RGATreeSplitNode[V]) SetRemovedAt(removedAt *time.Ticket) {
 	s.removedAt = removedAt
+	s.ledgered, s.dels, s.cancels = false, nil, nil
+}
+
+// Ledger returns the removal ledger: whether there is one, the deletions and
+// the cancels.
+func (s *RGATreeSplitNode[V]) Ledger() (bool, []*time.Ticket, []LedgerCancel) {
+	return s.ledgered, s.dels, s.cancels
+}
+
+// SetLedger sets the ledger decoded with removedAt.
+func (s *RGATreeSplitNode[V]) SetLedger(dels []*time.Ticket, cancels []LedgerCancel) {
+	s.ledgered, s.dels, s.cancels = true, dels, cancels
+}
+
+func (s *RGATreeSplitNode[V]) copyLedger(other *RGATreeSplitNode[V]) {
+	s.ledgered = other.ledgered
+	s.dels = append([]*time.Ticket(nil), other.dels...)
+	s.cancels = append([]LedgerCancel(nil), other.cancels...)
+}
+
+func (s *RGATreeSplitNode[V]) ledger() []*time.Ticket {
+	if !s.ledgered {
+		s.ledgered = true
+		s.dels = nil
+		if s.removedAt != nil {
+			s.dels = []*time.Ticket{s.removedAt}
+		}
+	}
+	return s.dels
+}
+
+func (s *RGATreeSplitNode[V]) isCancelled(d *time.Ticket) bool {
+	for _, c := range s.cancels {
+		if c.Deletion.Compare(d) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *RGATreeSplitNode[V]) recompute() {
+	var latest *time.Ticket
+	for _, d := range s.ledger() {
+		if s.isCancelled(d) {
+			continue
+		}
+		if latest == nil || d.After(latest) {
+			latest = d
+		}
+	}
+	s.removedAt = latest
+}
+
+// recordRemoval adds a deletion to the ledger.
+func (s *RGATreeSplitNode[V]) recordRemoval(removedAt *time.Ticket) {
+	found := false
+	for _, d := range s.ledger() {
+		if d.Compare(removedAt) == 0 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		s.dels = append(s.dels, removedAt)
+	}
+	s.recompute()
+}
+
+// cancelRemoval cancels one deletion (an undo of it). Returns whether the
+// node is live afterwards.
+func (s *RGATreeSplitNode[V]) cancelRemoval(deletion, at *time.Ticket) bool {
+	s.ledger()
+	if !s.isCancelled(deletion) {
+		s.cancels = append(s.cancels, LedgerCancel{Deletion: deletion, CancelledAt: at})
+	}
+	s.recompute()
+	return s.removedAt == nil
+}
+
+// uncancelledRemovals returns the deletions no undo has cancelled.
+func (s *RGATreeSplitNode[V]) uncancelledRemovals() []*time.Ticket {
+	var dels []*time.Ticket
+	for _, d := range s.ledger() {
+		if !s.isCancelled(d) {
+			dels = append(dels, d)
+		}
+	}
+	return dels
+}
+
+// isRemovedInView tells whether the node was removed in the view of the
+// given version vector: a deletion it knew that no undo it knew cancelled.
+func (s *RGATreeSplitNode[V]) isRemovedInView(vector time.VersionVector) bool {
+	for _, d := range s.ledger() {
+		if !time.TicketKnown(vector, d) {
+			continue
+		}
+		cancelled := false
+		for _, c := range s.cancels {
+			if c.Deletion.Compare(d) == 0 && time.TicketKnown(vector, c.CancelledAt) {
+				cancelled = true
+				break
+			}
+		}
+		if !cancelled {
+			return true
+		}
+	}
+	return false
+}
+
+// canRemove tells whether a deletion at editedAt may remove (or overwrite
+// the tombstone of) this node.
+func (s *RGATreeSplitNode[V]) canRemove(editedAt *time.Ticket, creationKnown, tombstoneKnown bool) bool {
+	if !creationKnown {
+		return false
+	}
+	if s.removedAt == nil {
+		return true
+	}
+	return !tombstoneKnown && editedAt.After(s.removedAt)
 }
 
 // Marshal returns the JSON encoding of this node.
@@ -314,6 +464,7 @@ func (s *RGATreeSplitNode[V]) DeepCopy() *RGATreeSplitNode[V] {
 		value:     s.value.DeepCopy().(V),
 		removedAt: s.removedAt,
 	}
+	node.copyLedger(s)
 	node.indexNode = splay.NewNode(node)
 
 	return node
@@ -336,6 +487,7 @@ func (s *RGATreeSplitNode[V]) split(offset int) *RGATreeSplitNode[V] {
 		s.value.Split(offset).(V),
 	)
 	newNode.removedAt = s.removedAt
+	newNode.copyLedger(s)
 	return newNode
 }
 
@@ -359,14 +511,15 @@ func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, creationKnown bool,
 	}
 
 	if s.removedAt == nil {
-		s.removedAt = removedAt
+		s.recordRemoval(removedAt)
 		return true
 	}
 
 	// NOTE(hackerwins): Overwrite only if prior tombstone was not known
-	// (concurrent or unseen) and newer.
+	// (concurrent or unseen) and newer. The ledger keeps the latest
+	// uncancelled deletion as removedAt, which is this rule.
 	if !tombstoneKnown && removedAt.After(s.removedAt) {
-		s.removedAt = removedAt
+		s.recordRemoval(removedAt)
 	}
 	return false
 }
@@ -417,6 +570,35 @@ type RGATreeSplit[V RGATreeSplitValue] struct {
 	// otherwise never be registered for GC. edit, Text.Style and
 	// Text.RemoveStyle drain this buffer into the GC pairs they return.
 	pendingGCPairs []GCPair
+
+	// purgedLedger is what the ledgers of purged pieces still said, keyed by
+	// insertion. A restore that finds the piece
+	// gone recreates it only when no other deletion remains, the same answer
+	// the piece's own ledger gives on a replica that has not purged it.
+	purgedLedger map[string][]*PurgedLedger
+	// purgedOrder keeps the insertion order of purgedLedger's keys, so the
+	// encoding is deterministic (and the same as the JS Map's).
+	purgedOrder []*time.Ticket
+}
+
+// PurgedLedgers calls fn for each insertion's purged ledgers, in the order
+// they were first recorded.
+func (s *RGATreeSplit[V]) PurgedLedgers(fn func(createdAt *time.Ticket, entries []*PurgedLedger)) {
+	for _, createdAt := range s.purgedOrder {
+		fn(createdAt, s.purgedLedger[createdAt.Key()])
+	}
+}
+
+// AddPurgedLedger appends a purged ledger entry (decoding, deep copy).
+func (s *RGATreeSplit[V]) AddPurgedLedger(createdAt *time.Ticket, entry *PurgedLedger) {
+	if s.purgedLedger == nil {
+		s.purgedLedger = make(map[string][]*PurgedLedger)
+	}
+	key := createdAt.Key()
+	if _, ok := s.purgedLedger[key]; !ok {
+		s.purgedOrder = append(s.purgedOrder, createdAt)
+	}
+	s.purgedLedger[key] = append(s.purgedLedger[key], entry)
 }
 
 // NewRGATreeSplit creates a new instance of RGATreeSplit.
@@ -818,11 +1000,26 @@ func (s *RGATreeSplit[V]) deleteNodes(
 			}
 		}
 
-		if n.Remove(editedAt, creationKnown, tombstoneKnown) {
-			removed[n.id.key()] = n
-		} else {
-			nodesToKeep = append(nodesToKeep, n)
+		// Once a tombstone can be cancelled by an undo, "the deleter knew the
+		// node" is not enough -- the node has to have been LIVE in the
+		// deleter's view, or a deletion removes text its author never saw.
+		liveInView := n.removedAt == nil
+		if !isLocal {
+			liveInView = creationKnown && !n.isRemovedInView(vector)
 		}
+		if liveInView && n.canRemove(editedAt, creationKnown, tombstoneKnown) {
+			wasLive := n.removedAt == nil
+			n.recordRemoval(editedAt)
+			if wasLive {
+				removed[n.id.key()] = n
+				continue
+			}
+		} else if !isLocal && liveInView && n.removedAt != nil {
+			// A node this deletion saw live but someone else removed
+			// concurrently records the deletion all the same.
+			n.recordRemoval(editedAt)
+		}
+		nodesToKeep = append(nodesToKeep, n)
 	}
 
 	nodesToKeep = append(nodesToKeep, rightEdge)
@@ -914,9 +1111,16 @@ func (s *RGATreeSplit[V]) restore(
 					if isoErr != nil {
 						return nil, nil, nil, isoErr
 					}
-					target.SetRemovedAt(nil)
-					s.treeByIndex.Splay(target.indexNode)
-					untombstoned = append(untombstoned, target)
+					live := true
+					if span.removedBy != nil {
+						live = target.cancelRemoval(span.removedBy, executedAt)
+					} else {
+						target.SetRemovedAt(nil)
+					}
+					if live {
+						s.treeByIndex.Splay(target.indexNode)
+						untombstoned = append(untombstoned, target)
+					}
 					chainAnchor = target
 				} else {
 					chainAnchor = piece
@@ -927,9 +1131,21 @@ func (s *RGATreeSplit[V]) restore(
 				}
 			} else {
 				gapEnd := min(pieceStart, span.end)
+				if span.removedBy != nil {
+					var held bool
+					cursor, gapEnd, held = s.purgedGap(span.createdAt, span.removedBy, cursor, gapEnd)
+					if held {
+						continue
+					}
+				}
 				val := subValue(span.value, cursor-span.start, gapEnd-span.start)
 				newNode := NewRGATreeSplitNode(
 					NewRGATreeSplitNodeID(span.createdAt, cursor), val)
+				if span.removedBy != nil {
+					// A node recreated after GC keeps what its ledger said.
+					newNode.recordRemoval(span.removedBy)
+					newNode.cancelRemoval(span.removedBy, executedAt)
+				}
 				prev := s.findRestoreAnchor(
 					span.createdAt, cursor, gapEnd, chainAnchor, fromPos, executedAt)
 				s.InsertAfter(prev, newNode)
@@ -966,6 +1182,58 @@ func (s *RGATreeSplit[V]) restore(
 	return untombstoned, recreated, stillTombstoned, nil
 }
 
+// purgedGap cancels removedBy in what the purged pieces of the insertion at
+// createdAt said about [cursor, gapEnd), and narrows the gap to the part a
+// restore may recreate. When another deletion still holds the offset at
+// cursor, it returns the first offset past the held run and held = true, and
+// nothing is recreated there. Otherwise it returns a gap that stops before
+// the next held offset and at the end of the purged piece it starts in, so
+// this replica splits the run where an unpurged one still has the pieces.
+func (s *RGATreeSplit[V]) purgedGap(
+	createdAt, removedBy *time.Ticket,
+	cursor, gapEnd int,
+) (int, int, bool) {
+	entries := s.purgedLedger[createdAt.Key()]
+	for _, e := range entries {
+		if e.Start < gapEnd && cursor < e.End {
+			kept := e.Dels[:0:0]
+			for _, d := range e.Dels {
+				if d.Compare(removedBy) != 0 {
+					kept = append(kept, d)
+				}
+			}
+			e.Dels = kept
+		}
+	}
+	heldAt := func(offset int) bool {
+		for _, e := range entries {
+			if e.Start <= offset && offset < e.End && len(e.Dels) > 0 {
+				return true
+			}
+		}
+		return false
+	}
+
+	if heldAt(cursor) {
+		for cursor < gapEnd && heldAt(cursor) {
+			cursor++
+		}
+		return cursor, gapEnd, true
+	}
+	for o := cursor + 1; o < gapEnd; o++ {
+		if heldAt(o) {
+			gapEnd = o
+			break
+		}
+	}
+	for _, e := range entries {
+		if e.Start <= cursor && cursor < e.End && e.End < gapEnd {
+			gapEnd = e.End
+		}
+	}
+	return cursor, gapEnd, false
+}
+
 // retombstone re-removes the characters in spans under their original
 // identities. Only live pieces are affected; already-removed or purged
 // regions are skipped (idempotent). Returns GC pairs for the newly
@@ -974,6 +1242,7 @@ func (s *RGATreeSplit[V]) restore(
 func (s *RGATreeSplit[V]) retombstone(
 	spans []restoreSpanValue[V],
 	executedAt *time.Ticket,
+	versionVector time.VersionVector,
 ) ([]GCPair, resource.DataSize, error) {
 	var pairs []GCPair
 	var diff resource.DataSize
@@ -982,6 +1251,18 @@ func (s *RGATreeSplit[V]) retombstone(
 		pieces := s.findPiecesOverlapping(span.createdAt, span.start, span.end)
 		for _, piece := range pieces {
 			if piece.removedAt != nil {
+				// A piece live in the redo's view but removed here by a
+				// deletion the redo never saw still records the redo.
+				if len(versionVector) > 0 && !piece.isRemovedInView(versionVector) {
+					pieceStart := piece.ID().Offset()
+					pieceEnd := pieceStart + piece.contentLen()
+					target, _, err := s.isolateRange(
+						piece, max(pieceStart, span.start), min(pieceEnd, span.end))
+					if err != nil {
+						return nil, diff, err
+					}
+					target.recordRemoval(executedAt)
+				}
 				continue
 			}
 			pieceStart := piece.ID().Offset()
@@ -992,7 +1273,7 @@ func (s *RGATreeSplit[V]) retombstone(
 				return nil, diff, err
 			}
 			diff.Add(splitDiff)
-			target.SetRemovedAt(executedAt)
+			target.recordRemoval(executedAt)
 			s.treeByIndex.Splay(target.indexNode)
 			pairs = append(pairs, GCPair{Parent: s, Child: target})
 		}
@@ -1183,6 +1464,15 @@ func (s *RGATreeSplit[V]) PurgeBarrierAt(child GCChild) *time.Ticket {
 
 func (s *RGATreeSplit[V]) Purge(child GCChild) error {
 	node := child.(*RGATreeSplitNode[V])
+
+	if node.ledgered {
+		start := node.id.offset
+		s.AddPurgedLedger(node.createdAt(), &PurgedLedger{
+			Start: start,
+			End:   start + node.contentLen(),
+			Dels:  node.uncancelledRemovals(),
+		})
+	}
 
 	s.treeByIndex.Delete(node.indexNode)
 	s.treeByID.Remove(node.id)

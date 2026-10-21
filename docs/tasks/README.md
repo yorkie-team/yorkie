@@ -1,5 +1,5 @@
 ---
-updated: 2026-10-13
+updated: 2026-10-21
 ---
 
 # Tasks Index
@@ -20,6 +20,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Keep a Text removal the undo never saw (2026-10-21) | [20261021-text-undo-removal-ledger-todo.md](./active/20261021-text-undo-removal-ledger-todo.md) | [20261021-text-undo-removal-ledger-lessons.md](./active/20261021-text-undo-removal-ledger-lessons.md) |
 | A peer's Tree undo leaves pending undo entries on stale indices (2026-10-13) | [20261013-remote-identity-undo-reconcile-todo.md](./active/20261013-remote-identity-undo-reconcile-todo.md) | [20261013-remote-identity-undo-reconcile-lessons.md](./active/20261013-remote-identity-undo-reconcile-lessons.md) |
 | Merge-moved children sit in arrival order (2026-09-24) | [20260924-merge-moved-child-order-todo.md](./active/20260924-merge-moved-child-order-todo.md) | - |
 | Install the `@claude` command surface, in four phases (2026-09-22) | [20260922-agent-command-verbs-todo.md](./active/20260922-agent-command-verbs-todo.md) | [20260922-agent-command-verbs-lessons.md](./active/20260922-agent-command-verbs-lessons.md) |

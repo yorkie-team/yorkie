@@ -299,7 +299,7 @@ func (x PresenceChange_ChangeType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PresenceChange_ChangeType.Descriptor instead.
 func (PresenceChange_ChangeType) EnumDescriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{23, 0}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{25, 0}
 }
 
 type ChannelEvent_Type int32
@@ -348,7 +348,7 @@ func (x ChannelEvent_Type) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ChannelEvent_Type.Descriptor instead.
 func (ChannelEvent_Type) EnumDescriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{33, 0}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{35, 0}
 }
 
 // ///////////////////////////////////////
@@ -1335,14 +1335,20 @@ func (x *NodeAttr) GetIsRemoved() bool {
 }
 
 type TextNode struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            *TextNodeID            `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
-	RemovedAt     *TimeTicket            `protobuf:"bytes,3,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
-	InsPrevId     *TextNodeID            `protobuf:"bytes,4,opt,name=ins_prev_id,json=insPrevId,proto3" json:"ins_prev_id,omitempty"`
-	Attributes    map[string]*NodeAttr   `protobuf:"bytes,5,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Id         *TextNodeID            `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Value      string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	RemovedAt  *TimeTicket            `protobuf:"bytes,3,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
+	InsPrevId  *TextNodeID            `protobuf:"bytes,4,opt,name=ins_prev_id,json=insPrevId,proto3" json:"ins_prev_id,omitempty"`
+	Attributes map[string]*NodeAttr   `protobuf:"bytes,5,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// The removal ledger: the deletions that removed this node and the undos
+	// that cancelled some of them. has_ledger is false when the ledger is just
+	// removed_at (the default), which is then not written.
+	HasLedger      bool             `protobuf:"varint,6,opt,name=has_ledger,json=hasLedger,proto3" json:"has_ledger,omitempty"`
+	Removals       []*TimeTicket    `protobuf:"bytes,7,rep,name=removals,proto3" json:"removals,omitempty"`
+	RemovalCancels []*RemovalCancel `protobuf:"bytes,8,rep,name=removal_cancels,json=removalCancels,proto3" json:"removal_cancels,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *TextNode) Reset() {
@@ -1410,6 +1416,150 @@ func (x *TextNode) GetAttributes() map[string]*NodeAttr {
 	return nil
 }
 
+func (x *TextNode) GetHasLedger() bool {
+	if x != nil {
+		return x.HasLedger
+	}
+	return false
+}
+
+func (x *TextNode) GetRemovals() []*TimeTicket {
+	if x != nil {
+		return x.Removals
+	}
+	return nil
+}
+
+func (x *TextNode) GetRemovalCancels() []*RemovalCancel {
+	if x != nil {
+		return x.RemovalCancels
+	}
+	return nil
+}
+
+// RemovalCancel is an undo that cancelled one removal of a node.
+type RemovalCancel struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Removal       *TimeTicket            `protobuf:"bytes,1,opt,name=removal,proto3" json:"removal,omitempty"`
+	CancelledAt   *TimeTicket            `protobuf:"bytes,2,opt,name=cancelled_at,json=cancelledAt,proto3" json:"cancelled_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemovalCancel) Reset() {
+	*x = RemovalCancel{}
+	mi := &file_yorkie_v1_resources_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemovalCancel) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemovalCancel) ProtoMessage() {}
+
+func (x *RemovalCancel) ProtoReflect() protoreflect.Message {
+	mi := &file_yorkie_v1_resources_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemovalCancel.ProtoReflect.Descriptor instead.
+func (*RemovalCancel) Descriptor() ([]byte, []int) {
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *RemovalCancel) GetRemoval() *TimeTicket {
+	if x != nil {
+		return x.Removal
+	}
+	return nil
+}
+
+func (x *RemovalCancel) GetCancelledAt() *TimeTicket {
+	if x != nil {
+		return x.CancelledAt
+	}
+	return nil
+}
+
+// PurgedRemovals is the uncancelled removals of a purged piece
+// [start, end) of the insertion created_at.
+type PurgedRemovals struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CreatedAt     *TimeTicket            `protobuf:"bytes,1,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Start         int32                  `protobuf:"varint,2,opt,name=start,proto3" json:"start,omitempty"`
+	End           int32                  `protobuf:"varint,3,opt,name=end,proto3" json:"end,omitempty"`
+	Removals      []*TimeTicket          `protobuf:"bytes,4,rep,name=removals,proto3" json:"removals,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PurgedRemovals) Reset() {
+	*x = PurgedRemovals{}
+	mi := &file_yorkie_v1_resources_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PurgedRemovals) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PurgedRemovals) ProtoMessage() {}
+
+func (x *PurgedRemovals) ProtoReflect() protoreflect.Message {
+	mi := &file_yorkie_v1_resources_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PurgedRemovals.ProtoReflect.Descriptor instead.
+func (*PurgedRemovals) Descriptor() ([]byte, []int) {
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *PurgedRemovals) GetCreatedAt() *TimeTicket {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *PurgedRemovals) GetStart() int32 {
+	if x != nil {
+		return x.Start
+	}
+	return 0
+}
+
+func (x *PurgedRemovals) GetEnd() int32 {
+	if x != nil {
+		return x.End
+	}
+	return 0
+}
+
+func (x *PurgedRemovals) GetRemovals() []*TimeTicket {
+	if x != nil {
+		return x.Removals
+	}
+	return nil
+}
+
 type TextNodeID struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	CreatedAt     *TimeTicket            `protobuf:"bytes,1,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
@@ -1420,7 +1570,7 @@ type TextNodeID struct {
 
 func (x *TextNodeID) Reset() {
 	*x = TextNodeID{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[12]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1432,7 +1582,7 @@ func (x *TextNodeID) String() string {
 func (*TextNodeID) ProtoMessage() {}
 
 func (x *TextNodeID) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[12]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1445,7 +1595,7 @@ func (x *TextNodeID) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TextNodeID.ProtoReflect.Descriptor instead.
 func (*TextNodeID) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{12}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *TextNodeID) GetCreatedAt() *TimeTicket {
@@ -1487,7 +1637,7 @@ type TreeNode struct {
 
 func (x *TreeNode) Reset() {
 	*x = TreeNode{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[13]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1499,7 +1649,7 @@ func (x *TreeNode) String() string {
 func (*TreeNode) ProtoMessage() {}
 
 func (x *TreeNode) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[13]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1512,7 +1662,7 @@ func (x *TreeNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TreeNode.ProtoReflect.Descriptor instead.
 func (*TreeNode) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{13}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *TreeNode) GetId() *TreeNodeID {
@@ -1594,7 +1744,7 @@ type TreeNodes struct {
 
 func (x *TreeNodes) Reset() {
 	*x = TreeNodes{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[14]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1606,7 +1756,7 @@ func (x *TreeNodes) String() string {
 func (*TreeNodes) ProtoMessage() {}
 
 func (x *TreeNodes) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[14]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1619,7 +1769,7 @@ func (x *TreeNodes) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TreeNodes.ProtoReflect.Descriptor instead.
 func (*TreeNodes) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{14}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *TreeNodes) GetContent() []*TreeNode {
@@ -1639,7 +1789,7 @@ type TreeNodeID struct {
 
 func (x *TreeNodeID) Reset() {
 	*x = TreeNodeID{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[15]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1651,7 +1801,7 @@ func (x *TreeNodeID) String() string {
 func (*TreeNodeID) ProtoMessage() {}
 
 func (x *TreeNodeID) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[15]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1664,7 +1814,7 @@ func (x *TreeNodeID) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TreeNodeID.ProtoReflect.Descriptor instead.
 func (*TreeNodeID) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{15}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *TreeNodeID) GetCreatedAt() *TimeTicket {
@@ -1691,7 +1841,7 @@ type TreePos struct {
 
 func (x *TreePos) Reset() {
 	*x = TreePos{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[16]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1703,7 +1853,7 @@ func (x *TreePos) String() string {
 func (*TreePos) ProtoMessage() {}
 
 func (x *TreePos) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[16]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1716,7 +1866,7 @@ func (x *TreePos) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TreePos.ProtoReflect.Descriptor instead.
 func (*TreePos) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{16}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *TreePos) GetParentId() *TreeNodeID {
@@ -1745,7 +1895,7 @@ type User struct {
 
 func (x *User) Reset() {
 	*x = User{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[17]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1757,7 +1907,7 @@ func (x *User) String() string {
 func (*User) ProtoMessage() {}
 
 func (x *User) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[17]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1770,7 +1920,7 @@ func (x *User) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use User.ProtoReflect.Descriptor instead.
 func (*User) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{17}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *User) GetId() string {
@@ -1815,7 +1965,7 @@ type Member struct {
 
 func (x *Member) Reset() {
 	*x = Member{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[18]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1827,7 +1977,7 @@ func (x *Member) String() string {
 func (*Member) ProtoMessage() {}
 
 func (x *Member) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[18]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1840,7 +1990,7 @@ func (x *Member) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Member.ProtoReflect.Descriptor instead.
 func (*Member) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{18}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *Member) GetId() string {
@@ -1921,7 +2071,7 @@ type Project struct {
 
 func (x *Project) Reset() {
 	*x = Project{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[19]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1933,7 +2083,7 @@ func (x *Project) String() string {
 func (*Project) ProtoMessage() {}
 
 func (x *Project) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[19]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1946,7 +2096,7 @@ func (x *Project) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Project.ProtoReflect.Descriptor instead.
 func (*Project) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{19}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *Project) GetId() string {
@@ -2155,7 +2305,7 @@ type MetricPoint struct {
 
 func (x *MetricPoint) Reset() {
 	*x = MetricPoint{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[20]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2167,7 +2317,7 @@ func (x *MetricPoint) String() string {
 func (*MetricPoint) ProtoMessage() {}
 
 func (x *MetricPoint) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[20]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2180,7 +2330,7 @@ func (x *MetricPoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MetricPoint.ProtoReflect.Descriptor instead.
 func (*MetricPoint) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{20}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *MetricPoint) GetTimestamp() int64 {
@@ -2228,7 +2378,7 @@ type UpdatableProjectFields struct {
 
 func (x *UpdatableProjectFields) Reset() {
 	*x = UpdatableProjectFields{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[21]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2240,7 +2390,7 @@ func (x *UpdatableProjectFields) String() string {
 func (*UpdatableProjectFields) ProtoMessage() {}
 
 func (x *UpdatableProjectFields) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[21]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2253,7 +2403,7 @@ func (x *UpdatableProjectFields) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatableProjectFields.ProtoReflect.Descriptor instead.
 func (*UpdatableProjectFields) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{21}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *UpdatableProjectFields) GetName() *wrapperspb.StringValue {
@@ -2435,7 +2585,7 @@ type DocumentSummary struct {
 
 func (x *DocumentSummary) Reset() {
 	*x = DocumentSummary{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[22]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2447,7 +2597,7 @@ func (x *DocumentSummary) String() string {
 func (*DocumentSummary) ProtoMessage() {}
 
 func (x *DocumentSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[22]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2460,7 +2610,7 @@ func (x *DocumentSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DocumentSummary.ProtoReflect.Descriptor instead.
 func (*DocumentSummary) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{22}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *DocumentSummary) GetId() string {
@@ -2546,7 +2696,7 @@ type PresenceChange struct {
 
 func (x *PresenceChange) Reset() {
 	*x = PresenceChange{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[23]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2558,7 +2708,7 @@ func (x *PresenceChange) String() string {
 func (*PresenceChange) ProtoMessage() {}
 
 func (x *PresenceChange) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[23]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2571,7 +2721,7 @@ func (x *PresenceChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PresenceChange.ProtoReflect.Descriptor instead.
 func (*PresenceChange) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{23}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *PresenceChange) GetType() PresenceChange_ChangeType {
@@ -2604,7 +2754,7 @@ type Presence struct {
 
 func (x *Presence) Reset() {
 	*x = Presence{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[24]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2616,7 +2766,7 @@ func (x *Presence) String() string {
 func (*Presence) ProtoMessage() {}
 
 func (x *Presence) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[24]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2629,7 +2779,7 @@ func (x *Presence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Presence.ProtoReflect.Descriptor instead.
 func (*Presence) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{24}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *Presence) GetData() map[string]string {
@@ -2649,7 +2799,7 @@ type ChannelSummary struct {
 
 func (x *ChannelSummary) Reset() {
 	*x = ChannelSummary{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[25]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2661,7 +2811,7 @@ func (x *ChannelSummary) String() string {
 func (*ChannelSummary) ProtoMessage() {}
 
 func (x *ChannelSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[25]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2674,7 +2824,7 @@ func (x *ChannelSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChannelSummary.ProtoReflect.Descriptor instead.
 func (*ChannelSummary) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{25}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ChannelSummary) GetKey() string {
@@ -2701,7 +2851,7 @@ type Checkpoint struct {
 
 func (x *Checkpoint) Reset() {
 	*x = Checkpoint{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[26]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2713,7 +2863,7 @@ func (x *Checkpoint) String() string {
 func (*Checkpoint) ProtoMessage() {}
 
 func (x *Checkpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[26]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2726,7 +2876,7 @@ func (x *Checkpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Checkpoint.ProtoReflect.Descriptor instead.
 func (*Checkpoint) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{26}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *Checkpoint) GetServerSeq() int64 {
@@ -2754,7 +2904,7 @@ type TextNodePos struct {
 
 func (x *TextNodePos) Reset() {
 	*x = TextNodePos{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[27]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2766,7 +2916,7 @@ func (x *TextNodePos) String() string {
 func (*TextNodePos) ProtoMessage() {}
 
 func (x *TextNodePos) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[27]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2779,7 +2929,7 @@ func (x *TextNodePos) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TextNodePos.ProtoReflect.Descriptor instead.
 func (*TextNodePos) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{27}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *TextNodePos) GetCreatedAt() *TimeTicket {
@@ -2808,19 +2958,23 @@ func (x *TextNodePos) GetRelativeOffset() int32 {
 // for identity-preserving undo/redo. content and attributes are a deep
 // copy of the removed value so restore is independent of GC state.
 type RestoreSpan struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CreatedAt     *TimeTicket            `protobuf:"bytes,1,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	Start         int32                  `protobuf:"varint,2,opt,name=start,proto3" json:"start,omitempty"`
-	End           int32                  `protobuf:"varint,3,opt,name=end,proto3" json:"end,omitempty"`
-	Content       string                 `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
-	Attributes    map[string]string      `protobuf:"bytes,5,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	CreatedAt  *TimeTicket            `protobuf:"bytes,1,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Start      int32                  `protobuf:"varint,2,opt,name=start,proto3" json:"start,omitempty"`
+	End        int32                  `protobuf:"varint,3,opt,name=end,proto3" json:"end,omitempty"`
+	Content    string                 `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
+	Attributes map[string]string      `protobuf:"bytes,5,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// removed_by is the removal this span undoes. Restore cancels exactly that
+	// removal, so a concurrent removal the undo never saw keeps the piece
+	// removed. Absent (older clients): restore clears the tombstone.
+	RemovedBy     *TimeTicket `protobuf:"bytes,6,opt,name=removed_by,json=removedBy,proto3" json:"removed_by,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RestoreSpan) Reset() {
 	*x = RestoreSpan{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[28]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2832,7 +2986,7 @@ func (x *RestoreSpan) String() string {
 func (*RestoreSpan) ProtoMessage() {}
 
 func (x *RestoreSpan) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[28]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2845,7 +2999,7 @@ func (x *RestoreSpan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RestoreSpan.ProtoReflect.Descriptor instead.
 func (*RestoreSpan) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{28}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *RestoreSpan) GetCreatedAt() *TimeTicket {
@@ -2883,6 +3037,13 @@ func (x *RestoreSpan) GetAttributes() map[string]string {
 	return nil
 }
 
+func (x *RestoreSpan) GetRemovedBy() *TimeTicket {
+	if x != nil {
+		return x.RemovedBy
+	}
+	return nil
+}
+
 // TreeRestoreSpan carries a tree node run from a single deletion, addressed
 // by TreeNodeID identity, for identity-preserving Tree undo/redo. Unlike the
 // text RestoreSpan (flat offsets), a tree span records the node's structure
@@ -2909,7 +3070,7 @@ type TreeRestoreSpan struct {
 
 func (x *TreeRestoreSpan) Reset() {
 	*x = TreeRestoreSpan{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[29]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2921,7 +3082,7 @@ func (x *TreeRestoreSpan) String() string {
 func (*TreeRestoreSpan) ProtoMessage() {}
 
 func (x *TreeRestoreSpan) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[29]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2934,7 +3095,7 @@ func (x *TreeRestoreSpan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TreeRestoreSpan.ProtoReflect.Descriptor instead.
 func (*TreeRestoreSpan) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{29}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *TreeRestoreSpan) GetId() *TreeNodeID {
@@ -3011,7 +3172,7 @@ type TimeTicket struct {
 
 func (x *TimeTicket) Reset() {
 	*x = TimeTicket{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[30]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3023,7 +3184,7 @@ func (x *TimeTicket) String() string {
 func (*TimeTicket) ProtoMessage() {}
 
 func (x *TimeTicket) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[30]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3036,7 +3197,7 @@ func (x *TimeTicket) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TimeTicket.ProtoReflect.Descriptor instead.
 func (*TimeTicket) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{30}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *TimeTicket) GetLamport() int64 {
@@ -3070,7 +3231,7 @@ type DocEventBody struct {
 
 func (x *DocEventBody) Reset() {
 	*x = DocEventBody{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[31]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3082,7 +3243,7 @@ func (x *DocEventBody) String() string {
 func (*DocEventBody) ProtoMessage() {}
 
 func (x *DocEventBody) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[31]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3095,7 +3256,7 @@ func (x *DocEventBody) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DocEventBody.ProtoReflect.Descriptor instead.
 func (*DocEventBody) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{31}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *DocEventBody) GetTopic() string {
@@ -3123,7 +3284,7 @@ type DocEvent struct {
 
 func (x *DocEvent) Reset() {
 	*x = DocEvent{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[32]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3135,7 +3296,7 @@ func (x *DocEvent) String() string {
 func (*DocEvent) ProtoMessage() {}
 
 func (x *DocEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[32]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3148,7 +3309,7 @@ func (x *DocEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DocEvent.ProtoReflect.Descriptor instead.
 func (*DocEvent) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{32}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *DocEvent) GetType() DocEventType {
@@ -3186,7 +3347,7 @@ type ChannelEvent struct {
 
 func (x *ChannelEvent) Reset() {
 	*x = ChannelEvent{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[33]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3198,7 +3359,7 @@ func (x *ChannelEvent) String() string {
 func (*ChannelEvent) ProtoMessage() {}
 
 func (x *ChannelEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[33]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3211,7 +3372,7 @@ func (x *ChannelEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChannelEvent.ProtoReflect.Descriptor instead.
 func (*ChannelEvent) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{33}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ChannelEvent) GetType() ChannelEvent_Type {
@@ -3266,7 +3427,7 @@ type DataSize struct {
 
 func (x *DataSize) Reset() {
 	*x = DataSize{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[34]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3278,7 +3439,7 @@ func (x *DataSize) String() string {
 func (*DataSize) ProtoMessage() {}
 
 func (x *DataSize) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[34]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3291,7 +3452,7 @@ func (x *DataSize) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DataSize.ProtoReflect.Descriptor instead.
 func (*DataSize) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{34}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *DataSize) GetData() int32 {
@@ -3318,7 +3479,7 @@ type DocSize struct {
 
 func (x *DocSize) Reset() {
 	*x = DocSize{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[35]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3330,7 +3491,7 @@ func (x *DocSize) String() string {
 func (*DocSize) ProtoMessage() {}
 
 func (x *DocSize) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[35]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3343,7 +3504,7 @@ func (x *DocSize) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DocSize.ProtoReflect.Descriptor instead.
 func (*DocSize) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{35}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *DocSize) GetLive() *DataSize {
@@ -3374,7 +3535,7 @@ type Schema struct {
 
 func (x *Schema) Reset() {
 	*x = Schema{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[36]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3386,7 +3547,7 @@ func (x *Schema) String() string {
 func (*Schema) ProtoMessage() {}
 
 func (x *Schema) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[36]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3399,7 +3560,7 @@ func (x *Schema) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Schema.ProtoReflect.Descriptor instead.
 func (*Schema) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{36}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *Schema) GetId() string {
@@ -3456,7 +3617,7 @@ type TreeNodeRule struct {
 
 func (x *TreeNodeRule) Reset() {
 	*x = TreeNodeRule{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[37]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3468,7 +3629,7 @@ func (x *TreeNodeRule) String() string {
 func (*TreeNodeRule) ProtoMessage() {}
 
 func (x *TreeNodeRule) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[37]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3481,7 +3642,7 @@ func (x *TreeNodeRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TreeNodeRule.ProtoReflect.Descriptor instead.
 func (*TreeNodeRule) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{37}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *TreeNodeRule) GetNodeType() string {
@@ -3523,7 +3684,7 @@ type Rule struct {
 
 func (x *Rule) Reset() {
 	*x = Rule{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[38]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3535,7 +3696,7 @@ func (x *Rule) String() string {
 func (*Rule) ProtoMessage() {}
 
 func (x *Rule) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[38]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3548,7 +3709,7 @@ func (x *Rule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Rule.ProtoReflect.Descriptor instead.
 func (*Rule) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{38}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *Rule) GetPath() string {
@@ -3585,7 +3746,7 @@ type RevisionSummary struct {
 
 func (x *RevisionSummary) Reset() {
 	*x = RevisionSummary{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[39]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3597,7 +3758,7 @@ func (x *RevisionSummary) String() string {
 func (*RevisionSummary) ProtoMessage() {}
 
 func (x *RevisionSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[39]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3610,7 +3771,7 @@ func (x *RevisionSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevisionSummary.ProtoReflect.Descriptor instead.
 func (*RevisionSummary) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{39}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *RevisionSummary) GetId() string {
@@ -3661,7 +3822,7 @@ type Operation_Set struct {
 
 func (x *Operation_Set) Reset() {
 	*x = Operation_Set{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[42]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3673,7 +3834,7 @@ func (x *Operation_Set) String() string {
 func (*Operation_Set) ProtoMessage() {}
 
 func (x *Operation_Set) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[42]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3737,7 +3898,7 @@ type Operation_Add struct {
 
 func (x *Operation_Add) Reset() {
 	*x = Operation_Add{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[43]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3749,7 +3910,7 @@ func (x *Operation_Add) String() string {
 func (*Operation_Add) ProtoMessage() {}
 
 func (x *Operation_Add) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[43]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3812,7 +3973,7 @@ type Operation_Move struct {
 
 func (x *Operation_Move) Reset() {
 	*x = Operation_Move{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[44]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3824,7 +3985,7 @@ func (x *Operation_Move) String() string {
 func (*Operation_Move) ProtoMessage() {}
 
 func (x *Operation_Move) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[44]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3879,7 +4040,7 @@ type Operation_Remove struct {
 
 func (x *Operation_Remove) Reset() {
 	*x = Operation_Remove{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[45]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3891,7 +4052,7 @@ func (x *Operation_Remove) String() string {
 func (*Operation_Remove) ProtoMessage() {}
 
 func (x *Operation_Remove) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[45]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3951,7 +4112,7 @@ type Operation_Edit struct {
 
 func (x *Operation_Edit) Reset() {
 	*x = Operation_Edit{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[46]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3963,7 +4124,7 @@ func (x *Operation_Edit) String() string {
 func (*Operation_Edit) ProtoMessage() {}
 
 func (x *Operation_Edit) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[46]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4064,7 +4225,7 @@ type Operation_Style struct {
 
 func (x *Operation_Style) Reset() {
 	*x = Operation_Style{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[47]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4076,7 +4237,7 @@ func (x *Operation_Style) String() string {
 func (*Operation_Style) ProtoMessage() {}
 
 func (x *Operation_Style) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[47]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4153,7 +4314,7 @@ type Operation_Increase struct {
 
 func (x *Operation_Increase) Reset() {
 	*x = Operation_Increase{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[48]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4165,7 +4326,7 @@ func (x *Operation_Increase) String() string {
 func (*Operation_Increase) ProtoMessage() {}
 
 func (x *Operation_Increase) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[48]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4232,7 +4393,7 @@ type Operation_TreeEdit struct {
 
 func (x *Operation_TreeEdit) Reset() {
 	*x = Operation_TreeEdit{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[49]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4244,7 +4405,7 @@ func (x *Operation_TreeEdit) String() string {
 func (*Operation_TreeEdit) ProtoMessage() {}
 
 func (x *Operation_TreeEdit) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[49]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4352,7 +4513,7 @@ type Operation_TreeStyle struct {
 
 func (x *Operation_TreeStyle) Reset() {
 	*x = Operation_TreeStyle{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[50]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4364,7 +4525,7 @@ func (x *Operation_TreeStyle) String() string {
 func (*Operation_TreeStyle) ProtoMessage() {}
 
 func (x *Operation_TreeStyle) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[50]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4442,7 +4603,7 @@ type Operation_ArraySet struct {
 
 func (x *Operation_ArraySet) Reset() {
 	*x = Operation_ArraySet{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[51]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4454,7 +4615,7 @@ func (x *Operation_ArraySet) String() string {
 func (*Operation_ArraySet) ProtoMessage() {}
 
 func (x *Operation_ArraySet) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[51]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4520,7 +4681,7 @@ type JSONElement_JSONObject struct {
 
 func (x *JSONElement_JSONObject) Reset() {
 	*x = JSONElement_JSONObject{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[59]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4532,7 +4693,7 @@ func (x *JSONElement_JSONObject) String() string {
 func (*JSONElement_JSONObject) ProtoMessage() {}
 
 func (x *JSONElement_JSONObject) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[59]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4596,7 +4757,7 @@ type JSONElement_JSONArray struct {
 
 func (x *JSONElement_JSONArray) Reset() {
 	*x = JSONElement_JSONArray{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[60]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4608,7 +4769,7 @@ func (x *JSONElement_JSONArray) String() string {
 func (*JSONElement_JSONArray) ProtoMessage() {}
 
 func (x *JSONElement_JSONArray) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[60]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4673,7 +4834,7 @@ type JSONElement_Primitive struct {
 
 func (x *JSONElement_Primitive) Reset() {
 	*x = JSONElement_Primitive{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[61]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4685,7 +4846,7 @@ func (x *JSONElement_Primitive) String() string {
 func (*JSONElement_Primitive) ProtoMessage() {}
 
 func (x *JSONElement_Primitive) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[61]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4744,19 +4905,22 @@ func (x *JSONElement_Primitive) GetRevivedAt() *TimeTicket {
 }
 
 type JSONElement_Text struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Nodes         []*TextNode            `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
-	CreatedAt     *TimeTicket            `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	MovedAt       *TimeTicket            `protobuf:"bytes,3,opt,name=moved_at,json=movedAt,proto3" json:"moved_at,omitempty"`
-	RemovedAt     *TimeTicket            `protobuf:"bytes,4,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
-	RevivedAt     *TimeTicket            `protobuf:"bytes,5,opt,name=revived_at,json=revivedAt,proto3" json:"revived_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Nodes     []*TextNode            `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	CreatedAt *TimeTicket            `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	MovedAt   *TimeTicket            `protobuf:"bytes,3,opt,name=moved_at,json=movedAt,proto3" json:"moved_at,omitempty"`
+	RemovedAt *TimeTicket            `protobuf:"bytes,4,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
+	RevivedAt *TimeTicket            `protobuf:"bytes,5,opt,name=revived_at,json=revivedAt,proto3" json:"revived_at,omitempty"`
+	// purged_removals is what the removal ledgers of purged pieces still
+	// said, so an undo that arrives after GC answers as the ledger would.
+	PurgedRemovals []*PurgedRemovals `protobuf:"bytes,6,rep,name=purged_removals,json=purgedRemovals,proto3" json:"purged_removals,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *JSONElement_Text) Reset() {
 	*x = JSONElement_Text{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[62]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4768,7 +4932,7 @@ func (x *JSONElement_Text) String() string {
 func (*JSONElement_Text) ProtoMessage() {}
 
 func (x *JSONElement_Text) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[62]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4819,6 +4983,13 @@ func (x *JSONElement_Text) GetRevivedAt() *TimeTicket {
 	return nil
 }
 
+func (x *JSONElement_Text) GetPurgedRemovals() []*PurgedRemovals {
+	if x != nil {
+		return x.PurgedRemovals
+	}
+	return nil
+}
+
 type JSONElement_Counter struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          ValueType              `protobuf:"varint,1,opt,name=type,proto3,enum=yorkie.v1.ValueType" json:"type,omitempty"`
@@ -4834,7 +5005,7 @@ type JSONElement_Counter struct {
 
 func (x *JSONElement_Counter) Reset() {
 	*x = JSONElement_Counter{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[63]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4846,7 +5017,7 @@ func (x *JSONElement_Counter) String() string {
 func (*JSONElement_Counter) ProtoMessage() {}
 
 func (x *JSONElement_Counter) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[63]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4924,7 +5095,7 @@ type JSONElement_Tree struct {
 
 func (x *JSONElement_Tree) Reset() {
 	*x = JSONElement_Tree{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[64]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4936,7 +5107,7 @@ func (x *JSONElement_Tree) String() string {
 func (*JSONElement_Tree) ProtoMessage() {}
 
 func (x *JSONElement_Tree) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[64]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4996,7 +5167,7 @@ type UpdatableProjectFields_AuthWebhookMethods struct {
 
 func (x *UpdatableProjectFields_AuthWebhookMethods) Reset() {
 	*x = UpdatableProjectFields_AuthWebhookMethods{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[67]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5008,7 +5179,7 @@ func (x *UpdatableProjectFields_AuthWebhookMethods) String() string {
 func (*UpdatableProjectFields_AuthWebhookMethods) ProtoMessage() {}
 
 func (x *UpdatableProjectFields_AuthWebhookMethods) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[67]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5021,7 +5192,7 @@ func (x *UpdatableProjectFields_AuthWebhookMethods) ProtoReflect() protoreflect.
 
 // Deprecated: Use UpdatableProjectFields_AuthWebhookMethods.ProtoReflect.Descriptor instead.
 func (*UpdatableProjectFields_AuthWebhookMethods) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{21, 0}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{23, 0}
 }
 
 func (x *UpdatableProjectFields_AuthWebhookMethods) GetMethods() []string {
@@ -5040,7 +5211,7 @@ type UpdatableProjectFields_EventWebhookEvents struct {
 
 func (x *UpdatableProjectFields_EventWebhookEvents) Reset() {
 	*x = UpdatableProjectFields_EventWebhookEvents{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[68]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5052,7 +5223,7 @@ func (x *UpdatableProjectFields_EventWebhookEvents) String() string {
 func (*UpdatableProjectFields_EventWebhookEvents) ProtoMessage() {}
 
 func (x *UpdatableProjectFields_EventWebhookEvents) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[68]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5065,7 +5236,7 @@ func (x *UpdatableProjectFields_EventWebhookEvents) ProtoReflect() protoreflect.
 
 // Deprecated: Use UpdatableProjectFields_EventWebhookEvents.ProtoReflect.Descriptor instead.
 func (*UpdatableProjectFields_EventWebhookEvents) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{21, 1}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{23, 1}
 }
 
 func (x *UpdatableProjectFields_EventWebhookEvents) GetEvents() []string {
@@ -5084,7 +5255,7 @@ type UpdatableProjectFields_AllowedOrigins struct {
 
 func (x *UpdatableProjectFields_AllowedOrigins) Reset() {
 	*x = UpdatableProjectFields_AllowedOrigins{}
-	mi := &file_yorkie_v1_resources_proto_msgTypes[69]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5096,7 +5267,7 @@ func (x *UpdatableProjectFields_AllowedOrigins) String() string {
 func (*UpdatableProjectFields_AllowedOrigins) ProtoMessage() {}
 
 func (x *UpdatableProjectFields_AllowedOrigins) ProtoReflect() protoreflect.Message {
-	mi := &file_yorkie_v1_resources_proto_msgTypes[69]
+	mi := &file_yorkie_v1_resources_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5109,7 +5280,7 @@ func (x *UpdatableProjectFields_AllowedOrigins) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use UpdatableProjectFields_AllowedOrigins.ProtoReflect.Descriptor instead.
 func (*UpdatableProjectFields_AllowedOrigins) Descriptor() ([]byte, []int) {
-	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{21, 2}
+	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{23, 2}
 }
 
 func (x *UpdatableProjectFields_AllowedOrigins) GetOrigins() []string {
@@ -5299,7 +5470,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\n" +
 	"removed_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x12(\n" +
 	"\x04type\x18\x04 \x01(\x0e2\x14.yorkie.v1.ValueTypeR\x04type\x12\x14\n" +
-	"\x05value\x18\x05 \x01(\fR\x05value\"\x98\x10\n" +
+	"\x05value\x18\x05 \x01(\fR\x05value\"\xdc\x10\n" +
 	"\vJSONElement\x12D\n" +
 	"\vjson_object\x18\x01 \x01(\v2!.yorkie.v1.JSONElement.JSONObjectH\x00R\n" +
 	"jsonObject\x12A\n" +
@@ -5337,7 +5508,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\n" +
 	"removed_at\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x124\n" +
 	"\n" +
-	"revived_at\x18\x06 \x01(\v2\x15.yorkie.v1.TimeTicketR\trevivedAt\x1a\x85\x02\n" +
+	"revived_at\x18\x06 \x01(\v2\x15.yorkie.v1.TimeTicketR\trevivedAt\x1a\xc9\x02\n" +
 	"\x04Text\x12)\n" +
 	"\x05nodes\x18\x01 \x03(\v2\x13.yorkie.v1.TextNodeR\x05nodes\x124\n" +
 	"\n" +
@@ -5346,7 +5517,8 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\n" +
 	"removed_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x124\n" +
 	"\n" +
-	"revived_at\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\trevivedAt\x1a\xc8\x02\n" +
+	"revived_at\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\trevivedAt\x12B\n" +
+	"\x0fpurged_removals\x18\x06 \x03(\v2\x19.yorkie.v1.PurgedRemovalsR\x0epurgedRemovals\x1a\xc8\x02\n" +
 	"\aCounter\x12(\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x14.yorkie.v1.ValueTypeR\x04type\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\fR\x05value\x124\n" +
@@ -5382,7 +5554,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\tupdatedAt\x12\x1d\n" +
 	"\n" +
-	"is_removed\x18\x03 \x01(\bR\tisRemoved\"\xcd\x02\n" +
+	"is_removed\x18\x03 \x01(\bR\tisRemoved\"\xe2\x03\n" +
 	"\bTextNode\x12%\n" +
 	"\x02id\x18\x01 \x01(\v2\x15.yorkie.v1.TextNodeIDR\x02id\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\x124\n" +
@@ -5391,10 +5563,23 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\vins_prev_id\x18\x04 \x01(\v2\x15.yorkie.v1.TextNodeIDR\tinsPrevId\x12C\n" +
 	"\n" +
 	"attributes\x18\x05 \x03(\v2#.yorkie.v1.TextNode.AttributesEntryR\n" +
-	"attributes\x1aR\n" +
+	"attributes\x12\x1d\n" +
+	"\n" +
+	"has_ledger\x18\x06 \x01(\bR\thasLedger\x121\n" +
+	"\bremovals\x18\a \x03(\v2\x15.yorkie.v1.TimeTicketR\bremovals\x12A\n" +
+	"\x0fremoval_cancels\x18\b \x03(\v2\x18.yorkie.v1.RemovalCancelR\x0eremovalCancels\x1aR\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12)\n" +
-	"\x05value\x18\x02 \x01(\v2\x13.yorkie.v1.NodeAttrR\x05value:\x028\x01\"Z\n" +
+	"\x05value\x18\x02 \x01(\v2\x13.yorkie.v1.NodeAttrR\x05value:\x028\x01\"z\n" +
+	"\rRemovalCancel\x12/\n" +
+	"\aremoval\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\aremoval\x128\n" +
+	"\fcancelled_at\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\vcancelledAt\"\xa1\x01\n" +
+	"\x0ePurgedRemovals\x124\n" +
+	"\n" +
+	"created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x12\x14\n" +
+	"\x05start\x18\x02 \x01(\x05R\x05start\x12\x10\n" +
+	"\x03end\x18\x03 \x01(\x05R\x03end\x121\n" +
+	"\bremovals\x18\x04 \x03(\v2\x15.yorkie.v1.TimeTicketR\bremovals\"Z\n" +
 	"\n" +
 	"TextNodeID\x124\n" +
 	"\n" +
@@ -5560,7 +5745,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x12\x16\n" +
 	"\x06offset\x18\x02 \x01(\x05R\x06offset\x12'\n" +
-	"\x0frelative_offset\x18\x03 \x01(\x05R\x0erelativeOffset\"\x8c\x02\n" +
+	"\x0frelative_offset\x18\x03 \x01(\x05R\x0erelativeOffset\"\xc2\x02\n" +
 	"\vRestoreSpan\x124\n" +
 	"\n" +
 	"created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x12\x14\n" +
@@ -5569,7 +5754,9 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\acontent\x18\x04 \x01(\tR\acontent\x12F\n" +
 	"\n" +
 	"attributes\x18\x05 \x03(\v2&.yorkie.v1.RestoreSpan.AttributesEntryR\n" +
-	"attributes\x1a=\n" +
+	"attributes\x124\n" +
+	"\n" +
+	"removed_by\x18\x06 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedBy\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xf0\x03\n" +
@@ -5683,7 +5870,7 @@ func file_yorkie_v1_resources_proto_rawDescGZIP() []byte {
 }
 
 var file_yorkie_v1_resources_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_yorkie_v1_resources_proto_msgTypes = make([]protoimpl.MessageInfo, 74)
+var file_yorkie_v1_resources_proto_msgTypes = make([]protoimpl.MessageInfo, 76)
 var file_yorkie_v1_resources_proto_goTypes = []any{
 	(RestoreMode)(0),               // 0: yorkie.v1.RestoreMode
 	(ValueType)(0),                 // 1: yorkie.v1.ValueType
@@ -5702,281 +5889,291 @@ var file_yorkie_v1_resources_proto_goTypes = []any{
 	(*RGANode)(nil),                // 14: yorkie.v1.RGANode
 	(*NodeAttr)(nil),               // 15: yorkie.v1.NodeAttr
 	(*TextNode)(nil),               // 16: yorkie.v1.TextNode
-	(*TextNodeID)(nil),             // 17: yorkie.v1.TextNodeID
-	(*TreeNode)(nil),               // 18: yorkie.v1.TreeNode
-	(*TreeNodes)(nil),              // 19: yorkie.v1.TreeNodes
-	(*TreeNodeID)(nil),             // 20: yorkie.v1.TreeNodeID
-	(*TreePos)(nil),                // 21: yorkie.v1.TreePos
-	(*User)(nil),                   // 22: yorkie.v1.User
-	(*Member)(nil),                 // 23: yorkie.v1.Member
-	(*Project)(nil),                // 24: yorkie.v1.Project
-	(*MetricPoint)(nil),            // 25: yorkie.v1.MetricPoint
-	(*UpdatableProjectFields)(nil), // 26: yorkie.v1.UpdatableProjectFields
-	(*DocumentSummary)(nil),        // 27: yorkie.v1.DocumentSummary
-	(*PresenceChange)(nil),         // 28: yorkie.v1.PresenceChange
-	(*Presence)(nil),               // 29: yorkie.v1.Presence
-	(*ChannelSummary)(nil),         // 30: yorkie.v1.ChannelSummary
-	(*Checkpoint)(nil),             // 31: yorkie.v1.Checkpoint
-	(*TextNodePos)(nil),            // 32: yorkie.v1.TextNodePos
-	(*RestoreSpan)(nil),            // 33: yorkie.v1.RestoreSpan
-	(*TreeRestoreSpan)(nil),        // 34: yorkie.v1.TreeRestoreSpan
-	(*TimeTicket)(nil),             // 35: yorkie.v1.TimeTicket
-	(*DocEventBody)(nil),           // 36: yorkie.v1.DocEventBody
-	(*DocEvent)(nil),               // 37: yorkie.v1.DocEvent
-	(*ChannelEvent)(nil),           // 38: yorkie.v1.ChannelEvent
-	(*DataSize)(nil),               // 39: yorkie.v1.DataSize
-	(*DocSize)(nil),                // 40: yorkie.v1.DocSize
-	(*Schema)(nil),                 // 41: yorkie.v1.Schema
-	(*TreeNodeRule)(nil),           // 42: yorkie.v1.TreeNodeRule
-	(*Rule)(nil),                   // 43: yorkie.v1.Rule
-	(*RevisionSummary)(nil),        // 44: yorkie.v1.RevisionSummary
-	nil,                            // 45: yorkie.v1.Snapshot.PresencesEntry
-	nil,                            // 46: yorkie.v1.VersionVector.VectorEntry
-	(*Operation_Set)(nil),          // 47: yorkie.v1.Operation.Set
-	(*Operation_Add)(nil),          // 48: yorkie.v1.Operation.Add
-	(*Operation_Move)(nil),         // 49: yorkie.v1.Operation.Move
-	(*Operation_Remove)(nil),       // 50: yorkie.v1.Operation.Remove
-	(*Operation_Edit)(nil),         // 51: yorkie.v1.Operation.Edit
-	(*Operation_Style)(nil),        // 52: yorkie.v1.Operation.Style
-	(*Operation_Increase)(nil),     // 53: yorkie.v1.Operation.Increase
-	(*Operation_TreeEdit)(nil),     // 54: yorkie.v1.Operation.TreeEdit
-	(*Operation_TreeStyle)(nil),    // 55: yorkie.v1.Operation.TreeStyle
-	(*Operation_ArraySet)(nil),     // 56: yorkie.v1.Operation.ArraySet
-	nil,                            // 57: yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry
-	nil,                            // 58: yorkie.v1.Operation.Edit.AttributesEntry
-	nil,                            // 59: yorkie.v1.Operation.Style.AttributesEntry
-	nil,                            // 60: yorkie.v1.Operation.Style.CreatedAtMapByActorEntry
-	nil,                            // 61: yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry
-	nil,                            // 62: yorkie.v1.Operation.TreeStyle.AttributesEntry
-	nil,                            // 63: yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry
-	(*JSONElement_JSONObject)(nil), // 64: yorkie.v1.JSONElement.JSONObject
-	(*JSONElement_JSONArray)(nil),  // 65: yorkie.v1.JSONElement.JSONArray
-	(*JSONElement_Primitive)(nil),  // 66: yorkie.v1.JSONElement.Primitive
-	(*JSONElement_Text)(nil),       // 67: yorkie.v1.JSONElement.Text
-	(*JSONElement_Counter)(nil),    // 68: yorkie.v1.JSONElement.Counter
-	(*JSONElement_Tree)(nil),       // 69: yorkie.v1.JSONElement.Tree
-	nil,                            // 70: yorkie.v1.TextNode.AttributesEntry
-	nil,                            // 71: yorkie.v1.TreeNode.AttributesEntry
-	(*UpdatableProjectFields_AuthWebhookMethods)(nil), // 72: yorkie.v1.UpdatableProjectFields.AuthWebhookMethods
-	(*UpdatableProjectFields_EventWebhookEvents)(nil), // 73: yorkie.v1.UpdatableProjectFields.EventWebhookEvents
-	(*UpdatableProjectFields_AllowedOrigins)(nil),     // 74: yorkie.v1.UpdatableProjectFields.AllowedOrigins
-	nil,                            // 75: yorkie.v1.DocumentSummary.PresencesEntry
-	nil,                            // 76: yorkie.v1.Presence.DataEntry
-	nil,                            // 77: yorkie.v1.RestoreSpan.AttributesEntry
-	nil,                            // 78: yorkie.v1.TreeRestoreSpan.AttributesEntry
-	(*timestamppb.Timestamp)(nil),  // 79: google.protobuf.Timestamp
-	(*wrapperspb.StringValue)(nil), // 80: google.protobuf.StringValue
-	(*wrapperspb.UInt64Value)(nil), // 81: google.protobuf.UInt64Value
-	(*wrapperspb.Int64Value)(nil),  // 82: google.protobuf.Int64Value
-	(*wrapperspb.Int32Value)(nil),  // 83: google.protobuf.Int32Value
-	(*wrapperspb.BoolValue)(nil),   // 84: google.protobuf.BoolValue
+	(*RemovalCancel)(nil),          // 17: yorkie.v1.RemovalCancel
+	(*PurgedRemovals)(nil),         // 18: yorkie.v1.PurgedRemovals
+	(*TextNodeID)(nil),             // 19: yorkie.v1.TextNodeID
+	(*TreeNode)(nil),               // 20: yorkie.v1.TreeNode
+	(*TreeNodes)(nil),              // 21: yorkie.v1.TreeNodes
+	(*TreeNodeID)(nil),             // 22: yorkie.v1.TreeNodeID
+	(*TreePos)(nil),                // 23: yorkie.v1.TreePos
+	(*User)(nil),                   // 24: yorkie.v1.User
+	(*Member)(nil),                 // 25: yorkie.v1.Member
+	(*Project)(nil),                // 26: yorkie.v1.Project
+	(*MetricPoint)(nil),            // 27: yorkie.v1.MetricPoint
+	(*UpdatableProjectFields)(nil), // 28: yorkie.v1.UpdatableProjectFields
+	(*DocumentSummary)(nil),        // 29: yorkie.v1.DocumentSummary
+	(*PresenceChange)(nil),         // 30: yorkie.v1.PresenceChange
+	(*Presence)(nil),               // 31: yorkie.v1.Presence
+	(*ChannelSummary)(nil),         // 32: yorkie.v1.ChannelSummary
+	(*Checkpoint)(nil),             // 33: yorkie.v1.Checkpoint
+	(*TextNodePos)(nil),            // 34: yorkie.v1.TextNodePos
+	(*RestoreSpan)(nil),            // 35: yorkie.v1.RestoreSpan
+	(*TreeRestoreSpan)(nil),        // 36: yorkie.v1.TreeRestoreSpan
+	(*TimeTicket)(nil),             // 37: yorkie.v1.TimeTicket
+	(*DocEventBody)(nil),           // 38: yorkie.v1.DocEventBody
+	(*DocEvent)(nil),               // 39: yorkie.v1.DocEvent
+	(*ChannelEvent)(nil),           // 40: yorkie.v1.ChannelEvent
+	(*DataSize)(nil),               // 41: yorkie.v1.DataSize
+	(*DocSize)(nil),                // 42: yorkie.v1.DocSize
+	(*Schema)(nil),                 // 43: yorkie.v1.Schema
+	(*TreeNodeRule)(nil),           // 44: yorkie.v1.TreeNodeRule
+	(*Rule)(nil),                   // 45: yorkie.v1.Rule
+	(*RevisionSummary)(nil),        // 46: yorkie.v1.RevisionSummary
+	nil,                            // 47: yorkie.v1.Snapshot.PresencesEntry
+	nil,                            // 48: yorkie.v1.VersionVector.VectorEntry
+	(*Operation_Set)(nil),          // 49: yorkie.v1.Operation.Set
+	(*Operation_Add)(nil),          // 50: yorkie.v1.Operation.Add
+	(*Operation_Move)(nil),         // 51: yorkie.v1.Operation.Move
+	(*Operation_Remove)(nil),       // 52: yorkie.v1.Operation.Remove
+	(*Operation_Edit)(nil),         // 53: yorkie.v1.Operation.Edit
+	(*Operation_Style)(nil),        // 54: yorkie.v1.Operation.Style
+	(*Operation_Increase)(nil),     // 55: yorkie.v1.Operation.Increase
+	(*Operation_TreeEdit)(nil),     // 56: yorkie.v1.Operation.TreeEdit
+	(*Operation_TreeStyle)(nil),    // 57: yorkie.v1.Operation.TreeStyle
+	(*Operation_ArraySet)(nil),     // 58: yorkie.v1.Operation.ArraySet
+	nil,                            // 59: yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry
+	nil,                            // 60: yorkie.v1.Operation.Edit.AttributesEntry
+	nil,                            // 61: yorkie.v1.Operation.Style.AttributesEntry
+	nil,                            // 62: yorkie.v1.Operation.Style.CreatedAtMapByActorEntry
+	nil,                            // 63: yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry
+	nil,                            // 64: yorkie.v1.Operation.TreeStyle.AttributesEntry
+	nil,                            // 65: yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry
+	(*JSONElement_JSONObject)(nil), // 66: yorkie.v1.JSONElement.JSONObject
+	(*JSONElement_JSONArray)(nil),  // 67: yorkie.v1.JSONElement.JSONArray
+	(*JSONElement_Primitive)(nil),  // 68: yorkie.v1.JSONElement.Primitive
+	(*JSONElement_Text)(nil),       // 69: yorkie.v1.JSONElement.Text
+	(*JSONElement_Counter)(nil),    // 70: yorkie.v1.JSONElement.Counter
+	(*JSONElement_Tree)(nil),       // 71: yorkie.v1.JSONElement.Tree
+	nil,                            // 72: yorkie.v1.TextNode.AttributesEntry
+	nil,                            // 73: yorkie.v1.TreeNode.AttributesEntry
+	(*UpdatableProjectFields_AuthWebhookMethods)(nil), // 74: yorkie.v1.UpdatableProjectFields.AuthWebhookMethods
+	(*UpdatableProjectFields_EventWebhookEvents)(nil), // 75: yorkie.v1.UpdatableProjectFields.EventWebhookEvents
+	(*UpdatableProjectFields_AllowedOrigins)(nil),     // 76: yorkie.v1.UpdatableProjectFields.AllowedOrigins
+	nil,                            // 77: yorkie.v1.DocumentSummary.PresencesEntry
+	nil,                            // 78: yorkie.v1.Presence.DataEntry
+	nil,                            // 79: yorkie.v1.RestoreSpan.AttributesEntry
+	nil,                            // 80: yorkie.v1.TreeRestoreSpan.AttributesEntry
+	(*timestamppb.Timestamp)(nil),  // 81: google.protobuf.Timestamp
+	(*wrapperspb.StringValue)(nil), // 82: google.protobuf.StringValue
+	(*wrapperspb.UInt64Value)(nil), // 83: google.protobuf.UInt64Value
+	(*wrapperspb.Int64Value)(nil),  // 84: google.protobuf.Int64Value
+	(*wrapperspb.Int32Value)(nil),  // 85: google.protobuf.Int32Value
+	(*wrapperspb.BoolValue)(nil),   // 86: google.protobuf.BoolValue
 }
 var file_yorkie_v1_resources_proto_depIdxs = []int32{
 	12,  // 0: yorkie.v1.Snapshot.root:type_name -> yorkie.v1.JSONElement
-	45,  // 1: yorkie.v1.Snapshot.presences:type_name -> yorkie.v1.Snapshot.PresencesEntry
-	31,  // 2: yorkie.v1.ChangePack.checkpoint:type_name -> yorkie.v1.Checkpoint
+	47,  // 1: yorkie.v1.Snapshot.presences:type_name -> yorkie.v1.Snapshot.PresencesEntry
+	33,  // 2: yorkie.v1.ChangePack.checkpoint:type_name -> yorkie.v1.Checkpoint
 	7,   // 3: yorkie.v1.ChangePack.changes:type_name -> yorkie.v1.Change
-	35,  // 4: yorkie.v1.ChangePack.min_synced_ticket:type_name -> yorkie.v1.TimeTicket
+	37,  // 4: yorkie.v1.ChangePack.min_synced_ticket:type_name -> yorkie.v1.TimeTicket
 	9,   // 5: yorkie.v1.ChangePack.version_vector:type_name -> yorkie.v1.VersionVector
 	8,   // 6: yorkie.v1.Change.id:type_name -> yorkie.v1.ChangeID
 	10,  // 7: yorkie.v1.Change.operations:type_name -> yorkie.v1.Operation
-	28,  // 8: yorkie.v1.Change.presence_change:type_name -> yorkie.v1.PresenceChange
+	30,  // 8: yorkie.v1.Change.presence_change:type_name -> yorkie.v1.PresenceChange
 	9,   // 9: yorkie.v1.ChangeID.version_vector:type_name -> yorkie.v1.VersionVector
-	46,  // 10: yorkie.v1.VersionVector.vector:type_name -> yorkie.v1.VersionVector.VectorEntry
-	47,  // 11: yorkie.v1.Operation.set:type_name -> yorkie.v1.Operation.Set
-	48,  // 12: yorkie.v1.Operation.add:type_name -> yorkie.v1.Operation.Add
-	49,  // 13: yorkie.v1.Operation.move:type_name -> yorkie.v1.Operation.Move
-	50,  // 14: yorkie.v1.Operation.remove:type_name -> yorkie.v1.Operation.Remove
-	51,  // 15: yorkie.v1.Operation.edit:type_name -> yorkie.v1.Operation.Edit
-	52,  // 16: yorkie.v1.Operation.style:type_name -> yorkie.v1.Operation.Style
-	53,  // 17: yorkie.v1.Operation.increase:type_name -> yorkie.v1.Operation.Increase
-	54,  // 18: yorkie.v1.Operation.tree_edit:type_name -> yorkie.v1.Operation.TreeEdit
-	55,  // 19: yorkie.v1.Operation.tree_style:type_name -> yorkie.v1.Operation.TreeStyle
-	56,  // 20: yorkie.v1.Operation.array_set:type_name -> yorkie.v1.Operation.ArraySet
-	35,  // 21: yorkie.v1.JSONElementSimple.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 22: yorkie.v1.JSONElementSimple.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 23: yorkie.v1.JSONElementSimple.removed_at:type_name -> yorkie.v1.TimeTicket
+	48,  // 10: yorkie.v1.VersionVector.vector:type_name -> yorkie.v1.VersionVector.VectorEntry
+	49,  // 11: yorkie.v1.Operation.set:type_name -> yorkie.v1.Operation.Set
+	50,  // 12: yorkie.v1.Operation.add:type_name -> yorkie.v1.Operation.Add
+	51,  // 13: yorkie.v1.Operation.move:type_name -> yorkie.v1.Operation.Move
+	52,  // 14: yorkie.v1.Operation.remove:type_name -> yorkie.v1.Operation.Remove
+	53,  // 15: yorkie.v1.Operation.edit:type_name -> yorkie.v1.Operation.Edit
+	54,  // 16: yorkie.v1.Operation.style:type_name -> yorkie.v1.Operation.Style
+	55,  // 17: yorkie.v1.Operation.increase:type_name -> yorkie.v1.Operation.Increase
+	56,  // 18: yorkie.v1.Operation.tree_edit:type_name -> yorkie.v1.Operation.TreeEdit
+	57,  // 19: yorkie.v1.Operation.tree_style:type_name -> yorkie.v1.Operation.TreeStyle
+	58,  // 20: yorkie.v1.Operation.array_set:type_name -> yorkie.v1.Operation.ArraySet
+	37,  // 21: yorkie.v1.JSONElementSimple.created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 22: yorkie.v1.JSONElementSimple.moved_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 23: yorkie.v1.JSONElementSimple.removed_at:type_name -> yorkie.v1.TimeTicket
 	1,   // 24: yorkie.v1.JSONElementSimple.type:type_name -> yorkie.v1.ValueType
-	64,  // 25: yorkie.v1.JSONElement.json_object:type_name -> yorkie.v1.JSONElement.JSONObject
-	65,  // 26: yorkie.v1.JSONElement.json_array:type_name -> yorkie.v1.JSONElement.JSONArray
-	66,  // 27: yorkie.v1.JSONElement.primitive:type_name -> yorkie.v1.JSONElement.Primitive
-	67,  // 28: yorkie.v1.JSONElement.text:type_name -> yorkie.v1.JSONElement.Text
-	68,  // 29: yorkie.v1.JSONElement.counter:type_name -> yorkie.v1.JSONElement.Counter
-	69,  // 30: yorkie.v1.JSONElement.tree:type_name -> yorkie.v1.JSONElement.Tree
+	66,  // 25: yorkie.v1.JSONElement.json_object:type_name -> yorkie.v1.JSONElement.JSONObject
+	67,  // 26: yorkie.v1.JSONElement.json_array:type_name -> yorkie.v1.JSONElement.JSONArray
+	68,  // 27: yorkie.v1.JSONElement.primitive:type_name -> yorkie.v1.JSONElement.Primitive
+	69,  // 28: yorkie.v1.JSONElement.text:type_name -> yorkie.v1.JSONElement.Text
+	70,  // 29: yorkie.v1.JSONElement.counter:type_name -> yorkie.v1.JSONElement.Counter
+	71,  // 30: yorkie.v1.JSONElement.tree:type_name -> yorkie.v1.JSONElement.Tree
 	12,  // 31: yorkie.v1.RHTNode.element:type_name -> yorkie.v1.JSONElement
 	14,  // 32: yorkie.v1.RGANode.next:type_name -> yorkie.v1.RGANode
 	12,  // 33: yorkie.v1.RGANode.element:type_name -> yorkie.v1.JSONElement
-	35,  // 34: yorkie.v1.RGANode.position_created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 35: yorkie.v1.RGANode.position_moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 36: yorkie.v1.RGANode.position_removed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 37: yorkie.v1.NodeAttr.updated_at:type_name -> yorkie.v1.TimeTicket
-	17,  // 38: yorkie.v1.TextNode.id:type_name -> yorkie.v1.TextNodeID
-	35,  // 39: yorkie.v1.TextNode.removed_at:type_name -> yorkie.v1.TimeTicket
-	17,  // 40: yorkie.v1.TextNode.ins_prev_id:type_name -> yorkie.v1.TextNodeID
-	70,  // 41: yorkie.v1.TextNode.attributes:type_name -> yorkie.v1.TextNode.AttributesEntry
-	35,  // 42: yorkie.v1.TextNodeID.created_at:type_name -> yorkie.v1.TimeTicket
-	20,  // 43: yorkie.v1.TreeNode.id:type_name -> yorkie.v1.TreeNodeID
-	35,  // 44: yorkie.v1.TreeNode.removed_at:type_name -> yorkie.v1.TimeTicket
-	20,  // 45: yorkie.v1.TreeNode.ins_prev_id:type_name -> yorkie.v1.TreeNodeID
-	20,  // 46: yorkie.v1.TreeNode.ins_next_id:type_name -> yorkie.v1.TreeNodeID
-	71,  // 47: yorkie.v1.TreeNode.attributes:type_name -> yorkie.v1.TreeNode.AttributesEntry
-	20,  // 48: yorkie.v1.TreeNode.merged_from:type_name -> yorkie.v1.TreeNodeID
-	35,  // 49: yorkie.v1.TreeNode.merged_at:type_name -> yorkie.v1.TimeTicket
-	18,  // 50: yorkie.v1.TreeNodes.content:type_name -> yorkie.v1.TreeNode
-	35,  // 51: yorkie.v1.TreeNodeID.created_at:type_name -> yorkie.v1.TimeTicket
-	20,  // 52: yorkie.v1.TreePos.parent_id:type_name -> yorkie.v1.TreeNodeID
-	20,  // 53: yorkie.v1.TreePos.left_sibling_id:type_name -> yorkie.v1.TreeNodeID
-	79,  // 54: yorkie.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	79,  // 55: yorkie.v1.Member.invited_at:type_name -> google.protobuf.Timestamp
-	79,  // 56: yorkie.v1.Project.created_at:type_name -> google.protobuf.Timestamp
-	79,  // 57: yorkie.v1.Project.updated_at:type_name -> google.protobuf.Timestamp
-	80,  // 58: yorkie.v1.UpdatableProjectFields.name:type_name -> google.protobuf.StringValue
-	80,  // 59: yorkie.v1.UpdatableProjectFields.auth_webhook_url:type_name -> google.protobuf.StringValue
-	72,  // 60: yorkie.v1.UpdatableProjectFields.auth_webhook_methods:type_name -> yorkie.v1.UpdatableProjectFields.AuthWebhookMethods
-	81,  // 61: yorkie.v1.UpdatableProjectFields.auth_webhook_max_retries:type_name -> google.protobuf.UInt64Value
-	80,  // 62: yorkie.v1.UpdatableProjectFields.auth_webhook_min_wait_interval:type_name -> google.protobuf.StringValue
-	80,  // 63: yorkie.v1.UpdatableProjectFields.auth_webhook_max_wait_interval:type_name -> google.protobuf.StringValue
-	80,  // 64: yorkie.v1.UpdatableProjectFields.auth_webhook_request_timeout:type_name -> google.protobuf.StringValue
-	80,  // 65: yorkie.v1.UpdatableProjectFields.event_webhook_url:type_name -> google.protobuf.StringValue
-	73,  // 66: yorkie.v1.UpdatableProjectFields.event_webhook_events:type_name -> yorkie.v1.UpdatableProjectFields.EventWebhookEvents
-	81,  // 67: yorkie.v1.UpdatableProjectFields.event_webhook_max_retries:type_name -> google.protobuf.UInt64Value
-	80,  // 68: yorkie.v1.UpdatableProjectFields.event_webhook_min_wait_interval:type_name -> google.protobuf.StringValue
-	80,  // 69: yorkie.v1.UpdatableProjectFields.event_webhook_max_wait_interval:type_name -> google.protobuf.StringValue
-	80,  // 70: yorkie.v1.UpdatableProjectFields.event_webhook_request_timeout:type_name -> google.protobuf.StringValue
-	82,  // 71: yorkie.v1.UpdatableProjectFields.snapshot_threshold:type_name -> google.protobuf.Int64Value
-	82,  // 72: yorkie.v1.UpdatableProjectFields.snapshot_interval:type_name -> google.protobuf.Int64Value
-	80,  // 73: yorkie.v1.UpdatableProjectFields.client_deactivate_threshold:type_name -> google.protobuf.StringValue
-	83,  // 74: yorkie.v1.UpdatableProjectFields.max_subscribers_per_document:type_name -> google.protobuf.Int32Value
-	83,  // 75: yorkie.v1.UpdatableProjectFields.max_attachments_per_document:type_name -> google.protobuf.Int32Value
-	83,  // 76: yorkie.v1.UpdatableProjectFields.max_size_per_document:type_name -> google.protobuf.Int32Value
-	84,  // 77: yorkie.v1.UpdatableProjectFields.remove_on_detach:type_name -> google.protobuf.BoolValue
-	84,  // 78: yorkie.v1.UpdatableProjectFields.auto_revision_enabled:type_name -> google.protobuf.BoolValue
-	80,  // 79: yorkie.v1.UpdatableProjectFields.channel_session_ttl:type_name -> google.protobuf.StringValue
-	74,  // 80: yorkie.v1.UpdatableProjectFields.allowed_origins:type_name -> yorkie.v1.UpdatableProjectFields.AllowedOrigins
-	40,  // 81: yorkie.v1.DocumentSummary.document_size:type_name -> yorkie.v1.DocSize
-	75,  // 82: yorkie.v1.DocumentSummary.presences:type_name -> yorkie.v1.DocumentSummary.PresencesEntry
-	79,  // 83: yorkie.v1.DocumentSummary.created_at:type_name -> google.protobuf.Timestamp
-	79,  // 84: yorkie.v1.DocumentSummary.accessed_at:type_name -> google.protobuf.Timestamp
-	79,  // 85: yorkie.v1.DocumentSummary.updated_at:type_name -> google.protobuf.Timestamp
-	3,   // 86: yorkie.v1.PresenceChange.type:type_name -> yorkie.v1.PresenceChange.ChangeType
-	29,  // 87: yorkie.v1.PresenceChange.presence:type_name -> yorkie.v1.Presence
-	76,  // 88: yorkie.v1.Presence.data:type_name -> yorkie.v1.Presence.DataEntry
-	35,  // 89: yorkie.v1.TextNodePos.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 90: yorkie.v1.RestoreSpan.created_at:type_name -> yorkie.v1.TimeTicket
-	77,  // 91: yorkie.v1.RestoreSpan.attributes:type_name -> yorkie.v1.RestoreSpan.AttributesEntry
-	20,  // 92: yorkie.v1.TreeRestoreSpan.id:type_name -> yorkie.v1.TreeNodeID
-	78,  // 93: yorkie.v1.TreeRestoreSpan.attributes:type_name -> yorkie.v1.TreeRestoreSpan.AttributesEntry
-	20,  // 94: yorkie.v1.TreeRestoreSpan.parent_id:type_name -> yorkie.v1.TreeNodeID
-	20,  // 95: yorkie.v1.TreeRestoreSpan.left_sibling_id:type_name -> yorkie.v1.TreeNodeID
-	20,  // 96: yorkie.v1.TreeRestoreSpan.right_sibling_id:type_name -> yorkie.v1.TreeNodeID
-	2,   // 97: yorkie.v1.DocEvent.type:type_name -> yorkie.v1.DocEventType
-	36,  // 98: yorkie.v1.DocEvent.body:type_name -> yorkie.v1.DocEventBody
-	4,   // 99: yorkie.v1.ChannelEvent.type:type_name -> yorkie.v1.ChannelEvent.Type
-	39,  // 100: yorkie.v1.DocSize.live:type_name -> yorkie.v1.DataSize
-	39,  // 101: yorkie.v1.DocSize.gc:type_name -> yorkie.v1.DataSize
-	43,  // 102: yorkie.v1.Schema.rules:type_name -> yorkie.v1.Rule
-	79,  // 103: yorkie.v1.Schema.created_at:type_name -> google.protobuf.Timestamp
-	42,  // 104: yorkie.v1.Rule.tree_nodes:type_name -> yorkie.v1.TreeNodeRule
-	79,  // 105: yorkie.v1.RevisionSummary.created_at:type_name -> google.protobuf.Timestamp
-	29,  // 106: yorkie.v1.Snapshot.PresencesEntry.value:type_name -> yorkie.v1.Presence
-	35,  // 107: yorkie.v1.Operation.Set.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	11,  // 108: yorkie.v1.Operation.Set.value:type_name -> yorkie.v1.JSONElementSimple
-	35,  // 109: yorkie.v1.Operation.Set.executed_at:type_name -> yorkie.v1.TimeTicket
-	0,   // 110: yorkie.v1.Operation.Set.restore_mode:type_name -> yorkie.v1.RestoreMode
-	35,  // 111: yorkie.v1.Operation.Add.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 112: yorkie.v1.Operation.Add.prev_created_at:type_name -> yorkie.v1.TimeTicket
-	11,  // 113: yorkie.v1.Operation.Add.value:type_name -> yorkie.v1.JSONElementSimple
-	35,  // 114: yorkie.v1.Operation.Add.executed_at:type_name -> yorkie.v1.TimeTicket
-	0,   // 115: yorkie.v1.Operation.Add.restore_mode:type_name -> yorkie.v1.RestoreMode
-	35,  // 116: yorkie.v1.Operation.Move.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 117: yorkie.v1.Operation.Move.prev_created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 118: yorkie.v1.Operation.Move.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 119: yorkie.v1.Operation.Move.executed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 120: yorkie.v1.Operation.Remove.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 121: yorkie.v1.Operation.Remove.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 122: yorkie.v1.Operation.Remove.executed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 123: yorkie.v1.Operation.Edit.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	32,  // 124: yorkie.v1.Operation.Edit.from:type_name -> yorkie.v1.TextNodePos
-	32,  // 125: yorkie.v1.Operation.Edit.to:type_name -> yorkie.v1.TextNodePos
-	57,  // 126: yorkie.v1.Operation.Edit.created_at_map_by_actor:type_name -> yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry
-	35,  // 127: yorkie.v1.Operation.Edit.executed_at:type_name -> yorkie.v1.TimeTicket
-	58,  // 128: yorkie.v1.Operation.Edit.attributes:type_name -> yorkie.v1.Operation.Edit.AttributesEntry
-	33,  // 129: yorkie.v1.Operation.Edit.restore_spans:type_name -> yorkie.v1.RestoreSpan
-	0,   // 130: yorkie.v1.Operation.Edit.restore_mode:type_name -> yorkie.v1.RestoreMode
-	33,  // 131: yorkie.v1.Operation.Edit.retombstone_spans:type_name -> yorkie.v1.RestoreSpan
-	35,  // 132: yorkie.v1.Operation.Style.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	32,  // 133: yorkie.v1.Operation.Style.from:type_name -> yorkie.v1.TextNodePos
-	32,  // 134: yorkie.v1.Operation.Style.to:type_name -> yorkie.v1.TextNodePos
-	59,  // 135: yorkie.v1.Operation.Style.attributes:type_name -> yorkie.v1.Operation.Style.AttributesEntry
-	35,  // 136: yorkie.v1.Operation.Style.executed_at:type_name -> yorkie.v1.TimeTicket
-	60,  // 137: yorkie.v1.Operation.Style.created_at_map_by_actor:type_name -> yorkie.v1.Operation.Style.CreatedAtMapByActorEntry
-	35,  // 138: yorkie.v1.Operation.Increase.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	11,  // 139: yorkie.v1.Operation.Increase.value:type_name -> yorkie.v1.JSONElementSimple
-	35,  // 140: yorkie.v1.Operation.Increase.executed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 141: yorkie.v1.Operation.TreeEdit.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	21,  // 142: yorkie.v1.Operation.TreeEdit.from:type_name -> yorkie.v1.TreePos
-	21,  // 143: yorkie.v1.Operation.TreeEdit.to:type_name -> yorkie.v1.TreePos
-	61,  // 144: yorkie.v1.Operation.TreeEdit.created_at_map_by_actor:type_name -> yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry
-	19,  // 145: yorkie.v1.Operation.TreeEdit.contents:type_name -> yorkie.v1.TreeNodes
-	35,  // 146: yorkie.v1.Operation.TreeEdit.executed_at:type_name -> yorkie.v1.TimeTicket
-	34,  // 147: yorkie.v1.Operation.TreeEdit.restore_spans:type_name -> yorkie.v1.TreeRestoreSpan
-	0,   // 148: yorkie.v1.Operation.TreeEdit.restore_mode:type_name -> yorkie.v1.RestoreMode
-	34,  // 149: yorkie.v1.Operation.TreeEdit.retombstone_spans:type_name -> yorkie.v1.TreeRestoreSpan
-	35,  // 150: yorkie.v1.Operation.TreeEdit.split_tickets:type_name -> yorkie.v1.TimeTicket
-	35,  // 151: yorkie.v1.Operation.TreeStyle.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	21,  // 152: yorkie.v1.Operation.TreeStyle.from:type_name -> yorkie.v1.TreePos
-	21,  // 153: yorkie.v1.Operation.TreeStyle.to:type_name -> yorkie.v1.TreePos
-	62,  // 154: yorkie.v1.Operation.TreeStyle.attributes:type_name -> yorkie.v1.Operation.TreeStyle.AttributesEntry
-	35,  // 155: yorkie.v1.Operation.TreeStyle.executed_at:type_name -> yorkie.v1.TimeTicket
-	63,  // 156: yorkie.v1.Operation.TreeStyle.created_at_map_by_actor:type_name -> yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry
-	35,  // 157: yorkie.v1.Operation.ArraySet.parent_created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 158: yorkie.v1.Operation.ArraySet.created_at:type_name -> yorkie.v1.TimeTicket
-	11,  // 159: yorkie.v1.Operation.ArraySet.value:type_name -> yorkie.v1.JSONElementSimple
-	35,  // 160: yorkie.v1.Operation.ArraySet.executed_at:type_name -> yorkie.v1.TimeTicket
-	0,   // 161: yorkie.v1.Operation.ArraySet.restore_mode:type_name -> yorkie.v1.RestoreMode
-	35,  // 162: yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
-	35,  // 163: yorkie.v1.Operation.Style.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
-	35,  // 164: yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
-	35,  // 165: yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
-	13,  // 166: yorkie.v1.JSONElement.JSONObject.nodes:type_name -> yorkie.v1.RHTNode
-	35,  // 167: yorkie.v1.JSONElement.JSONObject.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 168: yorkie.v1.JSONElement.JSONObject.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 169: yorkie.v1.JSONElement.JSONObject.removed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 170: yorkie.v1.JSONElement.JSONObject.revived_at:type_name -> yorkie.v1.TimeTicket
-	14,  // 171: yorkie.v1.JSONElement.JSONArray.nodes:type_name -> yorkie.v1.RGANode
-	35,  // 172: yorkie.v1.JSONElement.JSONArray.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 173: yorkie.v1.JSONElement.JSONArray.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 174: yorkie.v1.JSONElement.JSONArray.removed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 175: yorkie.v1.JSONElement.JSONArray.revived_at:type_name -> yorkie.v1.TimeTicket
-	1,   // 176: yorkie.v1.JSONElement.Primitive.type:type_name -> yorkie.v1.ValueType
-	35,  // 177: yorkie.v1.JSONElement.Primitive.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 178: yorkie.v1.JSONElement.Primitive.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 179: yorkie.v1.JSONElement.Primitive.removed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 180: yorkie.v1.JSONElement.Primitive.revived_at:type_name -> yorkie.v1.TimeTicket
-	16,  // 181: yorkie.v1.JSONElement.Text.nodes:type_name -> yorkie.v1.TextNode
-	35,  // 182: yorkie.v1.JSONElement.Text.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 183: yorkie.v1.JSONElement.Text.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 184: yorkie.v1.JSONElement.Text.removed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 185: yorkie.v1.JSONElement.Text.revived_at:type_name -> yorkie.v1.TimeTicket
-	1,   // 186: yorkie.v1.JSONElement.Counter.type:type_name -> yorkie.v1.ValueType
-	35,  // 187: yorkie.v1.JSONElement.Counter.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 188: yorkie.v1.JSONElement.Counter.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 189: yorkie.v1.JSONElement.Counter.removed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 190: yorkie.v1.JSONElement.Counter.revived_at:type_name -> yorkie.v1.TimeTicket
-	18,  // 191: yorkie.v1.JSONElement.Tree.nodes:type_name -> yorkie.v1.TreeNode
-	35,  // 192: yorkie.v1.JSONElement.Tree.created_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 193: yorkie.v1.JSONElement.Tree.moved_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 194: yorkie.v1.JSONElement.Tree.removed_at:type_name -> yorkie.v1.TimeTicket
-	35,  // 195: yorkie.v1.JSONElement.Tree.revived_at:type_name -> yorkie.v1.TimeTicket
-	15,  // 196: yorkie.v1.TextNode.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
-	15,  // 197: yorkie.v1.TreeNode.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
-	29,  // 198: yorkie.v1.DocumentSummary.PresencesEntry.value:type_name -> yorkie.v1.Presence
-	15,  // 199: yorkie.v1.TreeRestoreSpan.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
-	200, // [200:200] is the sub-list for method output_type
-	200, // [200:200] is the sub-list for method input_type
-	200, // [200:200] is the sub-list for extension type_name
-	200, // [200:200] is the sub-list for extension extendee
-	0,   // [0:200] is the sub-list for field type_name
+	37,  // 34: yorkie.v1.RGANode.position_created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 35: yorkie.v1.RGANode.position_moved_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 36: yorkie.v1.RGANode.position_removed_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 37: yorkie.v1.NodeAttr.updated_at:type_name -> yorkie.v1.TimeTicket
+	19,  // 38: yorkie.v1.TextNode.id:type_name -> yorkie.v1.TextNodeID
+	37,  // 39: yorkie.v1.TextNode.removed_at:type_name -> yorkie.v1.TimeTicket
+	19,  // 40: yorkie.v1.TextNode.ins_prev_id:type_name -> yorkie.v1.TextNodeID
+	72,  // 41: yorkie.v1.TextNode.attributes:type_name -> yorkie.v1.TextNode.AttributesEntry
+	37,  // 42: yorkie.v1.TextNode.removals:type_name -> yorkie.v1.TimeTicket
+	17,  // 43: yorkie.v1.TextNode.removal_cancels:type_name -> yorkie.v1.RemovalCancel
+	37,  // 44: yorkie.v1.RemovalCancel.removal:type_name -> yorkie.v1.TimeTicket
+	37,  // 45: yorkie.v1.RemovalCancel.cancelled_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 46: yorkie.v1.PurgedRemovals.created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 47: yorkie.v1.PurgedRemovals.removals:type_name -> yorkie.v1.TimeTicket
+	37,  // 48: yorkie.v1.TextNodeID.created_at:type_name -> yorkie.v1.TimeTicket
+	22,  // 49: yorkie.v1.TreeNode.id:type_name -> yorkie.v1.TreeNodeID
+	37,  // 50: yorkie.v1.TreeNode.removed_at:type_name -> yorkie.v1.TimeTicket
+	22,  // 51: yorkie.v1.TreeNode.ins_prev_id:type_name -> yorkie.v1.TreeNodeID
+	22,  // 52: yorkie.v1.TreeNode.ins_next_id:type_name -> yorkie.v1.TreeNodeID
+	73,  // 53: yorkie.v1.TreeNode.attributes:type_name -> yorkie.v1.TreeNode.AttributesEntry
+	22,  // 54: yorkie.v1.TreeNode.merged_from:type_name -> yorkie.v1.TreeNodeID
+	37,  // 55: yorkie.v1.TreeNode.merged_at:type_name -> yorkie.v1.TimeTicket
+	20,  // 56: yorkie.v1.TreeNodes.content:type_name -> yorkie.v1.TreeNode
+	37,  // 57: yorkie.v1.TreeNodeID.created_at:type_name -> yorkie.v1.TimeTicket
+	22,  // 58: yorkie.v1.TreePos.parent_id:type_name -> yorkie.v1.TreeNodeID
+	22,  // 59: yorkie.v1.TreePos.left_sibling_id:type_name -> yorkie.v1.TreeNodeID
+	81,  // 60: yorkie.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	81,  // 61: yorkie.v1.Member.invited_at:type_name -> google.protobuf.Timestamp
+	81,  // 62: yorkie.v1.Project.created_at:type_name -> google.protobuf.Timestamp
+	81,  // 63: yorkie.v1.Project.updated_at:type_name -> google.protobuf.Timestamp
+	82,  // 64: yorkie.v1.UpdatableProjectFields.name:type_name -> google.protobuf.StringValue
+	82,  // 65: yorkie.v1.UpdatableProjectFields.auth_webhook_url:type_name -> google.protobuf.StringValue
+	74,  // 66: yorkie.v1.UpdatableProjectFields.auth_webhook_methods:type_name -> yorkie.v1.UpdatableProjectFields.AuthWebhookMethods
+	83,  // 67: yorkie.v1.UpdatableProjectFields.auth_webhook_max_retries:type_name -> google.protobuf.UInt64Value
+	82,  // 68: yorkie.v1.UpdatableProjectFields.auth_webhook_min_wait_interval:type_name -> google.protobuf.StringValue
+	82,  // 69: yorkie.v1.UpdatableProjectFields.auth_webhook_max_wait_interval:type_name -> google.protobuf.StringValue
+	82,  // 70: yorkie.v1.UpdatableProjectFields.auth_webhook_request_timeout:type_name -> google.protobuf.StringValue
+	82,  // 71: yorkie.v1.UpdatableProjectFields.event_webhook_url:type_name -> google.protobuf.StringValue
+	75,  // 72: yorkie.v1.UpdatableProjectFields.event_webhook_events:type_name -> yorkie.v1.UpdatableProjectFields.EventWebhookEvents
+	83,  // 73: yorkie.v1.UpdatableProjectFields.event_webhook_max_retries:type_name -> google.protobuf.UInt64Value
+	82,  // 74: yorkie.v1.UpdatableProjectFields.event_webhook_min_wait_interval:type_name -> google.protobuf.StringValue
+	82,  // 75: yorkie.v1.UpdatableProjectFields.event_webhook_max_wait_interval:type_name -> google.protobuf.StringValue
+	82,  // 76: yorkie.v1.UpdatableProjectFields.event_webhook_request_timeout:type_name -> google.protobuf.StringValue
+	84,  // 77: yorkie.v1.UpdatableProjectFields.snapshot_threshold:type_name -> google.protobuf.Int64Value
+	84,  // 78: yorkie.v1.UpdatableProjectFields.snapshot_interval:type_name -> google.protobuf.Int64Value
+	82,  // 79: yorkie.v1.UpdatableProjectFields.client_deactivate_threshold:type_name -> google.protobuf.StringValue
+	85,  // 80: yorkie.v1.UpdatableProjectFields.max_subscribers_per_document:type_name -> google.protobuf.Int32Value
+	85,  // 81: yorkie.v1.UpdatableProjectFields.max_attachments_per_document:type_name -> google.protobuf.Int32Value
+	85,  // 82: yorkie.v1.UpdatableProjectFields.max_size_per_document:type_name -> google.protobuf.Int32Value
+	86,  // 83: yorkie.v1.UpdatableProjectFields.remove_on_detach:type_name -> google.protobuf.BoolValue
+	86,  // 84: yorkie.v1.UpdatableProjectFields.auto_revision_enabled:type_name -> google.protobuf.BoolValue
+	82,  // 85: yorkie.v1.UpdatableProjectFields.channel_session_ttl:type_name -> google.protobuf.StringValue
+	76,  // 86: yorkie.v1.UpdatableProjectFields.allowed_origins:type_name -> yorkie.v1.UpdatableProjectFields.AllowedOrigins
+	42,  // 87: yorkie.v1.DocumentSummary.document_size:type_name -> yorkie.v1.DocSize
+	77,  // 88: yorkie.v1.DocumentSummary.presences:type_name -> yorkie.v1.DocumentSummary.PresencesEntry
+	81,  // 89: yorkie.v1.DocumentSummary.created_at:type_name -> google.protobuf.Timestamp
+	81,  // 90: yorkie.v1.DocumentSummary.accessed_at:type_name -> google.protobuf.Timestamp
+	81,  // 91: yorkie.v1.DocumentSummary.updated_at:type_name -> google.protobuf.Timestamp
+	3,   // 92: yorkie.v1.PresenceChange.type:type_name -> yorkie.v1.PresenceChange.ChangeType
+	31,  // 93: yorkie.v1.PresenceChange.presence:type_name -> yorkie.v1.Presence
+	78,  // 94: yorkie.v1.Presence.data:type_name -> yorkie.v1.Presence.DataEntry
+	37,  // 95: yorkie.v1.TextNodePos.created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 96: yorkie.v1.RestoreSpan.created_at:type_name -> yorkie.v1.TimeTicket
+	79,  // 97: yorkie.v1.RestoreSpan.attributes:type_name -> yorkie.v1.RestoreSpan.AttributesEntry
+	37,  // 98: yorkie.v1.RestoreSpan.removed_by:type_name -> yorkie.v1.TimeTicket
+	22,  // 99: yorkie.v1.TreeRestoreSpan.id:type_name -> yorkie.v1.TreeNodeID
+	80,  // 100: yorkie.v1.TreeRestoreSpan.attributes:type_name -> yorkie.v1.TreeRestoreSpan.AttributesEntry
+	22,  // 101: yorkie.v1.TreeRestoreSpan.parent_id:type_name -> yorkie.v1.TreeNodeID
+	22,  // 102: yorkie.v1.TreeRestoreSpan.left_sibling_id:type_name -> yorkie.v1.TreeNodeID
+	22,  // 103: yorkie.v1.TreeRestoreSpan.right_sibling_id:type_name -> yorkie.v1.TreeNodeID
+	2,   // 104: yorkie.v1.DocEvent.type:type_name -> yorkie.v1.DocEventType
+	38,  // 105: yorkie.v1.DocEvent.body:type_name -> yorkie.v1.DocEventBody
+	4,   // 106: yorkie.v1.ChannelEvent.type:type_name -> yorkie.v1.ChannelEvent.Type
+	41,  // 107: yorkie.v1.DocSize.live:type_name -> yorkie.v1.DataSize
+	41,  // 108: yorkie.v1.DocSize.gc:type_name -> yorkie.v1.DataSize
+	45,  // 109: yorkie.v1.Schema.rules:type_name -> yorkie.v1.Rule
+	81,  // 110: yorkie.v1.Schema.created_at:type_name -> google.protobuf.Timestamp
+	44,  // 111: yorkie.v1.Rule.tree_nodes:type_name -> yorkie.v1.TreeNodeRule
+	81,  // 112: yorkie.v1.RevisionSummary.created_at:type_name -> google.protobuf.Timestamp
+	31,  // 113: yorkie.v1.Snapshot.PresencesEntry.value:type_name -> yorkie.v1.Presence
+	37,  // 114: yorkie.v1.Operation.Set.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	11,  // 115: yorkie.v1.Operation.Set.value:type_name -> yorkie.v1.JSONElementSimple
+	37,  // 116: yorkie.v1.Operation.Set.executed_at:type_name -> yorkie.v1.TimeTicket
+	0,   // 117: yorkie.v1.Operation.Set.restore_mode:type_name -> yorkie.v1.RestoreMode
+	37,  // 118: yorkie.v1.Operation.Add.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 119: yorkie.v1.Operation.Add.prev_created_at:type_name -> yorkie.v1.TimeTicket
+	11,  // 120: yorkie.v1.Operation.Add.value:type_name -> yorkie.v1.JSONElementSimple
+	37,  // 121: yorkie.v1.Operation.Add.executed_at:type_name -> yorkie.v1.TimeTicket
+	0,   // 122: yorkie.v1.Operation.Add.restore_mode:type_name -> yorkie.v1.RestoreMode
+	37,  // 123: yorkie.v1.Operation.Move.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 124: yorkie.v1.Operation.Move.prev_created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 125: yorkie.v1.Operation.Move.created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 126: yorkie.v1.Operation.Move.executed_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 127: yorkie.v1.Operation.Remove.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 128: yorkie.v1.Operation.Remove.created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 129: yorkie.v1.Operation.Remove.executed_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 130: yorkie.v1.Operation.Edit.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 131: yorkie.v1.Operation.Edit.from:type_name -> yorkie.v1.TextNodePos
+	34,  // 132: yorkie.v1.Operation.Edit.to:type_name -> yorkie.v1.TextNodePos
+	59,  // 133: yorkie.v1.Operation.Edit.created_at_map_by_actor:type_name -> yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry
+	37,  // 134: yorkie.v1.Operation.Edit.executed_at:type_name -> yorkie.v1.TimeTicket
+	60,  // 135: yorkie.v1.Operation.Edit.attributes:type_name -> yorkie.v1.Operation.Edit.AttributesEntry
+	35,  // 136: yorkie.v1.Operation.Edit.restore_spans:type_name -> yorkie.v1.RestoreSpan
+	0,   // 137: yorkie.v1.Operation.Edit.restore_mode:type_name -> yorkie.v1.RestoreMode
+	35,  // 138: yorkie.v1.Operation.Edit.retombstone_spans:type_name -> yorkie.v1.RestoreSpan
+	37,  // 139: yorkie.v1.Operation.Style.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	34,  // 140: yorkie.v1.Operation.Style.from:type_name -> yorkie.v1.TextNodePos
+	34,  // 141: yorkie.v1.Operation.Style.to:type_name -> yorkie.v1.TextNodePos
+	61,  // 142: yorkie.v1.Operation.Style.attributes:type_name -> yorkie.v1.Operation.Style.AttributesEntry
+	37,  // 143: yorkie.v1.Operation.Style.executed_at:type_name -> yorkie.v1.TimeTicket
+	62,  // 144: yorkie.v1.Operation.Style.created_at_map_by_actor:type_name -> yorkie.v1.Operation.Style.CreatedAtMapByActorEntry
+	37,  // 145: yorkie.v1.Operation.Increase.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	11,  // 146: yorkie.v1.Operation.Increase.value:type_name -> yorkie.v1.JSONElementSimple
+	37,  // 147: yorkie.v1.Operation.Increase.executed_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 148: yorkie.v1.Operation.TreeEdit.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	23,  // 149: yorkie.v1.Operation.TreeEdit.from:type_name -> yorkie.v1.TreePos
+	23,  // 150: yorkie.v1.Operation.TreeEdit.to:type_name -> yorkie.v1.TreePos
+	63,  // 151: yorkie.v1.Operation.TreeEdit.created_at_map_by_actor:type_name -> yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry
+	21,  // 152: yorkie.v1.Operation.TreeEdit.contents:type_name -> yorkie.v1.TreeNodes
+	37,  // 153: yorkie.v1.Operation.TreeEdit.executed_at:type_name -> yorkie.v1.TimeTicket
+	36,  // 154: yorkie.v1.Operation.TreeEdit.restore_spans:type_name -> yorkie.v1.TreeRestoreSpan
+	0,   // 155: yorkie.v1.Operation.TreeEdit.restore_mode:type_name -> yorkie.v1.RestoreMode
+	36,  // 156: yorkie.v1.Operation.TreeEdit.retombstone_spans:type_name -> yorkie.v1.TreeRestoreSpan
+	37,  // 157: yorkie.v1.Operation.TreeEdit.split_tickets:type_name -> yorkie.v1.TimeTicket
+	37,  // 158: yorkie.v1.Operation.TreeStyle.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	23,  // 159: yorkie.v1.Operation.TreeStyle.from:type_name -> yorkie.v1.TreePos
+	23,  // 160: yorkie.v1.Operation.TreeStyle.to:type_name -> yorkie.v1.TreePos
+	64,  // 161: yorkie.v1.Operation.TreeStyle.attributes:type_name -> yorkie.v1.Operation.TreeStyle.AttributesEntry
+	37,  // 162: yorkie.v1.Operation.TreeStyle.executed_at:type_name -> yorkie.v1.TimeTicket
+	65,  // 163: yorkie.v1.Operation.TreeStyle.created_at_map_by_actor:type_name -> yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry
+	37,  // 164: yorkie.v1.Operation.ArraySet.parent_created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 165: yorkie.v1.Operation.ArraySet.created_at:type_name -> yorkie.v1.TimeTicket
+	11,  // 166: yorkie.v1.Operation.ArraySet.value:type_name -> yorkie.v1.JSONElementSimple
+	37,  // 167: yorkie.v1.Operation.ArraySet.executed_at:type_name -> yorkie.v1.TimeTicket
+	0,   // 168: yorkie.v1.Operation.ArraySet.restore_mode:type_name -> yorkie.v1.RestoreMode
+	37,  // 169: yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
+	37,  // 170: yorkie.v1.Operation.Style.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
+	37,  // 171: yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
+	37,  // 172: yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry.value:type_name -> yorkie.v1.TimeTicket
+	13,  // 173: yorkie.v1.JSONElement.JSONObject.nodes:type_name -> yorkie.v1.RHTNode
+	37,  // 174: yorkie.v1.JSONElement.JSONObject.created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 175: yorkie.v1.JSONElement.JSONObject.moved_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 176: yorkie.v1.JSONElement.JSONObject.removed_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 177: yorkie.v1.JSONElement.JSONObject.revived_at:type_name -> yorkie.v1.TimeTicket
+	14,  // 178: yorkie.v1.JSONElement.JSONArray.nodes:type_name -> yorkie.v1.RGANode
+	37,  // 179: yorkie.v1.JSONElement.JSONArray.created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 180: yorkie.v1.JSONElement.JSONArray.moved_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 181: yorkie.v1.JSONElement.JSONArray.removed_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 182: yorkie.v1.JSONElement.JSONArray.revived_at:type_name -> yorkie.v1.TimeTicket
+	1,   // 183: yorkie.v1.JSONElement.Primitive.type:type_name -> yorkie.v1.ValueType
+	37,  // 184: yorkie.v1.JSONElement.Primitive.created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 185: yorkie.v1.JSONElement.Primitive.moved_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 186: yorkie.v1.JSONElement.Primitive.removed_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 187: yorkie.v1.JSONElement.Primitive.revived_at:type_name -> yorkie.v1.TimeTicket
+	16,  // 188: yorkie.v1.JSONElement.Text.nodes:type_name -> yorkie.v1.TextNode
+	37,  // 189: yorkie.v1.JSONElement.Text.created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 190: yorkie.v1.JSONElement.Text.moved_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 191: yorkie.v1.JSONElement.Text.removed_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 192: yorkie.v1.JSONElement.Text.revived_at:type_name -> yorkie.v1.TimeTicket
+	18,  // 193: yorkie.v1.JSONElement.Text.purged_removals:type_name -> yorkie.v1.PurgedRemovals
+	1,   // 194: yorkie.v1.JSONElement.Counter.type:type_name -> yorkie.v1.ValueType
+	37,  // 195: yorkie.v1.JSONElement.Counter.created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 196: yorkie.v1.JSONElement.Counter.moved_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 197: yorkie.v1.JSONElement.Counter.removed_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 198: yorkie.v1.JSONElement.Counter.revived_at:type_name -> yorkie.v1.TimeTicket
+	20,  // 199: yorkie.v1.JSONElement.Tree.nodes:type_name -> yorkie.v1.TreeNode
+	37,  // 200: yorkie.v1.JSONElement.Tree.created_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 201: yorkie.v1.JSONElement.Tree.moved_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 202: yorkie.v1.JSONElement.Tree.removed_at:type_name -> yorkie.v1.TimeTicket
+	37,  // 203: yorkie.v1.JSONElement.Tree.revived_at:type_name -> yorkie.v1.TimeTicket
+	15,  // 204: yorkie.v1.TextNode.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
+	15,  // 205: yorkie.v1.TreeNode.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
+	31,  // 206: yorkie.v1.DocumentSummary.PresencesEntry.value:type_name -> yorkie.v1.Presence
+	15,  // 207: yorkie.v1.TreeRestoreSpan.AttributesEntry.value:type_name -> yorkie.v1.NodeAttr
+	208, // [208:208] is the sub-list for method output_type
+	208, // [208:208] is the sub-list for method input_type
+	208, // [208:208] is the sub-list for extension type_name
+	208, // [208:208] is the sub-list for extension extendee
+	0,   // [0:208] is the sub-list for field type_name
 }
 
 func init() { file_yorkie_v1_resources_proto_init() }
@@ -6010,7 +6207,7 @@ func file_yorkie_v1_resources_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_yorkie_v1_resources_proto_rawDesc), len(file_yorkie_v1_resources_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   74,
+			NumMessages:   76,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -644,12 +644,17 @@ func fromRestoreSpans(pbSpans []*api.RestoreSpan) ([]*crdt.RestoreSpan, error) {
 		if createdAt == nil {
 			return nil, ErrInvalidRestoreSpan
 		}
+		removedBy, err := fromTimeTicket(pbSpan.RemovedBy)
+		if err != nil {
+			return nil, err
+		}
 		spans = append(spans, &crdt.RestoreSpan{
 			CreatedAt:  createdAt,
 			Start:      int(pbSpan.Start),
 			End:        int(pbSpan.End),
 			Content:    pbSpan.Content,
 			Attributes: pbSpan.Attributes,
+			RemovedBy:  removedBy,
 		})
 	}
 	return spans, nil

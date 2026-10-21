@@ -295,6 +295,14 @@ func (t *Text) DeepCopy() (Element, error) {
 		}
 	}
 
+	t.rgaTreeSplit.PurgedLedgers(func(createdAt *time.Ticket, entries []*PurgedLedger) {
+		for _, e := range entries {
+			rgaTreeSplit.AddPurgedLedger(createdAt, &PurgedLedger{
+				Start: e.Start, End: e.End, Dels: append([]*time.Ticket(nil), e.Dels...),
+			})
+		}
+	})
+
 	text := NewText(rgaTreeSplit, t.createdAt)
 	text.movedAt = t.movedAt
 	text.removedAt = t.removedAt
@@ -444,12 +452,14 @@ func (t *Text) Edit(
 		if span.value.Attrs().Len() > 0 {
 			attrs = span.value.Attrs().Elements()
 		}
+		// An undo of this edit cancels exactly this removal.
 		removedSpans = append(removedSpans, RestoreSpan{
 			CreatedAt:  span.createdAt,
 			Start:      span.start,
 			End:        span.end,
 			Content:    content,
 			Attributes: attrs,
+			RemovedBy:  executedAt,
 		})
 	}
 
@@ -475,6 +485,7 @@ func (t *Text) Restore(
 			start:     s.Start,
 			end:       s.End,
 			value:     NewTextValue(s.Content, attrs),
+			removedBy: s.RemovedBy,
 		})
 	}
 	// `from` is the op's left boundary; it anchors a fragment whose whole
@@ -489,6 +500,7 @@ func (t *Text) Restore(
 func (t *Text) Retombstone(
 	spans []*RestoreSpan,
 	executedAt *time.Ticket,
+	versionVector time.VersionVector,
 ) ([]GCPair, resource.DataSize, error) {
 	internal := make([]restoreSpanValue[*TextValue], 0, len(spans))
 	for _, s := range spans {
@@ -499,7 +511,7 @@ func (t *Text) Retombstone(
 			value:     NewTextValue(s.Content, NewRHT()),
 		})
 	}
-	return t.rgaTreeSplit.retombstone(internal, executedAt)
+	return t.rgaTreeSplit.retombstone(internal, executedAt, versionVector)
 }
 
 // NormalizePos converts the given position into a single absolute offset

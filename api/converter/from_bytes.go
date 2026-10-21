@@ -337,6 +337,25 @@ func fromJSONText(
 		}
 	}
 
+	for _, e := range pbText.PurgedRemovals {
+		if e == nil {
+			return nil, fmt.Errorf("json_text.purged_removals: %w", ErrMissingTicket)
+		}
+		pieceCreatedAt, err := fromRequiredTimeTicket(e.CreatedAt, "purged_removals.created_at")
+		if err != nil {
+			return nil, err
+		}
+		entry := &crdt.PurgedLedger{Start: int(e.Start), End: int(e.End)}
+		for _, d := range e.Removals {
+			removal, err := fromRequiredTimeTicket(d, "purged_removals.removals")
+			if err != nil {
+				return nil, err
+			}
+			entry.Dels = append(entry.Dels, removal)
+		}
+		rgaTreeSplit.AddPurgedLedger(pieceCreatedAt, entry)
+	}
+
 	text := crdt.NewText(
 		rgaTreeSplit,
 		createdAt,
@@ -440,6 +459,35 @@ func fromTextNode(
 			return nil, err
 		}
 		textNode.SetRemovedAt(removedAt)
+	}
+	if pbNode.HasLedger {
+		dels := make([]*time.Ticket, 0, len(pbNode.Removals))
+		for _, d := range pbNode.Removals {
+			ticket, err := fromRequiredTimeTicket(d, "text_node.removals")
+			if err != nil {
+				return nil, err
+			}
+			dels = append(dels, ticket)
+		}
+		var cancels []crdt.LedgerCancel
+		for _, c := range pbNode.RemovalCancels {
+			if c == nil {
+				return nil, fmt.Errorf("text_node.removal_cancels: %w", ErrMissingTicket)
+			}
+			removal, err := fromRequiredTimeTicket(c.Removal, "removal_cancel.removal")
+			if err != nil {
+				return nil, err
+			}
+			at, err := fromRequiredTimeTicket(c.CancelledAt, "removal_cancel.cancelled_at")
+			if err != nil {
+				return nil, err
+			}
+			cancels = append(cancels, crdt.LedgerCancel{Deletion: removal, CancelledAt: at})
+		}
+		if len(dels) == 0 {
+			dels = nil
+		}
+		textNode.SetLedger(dels, cancels)
 	}
 	return textNode, nil
 }
