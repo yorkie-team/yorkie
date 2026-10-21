@@ -1,0 +1,31 @@
+{
+  "v": 2,
+  "id": "oracle-local-split-end-of-span-after-enter",
+  "issues": ["yorkie#2187"],
+  "status": { "go": "known-fail", "js": "known-fail" },
+  "note": "One replica, no concurrency. Enter after 'ab' (level-2 split), then split the 'ab' span at its end. The new empty span should stay in the first paragraph; it lands in front of 'cd' in the second instead (the split product follows the earlier product's insertion chain into the other paragraph). Found by the span oracle enumeration (oracle_test.go); every three-op combination where an Enter is followed by a split at the same place on the same replica hits it.",
+  "replicas": 1,
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p",
+        "children": [{ "type": "span", "children": [{ "type": "text", "value": "abcd" }] }]
+      }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "edit", "from": 4, "to": 4, "split": 2 },
+    {
+      "op": "expect",
+      "label": "after enter",
+      "xml": ["<doc><p><span>ab</span></p><p><span>cd</span></p></doc>"]
+    },
+    { "r": 0, "op": "edit", "from": 4, "to": 4, "split": 1 },
+    {
+      "op": "expect",
+      "label": "after split",
+      "xml": ["<doc><p><span>ab</span><span></span></p><p><span>cd</span></p></doc>"]
+    }
+  ]
+}

@@ -299,9 +299,22 @@ func checkStep(s *Script, st *Step, raw map[string]json.RawMessage, nested bool)
 	if mode, ok := deliveryOps[st.Op]; ok && mode != s.Delivery {
 		return fmt.Errorf("op %q is not valid with delivery %q", st.Op, s.Delivery)
 	}
-	if st.Op == opGen && s.Init.Node != nil {
-		return fmt.Errorf("op %q needs a string init", st.Op)
+	if st.Op == opGen {
+		if span := spanGenKinds[st.K]; span && s.Init.Node == nil {
+			return fmt.Errorf("gen kind %q needs a tree init", st.K)
+		} else if !span && s.Init.Node != nil {
+			return fmt.Errorf("op %q needs a string init", st.Op)
+		}
 	}
+	if err := checkFields(s, st, raw, allowed); err != nil {
+		return err
+	}
+	return checkValues(s, st, raw)
+}
+
+// checkFields validates which fields a step carries against the fields its
+// op allows (true: required, false: optional).
+func checkFields(s *Script, st *Step, raw map[string]json.RawMessage, allowed map[string]bool) error {
 	for k, v := range raw {
 		if k == "r" || k == "op" {
 			continue
@@ -321,7 +334,7 @@ func checkStep(s *Script, st *Step, raw map[string]json.RawMessage, nested bool)
 			return fmt.Errorf("op %q needs %q", st.Op, k)
 		}
 	}
-	return checkValues(s, st, raw)
+	return nil
 }
 
 // checkValues validates the values of a step whose fields are in place.
@@ -382,7 +395,7 @@ func checkValues(s *Script, st *Step, raw map[string]json.RawMessage) error {
 	case opExpect:
 		return checkXML(raw["xml"], s.Replicas)
 	case opGen:
-		if !genKinds[st.K] {
+		if !genKinds[st.K] && !spanGenKinds[st.K] {
 			return fmt.Errorf("unknown gen kind %q", st.K)
 		}
 		for k, v := range map[string]float64{"f": st.F, "g": st.G, "h": st.H} {

@@ -1,0 +1,36 @@
+{
+  "v": 2,
+  "id": "gen-span-84-min",
+  "issues": ["yorkie#2187"],
+  "status": { "go": "known-diverge", "js": "known-diverge" },
+  "note": "Minimised from the span family (Enter as two edits). Both replicas press Enter at the same place, as a span split followed by a paragraph split in one update; d2 then types 'f' at the start of its new line. d2 keeps 'f' in a paragraph of its own and d1 puts it before 'cd'. Likely cause: outer-level split and element-child emptiness are judged differently (split-time count vs current count).",
+  "replicas": 2,
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p",
+        "children": [{ "type": "span", "children": [{ "type": "text", "value": "abcd" }] }]
+      }
+    ]
+  },
+  "steps": [
+    {
+      "r": 0,
+      "op": "update",
+      "ops": [
+        { "op": "edit", "from": 4, "to": 4, "split": 1 },
+        { "op": "edit", "from": 5, "to": 5, "split": 1 }
+      ]
+    },
+    {
+      "r": 1,
+      "op": "update",
+      "ops": [
+        { "op": "edit", "from": 4, "to": 4, "split": 1 },
+        { "op": "edit", "from": 5, "to": 5, "split": 1 }
+      ]
+    },
+    { "r": 1, "op": "edit", "from": 8, "to": 8, "text": "f" }
+  ]
+}

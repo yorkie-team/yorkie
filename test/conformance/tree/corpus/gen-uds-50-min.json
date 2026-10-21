@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "id": "gen-uds-50-min",
+  "status": { "go": "known-diverge", "js": "known-diverge" },
+  "note": "Minimised from gen-uds-n2-s24-50. Both replicas split at offset 0 concurrently and d1 undoes its split. The empty paragraph lands first on d1 and last on d2. Likely cause: undo-of-split removes its boundary by position and sweeps the concurrent split product.",
+  "replicas": 2,
+  "init": "abcd",
+  "steps": [
+    { "r": 1, "op": "edit", "from": 1, "to": 1, "split": 1 },
+    { "r": 0, "op": "edit", "from": 1, "to": 1, "split": 1 },
+    { "r": 0, "op": "undo" }
+  ]
+}
