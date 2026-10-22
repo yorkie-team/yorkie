@@ -68,7 +68,9 @@ func New(ctx *change.Context, data Data) *Presence {
 	}
 }
 
-// Initialize initializes the presence.
+// Initialize initializes the presence with the given data. Its values are
+// JSON-encoded as Set encodes them, since they come from the same place: the
+// presence a client hands to Attach.
 func (p *Presence) Initialize(data Data) {
 	// Recorded before the swap, for the same reason Clear records: what undo
 	// restores for a key is the value it held when the Update began, and
@@ -95,7 +97,7 @@ func (p *Presence) Initialize(data Data) {
 	}
 	p.data.Clear()
 	for key, value := range data {
-		p.data.Set(key, value)
+		p.data.Set(key, EncodeValue(value))
 	}
 
 	p.context.SetPresenceChange(Change{
@@ -121,10 +123,26 @@ func WithHistory() SetOption {
 	}
 }
 
-// Set sets the value of the given key. By default the change is not
-// undoable; pass WithHistory() to push the previous value onto the undo
-// stack alongside any operation reverses from the same Update call.
+// Set sets the value of the given key. The value is JSON-encoded before it is
+// stored, which is the form every SDK reads presence values in: pass the
+// string the peers should see, not its JSON text. SetJSON is the way to store
+// a value that is already encoded, such as an object or a number.
+//
+// By default the change is not undoable; pass WithHistory() to push the
+// previous value onto the undo stack alongside any operation reverses from
+// the same Update call.
 func (p *Presence) Set(key string, value string, opts ...SetOption) {
+	p.SetJSON(key, EncodeValue(value), opts...)
+}
+
+// SetJSON sets the given key to an already JSON-encoded value. It is the
+// escape hatch from Set for values that are not strings -- an object or a
+// number a peer should read as such -- and the way to re-apply a value that
+// was read back from a presence, which is encoded already.
+//
+// The value is stored as given: a caller that passes text which is not valid
+// JSON puts it on the wire in a form other SDKs cannot decode.
+func (p *Presence) SetJSON(key string, value string, opts ...SetOption) {
 	var cfg setConfig
 	for _, opt := range opts {
 		opt(&cfg)

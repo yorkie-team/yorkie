@@ -492,8 +492,11 @@ func (d *Document) executeUndoRedo(isUndo bool) (err error) {
 				data = presence.NewData()
 			}
 			p := presence.New(ctx, data.DeepCopy())
+			// SetJSON, not Set: these values were read out of a presence,
+			// so they are JSON-encoded already and Set would encode them a
+			// second time.
 			for key, value := range entry.Presence {
-				p.Set(key, value, presence.WithHistory())
+				p.SetJSON(key, value, presence.WithHistory())
 			}
 			// A key the reversed change introduced had no value to restore,
 			// so it is removed rather than set to the empty string. JS gets
@@ -1307,32 +1310,39 @@ func (d *Document) ensureClone() error {
 	return nil
 }
 
+// The accessors below decode what they return, because presence values are
+// stored and transmitted JSON-encoded (see presence.EncodeValue). A caller
+// reading through Document therefore gets back the string Set was given, and
+// a peer's value in the form that peer meant. The InternalDocument accessors
+// they delegate to stay encoded: the server builds snapshots and push-pull
+// payloads from those, and those carry the wire form.
+
 // MyPresence returns the presence of the actor.
 func (d *Document) MyPresence() presence.Data {
-	return readLocked(d, func() presence.Data { return d.doc.MyPresence() })
+	return readLocked(d, func() presence.Data { return presence.DecodeData(d.doc.MyPresence()) })
 }
 
 // Presence returns the presence of the given client.
 // If the client is not online, it returns nil.
 func (d *Document) Presence(clientID string) presence.Data {
-	return readLocked(d, func() presence.Data { return d.doc.Presence(clientID) })
+	return readLocked(d, func() presence.Data { return presence.DecodeData(d.doc.Presence(clientID)) })
 }
 
 // PresenceForTest returns the presence of the given client
 // regardless of whether the client is online or not.
 func (d *Document) PresenceForTest(clientID string) presence.Data {
-	return readLocked(d, func() presence.Data { return d.doc.PresenceForTest(clientID) })
+	return readLocked(d, func() presence.Data { return presence.DecodeData(d.doc.PresenceForTest(clientID)) })
 }
 
 // Presences returns the presence map of online clients.
 func (d *Document) Presences() map[string]presence.Data {
-	return readLocked(d, func() map[string]presence.Data { return d.doc.Presences() })
+	return readLocked(d, func() map[string]presence.Data { return presence.DecodeDataMap(d.doc.Presences()) })
 }
 
 // AllPresences returns the presence map of all clients
 // regardless of whether the client is online or not.
 func (d *Document) AllPresences() map[string]presence.Data {
-	return readLocked(d, func() map[string]presence.Data { return d.doc.AllPresences() })
+	return readLocked(d, func() map[string]presence.Data { return presence.DecodeDataMap(d.doc.AllPresences()) })
 }
 
 // ResetPresences clears the presence map and the online-clients set under
