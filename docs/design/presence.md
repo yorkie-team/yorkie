@@ -180,14 +180,20 @@ The Go SDK joins that contract at its own boundary (`pkg/document/presence`):
 | `Document`'s presence accessors and the presence events | decode (`presence.DecodeValue`) |
 | `InternalDocument`'s presence accessors | stay encoded — snapshots and push-pull payloads are built from them |
 | Storage (snapshot, change) | encoded |
+| Admin/cluster `GetDocument(s)` summaries | encoded — built from `InternalDocument` |
 
-Two consequences are worth stating:
+Three consequences are worth stating:
 
 - **Decoding is lenient.** A value that is not a JSON string decodes to itself.
   That covers a peer's object or number, which `map[string]string` has nowhere
   else to put, and any value a Go client wrote before this encoding existed.
 - **A Go caller that hand-encoded JSON into `Set` must switch to `SetJSON`**,
   or its value is encoded a second time.
+- **The admin API serves the wire form.** Its summaries come from
+  `InternalDocument`, so a value reads as `"moved"`, not `moved`. That is what
+  a JS client's presence has always looked like there; a Go client's now
+  matches it. Decoding at that boundary would be a separate change, and would
+  have to account for consumers that parse the values themselves.
 
 ### TTL and Heartbeat Mechanism
 

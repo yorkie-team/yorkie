@@ -12,3 +12,8 @@
 - The undo path re-applies values it recorded earlier, which are already
   encoded. Any encode-on-write change needs a raw setter for it, or undo
   quietly double-encodes.
+- Unit tests all passed while two integration tests failed: the admin
+  `GetDocument(s)` summaries are built from `InternalDocument`, so they carry
+  the wire form, and the only assertions that cover that path live behind the
+  `integration` build tag. A boundary audit has to follow the server's read
+  paths too, not just the SDK's.
