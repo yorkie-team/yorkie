@@ -15,6 +15,21 @@
   detach previously did not, which would have turned a miss into a failed
   deactivation on the memory backend.
 
+- The issue's second bullet — "the clear change is stamped with lamport 0 and
+  an empty version vector" — turns out to be cosmetic, and true of *every*
+  presence-only change rather than only the server-written one.
+  `change.Context.ToChange` takes the `IsPresenceOnlyChange` branch and rebuilds
+  the ID as `prevID.Next(true)`, which carries only clientSeq and actor and
+  drops lamport and the version vector. So whatever
+  `FindLatestChangeInfoByActor` returns is discarded before the change is
+  stored. The lookup was still keyed on the right actor here, because a wrong
+  key is a latent trap and because the memory backend turns a miss into an
+  error (below); the fix that matters is the actor stamped into the change ID.
+- `pushPack` drops a change whose `clientSeq <= cpBeforePush.ClientSeq`, and
+  `DetachDocument` builds its context from `cp.ClientSeq`. It survives only
+  because `ToChange`'s presence-only branch bumps the clientSeq by one. Worth
+  knowing before anyone "simplifies" either side.
+
 ## Review rounds
 
 - `/self-review` was not run: this change was produced by an autonomous,
