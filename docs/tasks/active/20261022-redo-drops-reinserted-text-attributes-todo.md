@@ -38,6 +38,12 @@ X with `a X{b:"1"} b`.
       `removedSpans`)
 - [x] Regression tests: GC'd vs non-GC'd replica after redo; chained
       undo/redo; plain insert still carries no attributes
+- [x] Refresh the span attributes from the live chain when the reverse of an
+      identity-preserving edit is built, so a Style applied after the insert
+      (another actor's — a local one would be popped first) is on the span the
+      redo restores, not just the insert-time snapshot
+- [x] Regression tests: remote style after the insert; style covering one
+      character of a three-character insert
 - [x] `make lint`, `go test ./pkg/document/... ./api/converter/...`
 
 ## Notes

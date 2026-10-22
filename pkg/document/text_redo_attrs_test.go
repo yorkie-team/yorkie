@@ -60,6 +60,22 @@ func editTextWithAttrs(
 	}))
 }
 
+// styleTextRange applies style attributes to a range, in its own change so a
+// later Undo targets only that style.
+func styleTextRange(
+	t *testing.T,
+	doc *document.Document,
+	from, to int,
+	attrs map[string]string,
+) {
+	t.Helper()
+
+	require.NoError(t, doc.Update(func(root *json.Object, _ *presence.Presence) error {
+		root.GetText("t").Style(from, to, attrs)
+		return nil
+	}))
+}
+
 // TestTextRedoKeepsAttributesAfterCollection is a regression for yorkie#2273.
 //
 // The reverse of an insert records the inserted run as a retombstoneSpan so
@@ -128,6 +144,71 @@ func TestTextRedoKeepsAttributesAfterCollection(t *testing.T) {
 			assert.Equal(t, "aXb", textOf(t, doc, "t").String())
 			assert.Equal(t, map[string]string{"b": "1", "i": "1"}, attrsOfRun(t, doc, "X"))
 		}
+	})
+
+	t.Run("redo keeps a style applied after the insert test", func(t *testing.T) {
+		// The attributes an insert carried are not the whole story: a Style
+		// that lands on the run afterwards lives on the node, and the undo
+		// stack holds a span built before it. The style has to be another
+		// actor's, or undoing on this one would pop the style before the
+		// insert and there would be nothing left to lose.
+		y := newTextDoc(t)
+		editText(t, y, 0, 0, "ab")
+
+		x := document.New("d1")
+		deliverChanges(t, y, x)
+
+		editText(t, y, 1, 1, "X")
+		deliverChanges(t, y, x)
+
+		styleTextRange(t, x, 1, 2, map[string]string{"b": "1"})
+		deliverChanges(t, x, y)
+		assert.Equal(t, map[string]string{"b": "1"}, attrsOfRun(t, y, "X"))
+
+		require.NoError(t, y.Undo())
+		deliverChanges(t, y, x)
+
+		vector := helper.MaxVersionVector(x.ActorID(), y.ActorID())
+		assert.Equal(t, 1, y.GarbageCollect(vector))
+		assert.Equal(t, 1, x.GarbageLen(), "x still holds the tombstone")
+
+		require.NoError(t, y.Redo())
+		deliverChanges(t, y, x)
+
+		assert.Equal(t, "aXb", textOf(t, y, "t").String())
+		assert.Equal(t, map[string]string{"b": "1"}, attrsOfRun(t, y, "X"),
+			"the recreated run lost the style applied after the insert")
+		assert.Equal(t, x.Marshal(), y.Marshal(),
+			"the replica that collected the tombstone revived the text unstyled")
+	})
+
+	t.Run("redo keeps a style covering part of the insert test", func(t *testing.T) {
+		// The run is styled on one character only, so a single span cannot
+		// describe it: the reverse has to report the pieces separately.
+		y := newTextDoc(t)
+		editText(t, y, 0, 0, "ab")
+
+		x := document.New("d1")
+		deliverChanges(t, y, x)
+
+		editText(t, y, 1, 1, "XYZ")
+		deliverChanges(t, y, x)
+
+		styleTextRange(t, x, 2, 3, map[string]string{"b": "1"})
+		deliverChanges(t, x, y)
+
+		require.NoError(t, y.Undo())
+		deliverChanges(t, y, x)
+		y.GarbageCollect(helper.MaxVersionVector(x.ActorID(), y.ActorID()))
+
+		require.NoError(t, y.Redo())
+		deliverChanges(t, y, x)
+
+		assert.Equal(t, "aXYZb", textOf(t, y, "t").String())
+		assert.Empty(t, attrsOfRun(t, y, "X"))
+		assert.Equal(t, map[string]string{"b": "1"}, attrsOfRun(t, y, "Y"))
+		assert.Empty(t, attrsOfRun(t, y, "Z"))
+		assert.Equal(t, x.Marshal(), y.Marshal())
 	})
 
 	t.Run("plain insert redo stays unstyled test", func(t *testing.T) {

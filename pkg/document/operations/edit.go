@@ -17,6 +17,9 @@
 package operations
 
 import (
+	"cmp"
+	"maps"
+	"slices"
 	"strings"
 	"unicode/utf16"
 
@@ -146,6 +149,27 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 				toRestore, toRetombstone = e.retombstoneSpans, e.restoreSpans
 			}
 
+			// The reverse restores whatever this op is about to re-remove, and
+			// a replica that purges the tombstone before that restore arrives
+			// recreates the node from the span alone (Text.Restore). The
+			// span's attributes therefore have to describe the run as it
+			// stands now, not as it stood when the span was first built: a
+			// Style that landed on the run in between lives on the node, not
+			// on the span, so without this the purging replica revives bare
+			// text while one still holding the tombstone un-tombstones the
+			// styled node (#2273). Read before the mutation below, and only
+			// when the reverse is kept -- a replayed remote change discards it
+			// (see OpSource.NeedsReverse).
+			reverseRestore, reverseRetombstone := e.restoreSpans, e.retombstoneSpans
+			if source.NeedsReverse() && len(toRetombstone) > 0 {
+				refreshed := refreshSpanAttributes(obj, toRetombstone)
+				if e.restoreMode == crdt.RestoreModeRetombstone {
+					reverseRestore = refreshed
+				} else {
+					reverseRetombstone = refreshed
+				}
+			}
+
 			// The reverse of an identity-preserving edit keeps both span sets
 			// and only flips the direction, so undoing a restore re-removes
 			// exactly the characters it revived, still under their original
@@ -157,9 +181,9 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 				from:             e.from,
 				to:               e.to,
 				isUndoOp:         true,
-				restoreSpans:     e.restoreSpans,
+				restoreSpans:     reverseRestore,
 				restoreMode:      flipRestoreMode(e.restoreMode),
-				retombstoneSpans: e.retombstoneSpans,
+				retombstoneSpans: reverseRetombstone,
 			}
 
 			// Whether anything was actually re-removed or revived below. JS
@@ -391,6 +415,122 @@ func (e *Edit) toReverseOperation(
 		isUndoOp:    true,
 		restoreMode: crdt.RestoreModeNone,
 	}
+}
+
+// refreshSpanAttributes returns spans addressing the same characters as the
+// given ones, but carrying the attributes that content holds right now, read
+// off the split chain.
+//
+// A span's attributes are a snapshot: the span built for an insert carries
+// what the insert applied (toReverseOperation), and the one built for a
+// removal carries what the removed node held (Text.Edit). Either goes stale
+// while the span waits on the undo stack, since a Style lands on the node and
+// not on the span.
+//
+// Each span is split at the boundaries of the pieces covering it, so a style
+// over part of a run is reported on that part alone; neighbouring pieces that
+// agree are merged back, leaving the common unstyled run a single span. A
+// region no piece covers was purged here, so it keeps the span's own
+// attributes -- there is nothing live left to read.
+func refreshSpanAttributes(text *crdt.Text, spans []*crdt.RestoreSpan) []*crdt.RestoreSpan {
+	pieces := piecesByInsertion(text, spans)
+
+	refreshed := make([]*crdt.RestoreSpan, 0, len(spans))
+	for _, span := range spans {
+		content := utf16.Encode([]rune(span.Content))
+		if span.End-span.Start != len(content) {
+			// The content does not measure the range it claims, so it cannot
+			// be sliced per piece. Leave the span exactly as it came.
+			refreshed = append(refreshed, span)
+			continue
+		}
+
+		var parts []*crdt.RestoreSpan
+		add := func(start, end int, attrs map[string]string) {
+			if start >= end {
+				return
+			}
+			if n := len(parts); n > 0 && maps.Equal(parts[n-1].Attributes, attrs) {
+				parts[n-1].End = end
+				parts[n-1].Content = string(utf16.Decode(
+					content[parts[n-1].Start-span.Start : end-span.Start]))
+				return
+			}
+			parts = append(parts, &crdt.RestoreSpan{
+				CreatedAt:  span.CreatedAt,
+				Start:      start,
+				End:        end,
+				Content:    string(utf16.Decode(content[start-span.Start : end-span.Start])),
+				Attributes: attrs,
+			})
+		}
+
+		cursor := span.Start
+		for _, piece := range pieces[span.CreatedAt.Key()] {
+			start := piece.ID().Offset()
+			end := start + piece.Value().Len()
+			if end <= cursor {
+				continue
+			}
+			if start >= span.End {
+				break
+			}
+			add(cursor, min(start, span.End), span.Attributes)
+			cursor = max(cursor, start)
+			add(cursor, min(end, span.End), attributesOf(piece))
+			cursor = min(end, span.End)
+		}
+		add(cursor, span.End, span.Attributes)
+
+		refreshed = append(refreshed, parts...)
+	}
+
+	return refreshed
+}
+
+// piecesByInsertion indexes the chain's nodes by the insertion they belong to,
+// ascending by offset, keeping only the insertions the given spans name. The
+// walk is over the whole chain, which is why the caller only runs it for a
+// reverse it actually keeps.
+func piecesByInsertion(
+	text *crdt.Text,
+	spans []*crdt.RestoreSpan,
+) map[string][]*crdt.RGATreeSplitNode[*crdt.TextValue] {
+	wanted := make(map[string]struct{}, len(spans))
+	for _, span := range spans {
+		wanted[span.CreatedAt.Key()] = struct{}{}
+	}
+
+	pieces := make(map[string][]*crdt.RGATreeSplitNode[*crdt.TextValue], len(wanted))
+	for _, node := range text.Nodes() {
+		key := node.ID().CreatedAt().Key()
+		if _, ok := wanted[key]; !ok {
+			continue
+		}
+		pieces[key] = append(pieces[key], node)
+	}
+
+	// Pieces of one insertion sit in offset order in the chain today, but
+	// nothing in the restore path guarantees it, and reading them out of order
+	// would mis-attribute a style to its neighbour.
+	for _, nodes := range pieces {
+		slices.SortFunc(nodes, func(a, b *crdt.RGATreeSplitNode[*crdt.TextValue]) int {
+			return cmp.Compare(a.ID().Offset(), b.ID().Offset())
+		})
+	}
+
+	return pieces
+}
+
+// attributesOf returns the style attributes the given piece carries, nil when
+// it carries none -- the convention Text.Edit uses when it fills removedSpans,
+// and what Text.Restore treats as "no attributes".
+func attributesOf(piece *crdt.RGATreeSplitNode[*crdt.TextValue]) map[string]string {
+	attrs := piece.Value().Attrs()
+	if attrs.Len() == 0 {
+		return nil
+	}
+	return attrs.Elements()
 }
 
 // flipRestoreMode returns the direction that undoes the given one: undoing a
