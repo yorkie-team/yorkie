@@ -152,7 +152,7 @@ Three writes do not come from a client and do not fit the lagging gate,
 because each one builds the whole root on the server and therefore knows the
 result exactly:
 
-- `documents.CreateDocument` (admin/MCP) writes the initial root straight
+- `documents.CreateDocument` (admin) writes the initial root straight
   through `DB.CompactChangeInfos` and never reaches `pushPack` at all.
 - `documents.UpdateDocument` (admin) and `revisions.RestoreRevision` rebuild
   the document and push it with `Status: attached`. Their packs are
