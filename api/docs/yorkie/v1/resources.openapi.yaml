@@ -343,7 +343,11 @@ components:
         minSyncedTicket:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
-          description: deprecated
+          description: |-
+            min_synced_ticket is superseded by version_vector and is written by no
+             SDK and read by no server. It stays declared rather than `reserved`
+             because the repository gates proto changes on buf's FILE category, whose
+             FIELD_NO_DELETE fires on a removed number even when it is reserved.
           title: min_synced_ticket
           type: object
         snapshot:
@@ -895,7 +899,12 @@ components:
       type: object
     yorkie.v1.JSONElementSimple:
       additionalProperties: false
-      description: ""
+      description: |-
+        JSONElementSimple is the value an operation carries: the element's identity
+         plus its encoded contents. Its moved_at and removed_at carry no lifecycle
+         state -- nothing ever wrote them, because an element reaching a replica
+         inside an operation has neither moved nor been removed yet. The snapshot
+         form, JSONElement, is where both are actually populated.
       properties:
         createdAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
@@ -906,7 +915,9 @@ components:
         movedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
-          description: ""
+          description: |-
+            Never written. See the message comment; deprecated rather than reserved
+             for the reason given on ChangePack.min_synced_ticket.
           title: moved_at
           type: object
         removedAt:
@@ -1157,7 +1168,10 @@ components:
           type: string
         createdAtMapByActor:
           additionalProperties: false
-          description: deprecated
+          description: |-
+            created_at_map_by_actor is superseded by the change's version vector and
+             is written by no SDK. See ChangePack.min_synced_ticket for why it is
+             deprecated rather than reserved.
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -1380,7 +1394,7 @@ components:
           type: array
         createdAtMapByActor:
           additionalProperties: false
-          description: deprecated
+          description: Deprecated for the same reason as Edit.created_at_map_by_actor.
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -1456,7 +1470,7 @@ components:
           type: array
         createdAtMapByActor:
           additionalProperties: false
-          description: deprecated
+          description: Deprecated for the same reason as Edit.created_at_map_by_actor.
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -1558,7 +1572,7 @@ components:
           type: array
         createdAtMapByActor:
           additionalProperties: false
-          description: deprecated
+          description: Deprecated for the same reason as Edit.created_at_map_by_actor.
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -1852,7 +1866,12 @@ components:
       type: object
     yorkie.v1.RGANode:
       additionalProperties: false
-      description: ""
+      description: |-
+        RGANode is one position slot of an array, serialized as a flat repeated
+         field by its container rather than as a linked list. The recursive `next`
+         is a leftover of the linked-list form: nothing writes it, and because it
+         stays declared, a server unmarshalling element bytes is still obliged to be
+         ready to parse a chain as deep as the array is long.
       properties:
         element:
           $ref: '#/components/schemas/yorkie.v1.JSONElement'
@@ -1863,7 +1882,10 @@ components:
         next:
           $ref: '#/components/schemas/yorkie.v1.RGANode'
           additionalProperties: false
-          description: ""
+          description: |-
+            Never written; the container's flat `nodes` carries the order instead.
+             Deprecated rather than reserved for the reason given on
+             ChangePack.min_synced_ticket.
           title: next
           type: object
         positionCreatedAt:

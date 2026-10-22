@@ -508,6 +508,11 @@ family name), `CONFORMANCE_RUNS` (default 5000), `CONFORMANCE_SEED0`
 (default 1), `CONFORMANCE_OUT` (writes the rows in the parity-fixture shape),
 `CONFORMANCE_GC` (`lagging`: the lagging minVV of Delivery and GC).
 
+`hll/` is a second fixture in this package, unrelated to the Tree scripts:
+`hll/vectors.json` pins the dedup counter's hashing and the register payloads
+both SDKs accept, and `hll/README.md` is its normative format. `hll_test.go`
+runs it.
+
 `TestSpanOracle` (Go only, not part of the runner contract, skipped unless
 `CONFORMANCE_ORACLE_OUT` names an output file) enumerates every two- and
 three-op combination of the span kinds `sins`, `ssplit`, `senter` and
