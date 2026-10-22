@@ -21,10 +21,20 @@ Issue: yorkie#2274.
 
 ## Plan
 
-1. `hll.go`: add `hllMaxRegisterValue = 64 - hllPrecision + 1` and reject a
-   payload holding a register above it in `Restore`, naming the offending
-   index and value. Keep the length check as it is.
-2. Add the shared vector fixture `test/conformance/hll/vectors.json` and
+1. `hll.go`: add `hllMaxRegisterValue = 64 - hllPrecision + 1` and clamp
+   every restored register to it. Clamp rather than reject: `Restore` is
+   the shared decode path for stored snapshots and operations
+   (`api/converter/from_bytes.go` → `BytesToSnapshot`,
+   `FromStoredOperations`) as well as for client input, and in the YSON
+   apply path a `RestoreHLL` error becomes a panic
+   (`pkg/document/json/object.go`, `array.go`), so an error would brick a
+   document written before the bound existed instead of repairing it.
+   Keep the length check as it is.
+2. `hll.go`: saturate `Count()` at `math.MaxUint64`. An all-51 payload is
+   in bounds yet drives the estimate to ~2.7e19, where the float →
+   `uint64` conversion is implementation-defined and two replicas could
+   read the same registers as different counts.
+3. Add the shared vector fixture `test/conformance/hll/vectors.json` and
    the Go runner `test/conformance/hll_test.go`, in the existing
    conformance package so `go test ./...` runs it. It pins, for a list of
    hand-picked strings (empty, ASCII, an actor id, 31/32/33/100 bytes,
@@ -34,21 +44,26 @@ Issue: yorkie#2274.
    generated families of 20,000 strings in total, the register-array
    sha256, the non-zero register count and `Count()`, and the same three
    over every vector and family together. Restore cases pin which payloads
-   both SDKs accept and reject.
-3. `test/conformance/hll/README.md`: the normative format of the fixture,
+   both SDKs accept, and the registers an accepted one is clamped to.
+4. `test/conformance/hll/README.md`: the normative format of the fixture,
    so the JS runner can replay it from the same file, plus a pointer from
    the suite README.
-4. `pkg/document/crdt/hll_test.go`: unit cases for the new rejection and
-   for the boundary value 51.
+5. `pkg/document/crdt/hll_test.go`: unit cases for the clamp, for its
+   idempotence, for the boundary value 51 and for the saturated count.
 
 ## Non-goals
 
 - Changing the hash function, the precision, or the wire format.
 - The JS side: yorkie-js-sdk takes a copy of `test/conformance/hll/` the
-  way it already takes `tree/`.
+  way it already takes `tree/`, and its `restore` follows the fixture in
+  clamping an out-of-range register instead of returning `false`.
+- Narrowing `Counter.recomputeValue`'s `int32(count)`, which truncates a
+  count beyond `int32` whatever the register bound is.
 
 ## Acceptance
 
-- `Restore` rejects a payload with a register above 51 and accepts 51.
+- `Restore` accepts 51, clamps anything above it to 51, and still
+  rejects a payload of the wrong length.
+- `Count()` saturates rather than wrapping on an all-51 payload.
 - The fixture fails the Go suite if the hashing, the UTF-8 handling, the
   register mapping, or `Count()` moves.

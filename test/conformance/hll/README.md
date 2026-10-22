@@ -99,7 +99,7 @@ which is floating point and must agree between the SDKs.
 
 ### `restore`
 
-One register payload per entry, and whether `Restore` takes it:
+One register payload per entry, and what `Restore` makes of it:
 
 | field | meaning |
 |---|---|
@@ -107,10 +107,20 @@ One register payload per entry, and whether `Restore` takes it:
 | `length` | length of the payload in bytes |
 | `registers` | optional, register index in decimal → the value held there; every other register is 0 |
 | `accept` | whether `Restore` must accept it |
-| `count` | for an accepted payload, the `Count()` it reports (absent means 0) |
+| `count` | for an accepted payload, the `Count()` it reports after the clamp below (absent means 0) |
 
-A rejected payload must leave the HLL it was handed to unchanged, which in Go
-is an error return and in JS a `false` return. The cases pin both halves of the
-check: the length, and the bound on a register. A register above
-`maxRegisterValue` cannot come from `Add`, so accepting it would let a snapshot
-or a nested `Set`/`Add` value report a count on one SDK that the other refuses.
+Only a length mismatch is rejected, and a rejected payload must leave the HLL
+it was handed to unchanged — in Go an error return, in JS a `false` return.
+
+A register above `maxRegisterValue` cannot come from `Add`, and an SDK must not
+carry one: an accepted payload ends with every register at
+`min(value, maxRegisterValue)`. It is clamped rather than refused because
+`Restore` also decodes snapshots and operations already in storage, which a
+client may have written before the bound existed; refusing those would make the
+document permanently unloadable instead of repairing it. Clamping is
+deterministic and idempotent, so replicas restoring the same payload still
+converge, and re-serializing writes the repaired registers back.
+
+A runner checks the registers, not only the count: the estimator's small-range
+branch reads only which registers are zero, so an unclamped register of 200
+reports the same count as the clamped one and the count alone would miss it.

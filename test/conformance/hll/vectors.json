@@ -181,7 +181,8 @@
       "registers": {
         "0": 52
       },
-      "accept": false
+      "accept": true,
+      "count": 1
     },
     {
       "id": "reported-200",
@@ -189,7 +190,8 @@
       "registers": {
         "0": 200
       },
-      "accept": false
+      "accept": true,
+      "count": 1
     },
     {
       "id": "max-byte",
@@ -197,7 +199,8 @@
       "registers": {
         "16383": 255
       },
-      "accept": false
+      "accept": true,
+      "count": 1
     },
     {
       "id": "empty-payload",

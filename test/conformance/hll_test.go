@@ -88,8 +88,9 @@ type HLLDigest struct {
 
 // HLLRestoreCase is a register payload both SDKs must accept or reject alike.
 // Registers maps a register index, in decimal, to the value the payload holds
-// there; every other register is zero. Count is the cardinality an accepted
-// payload reports.
+// there; every other register is zero. An accepted payload is held to the
+// bound by clamping — every register ends at min(value, maxRegisterValue) —
+// and Count is the cardinality it reports afterwards.
 type HLLRestoreCase struct {
 	ID        string         `json:"id"`
 	Length    int            `json:"length"`
@@ -132,7 +133,8 @@ var hllFamilies = []struct {
 
 // hllRestoreCases are hand-written, not derived from the implementation: they
 // are what the bound in Restore is held to, so regenerating the fixture must
-// not be able to move them.
+// not be able to move them. A payload of the right length is accepted and its
+// registers clamped to maxRegisterValue; only a length mismatch is rejected.
 var hllRestoreCases = []HLLRestoreCase{
 	{ID: "zeros", Length: hllRegisterCount, Accept: true, Count: 0},
 	{ID: "one-register", Length: hllRegisterCount, Registers: map[string]int{"0": 1}, Accept: true, Count: 1},
@@ -143,9 +145,15 @@ var hllRestoreCases = []HLLRestoreCase{
 		Accept:    true,
 		Count:     2,
 	},
-	{ID: "above-max", Length: hllRegisterCount, Registers: map[string]int{"0": hllMaxRegisterValue + 1}},
-	{ID: "reported-200", Length: hllRegisterCount, Registers: map[string]int{"0": 200}},
-	{ID: "max-byte", Length: hllRegisterCount, Registers: map[string]int{"16383": 255}},
+	{
+		ID:        "above-max",
+		Length:    hllRegisterCount,
+		Registers: map[string]int{"0": hllMaxRegisterValue + 1},
+		Accept:    true,
+		Count:     1,
+	},
+	{ID: "reported-200", Length: hllRegisterCount, Registers: map[string]int{"0": 200}, Accept: true, Count: 1},
+	{ID: "max-byte", Length: hllRegisterCount, Registers: map[string]int{"16383": 255}, Accept: true, Count: 1},
 	{ID: "empty-payload", Length: 0},
 	{ID: "one-short", Length: hllRegisterCount - 1},
 	{ID: "one-long", Length: hllRegisterCount + 1},
@@ -279,8 +287,11 @@ func TestHLLVectors(t *testing.T) {
 }
 
 // TestHLLRestore holds Restore to the fixture's cases: both SDKs accept and
-// reject the same register payloads, and an accepted one reports the same
-// count.
+// reject the same register payloads, clamp an accepted one's registers to the
+// fixture's maxRegisterValue, and report the same count afterwards. The
+// registers are checked as well as the count because the estimator's
+// small-range branch reads only which registers are zero, so a count alone
+// would not notice an unclamped register.
 func TestHLLRestore(t *testing.T) {
 	raw, err := os.ReadFile(hllVectorsPath)
 	require.NoError(t, err)
@@ -307,6 +318,12 @@ func TestHLLRestore(t *testing.T) {
 				return
 			}
 			require.NoError(t, err, "%s: must be accepted", c.ID)
+
+			clamped := make([]byte, c.Length)
+			for i, val := range data {
+				clamped[i] = byte(min(int(val), want.MaxRegisterValue))
+			}
+			assert.Equal(t, clamped, hll.Bytes(), "%s: registers must be clamped", c.ID)
 			assert.Equal(t, c.Count, hll.Count(), "%s: count", c.ID)
 		})
 	}

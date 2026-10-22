@@ -114,11 +114,42 @@ func TestHLL(t *testing.T) {
 		assert.Equal(t, uint64(2), hll.Count())
 	})
 
-	t.Run("restore rejects a register above the largest value add can write", func(t *testing.T) {
+	t.Run("restore clamps a register above the largest value add can write", func(t *testing.T) {
+		// Such a payload cannot come from Add, but it may already sit in
+		// storage, so Restore repairs it instead of making the document
+		// unloadable.
 		for _, val := range []byte{52, 200, 255} {
 			data := make([]byte, 1<<14)
 			data[0] = val
-			assert.Error(t, crdt.NewHLL().Restore(data), "register %d", val)
+
+			hll := crdt.NewHLL()
+			assert.NoError(t, hll.Restore(data), "register %d", val)
+			assert.Equal(t, byte(51), hll.Bytes()[0], "register %d", val)
+			assert.Equal(t, uint64(1), hll.Count(), "register %d", val)
 		}
+	})
+
+	t.Run("restore of a clamped payload is idempotent", func(t *testing.T) {
+		data := make([]byte, 1<<14)
+		data[7] = 200
+
+		first := crdt.NewHLL()
+		assert.NoError(t, first.Restore(data))
+		second := crdt.NewHLL()
+		assert.NoError(t, second.Restore(first.Bytes()))
+		assert.Equal(t, first.Bytes(), second.Bytes())
+	})
+
+	t.Run("count saturates instead of wrapping on an all-max payload", func(t *testing.T) {
+		data := make([]byte, 1<<14)
+		for i := range data {
+			data[i] = 51
+		}
+
+		hll := crdt.NewHLL()
+		assert.NoError(t, hll.Restore(data))
+		// The estimate here is ~2.7e19, past uint64; the conversion must not
+		// be left to the platform.
+		assert.Equal(t, uint64(math.MaxUint64), hll.Count())
 	})
 }
