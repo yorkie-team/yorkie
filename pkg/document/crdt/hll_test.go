@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 func TestHLL(t *testing.T) {
@@ -148,8 +149,23 @@ func TestHLL(t *testing.T) {
 
 		hll := crdt.NewHLL()
 		assert.NoError(t, hll.Restore(data))
-		// The estimate here is ~2.7e19, past uint64; the conversion must not
-		// be left to the platform.
-		assert.Equal(t, uint64(math.MaxUint64), hll.Count())
+		// The raw estimate here is ~2.7e19, past both int32 and uint64. The
+		// count must stay inside the int32 the dedup counter stores it in, so
+		// neither the float conversion nor the counter wraps it negative.
+		count := hll.Count()
+		assert.Equal(t, uint64(math.MaxInt32), count)
+		assert.Positive(t, int32(count))
+	})
+
+	t.Run("dedup counter stays positive on an all-max payload", func(t *testing.T) {
+		data := make([]byte, 1<<14)
+		for i := range data {
+			data[i] = 51
+		}
+
+		counter, err := crdt.NewCounter(crdt.IntegerDedupCnt, int32(0), time.InitialTicket)
+		assert.NoError(t, err)
+		assert.NoError(t, counter.RestoreHLL(data))
+		assert.Equal(t, int32(math.MaxInt32), counter.Value())
 	})
 }

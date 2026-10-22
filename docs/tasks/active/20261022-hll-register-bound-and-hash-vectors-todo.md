@@ -30,10 +30,13 @@ Issue: yorkie#2274.
    (`pkg/document/json/object.go`, `array.go`), so an error would brick a
    document written before the bound existed instead of repairing it.
    Keep the length check as it is.
-2. `hll.go`: saturate `Count()` at `math.MaxUint64`. An all-51 payload is
-   in bounds yet drives the estimate to ~2.7e19, where the float →
-   `uint64` conversion is implementation-defined and two replicas could
-   read the same registers as different counts.
+2. `hll.go`: saturate `Count()` at `math.MaxInt32`. An all-51 payload is
+   in bounds yet drives the estimate to ~2.7e19, past both `int32` and
+   `uint64`: the float → `uint64` conversion there is
+   implementation-defined, and anything above `int32` reaches the dedup
+   counter — which stores the count in an `int32` — as a negative value.
+   Saturating inside the estimator bounds both without the counter
+   having to re-check a bound the estimator already knows.
 3. Add the shared vector fixture `test/conformance/hll/vectors.json` and
    the Go runner `test/conformance/hll_test.go`, in the existing
    conformance package so `go test ./...` runs it. It pins, for a list of
@@ -57,13 +60,15 @@ Issue: yorkie#2274.
 - The JS side: yorkie-js-sdk takes a copy of `test/conformance/hll/` the
   way it already takes `tree/`, and its `restore` follows the fixture in
   clamping an out-of-range register instead of returning `false`.
-- Narrowing `Counter.recomputeValue`'s `int32(count)`, which truncates a
-  count beyond `int32` whatever the register bound is.
+- Touching `Counter.recomputeValue`'s `int32(count)`. `Count()`
+  saturating at `math.MaxInt32` means no count it returns truncates
+  there any more, so the conversion is left as it is.
 
 ## Acceptance
 
 - `Restore` accepts 51, clamps anything above it to 51, and still
   rejects a payload of the wrong length.
-- `Count()` saturates rather than wrapping on an all-51 payload.
+- `Count()` saturates on an all-51 payload at a value the dedup counter
+  stores without wrapping it negative.
 - The fixture fails the Go suite if the hashing, the UTF-8 handling, the
   register mapping, or `Count()` moves.

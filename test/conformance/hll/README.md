@@ -33,6 +33,7 @@ runner and only copied out, so regenerating cannot move them.
   "precision": 14,
   "registerCount": 16384,
   "maxRegisterValue": 51,
+  "maxCount": 2147483647,
   "vectors": [ … ],
   "families": [ … ],
   "aggregate": { … },
@@ -43,7 +44,9 @@ runner and only copied out, so regenerating cannot move them.
 - `v`: format version, `1`.
 - `hash`: the hash function `Add` applies to the UTF-8 bytes of its argument.
 - `precision`, `registerCount` (`1 << precision`), `maxRegisterValue`
-  (`64 - precision + 1`): the parameters both SDKs hold.
+  (`64 - precision + 1`), `maxCount` (the largest count `Count()` reports,
+  the `int32` range the dedup counter stores it in): the parameters both
+  SDKs hold.
 
 ### `vectors`
 
@@ -97,6 +100,13 @@ family's strings, in file order.
 `registers` is what pins the hashing; `count` additionally pins the estimator,
 which is floating point and must agree between the SDKs.
 
+`Count()` saturates at `maxCount`, so an SDK must clamp its estimate to that
+bound as well. Clamping registers to `maxRegisterValue` bounds each register
+but not their harmonic mean: a payload of all-`maxRegisterValue` registers is
+accepted and estimates ~2.7e19, which the dedup counter's `int32` value reads
+as a negative count. No reachable cardinality comes near `maxCount`, so the
+bound only ever fires on a forged payload.
+
 ### `restore`
 
 One register payload per entry, and what `Restore` makes of it:
@@ -105,7 +115,8 @@ One register payload per entry, and what `Restore` makes of it:
 |---|---|
 | `id` | name of the case |
 | `length` | length of the payload in bytes |
-| `registers` | optional, register index in decimal → the value held there; every other register is 0 |
+| `fill` | optional, the value every register starts at (absent means 0) |
+| `registers` | optional, register index in decimal → the value held there instead of `fill` |
 | `accept` | whether `Restore` must accept it |
 | `count` | for an accepted payload, the `Count()` it reports after the clamp below (absent means 0) |
 

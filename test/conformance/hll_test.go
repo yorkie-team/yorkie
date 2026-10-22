@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"testing"
@@ -36,12 +37,13 @@ import (
 const (
 	hllVectorsPath = "hll/vectors.json"
 
-	// hllPrecision, hllRegisterCount and hllMaxRegisterValue mirror the
-	// unexported constants of pkg/document/crdt/hll.go. The fixture carries
-	// them so the JS runner holds the same parameters.
+	// hllPrecision, hllRegisterCount, hllMaxRegisterValue and hllMaxCount
+	// mirror the unexported constants of pkg/document/crdt/hll.go. The fixture
+	// carries them so the JS runner holds the same parameters.
 	hllPrecision        = 14
 	hllRegisterCount    = 1 << hllPrecision
 	hllMaxRegisterValue = 64 - hllPrecision + 1
+	hllMaxCount         = math.MaxInt32
 )
 
 // HLLVectors is the dedup-counter hash fixture both SDKs check. Its format is
@@ -52,6 +54,7 @@ type HLLVectors struct {
 	Precision        int              `json:"precision"`
 	RegisterCount    int              `json:"registerCount"`
 	MaxRegisterValue int              `json:"maxRegisterValue"`
+	MaxCount         uint64           `json:"maxCount"`
 	Vectors          []HLLVector      `json:"vectors"`
 	Families         []HLLFamily      `json:"families"`
 	Aggregate        HLLDigest        `json:"aggregate"`
@@ -87,13 +90,15 @@ type HLLDigest struct {
 }
 
 // HLLRestoreCase is a register payload both SDKs must accept or reject alike.
-// Registers maps a register index, in decimal, to the value the payload holds
-// there; every other register is zero. An accepted payload is held to the
-// bound by clamping — every register ends at min(value, maxRegisterValue) —
-// and Count is the cardinality it reports afterwards.
+// Every register starts at Fill, and Registers maps a register index, in
+// decimal, to the value the payload holds there instead. An accepted payload
+// is held to the bound by clamping — every register ends at
+// min(value, maxRegisterValue) — and Count is the cardinality it reports
+// afterwards, itself clamped to maxCount.
 type HLLRestoreCase struct {
 	ID        string         `json:"id"`
 	Length    int            `json:"length"`
+	Fill      int            `json:"fill,omitempty"`
 	Registers map[string]int `json:"registers,omitempty"`
 	Accept    bool           `json:"accept"`
 	Count     uint64         `json:"count,omitempty"`
@@ -154,6 +159,25 @@ var hllRestoreCases = []HLLRestoreCase{
 	},
 	{ID: "reported-200", Length: hllRegisterCount, Registers: map[string]int{"0": 200}, Accept: true, Count: 1},
 	{ID: "max-byte", Length: hllRegisterCount, Registers: map[string]int{"16383": 255}, Accept: true, Count: 1},
+	{
+		// Every register at the bound is in range yet estimates ~2.7e19, past
+		// the int32 the dedup counter stores the count in. Both SDKs report
+		// the saturated count rather than a wrapped one.
+		ID:     "all-max",
+		Length: hllRegisterCount,
+		Fill:   hllMaxRegisterValue,
+		Accept: true,
+		Count:  hllMaxCount,
+	},
+	{
+		// The same payload unclamped: the registers are repaired down to the
+		// bound, and the count still saturates.
+		ID:     "all-byte-max",
+		Length: hllRegisterCount,
+		Fill:   255,
+		Accept: true,
+		Count:  hllMaxCount,
+	},
 	{ID: "empty-payload", Length: 0},
 	{ID: "one-short", Length: hllRegisterCount - 1},
 	{ID: "one-long", Length: hllRegisterCount + 1},
@@ -205,6 +229,7 @@ func buildHLLVectors(t *testing.T) HLLVectors {
 		Precision:        hllPrecision,
 		RegisterCount:    hllRegisterCount,
 		MaxRegisterValue: hllMaxRegisterValue,
+		MaxCount:         hllMaxCount,
 		Restore:          hllRestoreCases,
 	}
 
@@ -275,6 +300,7 @@ func TestHLLVectors(t *testing.T) {
 	assert.Equal(t, want.Precision, got.Precision, "%s: precision", hllVectorsPath)
 	assert.Equal(t, want.RegisterCount, got.RegisterCount, "%s: register count", hllVectorsPath)
 	assert.Equal(t, want.MaxRegisterValue, got.MaxRegisterValue, "%s: max register value", hllVectorsPath)
+	assert.Equal(t, want.MaxCount, got.MaxCount, "%s: max count", hllVectorsPath)
 	assert.Equal(t, want.Vectors, got.Vectors, "%s: the register update of a string moved", hllVectorsPath)
 	assert.Equal(t, want.Families, got.Families, "%s: a generated family's registers moved", hllVectorsPath)
 	assert.Equal(t, want.Aggregate, got.Aggregate, "%s: the aggregate registers moved", hllVectorsPath)
@@ -301,7 +327,12 @@ func TestHLLRestore(t *testing.T) {
 
 	for _, c := range want.Restore {
 		t.Run(c.ID, func(t *testing.T) {
+			require.GreaterOrEqual(t, c.Fill, 0, "%s: fill %d", c.ID, c.Fill)
+			require.LessOrEqual(t, c.Fill, 255, "%s: fill %d", c.ID, c.Fill)
 			data := make([]byte, c.Length)
+			for i := range data {
+				data[i] = byte(c.Fill)
+			}
 			for key, val := range c.Registers {
 				i, err := strconv.Atoi(key)
 				require.NoError(t, err, "%s: register index %q", c.ID, key)

@@ -27,11 +27,14 @@
   in-range payload still sets the dedup counter arbitrarily; that is
   inherent to HLL, since any register value is reachable from some input
   set. What the bound does buy is a register array the estimator can
-  actually produce, and `Count()` saturating at `math.MaxUint64` keeps
-  the conversion out of implementation-defined territory. The remaining
-  `int32(count)` truncation in `Counter.recomputeValue`
-  (`pkg/document/crdt/counter.go:365`) is deterministic but still
-  reports a wrapped value; narrowing it belongs with the counter.
+  actually produce. Bounding the count itself takes a second clamp, and
+  it belongs in the estimator: `Count()` saturates at `math.MaxInt32`,
+  the range its one consumer — `Counter.recomputeValue`, which stores
+  the count in an `int32` — can hold. Saturating at `math.MaxUint64`
+  instead only moved the wrap one frame out: `int32(math.MaxUint64)` is
+  `-1`, so a forged payload turned a dedup counter negative. The rule
+  the second attempt got right is that a value's bound belongs where the
+  value is produced, not where each caller re-derives it.
 - Pinning the clamp needs the registers, not the count: the estimator's
   small-range branch reads only which registers are zero, so a register
   left at 200 reports the same count as one clamped to 51.
@@ -46,5 +49,9 @@
   and separately that the bound does not stop the inflation it was
   motivated by. Resolved by clamping instead of rejecting and by
   saturating `Count()`; the fixture's `above-max`, `reported-200` and
-  `max-byte` cases now pin the clamped registers and count. The `int32`
-  truncation in `counter.go` is left to the counter, outside this diff.
+  `max-byte` cases now pin the clamped registers and count.
+- Round 2 (correctness): saturating at `math.MaxUint64` was found to
+  leave the inflation intact one frame out, since `recomputeValue`'s
+  `int32(count)` reads `math.MaxUint64` as `-1`. Resolved by saturating
+  `Count()` at `math.MaxInt32`, the range its consumer stores, with a
+  unit case asserting the restored dedup counter stays positive.

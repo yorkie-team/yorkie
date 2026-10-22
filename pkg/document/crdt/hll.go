@@ -37,6 +37,18 @@ const (
 	// a larger value cannot come from an HLL, so Restore clamps it to this
 	// bound rather than carrying a register the estimator never produces.
 	hllMaxRegisterValue = 64 - hllPrecision + 1
+
+	// hllMaxCount is the largest count Count reports. Clamping registers to
+	// hllMaxRegisterValue bounds each register but not their harmonic mean: a
+	// payload whose registers are all at that bound is still accepted and
+	// drives the raw estimate to ~2.7e19, past both int32 and uint64. The
+	// dedup counter this estimator backs stores the count in an int32, so an
+	// estimate above that range reaches the counter as a negative value.
+	// Saturating here keeps the stored count monotone in the registers and
+	// identical on every replica, and no reachable cardinality comes near the
+	// bound: filling all 16384 registers to hllMaxRegisterValue would take on
+	// the order of 2^65 distinct values, more than the 64-bit hash space.
+	hllMaxCount = math.MaxInt32
 )
 
 // HLL is a HyperLogLog probabilistic cardinality estimator.
@@ -66,7 +78,9 @@ func (h *HLL) Add(value string) bool {
 	return false
 }
 
-// Count returns the estimated cardinality.
+// Count returns the estimated cardinality, saturating at hllMaxCount so a
+// crafted register payload cannot report a count its consumer stores as a
+// negative value.
 func (h *HLL) Count() uint64 {
 	m := float64(hllRegisterCount)
 	alpha := 0.7213 / (1.0 + 1.079/m)
@@ -87,13 +101,13 @@ func (h *HLL) Count() uint64 {
 		estimate = m * math.Log(m/float64(zeros))
 	}
 
-	// A payload whose registers are all at hllMaxRegisterValue drives the
-	// estimate past what uint64 holds (~2.7e19), where the float-to-integer
-	// conversion is implementation-defined and two replicas on different CPUs
-	// could read the same registers as different counts. Saturate instead.
+	// A crafted payload drives the estimate past what the consumer — and even
+	// uint64 — holds, where the float-to-integer conversion is
+	// implementation-defined and two replicas on different CPUs could read the
+	// same registers as different counts. Saturate instead.
 	rounded := math.Round(estimate)
-	if rounded >= float64(math.MaxUint64) {
-		return math.MaxUint64
+	if rounded >= float64(hllMaxCount) {
+		return hllMaxCount
 	}
 	return uint64(rounded)
 }

@@ -4,6 +4,7 @@
   "precision": 14,
   "registerCount": 16384,
   "maxRegisterValue": 51,
+  "maxCount": 2147483647,
   "vectors": [
     {
       "id": "empty",
@@ -201,6 +202,20 @@
       },
       "accept": true,
       "count": 1
+    },
+    {
+      "id": "all-max",
+      "length": 16384,
+      "fill": 51,
+      "accept": true,
+      "count": 2147483647
+    },
+    {
+      "id": "all-byte-max",
+      "length": 16384,
+      "fill": 255,
+      "accept": true,
+      "count": 2147483647
     },
     {
       "id": "empty-payload",
