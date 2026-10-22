@@ -79,21 +79,33 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 
-	// 01. Create request pack with presence clear change.
+	// 01. Create request pack with presence clear changes.
 	//
-	// The clear must be stamped with the actor the client itself stamps into its
-	// changes — its StableActorID on current SDKs, its per-session ID on older
-	// ones — because applying it runs presences.Delete(actorID) against the key
-	// the client's presence was recorded under. req.Msg.ClientId is the session
-	// ID: it keys the client row, not the client's changes, so using it here
-	// would delete nothing and leave the departed client's presence in the
-	// document and in every snapshot of it (#2290). The same actor keys the
-	// latest-change lookup, so the clear inherits a real lamport and version
-	// vector instead of zero ones.
+	// Applying a clear runs presences.Delete(change.ID().ActorID()), so it only
+	// removes the entry under the actor the client itself stamped into its
+	// changes. The server cannot tell which of the client's two identities that
+	// is: ActivateClient derives a StableActorID for every client row, but the
+	// response carries both it and the per-session ID and the SDKs pick
+	// differently — the JS SDK stamps the stable actor, the Go SDK stamps the
+	// session ID (client.Activate stores ActivateClientResponse.client_id). So
+	// neither ClientInfo field identifies the stamping actor on its own, and
+	// stamping the wrong one deletes nothing: the departed client's presence
+	// stays in the document and in every snapshot of it (#2290).
+	//
+	// Clear both, as ClientInfo.IsOwnActor accepts both on the read side. A
+	// clear stamped with an identity that holds no presence deletes nothing and
+	// reconciles to no event on any replica (InternalDocument.applyChanges), so
+	// the redundant one is inert. The session ID goes first so its change keeps
+	// the clientSeq that a single clear used to take.
+	actorIDs := []time.ActorID{actorID}
 	ownActorID, err := clientInfo.OwnActorID()
 	if err != nil {
 		return nil, err
 	}
+	if ownActorID != actorID {
+		actorIDs = append(actorIDs, ownActorID)
+	}
+
 	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
 	cp := clientInfo.Checkpoint(docID)
 	latestChangeInfo, err := s.backend.DB.FindLatestChangeInfoByActor(
@@ -111,14 +123,31 @@ func (s *clusterServer) DetachDocument(
 	} else if err != nil {
 		return nil, err
 	}
-	changeCtx := change.NewContext(
-		change.NewID(cp.ClientSeq, cp.ServerSeq, latestChangeInfo.Lamport, ownActorID, latestChangeInfo.VersionVector),
-		"",
-		nil,
-	)
-	p := presence.New(changeCtx, presence.NewData())
-	p.Clear()
-	pack := change.NewPack(docKey, cp, []*change.Change{changeCtx.ToChange()}, nil, nil)
+
+	// Each clear takes the next clientSeq: Context.ToChange rebuilds a
+	// presence-only change's ID as prevID.Next(true), so a context built from
+	// clientSeq n emits a change at n+1, and pushPack drops anything at or below
+	// the checkpoint.
+	changes := make([]*change.Change, 0, len(actorIDs))
+	clientSeq := cp.ClientSeq
+	for _, id := range actorIDs {
+		changeCtx := change.NewContext(
+			change.NewID(
+				clientSeq,
+				cp.ServerSeq,
+				latestChangeInfo.Lamport,
+				id,
+				latestChangeInfo.VersionVector,
+			),
+			"",
+			nil,
+		)
+		p := presence.New(changeCtx, presence.NewData())
+		p.Clear()
+		changes = append(changes, changeCtx.ToChange())
+		clientSeq++
+	}
+	pack := change.NewPack(docKey, cp, changes, nil, nil)
 
 	// 02. Push the changePack to the document
 	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
