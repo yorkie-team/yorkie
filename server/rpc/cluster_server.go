@@ -32,6 +32,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -79,19 +80,39 @@ func (s *clusterServer) DetachDocument(
 	}
 
 	// 01. Create request pack with presence clear change.
+	//
+	// The clear must be stamped with the actor the client itself stamps into its
+	// changes — its StableActorID on current SDKs, its per-session ID on older
+	// ones — because applying it runs presences.Delete(actorID) against the key
+	// the client's presence was recorded under. req.Msg.ClientId is the session
+	// ID: it keys the client row, not the client's changes, so using it here
+	// would delete nothing and leave the departed client's presence in the
+	// document and in every snapshot of it (#2290). The same actor keys the
+	// latest-change lookup, so the clear inherits a real lamport and version
+	// vector instead of zero ones.
+	ownActorID, err := clientInfo.OwnActorID()
+	if err != nil {
+		return nil, err
+	}
 	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
 	cp := clientInfo.Checkpoint(docID)
 	latestChangeInfo, err := s.backend.DB.FindLatestChangeInfoByActor(
 		ctx,
 		refKey,
-		types.ID(req.Msg.ClientId),
+		types.IDFromActorID(ownActorID),
 		cp.ServerSeq,
 	)
-	if err != nil {
+	// A client that attached without ever writing a change has no latest change
+	// to inherit clocks from. The backends disagree on how they say so — Mongo
+	// returns a zero-valued ChangeInfo, the memory DB returns ErrChangeNotFound
+	// — so normalize both to the zero value rather than failing the detach.
+	if errors.Is(err, database.ErrChangeNotFound) {
+		latestChangeInfo = &database.ChangeInfo{}
+	} else if err != nil {
 		return nil, err
 	}
 	changeCtx := change.NewContext(
-		change.NewID(cp.ClientSeq, cp.ServerSeq, latestChangeInfo.Lamport, actorID, latestChangeInfo.VersionVector),
+		change.NewID(cp.ClientSeq, cp.ServerSeq, latestChangeInfo.Lamport, ownActorID, latestChangeInfo.VersionVector),
 		"",
 		nil,
 	)

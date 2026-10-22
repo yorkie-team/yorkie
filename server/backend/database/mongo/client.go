@@ -1372,9 +1372,17 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 
 	// NOTE(hackerwins): Clear presence changes of the given client on the
 	// document if the client is no longer attached to the document.
+	//
+	// Drop them under both identities the client may have stamped — the
+	// per-session ID on old SDKs, the StableActorID on current ones — mirroring
+	// ClientInfo.IsOwnActor. Keying only on info.ID left a stable-actor client's
+	// cached presence changes behind (#2290).
 	docKey := types.DocRefKey{ProjectID: info.ProjectID, DocID: docInfo.ID}
 	if prStore, ok := c.presenceCache.Get(docKey); ok && !attached {
 		prStore.RemoveChangesByActor(info.ID)
+		if info.StableActorID != "" && info.StableActorID != info.ID {
+			prStore.RemoveChangesByActor(info.StableActorID)
+		}
 	}
 
 	var updater bson.M
