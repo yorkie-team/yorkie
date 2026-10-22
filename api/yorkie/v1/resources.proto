@@ -229,6 +229,9 @@ message JSONElement {
     TimeTicket moved_at = 3;
     TimeTicket removed_at = 4;
     TimeTicket revived_at = 5;
+    // purged_removals is what the removal ledgers of purged pieces still
+    // said, so an undo that arrives after GC answers as the ledger would.
+    repeated PurgedRemovals purged_removals = 6;
   }
   message Counter {
     ValueType type = 1;
@@ -283,6 +286,27 @@ message TextNode {
   TimeTicket removed_at = 3;
   TextNodeID ins_prev_id = 4;
   map<string, NodeAttr> attributes = 5;
+  // The removal ledger: the deletions that removed this node and the undos
+  // that cancelled some of them. has_ledger is false when the ledger is just
+  // removed_at (the default), which is then not written.
+  bool has_ledger = 6;
+  repeated TimeTicket removals = 7;
+  repeated RemovalCancel removal_cancels = 8;
+}
+
+// RemovalCancel is an undo that cancelled one removal of a node.
+message RemovalCancel {
+  TimeTicket removal = 1;
+  TimeTicket cancelled_at = 2;
+}
+
+// PurgedRemovals is the uncancelled removals of a purged piece
+// [start, end) of the insertion created_at.
+message PurgedRemovals {
+  TimeTicket created_at = 1;
+  int32 start = 2;
+  int32 end = 3;
+  repeated TimeTicket removals = 4;
 }
 
 message TextNodeID {
@@ -482,6 +506,10 @@ message RestoreSpan {
   int32 end = 3;
   string content = 4;
   map<string, string> attributes = 5;
+  // removed_by is the removal this span undoes. Restore cancels exactly that
+  // removal, so a concurrent removal the undo never saw keeps the piece
+  // removed. Absent (older clients): restore clears the tombstone.
+  TimeTicket removed_by = 6;
 }
 
 // RestoreMode selects the identity-preserving path. RESTORE_MODE_UNSPECIFIED

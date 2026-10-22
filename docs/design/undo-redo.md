@@ -269,6 +269,55 @@ Case 6 (overlap_end):       [---remote---]     → adjust end
                         [---undo---]
 ```
 
+#### Removal Ledger
+
+An identity-preserving restore used to clear a node's tombstone outright.
+Two things went wrong once a concurrent deletion was involved:
+
+- The undo revived text a deletion it never saw had removed. From
+  `abcdefgh`, B deletes `d` and undoes it while A deletes `defgh`; A ended
+  with `abcd` and B with `abc`, depending on delivery order.
+- A remote deletion removed every node whose creation it knew, including a
+  node the deleter saw removed and an undo revived on this replica
+  (#2237: d1 `efh`, d2 `eh`).
+
+Each `RGATreeSplitNode` keeps a removal ledger: the deletions that removed it
+while it was live in the deleter's view (`dels`), and the undos that cancelled
+some of them (`cancels`, deletion and cancel ticket). `removedAt` is the
+latest uncancelled deletion, so a node no undo touched looks as before, and
+the ledger is materialized only when a second deletion or a cancel needs it.
+
+- A `RestoreSpan` carries `removed_by`, the deletion it undoes. The restore
+  cancels only that one, so the node stays removed while another deletion
+  holds it. A redo records a new deletion, and the reverse it returns names
+  the redo, so the next undo cancels the redo rather than the original.
+- A remote deletion removes a node only if it was live in the deleter's view:
+  its creation is known and every deletion known to the deleter was cancelled
+  by an undo known to it. A node it saw live but someone else removed records
+  the deletion anyway, so a later undo of the other deletion keeps it removed
+  in every order. A redo (`Retombstone`) applies the same rule with the
+  change's version vector.
+- GC keeps what a purged piece's ledger still said (`PurgedLedger`, keyed by
+  insertion). A restore that finds the piece gone recreates only offsets no
+  other deletion holds, piece by piece along the purged boundaries, the
+  answer and the node partition an unpurged replica has.
+- Snapshots carry the ledgers (`TextNode.has_ledger`, `removals`,
+  `removal_cancels`) and purged ledgers (`JSONElement.Text.purged_removals`,
+  sorted). The default ledger is elided, so a text without undo encodes to
+  the same bytes as before.
+
+A server re-encodes every change pack and drops fields it does not know, so
+an older server would strip `removed_by`: the undoer would cancel one
+deletion and every other replica would revive the span outright. The server
+advertises `restore-removed-by` (`api.CapRestoreRemovedBy`), and the JS SDK
+sends `removed_by` only while the last returned pack carries it. A span
+without it restores as before.
+
+Not covered: an undo after GC still anchors a recreated piece next to the
+following piece of its insertion, which can land after text inserted
+concurrently there; and purged ledgers are kept for the life of the
+document.
+
 ### Tree.Edit Undo/Redo
 
 Tree uses a CRDT tree structure (`CRDTTree`) with identity-based positions
