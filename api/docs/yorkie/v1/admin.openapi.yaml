@@ -2224,25 +2224,18 @@ components:
       type: string
     yorkie.v1.JSONElementSimple:
       additionalProperties: false
-      description: ""
+      description: |-
+        JSONElementSimple is the value an operation carries: the element's identity
+         plus its encoded contents. It has no lifecycle timestamps of its own --
+         2 and 3 were moved_at and removed_at, which nothing ever wrote, because an
+         element reaching a replica inside an operation has neither moved nor been
+         removed yet. The snapshot form, JSONElement, does carry both.
       properties:
         createdAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
           description: ""
           title: created_at
-          type: object
-        movedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
-          additionalProperties: false
-          description: ""
-          title: moved_at
-          type: object
-        removedAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
-          additionalProperties: false
-          description: ""
-          title: removed_at
           type: object
         type:
           $ref: '#/components/schemas/yorkie.v1.ValueType'
@@ -2736,11 +2729,6 @@ components:
           description: ""
           title: content
           type: string
-        createdAtMapByActor:
-          additionalProperties: false
-          description: deprecated
-          title: created_at_map_by_actor
-          type: object
         executedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
@@ -2808,23 +2796,6 @@ components:
           title: value
           type: string
       title: AttributesEntry
-      type: object
-    yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry:
-      additionalProperties: false
-      description: ""
-      properties:
-        key:
-          additionalProperties: false
-          description: ""
-          title: key
-          type: string
-        value:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
-          additionalProperties: false
-          description: ""
-          title: value
-          type: object
-      title: CreatedAtMapByActorEntry
       type: object
     yorkie.v1.Operation.Increase:
       additionalProperties: false
@@ -2959,11 +2930,6 @@ components:
             type: string
           title: attributes_to_remove
           type: array
-        createdAtMapByActor:
-          additionalProperties: false
-          description: deprecated
-          title: created_at_map_by_actor
-          type: object
         executedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
@@ -3006,23 +2972,6 @@ components:
           type: string
       title: AttributesEntry
       type: object
-    yorkie.v1.Operation.Style.CreatedAtMapByActorEntry:
-      additionalProperties: false
-      description: ""
-      properties:
-        key:
-          additionalProperties: false
-          description: ""
-          title: key
-          type: string
-        value:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
-          additionalProperties: false
-          description: ""
-          title: value
-          type: object
-      title: CreatedAtMapByActorEntry
-      type: object
     yorkie.v1.Operation.TreeEdit:
       additionalProperties: false
       description: ""
@@ -3035,11 +2984,6 @@ components:
             type: object
           title: contents
           type: array
-        createdAtMapByActor:
-          additionalProperties: false
-          description: deprecated
-          title: created_at_map_by_actor
-          type: object
         executedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
@@ -3104,23 +3048,6 @@ components:
           type: object
       title: TreeEdit
       type: object
-    yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry:
-      additionalProperties: false
-      description: ""
-      properties:
-        key:
-          additionalProperties: false
-          description: ""
-          title: key
-          type: string
-        value:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
-          additionalProperties: false
-          description: ""
-          title: value
-          type: object
-      title: CreatedAtMapByActorEntry
-      type: object
     yorkie.v1.Operation.TreeStyle:
       additionalProperties: false
       description: ""
@@ -3137,11 +3064,6 @@ components:
             type: string
           title: attributes_to_remove
           type: array
-        createdAtMapByActor:
-          additionalProperties: false
-          description: deprecated
-          title: created_at_map_by_actor
-          type: object
         executedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
@@ -3183,23 +3105,6 @@ components:
           title: value
           type: string
       title: AttributesEntry
-      type: object
-    yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry:
-      additionalProperties: false
-      description: ""
-      properties:
-        key:
-          additionalProperties: false
-          description: ""
-          title: key
-          type: string
-        value:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
-          additionalProperties: false
-          description: ""
-          title: value
-          type: object
-      title: CreatedAtMapByActorEntry
       type: object
     yorkie.v1.Presence:
       additionalProperties: false

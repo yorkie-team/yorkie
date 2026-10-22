@@ -73,12 +73,22 @@ func TestReissueOperations(t *testing.T) {
 	})
 
 	t.Run("rename an actor-keyed map entry", func(t *testing.T) {
-		pbFrom := ToTimeTicket(time.NewTicket(2, 1, from))
-		edit := &api.Operation_Edit{
-			ExecutedAt: ToTimeTicket(time.NewTicket(2, 2, from)),
-			CreatedAtMapByActor: map[string]*api.TimeTicket{
-				from.String(): pbFrom,
+		// The version vector is the only actor-keyed map an operation still
+		// carries, so it stands in for every string-keyed map the walk meets.
+		// It holds both key forms at once here because rekeyMap has to rename
+		// whichever one it finds, not the one the field happens to use.
+		change := &api.Change{
+			Id: &api.ChangeID{
+				VersionVector: &api.VersionVector{Vector: map[string]int64{
+					from.String():       1,
+					from.StringBase64(): 2,
+				}},
 			},
+			Operations: []*api.Operation{{Body: &api.Operation_Edit_{
+				Edit: &api.Operation_Edit{
+					ExecutedAt: ToTimeTicket(time.NewTicket(2, 2, from)),
+				},
+			}}},
 		}
 		r := ticketReissuer{
 			from: from.Bytes(),
@@ -88,11 +98,13 @@ func TestReissueOperations(t *testing.T) {
 				from.StringBase64(): to.StringBase64(),
 			},
 		}
-		require.NoError(t, r.walk(edit.ProtoReflect()))
+		require.NoError(t, r.walk(change.ProtoReflect()))
 
-		assert.NotContains(t, edit.CreatedAtMapByActor, from.String())
-		require.Contains(t, edit.CreatedAtMapByActor, to.String())
-		assert.Equal(t, to.Bytes(), edit.CreatedAtMapByActor[to.String()].ActorId)
-		assert.Equal(t, to.Bytes(), edit.ExecutedAt.ActorId)
+		vector := change.Id.VersionVector.Vector
+		assert.NotContains(t, vector, from.String())
+		assert.NotContains(t, vector, from.StringBase64())
+		assert.Equal(t, int64(1), vector[to.String()])
+		assert.Equal(t, int64(2), vector[to.StringBase64()])
+		assert.Equal(t, to.Bytes(), change.Operations[0].GetEdit().ExecutedAt.ActorId)
 	})
 }

@@ -44,7 +44,9 @@ message ChangePack {
   Checkpoint checkpoint = 2;
   bytes snapshot = 3;
   repeated Change changes = 4;
-  TimeTicket min_synced_ticket = 5; // deprecated
+  // 5 was min_synced_ticket, superseded by version_vector.
+  reserved 5;
+  reserved "min_synced_ticket";
   bool is_removed = 6;
   VersionVector version_vector = 7;
   int64 epoch = 8;
@@ -110,7 +112,10 @@ message Operation {
     TimeTicket parent_created_at = 1;
     TextNodePos from = 2;
     TextNodePos to = 3;
-    map<string, TimeTicket> created_at_map_by_actor = 4; // deprecated
+    // 4 was created_at_map_by_actor, superseded by the change's version
+    // vector.
+    reserved 4;
+    reserved "created_at_map_by_actor";
     string content = 5;
     TimeTicket executed_at = 6;
     map<string, string> attributes = 7;
@@ -129,7 +134,10 @@ message Operation {
     TextNodePos to = 3;
     map<string, string> attributes = 4;
     TimeTicket executed_at = 5;
-    map<string, TimeTicket> created_at_map_by_actor = 6; // deprecated
+    // 6 was created_at_map_by_actor, superseded by the change's version
+    // vector.
+    reserved 6;
+    reserved "created_at_map_by_actor";
     repeated string attributes_to_remove = 7;
   }
   message Increase {
@@ -142,7 +150,10 @@ message Operation {
     TimeTicket parent_created_at = 1;
     TreePos from = 2;
     TreePos to = 3;
-    map<string, TimeTicket> created_at_map_by_actor = 4; // deprecated
+    // 4 was created_at_map_by_actor, superseded by the change's version
+    // vector.
+    reserved 4;
+    reserved "created_at_map_by_actor";
     repeated TreeNodes contents = 5;
     int32 split_level = 7;
     TimeTicket executed_at = 6;
@@ -162,7 +173,10 @@ message Operation {
     map<string, string> attributes = 4;
     TimeTicket executed_at = 5;
     repeated string attributes_to_remove = 6;
-    map<string, TimeTicket> created_at_map_by_actor = 7; // deprecated
+    // 7 was created_at_map_by_actor, superseded by the change's version
+    // vector.
+    reserved 7;
+    reserved "created_at_map_by_actor";
   }
   message ArraySet {
     TimeTicket parent_created_at = 1;
@@ -186,10 +200,15 @@ message Operation {
   }
 }
 
+// JSONElementSimple is the value an operation carries: the element's identity
+// plus its encoded contents. It has no lifecycle timestamps of its own --
+// 2 and 3 were moved_at and removed_at, which nothing ever wrote, because an
+// element reaching a replica inside an operation has neither moved nor been
+// removed yet. The snapshot form, JSONElement, does carry both.
 message JSONElementSimple {
   TimeTicket created_at = 1;
-  TimeTicket moved_at = 2;
-  TimeTicket removed_at = 3;
+  reserved 2, 3;
+  reserved "moved_at", "removed_at";
   ValueType type = 4;
   bytes value = 5;
 }
@@ -263,8 +282,14 @@ message RHTNode {
   JSONElement element = 2;
 }
 
+// RGANode is one position slot of an array, serialized as a flat repeated
+// field by its container rather than as a linked list -- 1 was a recursive
+// `next` that nothing ever wrote, and whose presence obliged a server to be
+// ready to parse a chain as deep as the array is long when it unmarshals
+// element bytes.
 message RGANode {
-  RGANode next = 1;
+  reserved 1;
+  reserved "next";
   JSONElement element = 2;
   TimeTicket position_created_at = 3;
   TimeTicket position_moved_at = 4;
