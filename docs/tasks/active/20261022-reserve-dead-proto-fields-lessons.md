@@ -12,6 +12,33 @@ is `[deprecated = true]`, which keeps the number declared and still propagates
 a `// Deprecated:` marker into generated code. Check the configured category
 before planning a reservation — the two read as interchangeable and are not.
 
+Measured rather than inferred, with the buf the CI job pins (1.50.0, see
+`.github/workflows/ci.yml`), against this branch's own base:
+
+```text
+$ buf config ls-breaking-rules --version v1 | grep FIELD_NO_DELETE
+FIELD_NO_DELETE                         FILE, PACKAGE
+FIELD_NO_DELETE_UNLESS_NAME_RESERVED    WIRE_JSON
+FIELD_NO_DELETE_UNLESS_NUMBER_RESERVED  WIRE_JSON, WIRE
+
+# with ChangePack.min_synced_ticket = 5 replaced by `reserved 5;` plus
+# `reserved "min_synced_ticket";`
+$ buf breaking api --against '.git#ref=origin/main,subdir=api'
+api/yorkie/v1/resources.proto:42:1:Previously present field "5" with name
+"min_synced_ticket" on message "ChangePack" was deleted.   # exit 100
+
+# with `[deprecated = true]`, as shipped
+$ buf breaking api --against '.git#ref=origin/main,subdir=api'   # exit 0
+```
+
+Reserving by number *and* name — the pair protobuf itself treats as the
+compatible retirement — is what trips the rule; `buf breaking` cannot stay
+green and the numbers be reserved at the same time while `FILE` is the
+configured category. Making both true needs `api/buf.yaml` to move to
+`WIRE_JSON` or to list `FIELD_NO_DELETE` under `breaking.except`, which
+relaxes the repository's compatibility gate for every future proto change,
+not just these seven slots.
+
 ## What the audit got right, and the one thing it understated
 
 The issue listed `JSONElementSimple.moved_at`/`removed_at` as unproduced. That
