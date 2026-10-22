@@ -2224,7 +2224,12 @@ components:
       type: string
     yorkie.v1.JSONElementSimple:
       additionalProperties: false
-      description: ""
+      description: |-
+        JSONElementSimple is the value an operation carries: the element's identity
+         plus its encoded contents. Its moved_at and removed_at carry no lifecycle
+         state -- nothing ever wrote them, because an element reaching a replica
+         inside an operation has neither moved nor been removed yet. The snapshot
+         form, JSONElement, is where both are actually populated.
       properties:
         createdAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
@@ -2235,7 +2240,9 @@ components:
         movedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
-          description: ""
+          description: |-
+            Never written. See the message comment; deprecated rather than reserved
+             for the reason given on ChangePack.min_synced_ticket.
           title: moved_at
           type: object
         removedAt:
@@ -2738,7 +2745,10 @@ components:
           type: string
         createdAtMapByActor:
           additionalProperties: false
-          description: deprecated
+          description: |-
+            created_at_map_by_actor is superseded by the change's version vector and
+             is written by no SDK. See ChangePack.min_synced_ticket for why it is
+             deprecated rather than reserved.
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -2961,7 +2971,7 @@ components:
           type: array
         createdAtMapByActor:
           additionalProperties: false
-          description: deprecated
+          description: Deprecated for the same reason as Edit.created_at_map_by_actor.
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -3037,7 +3047,7 @@ components:
           type: array
         createdAtMapByActor:
           additionalProperties: false
-          description: deprecated
+          description: Deprecated for the same reason as Edit.created_at_map_by_actor.
           title: created_at_map_by_actor
           type: object
         executedAt:
@@ -3139,7 +3149,7 @@ components:
           type: array
         createdAtMapByActor:
           additionalProperties: false
-          description: deprecated
+          description: Deprecated for the same reason as Edit.created_at_map_by_actor.
           title: created_at_map_by_actor
           type: object
         executedAt:
