@@ -58,8 +58,8 @@ type Config struct {
 	// we are using server as single-tenant mode, this should be set to true.
 	//
 	// It applies only to the client public key on YorkieService. It never
-	// waives the project secret key on AdminService, where a request without
-	// one is rejected whatever this says.
+	// waives the secret key of an API-Key credential on AdminService, where an
+	// empty key is rejected whatever this says.
 	UseDefaultProject bool `yaml:"UseDefaultProject"`
 
 	// SnapshotDisableGC is whether to disable garbage collection of snapshots.

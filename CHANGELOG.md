@@ -9,9 +9,10 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Removed
 
-- Remove the MCP server. `/mcp/` is no longer served and answers 404, so
-  assistants configured against it must be removed from their client. The
-  Admin API still serves document and schema reads.
+- Remove the MCP server. `/mcp/` is no longer served: a request to it gets
+  404 (a CORS preflight still gets 204), so assistants configured against it
+  must be removed from their client. The Admin API still serves document and
+  schema reads.
 
 ## [v0.7.25] - 2026-10-13
 
