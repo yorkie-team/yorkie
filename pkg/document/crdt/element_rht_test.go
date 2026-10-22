@@ -273,6 +273,29 @@ func TestElementRHTSetLoser(t *testing.T) {
 		assert.Empty(t, rht.Elements())
 	})
 
+	t.Run("re-applying the same set keeps the index on the live copy", func(t *testing.T) {
+		// The same Set applied twice: the second copy carries the createdAt
+		// of the first and ties its positionedAt, so it loses. The index must
+		// keep naming the copy the key answers with, not the duplicate.
+		rht := crdt.NewElementRHT()
+		executedAt := time.NewTicket(4, 0, actorA)
+
+		first, err := crdt.NewPrimitive("v", executedAt)
+		assert.NoError(t, err)
+		rht.SetWithExecutedAt("k", first, executedAt)
+
+		duplicate, err := crdt.NewPrimitive("v", executedAt)
+		assert.NoError(t, err)
+		removed, indexed := rht.SetWithExecutedAt("k", duplicate, executedAt)
+		assert.Nil(t, removed)
+		assert.False(t, indexed, "a duplicate of a live member was taken in")
+
+		assert.Len(t, rht.Nodes(), 1)
+		assert.Same(t, first, rht.Nodes()[0].Element())
+		assert.Same(t, first, rht.Get("k"))
+		assert.Nil(t, first.RemovedAt())
+	})
+
 	t.Run("keeps the removedAt of a loser that arrives removed", func(t *testing.T) {
 		// Replays a decoded object whose members are not in positionedAt
 		// order: the tombstone of an older value arrives after the live
@@ -291,5 +314,88 @@ func TestElementRHTSetLoser(t *testing.T) {
 		assert.Equal(t, removedAt.Key(), tombstone.RemovedAt().Key(),
 			"the tombstone's removedAt was bumped to the occupant's ticket")
 		assert.Nil(t, live.RemovedAt())
+	})
+
+	t.Run("refuses a loser whose slot a tombstone still answering the key holds", func(t *testing.T) {
+		// A restore wins k, a Delete of k tombstones it in place -- it stays
+		// the key's occupant -- and a concurrent older restore of the same
+		// createdAt arrives late and loses. Taking the slot would orphan the
+		// occupant from nodeMapByCreatedAt, which is the only way GC, purge
+		// and DeepCopy reach it.
+		rht := crdt.NewElementRHT()
+		createdAt := time.NewTicket(2, 0, actorA)
+
+		occupant, err := crdt.NewPrimitive("restored", createdAt)
+		assert.NoError(t, err)
+		rht.SetWithExecutedAt("k", occupant, time.NewTicket(9, 0, actorA))
+		assert.NotNil(t, rht.Delete("k", time.NewTicket(10, 0, actorA)))
+
+		loser, err := crdt.NewPrimitive("restored", createdAt)
+		assert.NoError(t, err)
+		removed, indexed := rht.SetWithExecutedAt("k", loser, time.NewTicket(5, 0, actorB))
+		assert.Nil(t, removed)
+		assert.False(t, indexed, "the loser took the tombstone's slot")
+
+		assert.Len(t, rht.Nodes(), 1)
+		assert.Same(t, occupant, rht.Nodes()[0].Element())
+		clone, err := rht.DeepCopy()
+		assert.NoError(t, err)
+		assert.Len(t, clone.Nodes(), 1)
+	})
+
+	t.Run("takes over the slot of a tombstone displaced from its key", func(t *testing.T) {
+		// A restore wins k and a newer Set evicts it, so the restore is a
+		// tombstone no key answers with. A concurrent older restore of the
+		// same createdAt arrives late and loses: it takes the slot, tombstoned
+		// at the occupant's ticket, which is where a replica that saw it win
+		// first and then evicted ends.
+		rht := crdt.NewElementRHT()
+		createdAt := time.NewTicket(2, 0, actorA)
+
+		newer, err := crdt.NewPrimitive("restored", createdAt)
+		assert.NoError(t, err)
+		rht.SetWithExecutedAt("k", newer, time.NewTicket(9, 0, actorA))
+		occupant, err := crdt.NewPrimitive("x", time.NewTicket(10, 0, actorB))
+		assert.NoError(t, err)
+		removed, _ := rht.Set("k", occupant)
+		assert.Same(t, newer, removed)
+
+		older, err := crdt.NewPrimitive("restored", createdAt)
+		assert.NoError(t, err)
+		removed, indexed := rht.SetWithExecutedAt("k", older, time.NewTicket(5, 0, actorB))
+		assert.Nil(t, removed)
+		assert.True(t, indexed, "a loser was refused a slot only a displaced tombstone held")
+		assert.Equal(t, occupant.CreatedAt().Key(), older.RemovedAt().Key())
+
+		assert.Len(t, rht.Nodes(), 2)
+		assert.Same(t, occupant, rht.Get("k"))
+		clone, err := rht.DeepCopy()
+		assert.NoError(t, err)
+		assert.Len(t, clone.Nodes(), 2)
+	})
+
+	t.Run("a winning restore evicts an older copy of itself from both maps", func(t *testing.T) {
+		// Two concurrent undos restore the same value under one createdAt,
+		// and the newer one arrives second. It wins k and the createdAt slot,
+		// as in the JS SDK; the older copy it evicts is left in neither map,
+		// and operations.Set.Execute releases it instead of booking it as
+		// garbage under a createdAt the winner now answers to.
+		rht := crdt.NewElementRHT()
+		createdAt := time.NewTicket(2, 0, actorA)
+
+		older, err := crdt.NewPrimitive("restored", createdAt)
+		assert.NoError(t, err)
+		rht.SetWithExecutedAt("k", older, time.NewTicket(5, 0, actorA))
+
+		newer, err := crdt.NewPrimitive("restored", createdAt)
+		assert.NoError(t, err)
+		removed, indexed := rht.SetWithExecutedAt("k", newer, time.NewTicket(9, 0, actorB))
+		assert.True(t, indexed)
+		assert.Same(t, older, removed)
+		assert.NotNil(t, older.RemovedAt())
+
+		assert.Len(t, rht.Nodes(), 1)
+		assert.Same(t, newer, rht.Nodes()[0].Element())
+		assert.Same(t, newer, rht.Get("k"))
 	})
 }
