@@ -31,6 +31,24 @@ const (
 
 	// hllRegisterCount is the number of registers.
 	hllRegisterCount = 1 << hllPrecision
+
+	// hllMaxRegisterValue is the largest value Add can write into a register:
+	// the sentinel bit in Add caps rho at 64-hllPrecision+1. A payload holding
+	// a larger value cannot come from an HLL, so Restore clamps it to this
+	// bound rather than carrying a register the estimator never produces.
+	hllMaxRegisterValue = 64 - hllPrecision + 1
+
+	// hllMaxCount is the largest count Count reports. Clamping registers to
+	// hllMaxRegisterValue bounds each register but not their harmonic mean: a
+	// payload whose registers are all at that bound is still accepted and
+	// drives the raw estimate to ~2.7e19, past both int32 and uint64. The
+	// dedup counter this estimator backs stores the count in an int32, so an
+	// estimate above that range reaches the counter as a negative value.
+	// Saturating here keeps the stored count monotone in the registers and
+	// identical on every replica, and no reachable cardinality comes near the
+	// bound: filling all 16384 registers to hllMaxRegisterValue would take on
+	// the order of 2^65 distinct values, more than the 64-bit hash space.
+	hllMaxCount = math.MaxInt32
 )
 
 // HLL is a HyperLogLog probabilistic cardinality estimator.
@@ -60,7 +78,9 @@ func (h *HLL) Add(value string) bool {
 	return false
 }
 
-// Count returns the estimated cardinality.
+// Count returns the estimated cardinality, saturating at hllMaxCount so a
+// crafted register payload cannot report a count its consumer stores as a
+// negative value.
 func (h *HLL) Count() uint64 {
 	m := float64(hllRegisterCount)
 	alpha := 0.7213 / (1.0 + 1.079/m)
@@ -81,7 +101,15 @@ func (h *HLL) Count() uint64 {
 		estimate = m * math.Log(m/float64(zeros))
 	}
 
-	return uint64(math.Round(estimate))
+	// A crafted payload drives the estimate past what the consumer — and even
+	// uint64 — holds, where the float-to-integer conversion is
+	// implementation-defined and two replicas on different CPUs could read the
+	// same registers as different counts. Saturate instead.
+	rounded := math.Round(estimate)
+	if rounded >= float64(hllMaxCount) {
+		return hllMaxCount
+	}
+	return uint64(rounded)
 }
 
 // Merge performs max-merge with another HLL. This operation is commutative,
@@ -99,12 +127,22 @@ func (h *HLL) Bytes() []byte {
 	return h.registers[:]
 }
 
-// Restore loads register data from bytes. Returns an error if the data
-// length does not match the expected register count.
+// Restore loads register data from bytes. Returns an error if the data length
+// does not match the expected register count.
+//
+// A register above hllMaxRegisterValue cannot come from Add, so it is clamped
+// to that bound instead of rejected: Restore also decodes snapshots and
+// operations already in storage, which a client may have written before the
+// bound existed, and rejecting those would make the document unloadable rather
+// than repair it. Clamping is deterministic and idempotent, so replicas that
+// restore the same payload still converge, and re-serializing the counter
+// writes the repaired registers back.
 func (h *HLL) Restore(data []byte) error {
 	if len(data) != hllRegisterCount {
 		return fmt.Errorf("invalid HLL register payload: got %d bytes, want %d", len(data), hllRegisterCount)
 	}
-	copy(h.registers[:], data)
+	for i, val := range data {
+		h.registers[i] = min(val, hllMaxRegisterValue)
+	}
 	return nil
 }
