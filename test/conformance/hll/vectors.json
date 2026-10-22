@@ -1,0 +1,218 @@
+{
+  "v": 1,
+  "hash": "xxhash64",
+  "precision": 14,
+  "registerCount": 16384,
+  "maxRegisterValue": 51,
+  "vectors": [
+    {
+      "id": "empty",
+      "value": "",
+      "utf8": "",
+      "hash": "ef46db3751d8e999",
+      "index": 15313,
+      "rho": 1
+    },
+    {
+      "id": "ascii-1",
+      "value": "a",
+      "utf8": "61",
+      "hash": "d24ec4f1a98c6e5b",
+      "index": 13459,
+      "rho": 1
+    },
+    {
+      "id": "actor-24",
+      "value": "000000000000000000000001",
+      "utf8": "303030303030303030303030303030303030303030303031",
+      "hash": "8c078b2d00660a85",
+      "index": 8961,
+      "rho": 1
+    },
+    {
+      "id": "len-31",
+      "value": "0123456789abcdef0123456789abcde",
+      "utf8": "30313233343536373839616263646566303132333435363738396162636465",
+      "hash": "1fdfc63febacfde7",
+      "index": 2039,
+      "rho": 1
+    },
+    {
+      "id": "len-32",
+      "value": "0123456789abcdef0123456789abcdef",
+      "utf8": "3031323334353637383961626364656630313233343536373839616263646566",
+      "hash": "642a94958e71e6c5",
+      "index": 6410,
+      "rho": 1
+    },
+    {
+      "id": "len-33",
+      "value": "0123456789abcdef0123456789abcdef0",
+      "utf8": "303132333435363738396162636465663031323334353637383961626364656630",
+      "hash": "e87684f08d6d0816",
+      "index": 14877,
+      "rho": 1
+    },
+    {
+      "id": "len-100",
+      "value": "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789",
+      "utf8": "30313233343536373839303132333435363738393031323334353637383930313233343536373839303132333435363738393031323334353637383930313233343536373839303132333435363738393031323334353637383930313233343536373839",
+      "hash": "f80e7b96315afffa",
+      "index": 15875,
+      "rho": 1
+    },
+    {
+      "id": "hangul",
+      "value": "한글 사용자",
+      "utf8": "ed959ceab88020ec82acec9aa9ec9e90",
+      "hash": "4e00a97a76421eb4",
+      "index": 4992,
+      "rho": 3
+    },
+    {
+      "id": "emoji",
+      "value": "🙂🚀",
+      "utf8": "f09f9982f09f9a80",
+      "hash": "0a4105eedd370f1a",
+      "index": 656,
+      "rho": 2
+    },
+    {
+      "id": "emoji-zwj",
+      "value": "👨‍👩‍👧",
+      "utf8": "f09f91a8e2808df09f91a9e2808df09f91a7",
+      "hash": "bc12ad7abecb179f",
+      "index": 12036,
+      "rho": 1
+    },
+    {
+      "id": "combining",
+      "value": "é",
+      "utf8": "65cc81",
+      "hash": "739d9d425d7073ce",
+      "index": 7399,
+      "rho": 2
+    },
+    {
+      "id": "precomposed",
+      "value": "é",
+      "utf8": "c3a9",
+      "hash": "17d757dfb8b46f78",
+      "index": 1525,
+      "rho": 1
+    },
+    {
+      "id": "nul",
+      "value": "a\u0000b",
+      "utf8": "610062",
+      "hash": "b51b25d68d1338c1",
+      "index": 11590,
+      "rho": 1
+    }
+  ],
+  "families": [
+    {
+      "id": "user",
+      "prefix": "user-",
+      "utf8": "757365722d",
+      "count": 10000,
+      "digest": {
+        "count": 10021,
+        "nonZero": 7496,
+        "registers": "f2184ce90426e29b6eb3444b436c1f71d4a159f85ca1d6a04ec0f39983a4e128"
+      }
+    },
+    {
+      "id": "hangul",
+      "prefix": "사용자-",
+      "utf8": "ec82acec9aa9ec9e902d",
+      "count": 5000,
+      "digest": {
+        "count": 4978,
+        "nonZero": 4293,
+        "registers": "122d12f6c74025c3ed9f1df3d21367b51e2df74bde3bec668b26308947087d3d"
+      }
+    },
+    {
+      "id": "emoji",
+      "prefix": "🙂-",
+      "utf8": "f09f99822d",
+      "count": 5000,
+      "digest": {
+        "count": 4980,
+        "nonZero": 4294,
+        "registers": "1cb5fe4a5b14b77233da18325dcc213a40ecce4046b14253f823e639c2b0c98b"
+      }
+    }
+  ],
+  "aggregate": {
+    "count": 20155,
+    "nonZero": 11596,
+    "registers": "c47dfac23e59337ee209ec005e158320f587e25095950fa55c1824d2ae93fa68"
+  },
+  "restore": [
+    {
+      "id": "zeros",
+      "length": 16384,
+      "accept": true
+    },
+    {
+      "id": "one-register",
+      "length": 16384,
+      "registers": {
+        "0": 1
+      },
+      "accept": true,
+      "count": 1
+    },
+    {
+      "id": "max-register",
+      "length": 16384,
+      "registers": {
+        "0": 51,
+        "16383": 51
+      },
+      "accept": true,
+      "count": 2
+    },
+    {
+      "id": "above-max",
+      "length": 16384,
+      "registers": {
+        "0": 52
+      },
+      "accept": false
+    },
+    {
+      "id": "reported-200",
+      "length": 16384,
+      "registers": {
+        "0": 200
+      },
+      "accept": false
+    },
+    {
+      "id": "max-byte",
+      "length": 16384,
+      "registers": {
+        "16383": 255
+      },
+      "accept": false
+    },
+    {
+      "id": "empty-payload",
+      "length": 0,
+      "accept": false
+    },
+    {
+      "id": "one-short",
+      "length": 16383,
+      "accept": false
+    },
+    {
+      "id": "one-long",
+      "length": 16385,
+      "accept": false
+    }
+  ]
+}

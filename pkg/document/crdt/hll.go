@@ -31,6 +31,12 @@ const (
 
 	// hllRegisterCount is the number of registers.
 	hllRegisterCount = 1 << hllPrecision
+
+	// hllMaxRegisterValue is the largest value Add can write into a register:
+	// the sentinel bit in Add caps rho at 64-hllPrecision+1. A payload holding
+	// a larger value cannot come from an HLL, and the JS SDK rejects it, so
+	// Restore rejects it too.
+	hllMaxRegisterValue = 64 - hllPrecision + 1
 )
 
 // HLL is a HyperLogLog probabilistic cardinality estimator.
@@ -100,10 +106,19 @@ func (h *HLL) Bytes() []byte {
 }
 
 // Restore loads register data from bytes. Returns an error if the data
-// length does not match the expected register count.
+// length does not match the expected register count, or if a register holds
+// a value Add could not have written.
 func (h *HLL) Restore(data []byte) error {
 	if len(data) != hllRegisterCount {
 		return fmt.Errorf("invalid HLL register payload: got %d bytes, want %d", len(data), hllRegisterCount)
+	}
+	for i, val := range data {
+		if val > hllMaxRegisterValue {
+			return fmt.Errorf(
+				"invalid HLL register payload: register %d is %d, want at most %d",
+				i, val, hllMaxRegisterValue,
+			)
+		}
 	}
 	copy(h.registers[:], data)
 	return nil
