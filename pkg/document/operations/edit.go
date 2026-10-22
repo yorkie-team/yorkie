@@ -319,13 +319,26 @@ func (e *Edit) toReverseOperation(
 		var insertedSpans []*crdt.RestoreSpan
 		if len(e.content) > 0 {
 			// The insertion is one run born under this edit's own ticket, so
-			// it is addressed as [0, len) of that identity. Its attributes
-			// are irrelevant: re-removing a run never reads them.
+			// it is addressed as [0, len) of that identity.
+			//
+			// The attributes travel with it. Re-removing a run never reads
+			// them, but this same span is what the redo restores once the
+			// direction flips, and a replica that collected the tombstone in
+			// between has to recreate the node from the span alone. Without
+			// them that replica revives bare text while one still holding the
+			// tombstone un-tombstones the styled node, and the two diverge
+			// (#2273). Left nil when the edit carried none, matching how
+			// Text.Edit fills removedSpans for a plain-text node.
+			var attrs map[string]string
+			if len(e.attributes) > 0 {
+				attrs = e.attributes
+			}
 			insertedSpans = []*crdt.RestoreSpan{{
-				CreatedAt: e.executedAt,
-				Start:     0,
-				End:       len(utf16.Encode([]rune(e.content))),
-				Content:   e.content,
+				CreatedAt:  e.executedAt,
+				Start:      0,
+				End:        len(utf16.Encode([]rune(e.content))),
+				Content:    e.content,
+				Attributes: attrs,
 			}}
 		}
 
