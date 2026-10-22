@@ -72,40 +72,65 @@ func TestReissueOperations(t *testing.T) {
 		assert.Equal(t, to, got.CreatedAt().ActorID())
 	})
 
-	t.Run("rename an actor-keyed map entry", func(t *testing.T) {
-		// The version vector is the only actor-keyed map a change populates --
-		// created_at_map_by_actor is deprecated and never written -- so it
-		// stands in for every string-keyed map the walk meets. It holds both
-		// key forms at once here because rekeyMap has to rename whichever one
-		// it finds, not the one the field happens to use.
-		change := &api.Change{
-			Id: &api.ChangeID{
-				VersionVector: &api.VersionVector{Vector: map[string]int64{
-					from.String():       1,
-					from.StringBase64(): 2,
-				}},
-			},
-			Operations: []*api.Operation{{Body: &api.Operation_Edit_{
-				Edit: &api.Operation_Edit{
-					ExecutedAt: ToTimeTicket(time.NewTicket(2, 2, from)),
-				},
-			}}},
-		}
-		r := ticketReissuer{
-			from: from.Bytes(),
-			to:   to.Bytes(),
-			fromKeys: map[string]string{
-				from.String():       to.String(),
-				from.StringBase64(): to.StringBase64(),
-			},
-		}
-		require.NoError(t, r.walk(change.ProtoReflect()))
+	r := ticketReissuer{
+		from: from.Bytes(),
+		to:   to.Bytes(),
+		fromKeys: map[string]string{
+			from.String():       to.String(),
+			from.StringBase64(): to.StringBase64(),
+		},
+	}
 
-		vector := change.Id.VersionVector.Vector
-		assert.NotContains(t, vector, from.String())
-		assert.NotContains(t, vector, from.StringBase64())
-		assert.Equal(t, int64(1), vector[to.String()])
-		assert.Equal(t, int64(2), vector[to.StringBase64()])
-		assert.Equal(t, to.Bytes(), change.Operations[0].GetEdit().ExecutedAt.ActorId)
+	t.Run("rename an actor-keyed map entry", func(t *testing.T) {
+		// VersionVector.vector is the protocol's only actor-keyed map, and no
+		// operation carries one -- created_at_map_by_actor is deprecated and
+		// never written -- so this walks the message directly rather than
+		// through an operation, which is what ReissueOperations hands the
+		// walk. It holds both key forms at once because rekeyMap has to
+		// rename whichever one it finds, not the one the field happens to use.
+		vector := &api.VersionVector{Vector: map[string]int64{
+			from.String():       1,
+			from.StringBase64(): 2,
+		}}
+		require.NoError(t, r.walk(vector.ProtoReflect()))
+
+		assert.NotContains(t, vector.Vector, from.String())
+		assert.NotContains(t, vector.Vector, from.StringBase64())
+		assert.Equal(t, int64(1), vector.Vector[to.String()])
+		assert.Equal(t, int64(2), vector.Vector[to.StringBase64()])
+	})
+
+	t.Run("re-issue the tickets inside a message-valued map", func(t *testing.T) {
+		// TreeNode.attributes is map<string, NodeAttr>, the live
+		// message-valued map an operation does carry: the walk has to descend
+		// into each value to reach the NodeAttr's own ticket, and to keep
+		// doing so for an entry rekeyMap has just renamed.
+		pbOp := &api.Operation{Body: &api.Operation_TreeEdit_{
+			TreeEdit: &api.Operation_TreeEdit{
+				ExecutedAt: ToTimeTicket(time.NewTicket(2, 2, from)),
+				Contents: []*api.TreeNodes{{Content: []*api.TreeNode{{
+					Attributes: map[string]*api.NodeAttr{
+						"bold": {
+							Value:     "true",
+							UpdatedAt: ToTimeTicket(time.NewTicket(2, 3, from)),
+						},
+						from.String(): {
+							Value:     "x",
+							UpdatedAt: ToTimeTicket(time.NewTicket(2, 4, from)),
+						},
+					},
+				}}}},
+			},
+		}}
+		require.NoError(t, r.walk(pbOp.ProtoReflect()))
+
+		treeEdit := pbOp.GetTreeEdit()
+		assert.Equal(t, to.Bytes(), treeEdit.ExecutedAt.ActorId)
+
+		attrs := treeEdit.Contents[0].Content[0].Attributes
+		assert.Equal(t, to.Bytes(), attrs["bold"].UpdatedAt.ActorId)
+		assert.NotContains(t, attrs, from.String())
+		require.Contains(t, attrs, to.String())
+		assert.Equal(t, to.Bytes(), attrs[to.String()].UpdatedAt.ActorId)
 	})
 }

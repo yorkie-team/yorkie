@@ -53,8 +53,12 @@ reads. Only the *simple* element carried by an operation has neither.
       via `make tools`; a clean-tree `make proto` was verified to produce no
       diff first, so the regeneration is attributable to this change alone).
 - [x] Retarget the one test that used a now-deprecated field as a fixture
-      (`api/converter/reissue_test.go`) at a field the walk actually meets, so
+      (`api/converter/reissue_test.go`) at fields the walk actually meets, so
       no test depends on a field the schema tells callers not to use.
+      `created_at_map_by_actor` covered two branches at once, so it takes two
+      fixtures to replace: `VersionVector.vector` for the rekey, and
+      `TreeNode.attributes` (`map<string, NodeAttr>`, carried by a real
+      `Operation.TreeEdit`) for the descent into message-valued map values.
 - [x] Correct the `Element.MovedAt deprecation` section of
       `docs/design/array-move-convergence.md`.
 - [x] `make lint` and targeted `go test ./api/... ./pkg/document/...`.
