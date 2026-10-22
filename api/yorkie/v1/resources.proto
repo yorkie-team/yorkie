@@ -44,9 +44,11 @@ message ChangePack {
   Checkpoint checkpoint = 2;
   bytes snapshot = 3;
   repeated Change changes = 4;
-  // 5 was min_synced_ticket, superseded by version_vector.
-  reserved 5;
-  reserved "min_synced_ticket";
+  // min_synced_ticket is superseded by version_vector and is written by no
+  // SDK and read by no server. It stays declared rather than `reserved`
+  // because the repository gates proto changes on buf's FILE category, whose
+  // FIELD_NO_DELETE fires on a removed number even when it is reserved.
+  TimeTicket min_synced_ticket = 5 [deprecated = true];
   bool is_removed = 6;
   VersionVector version_vector = 7;
   int64 epoch = 8;
@@ -112,10 +114,10 @@ message Operation {
     TimeTicket parent_created_at = 1;
     TextNodePos from = 2;
     TextNodePos to = 3;
-    // 4 was created_at_map_by_actor, superseded by the change's version
-    // vector.
-    reserved 4;
-    reserved "created_at_map_by_actor";
+    // created_at_map_by_actor is superseded by the change's version vector and
+    // is written by no SDK. See ChangePack.min_synced_ticket for why it is
+    // deprecated rather than reserved.
+    map<string, TimeTicket> created_at_map_by_actor = 4 [deprecated = true];
     string content = 5;
     TimeTicket executed_at = 6;
     map<string, string> attributes = 7;
@@ -134,10 +136,8 @@ message Operation {
     TextNodePos to = 3;
     map<string, string> attributes = 4;
     TimeTicket executed_at = 5;
-    // 6 was created_at_map_by_actor, superseded by the change's version
-    // vector.
-    reserved 6;
-    reserved "created_at_map_by_actor";
+    // Deprecated for the same reason as Edit.created_at_map_by_actor.
+    map<string, TimeTicket> created_at_map_by_actor = 6 [deprecated = true];
     repeated string attributes_to_remove = 7;
   }
   message Increase {
@@ -150,10 +150,8 @@ message Operation {
     TimeTicket parent_created_at = 1;
     TreePos from = 2;
     TreePos to = 3;
-    // 4 was created_at_map_by_actor, superseded by the change's version
-    // vector.
-    reserved 4;
-    reserved "created_at_map_by_actor";
+    // Deprecated for the same reason as Edit.created_at_map_by_actor.
+    map<string, TimeTicket> created_at_map_by_actor = 4 [deprecated = true];
     repeated TreeNodes contents = 5;
     int32 split_level = 7;
     TimeTicket executed_at = 6;
@@ -173,10 +171,8 @@ message Operation {
     map<string, string> attributes = 4;
     TimeTicket executed_at = 5;
     repeated string attributes_to_remove = 6;
-    // 7 was created_at_map_by_actor, superseded by the change's version
-    // vector.
-    reserved 7;
-    reserved "created_at_map_by_actor";
+    // Deprecated for the same reason as Edit.created_at_map_by_actor.
+    map<string, TimeTicket> created_at_map_by_actor = 7 [deprecated = true];
   }
   message ArraySet {
     TimeTicket parent_created_at = 1;
@@ -201,14 +197,16 @@ message Operation {
 }
 
 // JSONElementSimple is the value an operation carries: the element's identity
-// plus its encoded contents. It has no lifecycle timestamps of its own --
-// 2 and 3 were moved_at and removed_at, which nothing ever wrote, because an
-// element reaching a replica inside an operation has neither moved nor been
-// removed yet. The snapshot form, JSONElement, does carry both.
+// plus its encoded contents. Its moved_at and removed_at carry no lifecycle
+// state -- nothing ever wrote them, because an element reaching a replica
+// inside an operation has neither moved nor been removed yet. The snapshot
+// form, JSONElement, is where both are actually populated.
 message JSONElementSimple {
   TimeTicket created_at = 1;
-  reserved 2, 3;
-  reserved "moved_at", "removed_at";
+  // Never written. See the message comment; deprecated rather than reserved
+  // for the reason given on ChangePack.min_synced_ticket.
+  TimeTicket moved_at = 2 [deprecated = true];
+  TimeTicket removed_at = 3 [deprecated = true];
   ValueType type = 4;
   bytes value = 5;
 }
@@ -283,13 +281,15 @@ message RHTNode {
 }
 
 // RGANode is one position slot of an array, serialized as a flat repeated
-// field by its container rather than as a linked list -- 1 was a recursive
-// `next` that nothing ever wrote, and whose presence obliged a server to be
-// ready to parse a chain as deep as the array is long when it unmarshals
-// element bytes.
+// field by its container rather than as a linked list. The recursive `next`
+// is a leftover of the linked-list form: nothing writes it, and because it
+// stays declared, a server unmarshalling element bytes is still obliged to be
+// ready to parse a chain as deep as the array is long.
 message RGANode {
-  reserved 1;
-  reserved "next";
+  // Never written; the container's flat `nodes` carries the order instead.
+  // Deprecated rather than reserved for the reason given on
+  // ChangePack.min_synced_ticket.
+  RGANode next = 1 [deprecated = true];
   JSONElement element = 2;
   TimeTicket position_created_at = 3;
   TimeTicket position_moved_at = 4;

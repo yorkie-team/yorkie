@@ -73,10 +73,11 @@ func TestReissueOperations(t *testing.T) {
 	})
 
 	t.Run("rename an actor-keyed map entry", func(t *testing.T) {
-		// The version vector is the only actor-keyed map an operation still
-		// carries, so it stands in for every string-keyed map the walk meets.
-		// It holds both key forms at once here because rekeyMap has to rename
-		// whichever one it finds, not the one the field happens to use.
+		// The version vector is the only actor-keyed map a change populates --
+		// created_at_map_by_actor is deprecated and never written -- so it
+		// stands in for every string-keyed map the walk meets. It holds both
+		// key forms at once here because rekeyMap has to rename whichever one
+		// it finds, not the one the field happens to use.
 		change := &api.Change{
 			Id: &api.ChangeID{
 				VersionVector: &api.VersionVector{Vector: map[string]int64{

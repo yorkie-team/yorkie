@@ -1,4 +1,16 @@
-# Lessons — Reserve dead proto fields
+# Lessons — Deprecate dead proto fields
+
+## `reserved` is not a compatible way to retire a field under buf's FILE category
+
+The obvious encoding of "nothing uses this number any more" is `reserved N;`,
+and protobuf itself treats that as wire-compatible. buf's `FILE` breaking
+category does not: `FIELD_NO_DELETE` compares field sets and fires on a missing
+number whether or not it was reserved. The reserved-aware rule is
+`FIELD_NO_DELETE_UNLESS_NUMBER_RESERVED`, and only `WIRE` and `WIRE_JSON` use
+it. So under `breaking.use: [FILE]` the strongest in-file statement available
+is `[deprecated = true]`, which keeps the number declared and still propagates
+a `// Deprecated:` marker into generated code. Check the configured category
+before planning a reservation — the two read as interchangeable and are not.
 
 ## What the audit got right, and the one thing it understated
 
@@ -6,7 +18,7 @@ The issue listed `JSONElementSimple.moved_at`/`removed_at` as unproduced. That
 is true, but the *similar-looking* fields on `JSONElement` are load-bearing:
 `to_bytes.go:129` writes `obj.MovedAt()` and `from_bytes.go:186` reads it back
 into `SetMovedAt`, which is exactly what `crdt.PositionedAt` later consults.
-Reserving by name on the wrong message would have broken snapshot rebuild. The
+Marking the wrong message's fields would have mislabelled snapshot rebuild. The
 two messages are only distinguishable by reading which one each converter path
 constructs — grepping for `MovedAt` alone cannot tell them apart.
 
@@ -15,7 +27,9 @@ constructs — grepping for `MovedAt` alone cannot tell them apart.
 `Operation.Edit.created_at_map_by_actor` was the only
 `map<string, TimeTicket>` left in the schema, and
 `api/converter/reissue_test.go` used it as the fixture for
-`ticketReissuer.rekeyMap`. Reserving it took the fixture with it. The useful
+`ticketReissuer.rekeyMap`. Deprecating it makes that fixture a deprecated-API
+use in the repository's own tests, which is the thing the marker exists to
+discourage. The useful
 observation is that `rekeyMap` fires on *every* string-keyed map, so the
 behaviour under test was never specific to that field: retargeting the test at
 `VersionVector.vector` — which is the map the reissuer actually meets in
@@ -26,7 +40,7 @@ message — covers strictly more than the original did.
 
 `make proto` was run once on a clean tree before any edit. It produced no diff,
 which is what makes the post-edit regeneration safe to attribute entirely to
-the `reserved` statements. Without that baseline, a plugin-version drift would
+the field markers. Without that baseline, a plugin-version drift would
 be indistinguishable from the intended change inside a 4k-line generated diff.
 
 ## Self review

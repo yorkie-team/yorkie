@@ -140,7 +140,7 @@ The two lifecycles are independent: a value can move between slots (position cha
 Current state across the codebase:
 - **Array**: `ElementEntry.posMovedAt` is the source of truth, and `RGANode.position_moved_at` carries it on the wire. `Element.SetMovedAt` is still called on array members for snapshot serialization, but for an array member `Element.MovedAt()` is read by nothing.
 - **Object (ElementRHT)**: `MovedAt()` **is read, and it decides convergence.** `ElementRHT.Set` calls `SetMovedAt(v.CreatedAt())` on the LWW winner, and `crdt.PositionedAt` (`pkg/document/crdt/element_rht.go`) then reads it back as the tie-break anchor for the key: once a node has been re-placed at a key with a ticket newer than its own `createdAt` — which is exactly what undo/redo does when it restores an element under its original, older `createdAt` — every later comparison must use that newer ticket. Snapshot rebuild depends on the same value: `fromObject` in `api/converter/from_bytes.go` replays `PositionedAt`, not `createdAt`, so the ticket has to survive the round trip.
-- **Serialization**: `MovedAt()` is read by `to_bytes.go` and written to `JSONElement.moved_at`, the *snapshot* element. `JSONElementSimple.moved_at`, on the operation-carried element, was never written and is now `reserved`.
+- **Serialization**: `MovedAt()` is read by `to_bytes.go` and written to `JSONElement.moved_at`, the *snapshot* element. `JSONElementSimple.moved_at`, on the operation-carried element, was never written and is now marked `[deprecated = true]`.
 
 So the old plan to stop calling `SetMovedAt` in `ElementRHT.Set` **must not be followed**. Dropping it would leave `PositionedAt` falling back to `createdAt` for a restored key, and a later write with a ticket between the two would win on a replica that had seen the restore and lose on one that had not — a silent divergence, not a cleanup.
 
@@ -158,7 +158,7 @@ Any future attempt to retire the Object half needs a replacement register for th
 
 ```protobuf
 message RGANode {
-  reserved 1; // was `RGANode next`, never written
+  RGANode next = 1 [deprecated = true]; // leftover linked list, never written
   JSONElement element = 2;
   TimeTicket position_created_at = 3;
   TimeTicket position_moved_at = 4;

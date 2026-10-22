@@ -340,6 +340,16 @@ components:
           description: ""
           title: is_removed
           type: boolean
+        minSyncedTicket:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: |-
+            min_synced_ticket is superseded by version_vector and is written by no
+             SDK and read by no server. It stays declared rather than `reserved`
+             because the repository gates proto changes on buf's FILE category, whose
+             FIELD_NO_DELETE fires on a removed number even when it is reserved.
+          title: min_synced_ticket
+          type: object
         snapshot:
           additionalProperties: false
           description: ""
@@ -891,16 +901,30 @@ components:
       additionalProperties: false
       description: |-
         JSONElementSimple is the value an operation carries: the element's identity
-         plus its encoded contents. It has no lifecycle timestamps of its own --
-         2 and 3 were moved_at and removed_at, which nothing ever wrote, because an
-         element reaching a replica inside an operation has neither moved nor been
-         removed yet. The snapshot form, JSONElement, does carry both.
+         plus its encoded contents. Its moved_at and removed_at carry no lifecycle
+         state -- nothing ever wrote them, because an element reaching a replica
+         inside an operation has neither moved nor been removed yet. The snapshot
+         form, JSONElement, is where both are actually populated.
       properties:
         createdAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
           description: ""
           title: created_at
+          type: object
+        movedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: |-
+            Never written. See the message comment; deprecated rather than reserved
+             for the reason given on ChangePack.min_synced_ticket.
+          title: moved_at
+          type: object
+        removedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: removed_at
           type: object
         type:
           $ref: '#/components/schemas/yorkie.v1.ValueType'
@@ -1142,6 +1166,14 @@ components:
           description: ""
           title: content
           type: string
+        createdAtMapByActor:
+          additionalProperties: false
+          description: |-
+            created_at_map_by_actor is superseded by the change's version vector and
+             is written by no SDK. See ChangePack.min_synced_ticket for why it is
+             deprecated rather than reserved.
+          title: created_at_map_by_actor
+          type: object
         executedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
@@ -1209,6 +1241,23 @@ components:
           title: value
           type: string
       title: AttributesEntry
+      type: object
+    yorkie.v1.Operation.Edit.CreatedAtMapByActorEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: value
+          type: object
+      title: CreatedAtMapByActorEntry
       type: object
     yorkie.v1.Operation.Increase:
       additionalProperties: false
@@ -1343,6 +1392,11 @@ components:
             type: string
           title: attributes_to_remove
           type: array
+        createdAtMapByActor:
+          additionalProperties: false
+          description: Deprecated for the same reason as Edit.created_at_map_by_actor.
+          title: created_at_map_by_actor
+          type: object
         executedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
@@ -1385,6 +1439,23 @@ components:
           type: string
       title: AttributesEntry
       type: object
+    yorkie.v1.Operation.Style.CreatedAtMapByActorEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: value
+          type: object
+      title: CreatedAtMapByActorEntry
+      type: object
     yorkie.v1.Operation.TreeEdit:
       additionalProperties: false
       description: ""
@@ -1397,6 +1468,11 @@ components:
             type: object
           title: contents
           type: array
+        createdAtMapByActor:
+          additionalProperties: false
+          description: Deprecated for the same reason as Edit.created_at_map_by_actor.
+          title: created_at_map_by_actor
+          type: object
         executedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
@@ -1461,6 +1537,23 @@ components:
           type: object
       title: TreeEdit
       type: object
+    yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: value
+          type: object
+      title: CreatedAtMapByActorEntry
+      type: object
     yorkie.v1.Operation.TreeStyle:
       additionalProperties: false
       description: ""
@@ -1477,6 +1570,11 @@ components:
             type: string
           title: attributes_to_remove
           type: array
+        createdAtMapByActor:
+          additionalProperties: false
+          description: Deprecated for the same reason as Edit.created_at_map_by_actor.
+          title: created_at_map_by_actor
+          type: object
         executedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
@@ -1518,6 +1616,23 @@ components:
           title: value
           type: string
       title: AttributesEntry
+      type: object
+    yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntry:
+      additionalProperties: false
+      description: ""
+      properties:
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: value
+          type: object
+      title: CreatedAtMapByActorEntry
       type: object
     yorkie.v1.Presence:
       additionalProperties: false
@@ -1753,16 +1868,25 @@ components:
       additionalProperties: false
       description: |-
         RGANode is one position slot of an array, serialized as a flat repeated
-         field by its container rather than as a linked list -- 1 was a recursive
-         `next` that nothing ever wrote, and whose presence obliged a server to be
-         ready to parse a chain as deep as the array is long when it unmarshals
-         element bytes.
+         field by its container rather than as a linked list. The recursive `next`
+         is a leftover of the linked-list form: nothing writes it, and because it
+         stays declared, a server unmarshalling element bytes is still obliged to be
+         ready to parse a chain as deep as the array is long.
       properties:
         element:
           $ref: '#/components/schemas/yorkie.v1.JSONElement'
           additionalProperties: false
           description: ""
           title: element
+          type: object
+        next:
+          $ref: '#/components/schemas/yorkie.v1.RGANode'
+          additionalProperties: false
+          description: |-
+            Never written; the container's flat `nodes` carries the order instead.
+             Deprecated rather than reserved for the reason given on
+             ChangePack.min_synced_ticket.
+          title: next
           type: object
         positionCreatedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
