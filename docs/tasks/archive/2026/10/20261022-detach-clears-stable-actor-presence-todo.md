@@ -30,26 +30,37 @@ Two side effects of the same mismatch:
 
 ## Plan
 
+As shipped, after three review rounds:
+
 1. `server/rpc/cluster_server.go` `DetachDocument`: keep the session ID for
    looking up the client row (that is its key), and write one clear change per
-   identity the client may have stamped — the session ID and, when it differs,
-   `clientInfo.OwnActorID()`. A clear under an identity that holds no presence
-   deletes nothing and reconciles to no event, so the redundant one is inert.
-   The session ID goes first, keeping the clientSeq a single clear took.
-2. Tolerate `database.ErrChangeNotFound` from `FindLatestChangeInfoByActor`:
-   the memory DB returns it where Mongo returns a zero `ChangeInfo`, and a
-   client that attached without writing a change has no latest change under
-   either identity. Treat it as "no prior change" rather than failing the
-   detach.
-3. `server/backend/database/mongo/client.go`
-   `UpdateClientInfoAfterPushPull`: drop cached presence changes under both
-   identities the client may have stamped, mirroring `ClientInfo.IsOwnActor`.
-4. Tests:
-   - unit: `ChangeStore.RemoveChangesByActor` already covered.
-   - integration, one subtest per identity: a Go client attaches with a
-     presence, deactivates without detaching, and neither the peer nor a client
-     attaching afterwards sees leftover presence; and the same over raw RPC for
-     a presence put under the stable actor, which the Go client never stamps.
+   identity the client may have stamped — the session ID always, and
+   `clientInfo.OwnActorID()` when it differs. A clear under an identity that
+   holds no presence deletes nothing and reconciles to no event, so the
+   redundant one is inert. The session ID goes first, keeping the clientSeq a
+   single clear took.
+2. Skip the stable-actor clear while another session of the same client key is
+   still attached to the document (`hasAttachedSibling`): the stable actor is
+   derived from (project, client key), so those sessions share one presence
+   entry.
+3. Drop the `FindLatestChangeInfoByActor` lookup. `Context.ToChange` discards
+   the lamport and version vector of every presence-only change, so its result
+   never reached the stored change, and the memory backend turned a miss into
+   a failed deactivation.
+4. Keep the presence-cache prune in `UpdateClientInfoAfterPushPull` on the
+   session ID. Pruning the stable actor too was tried and reverted: it would
+   drop a sibling session's cached changes.
+5. Tests:
+   - unit: `TestRedundantPresenceClear` (`pkg/document`) — a clear pair as the
+     server writes it publishes exactly one unwatched event, in either order.
+   - integration: `TestDeactivateClearsPresence`, one subtest per identity and
+     one for a still-attached sibling session.
+6. Record the new site in `docs/design/offline-resumable-attach.md` Seam 2.
+
+## Follow-up
+
+- #2294 — the sibling guard does not see a session that is still attaching,
+  so its shared stable-actor presence can still be cleared.
 
 ## Non-goals
 

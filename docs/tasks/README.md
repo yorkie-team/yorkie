@@ -1,5 +1,5 @@
 ---
-updated: 2026-10-22
+updated: 2026-10-23
 ---
 
 # Tasks Index
@@ -20,7 +20,11 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Deprecate dead proto fields and correct the MovedAt deprecation plan (2026-10-22) | [20261022-reserve-dead-proto-fields-todo.md](./active/20261022-reserve-dead-proto-fields-todo.md) | [20261022-reserve-dead-proto-fields-lessons.md](./active/20261022-reserve-dead-proto-fields-lessons.md) |
 | Remove the MCP server (2026-10-22) | [20261022-remove-mcp-server-todo.md](./active/20261022-remove-mcp-server-todo.md) | [20261022-remove-mcp-server-lessons.md](./active/20261022-remove-mcp-server-lessons.md) |
+| Redo after GC drops the attributes of re-inserted text (2026-10-22) | [20261022-redo-drops-reinserted-text-attributes-todo.md](./active/20261022-redo-drops-reinserted-text-attributes-todo.md) | [20261022-redo-drops-reinserted-text-attributes-lessons.md](./active/20261022-redo-drops-reinserted-text-attributes-lessons.md) |
+| Go presence values are not JSON-encoded, so JS peers fail to decode them (2026-10-22) | [20261022-presence-json-value-encoding-todo.md](./active/20261022-presence-json-value-encoding-todo.md) | [20261022-presence-json-value-encoding-lessons.md](./active/20261022-presence-json-value-encoding-lessons.md) |
+| Dedup counter HLL: bound restored registers, pin the hash across SDKs (2026-10-22) | [20261022-hll-register-bound-and-hash-vectors-todo.md](./active/20261022-hll-register-bound-and-hash-vectors-todo.md) | [20261022-hll-register-bound-and-hash-vectors-lessons.md](./active/20261022-hll-register-bound-and-hash-vectors-lessons.md) |
 | A peer's Tree undo leaves pending undo entries on stale indices (2026-10-13) | [20261013-remote-identity-undo-reconcile-todo.md](./active/20261013-remote-identity-undo-reconcile-todo.md) | [20261013-remote-identity-undo-reconcile-lessons.md](./active/20261013-remote-identity-undo-reconcile-lessons.md) |
 | Merge-moved children sit in arrival order (2026-09-24) | [20260924-merge-moved-child-order-todo.md](./active/20260924-merge-moved-child-order-todo.md) | - |
 | Install the `@claude` command surface, in four phases (2026-09-22) | [20260922-agent-command-verbs-todo.md](./active/20260922-agent-command-verbs-todo.md) | [20260922-agent-command-verbs-lessons.md](./active/20260922-agent-command-verbs-lessons.md) |
@@ -35,5 +39,5 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 ## Archive
 
-- Archived task count: 99
+- Archived task count: 100
 - Archive index: [archive/README.md](./archive/README.md)

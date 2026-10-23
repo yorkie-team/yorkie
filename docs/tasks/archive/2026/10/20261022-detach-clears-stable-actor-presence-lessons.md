@@ -33,10 +33,8 @@
   the ID as `prevID.Next(true)`, which carries only clientSeq and actor and
   drops lamport and the version vector. So whatever
   `FindLatestChangeInfoByActor` returns is discarded before the change is
-  stored; both clears therefore share one lookup. It is kept because the memory
-  backend turns a miss into an error (above) and because the presence-only
-  branch is not a contract — the fix that matters is the actor stamped into the
-  change ID.
+  stored. The lookup was kept at first and removed in a later round (below) —
+  the fix that matters is the actor stamped into the change ID.
 - `pushPack` drops a change whose `clientSeq <= cpBeforePush.ClientSeq`, and
   `DetachDocument` builds its context from `cp.ClientSeq`. It survives only
   because `ToChange`'s presence-only branch bumps the clientSeq by one. Worth
@@ -93,4 +91,9 @@
   attach/detach-exclusive document lock (`yorkie_server.AttachDocument` takes
   `DocAttachmentKey` only under an attachment limit, a `RemoveOnDetach` project
   or a schema rebind, so it is not a lock this handler can rely on). Both are
-  follow-up work; `hasAttachedSibling` carries the same note.
+  follow-up work, tracked as #2294; `hasAttachedSibling` carries the same note.
+- Maintainer handoff: the loop stopped after three fix rounds. The remaining
+  blocking findings were settled by hand — the "redundant clear is inert"
+  claim is pinned by `TestRedundantPresenceClear` in `pkg/document` (a
+  deterministic unit test, not a watch-stream timing test), and the attaching
+  blind spot went to #2294.
