@@ -214,6 +214,23 @@ type viewEntry struct {
 	scope   string
 }
 
+// ZeroLevelKey is the reserved attribute that places a marker between two
+// whole depths (JS `ZeroLevelKey`): the marker given to a virtual node
+// squeezed in below the marker it was opened for. Its depth is the next whole
+// depth. The model never shows it.
+const ZeroLevelKey = "zt.level"
+
+// levelOf returns where a marker sits in the written-depth space: the level
+// it carries, or its depth (JS `levelOf`).
+func levelOf(m *viewMarker) float64 {
+	if raw, ok := m.attrs.get(ZeroLevelKey); ok {
+		if v, err := strconv.ParseFloat(raw, 64); err == nil {
+			return v
+		}
+	}
+	return float64(max(1, m.depth))
+}
+
 // zeroIDString is the JS SDK's `RGATreeSplitNodeID.toIDString` (token ids
 // are compared with the scope strings clients wrote).
 func zeroIDString(createdAt *time.Ticket, offset int) string {
@@ -288,7 +305,7 @@ func parseJSONString(raw string) (string, bool) {
 }
 
 type dealiasOpen struct {
-	depth int
+	depth float64
 	typ   string
 	seen  map[string]bool
 	attrs *omap[string]
@@ -304,7 +321,7 @@ func dealias(entries []viewEntry, schema *ZeroSchema) []viewEntry {
 	firstRuns := map[string][]int{}
 	shown := map[string]bool{}
 	open := []dealiasOpen{{depth: 0, typ: schema.RootType, seen: map[string]bool{}}}
-	hideDepth := math.MaxInt
+	hideDepth := math.Inf(1)
 	var into []int
 	isFirst := false
 	j := 0
@@ -313,14 +330,14 @@ func dealias(entries []viewEntry, schema *ZeroSchema) []viewEntry {
 		if entry.scope != "" && !shown[entry.scope] {
 			continue
 		}
-		if entry.marker != nil && entry.marker.depth <= hideDepth {
-			hideDepth = math.MaxInt
+		if entry.marker != nil && levelOf(entry.marker) <= hideDepth {
+			hideDepth = math.Inf(1)
 		}
-		if hideDepth != math.MaxInt {
+		if !math.IsInf(hideDepth, 1) {
 			continue
 		}
 		if m := entry.marker; m != nil {
-			depth := m.depth
+			depth := levelOf(m)
 			for len(open) > 1 && open[len(open)-1].depth >= depth {
 				open = open[:len(open)-1]
 			}
@@ -578,7 +595,7 @@ func buildView(entries []viewEntry, schema *ZeroSchema) *zNode {
 	for i := range entries {
 		entry := entries[i]
 		if m := entry.marker; m != nil {
-			depth := max(1, m.depth)
+			depth := levelOf(m)
 			current := top()
 			if i > 0 && m.boundary != "" {
 				if prev := entries[i-1]; prev.marker != nil && prev.marker.boundary == m.boundary &&
@@ -590,13 +607,13 @@ func buildView(entries []viewEntry, schema *ZeroSchema) *zNode {
 					continue
 				}
 			}
-			for top().level >= float64(depth) ||
-				(top().anchor == float64(depth) && !holds(top().typ, m.typ, 5)) {
+			for top().level >= depth ||
+				(top().anchor == depth && !holds(top().typ, m.typ, 5)) {
 				closeNode(i)
 			}
-			settle(m.typ, i, float64(depth))
+			settle(m.typ, i, depth)
 			node := openNode(m.typ, top().depth+1, i, m.attrs, entry.id)
-			node.level = float64(depth)
+			node.level = depth
 			node.group = append([]string{entry.id}, entry.aliases...)
 			node.registers = m.registers
 			if col, ok := m.attrs.get("zt.col"); ok {

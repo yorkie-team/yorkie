@@ -19,6 +19,8 @@ package crdt
 import (
 	"bytes"
 	"fmt"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,21 +48,25 @@ func listSchema() *ZeroSchema {
 	}
 }
 
-// tokens builds live view entries: "<type:depth" opens a marker, any other
-// string is characters.
+// tokens builds live view entries: "<type depth key=value ..." opens a
+// marker with those attributes, any other string is characters.
 func tokens(parts ...string) []viewEntry {
 	var entries []viewEntry
 	for _, p := range parts {
 		if p[0] == '<' {
-			var typ string
-			var depth int
-			_, err := fmt.Sscanf(p[1:], "%s %d", &typ, &depth)
+			fields := strings.Fields(p[1:])
+			depth, err := strconv.Atoi(fields[1])
 			if err != nil {
 				panic(err)
 			}
+			attrs := newOmap[string]()
+			for _, kv := range fields[2:] {
+				k, v, _ := strings.Cut(kv, "=")
+				attrs.set(k, v)
+			}
 			entries = append(entries, viewEntry{
 				id:     fmt.Sprintf("m%d", len(entries)),
-				marker: &viewMarker{typ: typ, depth: depth, attrs: newOmap[string]()},
+				marker: &viewMarker{typ: fields[0], depth: depth, attrs: attrs},
 			})
 			continue
 		}
@@ -140,6 +146,24 @@ func TestZeroTreeVirtualParents(t *testing.T) {
 			node("bullet_list",
 				node("list_item", node("paragraph", text("cd"))),
 				node("list_item", node("paragraph", text("P")), node("paragraph", hardBreak)),
+			),
+		)), got)
+	})
+
+	t.Run("a marker between two depths holds the wrapped marker", func(t *testing.T) {
+		// the paragraph a client gave an attribute: written between the list
+		// (depth 1) and the break (depth 2); the level never shows in the model
+		got := modelOf(tokens(
+			"<bullet_list 1", "<list_item 2", "<paragraph 3", "<inline-text 4", "cd",
+			`<paragraph 2 zt.level=1.6666666666666667 attribute.align="center"`,
+			"<hard_break 2",
+		), schema)
+		para := node("paragraph", hardBreak)
+		para["attribute"] = map[string]any{"align": "center"}
+		assert.Equal(t, jsonOf(node("content",
+			node("bullet_list",
+				node("list_item", node("paragraph", text("cd"))),
+				node("list_item", para),
 			),
 		)), got)
 	})
