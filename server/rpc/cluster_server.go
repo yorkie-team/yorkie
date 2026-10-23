@@ -95,50 +95,49 @@ func (s *clusterServer) DetachDocument(
 	// Clear both, as ClientInfo.IsOwnActor accepts both on the read side. A
 	// clear stamped with an identity that holds no presence deletes nothing and
 	// reconciles to no event on any replica (InternalDocument.applyChanges), so
-	// the redundant one is inert. The session ID goes first so its change keeps
-	// the clientSeq that a single clear used to take.
+	// a redundant one is inert. The session ID is this row's alone, so its clear
+	// is always safe; it goes first so its change keeps the clientSeq that a
+	// single clear used to take.
+	//
+	// The stable actor is not this row's alone: it is
+	// DeriveActorID(project_id, client_key), which every session of one client
+	// key shares by design (docs/design/offline-resumable-attach.md), and so
+	// they share the single presence entry keyed under it. Clearing it while a
+	// sibling session is still attached to this document would delete presence
+	// that session still owns, so that clear is skipped while one remains.
+	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
 	actorIDs := []time.ActorID{actorID}
 	ownActorID, err := clientInfo.OwnActorID()
 	if err != nil {
 		return nil, err
 	}
 	if ownActorID != actorID {
-		actorIDs = append(actorIDs, ownActorID)
+		shared, err := s.hasAttachedSibling(ctx, refKey, clientInfo)
+		if err != nil {
+			return nil, err
+		}
+		if !shared {
+			actorIDs = append(actorIDs, ownActorID)
+		}
 	}
 
-	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	// The clears carry no clocks, and there is nothing to inherit from the
+	// client's latest change: Context.ToChange rebuilds a presence-only change's
+	// ID as prevID.Next(true), which keeps the actor and the clientSeq and drops
+	// the lamport and the version vector (change/id.go). Every SDK-emitted
+	// presence change is stamped the same way, and a presence change that did
+	// carry a vector would put a liveness entry back under an actor that is
+	// leaving.
+	//
+	// Each clear takes the next clientSeq: a context built from clientSeq n
+	// emits a change at n+1, and pushPack drops anything at or below the
+	// checkpoint.
 	cp := clientInfo.Checkpoint(docID)
-	latestChangeInfo, err := s.backend.DB.FindLatestChangeInfoByActor(
-		ctx,
-		refKey,
-		types.IDFromActorID(ownActorID),
-		cp.ServerSeq,
-	)
-	// A client that attached without ever writing a change has no latest change
-	// to inherit clocks from. The backends disagree on how they say so — Mongo
-	// returns a zero-valued ChangeInfo, the memory DB returns ErrChangeNotFound
-	// — so normalize both to the zero value rather than failing the detach.
-	if errors.Is(err, database.ErrChangeNotFound) {
-		latestChangeInfo = &database.ChangeInfo{}
-	} else if err != nil {
-		return nil, err
-	}
-
-	// Each clear takes the next clientSeq: Context.ToChange rebuilds a
-	// presence-only change's ID as prevID.Next(true), so a context built from
-	// clientSeq n emits a change at n+1, and pushPack drops anything at or below
-	// the checkpoint.
 	changes := make([]*change.Change, 0, len(actorIDs))
 	clientSeq := cp.ClientSeq
 	for _, id := range actorIDs {
 		changeCtx := change.NewContext(
-			change.NewID(
-				clientSeq,
-				cp.ServerSeq,
-				latestChangeInfo.Lamport,
-				id,
-				latestChangeInfo.VersionVector,
-			),
+			change.NewID(clientSeq, cp.ServerSeq, time.InitialLamport, id, nil),
 			"",
 			nil,
 		)
@@ -199,6 +198,37 @@ func (s *clusterServer) DetachDocument(
 	// once. A future caller that detaches a single document through this
 	// handler must broadcast the invalidation itself.
 	return connect.NewResponse(&api.ClusterServiceDetachDocumentResponse{}), nil
+}
+
+// hasAttachedSibling reports whether another session of the same client key is
+// still attached to the given document, i.e. whether another activated client
+// row holds the same StableActorID. Because that actor is derived from
+// (project, client key) alone, such a row keys its presence under the very
+// actor a detach of this row would otherwise clear.
+//
+// Rows written before StableActorID existed leave it empty; an empty value is
+// no identity and never matches, mirroring ClientInfo.IsOwnActor.
+func (s *clusterServer) hasAttachedSibling(
+	ctx context.Context,
+	refKey types.DocRefKey,
+	clientInfo *database.ClientInfo,
+) (bool, error) {
+	if clientInfo.StableActorID == "" {
+		return false, nil
+	}
+
+	infos, err := s.backend.DB.FindAttachedClientInfosByRefKey(ctx, refKey)
+	if err != nil {
+		return false, err
+	}
+
+	for _, info := range infos {
+		if info.ID != clientInfo.ID && info.StableActorID == clientInfo.StableActorID {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // CompactDocument unnecessary data from the document and its metadata to reduce

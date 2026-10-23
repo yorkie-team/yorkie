@@ -60,3 +60,23 @@
   the same mistaken premise about which actor a client stamps. The second
   integration subtest, which drives the stable-actor identity over raw RPC,
   exists so the symmetric mistake fails locally next time.
+- Review round (panel): the stable actor is `DeriveActorID(project_id,
+  client_key)`, so every session of one client key resolves the same actor and
+  the sessions share one presence entry keyed under it. An unconditional
+  stable-actor clear on a per-session detach therefore deletes presence a live
+  sibling session still owns, and de-onlines it on every peer. The clear is now
+  gated on `FindAttachedClientInfosByRefKey`: it is skipped while another
+  activated row attached to the same document carries the same
+  `StableActorID`. The session-ID clear needs no gate — that identity is the
+  row's alone.
+- The same sharing made the `presenceCache` prune by `StableActorID` unsafe:
+  `ChangeStore.RemoveChangesByActor` deletes from a range the store still
+  counts as fetched, so a sibling's presence changes would be dropped and never
+  refetched. The prune is an optimization — it keeps Clear changes, so the
+  replayed state is cleared either way — so it stays keyed on the session ID.
+- `FindLatestChangeInfoByActor` is gone from `DetachDocument`. Its result was
+  discarded by `ToChange`'s presence-only branch (noted above), so the lookup
+  bought a DB round-trip and a backend-disagreement workaround for no effect on
+  the stored change. Giving a presence-only clear real clocks would need
+  `pkg/document/change`, and would write a version-vector liveness entry back
+  under an actor that is leaving.

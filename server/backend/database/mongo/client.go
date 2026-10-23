@@ -1373,16 +1373,17 @@ func (c *Client) UpdateClientInfoAfterPushPull(
 	// NOTE(hackerwins): Clear presence changes of the given client on the
 	// document if the client is no longer attached to the document.
 	//
-	// Drop them under both identities the client may have stamped — the
-	// per-session ID on old SDKs, the StableActorID on current ones — mirroring
-	// ClientInfo.IsOwnActor. Keying only on info.ID left a stable-actor client's
-	// cached presence changes behind (#2290).
+	// Only the per-session ID is pruned, never the StableActorID: that actor is
+	// derived from (project, client key) and shared by every session of one key
+	// (docs/design/offline-resumable-attach.md), so pruning it would drop the
+	// cached presence changes of a sibling session that is still attached, and
+	// a range the store already counts as fetched is never refetched. Pruning
+	// is an optimization, not the fix for a departed client's presence: the
+	// Clear change the server writes on detach is kept here and replays to the
+	// same cleared state either way.
 	docKey := types.DocRefKey{ProjectID: info.ProjectID, DocID: docInfo.ID}
 	if prStore, ok := c.presenceCache.Get(docKey); ok && !attached {
 		prStore.RemoveChangesByActor(info.ID)
-		if info.StableActorID != "" && info.StableActorID != info.ID {
-			prStore.RemoveChangesByActor(info.StableActorID)
-		}
 	}
 
 	var updater bson.M
