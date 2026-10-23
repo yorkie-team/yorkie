@@ -7,12 +7,27 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Upgrade Notes
+
+- **`rl_session_daily` is required.** The sessions stats now read the rollup by
+  name, so a cluster with `starrocksSummaryEnabled` whose
+  `sum_session_hll_daily_ch` lacks it fails those stats instead of scanning the
+  base index. Clusters that followed v0.7.20 already have it; otherwise add it
+  before upgrading with `ALTER TABLE sum_session_hll_daily_ch ADD ROLLUP
+  rl_session_daily (project_id, dt, session_hll);` and wait for the rollup job
+  to finish.
+
 ### Removed
 
 - Remove the MCP server. `/mcp/` is no longer served: a request to it gets
   404 (a CORS preflight still gets 204), so assistants configured against it
   must be removed from their client. The Admin API still serves document and
   schema reads.
+
+### Fixed
+
+- Read the sessions summary through `rl_session_daily` by name, so project
+  stats over long windows stay on one sketch per day on StarRocks 3.3.22.
 
 ## [v0.7.25] - 2026-10-13
 

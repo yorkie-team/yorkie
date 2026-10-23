@@ -29,6 +29,12 @@ type metricDesc struct {
 	idColumn string
 	// summaryTable is the decoupled daily summary, e.g. "sum_user_hll_daily".
 	summaryTable string
+	// summaryRollup, when non-empty, names a rollup on summaryTable that the
+	// series and total read instead of the table itself. It is set only for
+	// sessions, whose summary carries a channel_key the reads do not need.
+	// The coverage probe still reads summaryTable: a rollup is written in the
+	// same load as its base index, so the two hold the same days.
+	summaryRollup string
 	// hllColumn is the HLL_UNION sketch column in summaryTable, e.g. "user_hll".
 	// It is empty for a metric whose summary stores a plain number instead of a
 	// sketch.
@@ -71,13 +77,15 @@ var (
 	}
 	// descSession counts distinct sessions. Its summary is keyed by channel as
 	// well as day, a shape the sessions reads themselves do not need: they
-	// union every channel-day sketch of a day back together. The peak metric,
-	// which does need the per-channel breakdown, no longer reads this table.
+	// read the rl_session_daily rollup, one sketch per (project, day), instead
+	// of every channel-day sketch. The peak metric, which does need the
+	// per-channel breakdown, no longer reads this table.
 	descSession = metricDesc{
-		baseTable:    "session_events",
-		idColumn:     "session_id",
-		summaryTable: "sum_session_hll_daily_ch",
-		hllColumn:    "session_hll",
+		baseTable:     "session_events",
+		idColumn:      "session_id",
+		summaryTable:  "sum_session_hll_daily_ch",
+		summaryRollup: "rl_session_daily",
+		hllColumn:     "session_hll",
 	}
 	// descPeak is the daily peak sessions per channel. Its summary is
 	// precomputed from descSession's per-channel sketches, one plain integer per
