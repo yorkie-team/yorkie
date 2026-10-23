@@ -208,6 +208,16 @@ func (s *clusterServer) DetachDocument(
 //
 // Rows written before StableActorID existed leave it empty; an empty value is
 // no identity and never matches, mirroring ClientInfo.IsOwnActor.
+//
+// KNOWN LIMITATION: the query behind this only reports sessions the client row
+// already counts as attached. A sibling whose attach is still in flight sits in
+// the attaching state — TryAttaching stamps it at the start of AttachDocument
+// and UpdateClientInfoAfterPushPull only moves it to attached at the end of
+// PushPull — while the presence that attach pushes is already stored. Such a
+// sibling is invisible here, so its presence can still be cleared by this
+// detach. Closing that needs either a query over attaching sessions, which
+// database.Database does not expose, or an attach/detach-exclusive lock on the
+// document; both live outside this file.
 func (s *clusterServer) hasAttachedSibling(
 	ctx context.Context,
 	refKey types.DocRefKey,

@@ -80,3 +80,17 @@
   the stored change. Giving a presence-only clear real clocks would need
   `pkg/document/change`, and would write a version-vector liveness entry back
   under an actor that is leaving.
+- Known limitation of that gate: `FindAttachedClientInfosByRefKey` reports only
+  rows whose `ClientDocInfo.Status` is already `attached`. A sibling session
+  whose attach is still in flight is in the `attaching` state for the whole
+  `AttachDocument` RPC — `TryAttaching` stamps it up front,
+  `UpdateClientInfoAfterPushPull` flips it at the end of `PushPull` — yet the
+  presence that attach pushes is stored before the flip. So the gate can miss a
+  sibling that already owns the shared entry, and the stable-actor clear still
+  deletes it. The window is the reload/offline-resume flow, not a rare race.
+  Closing it needs a query over attaching sessions (the `database.Database`
+  interface and the memory backend, neither in this branch's diff) or an
+  attach/detach-exclusive document lock (`yorkie_server.AttachDocument` takes
+  `DocAttachmentKey` only under an attachment limit, a `RemoveOnDetach` project
+  or a schema rebind, so it is not a lock this handler can rely on). Both are
+  follow-up work; `hasAttachedSibling` carries the same note.
