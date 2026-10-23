@@ -1286,6 +1286,13 @@ func (s *RGATreeSplit[V]) retombstone(
 				}
 				continue
 			}
+			// A piece live here but removed in the redo's view (by a deletion
+			// whose undo the redo never saw) is left alone, as the redoing
+			// replica left it: like a deletion, a redo removes only what was
+			// live in its view.
+			if len(versionVector) > 0 && piece.isRemovedInView(versionVector) {
+				continue
+			}
 			pieceStart := piece.ID().Offset()
 			pieceEnd := pieceStart + piece.contentLen()
 			target, splitDiff, err := s.isolateRange(
