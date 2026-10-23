@@ -257,4 +257,24 @@ func TestTextUndoRemovalLedger(t *testing.T) {
 		assert.Equal(t, "abcdefgh", ledgerText(t, b))
 		assert.Equal(t, "abcdefgh", ledgerText(t, c))
 	})
+
+	t.Run("redoes only what the redoer saw live", func(t *testing.T) {
+		a, b := ledgerReplicas(t, "abcdef")
+		// a and b delete `cd` concurrently; a learns of b's deletion.
+		ledgerEdit(t, a, 2, 4, "")
+		ledgerEdit(t, b, 2, 4, "")
+		ledgerSend(t, b, a)
+		ledgerAck(t, b)
+		// a undoes and redoes: `cd` stays removed by b's deletion all along,
+		// so a's redo removes nothing. b then undoes its deletion.
+		require.NoError(t, a.Undo())
+		require.NoError(t, a.Redo())
+		require.NoError(t, b.Undo())
+		ledgerExchange(t, a, b)
+
+		// b revived `cd` before a's redo arrived; the redo, which saw `cd`
+		// removed, leaves it alone there as it did on a.
+		assert.Equal(t, "abcdef", ledgerText(t, a))
+		assert.Equal(t, "abcdef", ledgerText(t, b))
+	})
 }
