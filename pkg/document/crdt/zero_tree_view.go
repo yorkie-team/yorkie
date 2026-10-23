@@ -396,8 +396,17 @@ func dealias(entries []viewEntry, schema *ZeroSchema) []viewEntry {
 
 // zNode is a node of the model (JS `ZNode`).
 type zNode struct {
-	typ       string
-	depth     int
+	typ   string
+	depth int
+	// level is the node's place in the stored-depth space the markers are
+	// written in (JS `ZNode.level`): a real node's marker depth, a virtual one
+	// between its parent and the marker it was opened for.
+	level float64
+	// anchor is, for a virtual node squeezed in below the marker it was
+	// opened for, that marker's depth (0: none). A later marker of that depth
+	// stays in it only if the node holds that type, directly or through its
+	// default children (JS `ZNode.anchor`).
+	anchor    float64
 	attrs     *omap[string]
 	markerID  string
 	virtual   bool
@@ -432,12 +441,12 @@ func buildView(entries []viewEntry, schema *ZeroSchema) *zNode {
 		if attrs == nil {
 			attrs = newOmap[string]()
 		}
-		node := &zNode{typ: typ, depth: depth, attrs: attrs, markerID: markerID, virtual: markerID == "",
-			start: at, end: at, textStart: at}
+		parent := top()
+		node := &zNode{typ: typ, depth: depth, level: parent.level + 1, attrs: attrs, markerID: markerID,
+			virtual: markerID == "", start: at, end: at, textStart: at}
 		if markerID != "" {
 			node.textStart = at + 1
 		}
-		parent := top()
 		parent.children = append(parent.children, node)
 		stack = append(stack, node)
 		return node
@@ -501,6 +510,15 @@ func buildView(entries []viewEntry, schema *ZeroSchema) *zNode {
 		}
 		return false
 	}
+	// holds tells whether from holds typ directly or down its default children.
+	var holds func(from, typ string, budget int) bool
+	holds = func(from, typ string, budget int) bool {
+		if schema.accepts(from, typ) {
+			return true
+		}
+		def := schema.c().defaultChild[from]
+		return budget > 0 && def != "" && def != from && schema.isContainer(def) && holds(def, typ, budget-1)
+	}
 	fillFor := func(from, typ string) string {
 		for _, c := range candidatesOf(from) {
 			if reaches(c, typ, 5) {
@@ -509,10 +527,33 @@ func buildView(entries []viewEntry, schema *ZeroSchema) *zNode {
 		}
 		return ""
 	}
-	settle := func(typ string, at int) {
+	// anchor is the marker depth of what is being placed (+Inf for
+	// characters). Virtual nodes opened for it get levels between the parent's
+	// and the anchor's, so a later marker of the anchor's depth (its sibling as
+	// written) does not close them (JS `settle`).
+	settle := func(typ string, at int, anchor float64) {
+		var fills []*zNode
+		var p float64
+		place := func() {
+			if len(fills) == 0 {
+				return
+			}
+			n := float64(len(fills))
+			for j, f := range fills {
+				// under the root, keep whole levels: a depth-1 marker must
+				// close everything before it
+				if p == 0 || anchor-p-1 >= n {
+					f.level = p + float64(j) + 1
+				} else {
+					f.level = p + (float64(j+1)*(anchor-p))/(n+1)
+					f.anchor = anchor
+				}
+			}
+		}
 		for range 64 {
 			parent := top()
 			if schema.accepts(parent.typ, typ) {
+				place()
 				return
 			}
 			fill := ""
@@ -520,10 +561,14 @@ func buildView(entries []viewEntry, schema *ZeroSchema) *zNode {
 				fill = fillFor(parent.typ, typ)
 			}
 			if fill != "" {
-				openNode(fill, parent.depth+1, at, nil, "")
+				if len(fills) == 0 {
+					p = parent.level
+				}
+				fills = append(fills, openNode(fill, parent.depth+1, at, nil, ""))
 				continue
 			}
 			if parent == root {
+				place()
 				return
 			}
 			closeNode(at)
@@ -545,11 +590,13 @@ func buildView(entries []viewEntry, schema *ZeroSchema) *zNode {
 					continue
 				}
 			}
-			for top().depth >= depth {
+			for top().level >= float64(depth) ||
+				(top().anchor == float64(depth) && !holds(top().typ, m.typ, 5)) {
 				closeNode(i)
 			}
-			settle(m.typ, i)
+			settle(m.typ, i, float64(depth))
 			node := openNode(m.typ, top().depth+1, i, m.attrs, entry.id)
+			node.level = float64(depth)
 			node.group = append([]string{entry.id}, entry.aliases...)
 			node.registers = m.registers
 			if col, ok := m.attrs.get("zt.col"); ok {
@@ -562,7 +609,7 @@ func buildView(entries []viewEntry, schema *ZeroSchema) *zNode {
 		if !schema.isText(top().typ) {
 			textType := schema.textTypeFor(top().typ)
 			if !schema.accepts(top().typ, textType) {
-				settle(schema.TextType, i)
+				settle(schema.TextType, i, math.Inf(1))
 				textType = schema.textTypeFor(top().typ)
 			}
 			openNode(textType, top().depth+1, i, nil, "")
