@@ -227,6 +227,10 @@ func (r *Root) registerInternalGCPairs(element Element) {
 			for _, pair := range e.GCPairs() {
 				r.RegisterGCPair(pair)
 			}
+		case *ZeroTree:
+			for _, pair := range e.GCPairs() {
+				r.RegisterGCPair(pair)
+			}
 		}
 	}
 

@@ -649,6 +649,12 @@ components:
           description: ""
           title: tree
           type: object
+        zeroTree:
+          $ref: '#/components/schemas/yorkie.v1.JSONElement.ZeroTree'
+          additionalProperties: false
+          description: ""
+          title: zero_tree
+          type: object
       title: JSONElement
       type: object
     yorkie.v1.JSONElement.Counter:
@@ -903,6 +909,72 @@ components:
           type: object
       title: Tree
       type: object
+    yorkie.v1.JSONElement.ZeroTree:
+      additionalProperties: false
+      description: |-
+        PROTOTYPE (Zero Tree): one RGA of tokens. purged_ledger is what the
+         removal ledgers of purged pieces still said (see ZeroPurgedLedger).
+      properties:
+        actors:
+          additionalProperties: false
+          description: |-
+            actors are the actor ids the tickets of this tree's nodes point at
+             (ZeroTicket.actor), so a snapshot writes each id once.
+          items:
+            format: byte
+            type: string
+          title: actors
+          type: array
+        createdAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: created_at
+          type: object
+        movedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: moved_at
+          type: object
+        nodes:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ZeroTreeNode'
+            type: object
+          title: nodes
+          type: array
+        purgedLedger:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ZeroPurgedLedger'
+            type: object
+          title: purged_ledger
+          type: array
+        removedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: removed_at
+          type: object
+        revivedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: revived_at
+          type: object
+        schema:
+          $ref: '#/components/schemas/yorkie.v1.ZeroSchema'
+          additionalProperties: false
+          description: |-
+            schema is what the model of this tree is built with (the creator's
+             editor schema). Absent: the reader's default.
+          title: schema
+          type: object
+      title: ZeroTree
+      type: object
     yorkie.v1.JSONElementSimple:
       additionalProperties: false
       description: ""
@@ -1078,6 +1150,18 @@ components:
           additionalProperties: false
           description: ""
           title: tree_style
+          type: object
+        zeroTreeEdit:
+          $ref: '#/components/schemas/yorkie.v1.Operation.ZeroTreeEdit'
+          additionalProperties: false
+          description: ""
+          title: zero_tree_edit
+          type: object
+        zeroTreeStyle:
+          $ref: '#/components/schemas/yorkie.v1.Operation.ZeroTreeStyle'
+          additionalProperties: false
+          description: ""
+          title: zero_tree_style
           type: object
       title: Operation
       type: object
@@ -1629,6 +1713,99 @@ components:
           title: value
           type: object
       title: CreatedAtMapByActorEntry
+      type: object
+    yorkie.v1.Operation.ZeroTreeEdit:
+      additionalProperties: false
+      description: |-
+        PROTOTYPE (Zero Tree): delete the token range [from, to) and insert
+         content at its start. An undo/redo carries restore/retombstone spans
+         addressed by token identity instead, like Edit.
+      properties:
+        content:
+          $ref: '#/components/schemas/yorkie.v1.ZeroTokens'
+          additionalProperties: false
+          description: ""
+          title: content
+          type: object
+        executedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: executed_at
+          type: object
+        from:
+          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          additionalProperties: false
+          description: ""
+          title: from
+          type: object
+        parentCreatedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: parent_created_at
+          type: object
+        restoreMode:
+          $ref: '#/components/schemas/yorkie.v1.RestoreMode'
+          additionalProperties: false
+          description: ""
+          title: restore_mode
+        restoreSpans:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ZeroRestoreSpan'
+            type: object
+          title: restore_spans
+          type: array
+        retombstoneSpans:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ZeroRestoreSpan'
+            type: object
+          title: retombstone_spans
+          type: array
+        to:
+          $ref: '#/components/schemas/yorkie.v1.TextNodePos'
+          additionalProperties: false
+          description: ""
+          title: to
+          type: object
+      title: ZeroTreeEdit
+      type: object
+    yorkie.v1.Operation.ZeroTreeStyle:
+      additionalProperties: false
+      description: 'PROTOTYPE (Zero Tree): LWW attribute writes on one marker, in
+        order.'
+      properties:
+        executedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: executed_at
+          type: object
+        markerId:
+          $ref: '#/components/schemas/yorkie.v1.TextNodeID'
+          additionalProperties: false
+          description: ""
+          title: marker_id
+          type: object
+        parentCreatedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: parent_created_at
+          type: object
+        writes:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ZeroAttrWrite'
+            type: object
+          title: writes
+          type: array
+      title: ZeroTreeStyle
       type: object
     yorkie.v1.Presence:
       additionalProperties: false
@@ -2808,6 +2985,8 @@ components:
         - 13
         - VALUE_TYPE_INTEGER_DEDUP_CNT
         - 14
+        - VALUE_TYPE_ZERO_TREE
+        - 16
       title: ValueType
       type: string
     yorkie.v1.VersionVector:
@@ -2838,6 +3017,426 @@ components:
           - type: number
           title: value
       title: VectorEntry
+      type: object
+    yorkie.v1.ZeroAttr:
+      additionalProperties: false
+      description: 'ZeroAttr is one LWW register of a marker. is_removed: the value
+        is null.'
+      properties:
+        isRemoved:
+          additionalProperties: false
+          description: ""
+          title: is_removed
+          type: boolean
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        updatedAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: in operations
+          title: updated_at
+          type: object
+        updatedAtRef:
+          $ref: '#/components/schemas/yorkie.v1.ZeroTicket'
+          additionalProperties: false
+          description: in a ZeroTree element (see actors)
+          title: updated_at_ref
+          type: object
+        value:
+          additionalProperties: false
+          description: ""
+          title: value
+          type: string
+      title: ZeroAttr
+      type: object
+    yorkie.v1.ZeroAttrWrite:
+      additionalProperties: false
+      description: 'ZeroAttrWrite is one attribute write of ZeroTreeStyle (is_removed:
+        null).'
+      properties:
+        isRemoved:
+          additionalProperties: false
+          description: ""
+          title: is_removed
+          type: boolean
+        key:
+          additionalProperties: false
+          description: ""
+          title: key
+          type: string
+        value:
+          additionalProperties: false
+          description: ""
+          title: value
+          type: string
+      title: ZeroAttrWrite
+      type: object
+    yorkie.v1.ZeroCancel:
+      additionalProperties: false
+      description: ZeroCancel is an undo that cancelled one deletion of a node.
+      properties:
+        cancelledAt:
+          $ref: '#/components/schemas/yorkie.v1.ZeroTicket'
+          additionalProperties: false
+          description: ""
+          title: cancelled_at
+          type: object
+        deletion:
+          $ref: '#/components/schemas/yorkie.v1.ZeroTicket'
+          additionalProperties: false
+          description: ""
+          title: deletion
+          type: object
+      title: ZeroCancel
+      type: object
+    yorkie.v1.ZeroMarker:
+      additionalProperties: false
+      description: |-
+        ZeroMarker is the open marker of a Zero element node. attrs keep their
+         order; boundary is the split boundary key (empty: none).
+      properties:
+        attrs:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ZeroAttr'
+            type: object
+          title: attrs
+          type: array
+        boundary:
+          additionalProperties: false
+          description: ""
+          title: boundary
+          type: string
+        depth:
+          additionalProperties: false
+          description: ""
+          title: depth
+          type: integer
+        type:
+          additionalProperties: false
+          description: ""
+          title: type
+          type: string
+      title: ZeroMarker
+      type: object
+    yorkie.v1.ZeroNodeID:
+      additionalProperties: false
+      description: ""
+      properties:
+        createdAt:
+          $ref: '#/components/schemas/yorkie.v1.ZeroTicket'
+          additionalProperties: false
+          description: ""
+          title: created_at
+          type: object
+        offset:
+          additionalProperties: false
+          description: ""
+          title: offset
+          type: integer
+      title: ZeroNodeID
+      type: object
+    yorkie.v1.ZeroPurgedLedger:
+      additionalProperties: false
+      description: |-
+        ZeroPurgedLedger is the uncancelled deletions of a purged piece
+         [start, end) of the insertion created_at.
+      properties:
+        createdAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: created_at
+          type: object
+        dels:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+            type: object
+          title: dels
+          type: array
+        end:
+          additionalProperties: false
+          description: ""
+          title: end
+          type: integer
+        start:
+          additionalProperties: false
+          description: ""
+          title: start
+          type: integer
+      title: ZeroPurgedLedger
+      type: object
+    yorkie.v1.ZeroRestoreSpan:
+      additionalProperties: false
+      description: |-
+        ZeroRestoreSpan is a token run of one insertion [start, end) for
+         identity-preserving undo/redo. removed_by is the deletion it undoes.
+      properties:
+        createdAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: created_at
+          type: object
+        end:
+          additionalProperties: false
+          description: ""
+          title: end
+          type: integer
+        removedBy:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: removed_by
+          type: object
+        start:
+          additionalProperties: false
+          description: ""
+          title: start
+          type: integer
+        value:
+          $ref: '#/components/schemas/yorkie.v1.ZeroTokens'
+          additionalProperties: false
+          description: ""
+          title: value
+          type: object
+      title: ZeroRestoreSpan
+      type: object
+    yorkie.v1.ZeroSchema:
+      additionalProperties: false
+      description: |-
+        ZeroSchema is the part of the editor schema the Zero Tree model needs.
+         Lists keep their order: it decides which child fills a gap.
+      properties:
+        allowed:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ZeroSchemaChildren'
+            type: object
+          title: allowed
+          type: array
+        atomic:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: atomic
+          type: array
+        defaultChild:
+          additionalProperties: false
+          description: one child each
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ZeroSchemaChildren'
+            type: object
+          title: default_child
+          type: array
+        grid:
+          $ref: '#/components/schemas/yorkie.v1.ZeroSchemaGrid'
+          additionalProperties: false
+          description: ""
+          title: grid
+          type: object
+        rootType:
+          additionalProperties: false
+          description: ""
+          title: root_type
+          type: string
+        scoped:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: scoped
+          type: array
+        single:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ZeroSchemaChildren'
+            type: object
+          title: single
+          type: array
+        textType:
+          additionalProperties: false
+          description: ""
+          title: text_type
+          type: string
+        textTypes:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: text_types
+          type: array
+      title: ZeroSchema
+      type: object
+    yorkie.v1.ZeroSchemaChildren:
+      additionalProperties: false
+      description: ""
+      properties:
+        children:
+          additionalProperties: false
+          description: ""
+          items:
+            type: string
+          title: children
+          type: array
+        type:
+          additionalProperties: false
+          description: ""
+          title: type
+          type: string
+      title: ZeroSchemaChildren
+      type: object
+    yorkie.v1.ZeroSchemaGrid:
+      additionalProperties: false
+      description: ""
+      properties:
+        cell:
+          additionalProperties: false
+          description: ""
+          title: cell
+          type: string
+        row:
+          additionalProperties: false
+          description: ""
+          title: row
+          type: string
+        table:
+          additionalProperties: false
+          description: ""
+          title: table
+          type: string
+      title: ZeroSchemaGrid
+      type: object
+    yorkie.v1.ZeroTicket:
+      additionalProperties: false
+      description: |-
+        ZeroTicket is a ticket inside a ZeroTree element: actor is an index into
+         JSONElement.ZeroTree.actors.
+      properties:
+        actor:
+          additionalProperties: false
+          description: ""
+          title: actor
+          type: integer
+        delimiter:
+          additionalProperties: false
+          description: ""
+          title: delimiter
+          type: integer
+        lamport:
+          additionalProperties: false
+          description: ""
+          oneOf:
+          - type: string
+          - type: number
+          title: lamport
+      title: ZeroTicket
+      type: object
+    yorkie.v1.ZeroToken:
+      additionalProperties: false
+      description: ghost is a run of characters a ghost purge (GC) dropped.
+      properties:
+        chars:
+          additionalProperties: false
+          description: ""
+          title: chars
+          type: string
+        ghost:
+          additionalProperties: false
+          description: ""
+          title: ghost
+          type: integer
+        marker:
+          $ref: '#/components/schemas/yorkie.v1.ZeroMarker'
+          additionalProperties: false
+          description: ""
+          title: marker
+          type: object
+      title: ZeroToken
+      type: object
+    yorkie.v1.ZeroTokens:
+      additionalProperties: false
+      description: |-
+        ZeroTokens is a run of tokens. Consecutive characters travel as one
+         string. scope is the id of the scoped marker the run was inserted in.
+      properties:
+        scope:
+          additionalProperties: false
+          description: ""
+          title: scope
+          type: string
+        tokens:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ZeroToken'
+            type: object
+          title: tokens
+          type: array
+      title: ZeroTokens
+      type: object
+    yorkie.v1.ZeroTreeNode:
+      additionalProperties: false
+      description: |-
+        ZeroTreeNode is one RGATreeSplit node of a Zero Tree. has_ledger tells a
+         node with a removal ledger (dels/cancels, possibly empty) from one whose
+         ledger is just removed_at.
+      properties:
+        cancels:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ZeroCancel'
+            type: object
+          title: cancels
+          type: array
+        dels:
+          additionalProperties: false
+          description: ""
+          items:
+            $ref: '#/components/schemas/yorkie.v1.ZeroTicket'
+            type: object
+          title: dels
+          type: array
+        hasLedger:
+          additionalProperties: false
+          description: ""
+          title: has_ledger
+          type: boolean
+        id:
+          $ref: '#/components/schemas/yorkie.v1.ZeroNodeID'
+          additionalProperties: false
+          description: ""
+          title: id
+          type: object
+        insPrevId:
+          $ref: '#/components/schemas/yorkie.v1.ZeroNodeID'
+          additionalProperties: false
+          description: ""
+          title: ins_prev_id
+          type: object
+        removedAt:
+          $ref: '#/components/schemas/yorkie.v1.ZeroTicket'
+          additionalProperties: false
+          description: ""
+          title: removed_at
+          type: object
+        value:
+          $ref: '#/components/schemas/yorkie.v1.ZeroTokens'
+          additionalProperties: false
+          description: ""
+          title: value
+          type: object
+      title: ZeroTreeNode
       type: object
   securitySchemes:
     ApiKeyAuth:

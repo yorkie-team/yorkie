@@ -171,6 +171,26 @@ message Operation {
     TimeTicket executed_at = 4;
     RestoreMode restore_mode = 5;
   }
+  // PROTOTYPE (Zero Tree): delete the token range [from, to) and insert
+  // content at its start. An undo/redo carries restore/retombstone spans
+  // addressed by token identity instead, like Edit.
+  message ZeroTreeEdit {
+    TimeTicket parent_created_at = 1;
+    TextNodePos from = 2;
+    TextNodePos to = 3;
+    ZeroTokens content = 4;
+    TimeTicket executed_at = 5;
+    repeated ZeroRestoreSpan restore_spans = 6;
+    RestoreMode restore_mode = 7;
+    repeated ZeroRestoreSpan retombstone_spans = 8;
+  }
+  // PROTOTYPE (Zero Tree): LWW attribute writes on one marker, in order.
+  message ZeroTreeStyle {
+    TimeTicket parent_created_at = 1;
+    TextNodeID marker_id = 2;
+    repeated ZeroAttrWrite writes = 3;
+    TimeTicket executed_at = 4;
+  }
 
   oneof body {
     Set set = 1;
@@ -183,6 +203,8 @@ message Operation {
     TreeEdit tree_edit = 9;
     TreeStyle tree_style = 10;
     ArraySet array_set = 11;
+    ZeroTreeEdit zero_tree_edit = 12;
+    ZeroTreeStyle zero_tree_style = 13;
   }
 }
 
@@ -250,6 +272,22 @@ message JSONElement {
     TimeTicket removed_at = 4;
     TimeTicket revived_at = 5;
   }
+  // PROTOTYPE (Zero Tree): one RGA of tokens. purged_ledger is what the
+  // removal ledgers of purged pieces still said (see ZeroPurgedLedger).
+  message ZeroTree {
+    repeated ZeroTreeNode nodes = 1;
+    TimeTicket created_at = 2;
+    TimeTicket moved_at = 3;
+    TimeTicket removed_at = 4;
+    TimeTicket revived_at = 5;
+    repeated ZeroPurgedLedger purged_ledger = 6;
+    // schema is what the model of this tree is built with (the creator's
+    // editor schema). Absent: the reader's default.
+    ZeroSchema schema = 7;
+    // actors are the actor ids the tickets of this tree's nodes point at
+    // (ZeroTicket.actor), so a snapshot writes each id once.
+    repeated bytes actors = 8;
+  }
 
   oneof body {
     JSONObject json_object = 1;
@@ -258,6 +296,7 @@ message JSONElement {
     Text text = 5;
     Counter counter = 6;
     Tree tree = 7;
+    ZeroTree zero_tree = 8;
   }
 }
 
@@ -332,6 +371,127 @@ message TreeNode {
   // the merge-time causal boundary for SplitElement. See
   // docs/design/concurrent-merge-split.md for details.
   TimeTicket merged_at = 10;
+}
+
+/////////////////////////////////////////
+// Messages for Zero Tree (PROTOTYPE)  //
+/////////////////////////////////////////
+
+// ZeroTreeNode is one RGATreeSplit node of a Zero Tree. has_ledger tells a
+// node with a removal ledger (dels/cancels, possibly empty) from one whose
+// ledger is just removed_at.
+message ZeroTreeNode {
+  ZeroNodeID id = 1;
+  ZeroTokens value = 2;
+  ZeroTicket removed_at = 3;
+  ZeroNodeID ins_prev_id = 4;
+  bool has_ledger = 5;
+  repeated ZeroTicket dels = 6;
+  repeated ZeroCancel cancels = 7;
+}
+
+// ZeroTicket is a ticket inside a ZeroTree element: actor is an index into
+// JSONElement.ZeroTree.actors.
+message ZeroTicket {
+  int64 lamport = 1;
+  uint32 delimiter = 2;
+  uint32 actor = 3;
+}
+
+message ZeroNodeID {
+  ZeroTicket created_at = 1;
+  int32 offset = 2;
+}
+
+// ZeroSchema is the part of the editor schema the Zero Tree model needs.
+// Lists keep their order: it decides which child fills a gap.
+message ZeroSchema {
+  string text_type = 1;
+  repeated string text_types = 2;
+  repeated string scoped = 3;
+  repeated ZeroSchemaChildren single = 4;
+  ZeroSchemaGrid grid = 5;
+  string root_type = 6;
+  repeated string atomic = 7;
+  repeated ZeroSchemaChildren default_child = 8; // one child each
+  repeated ZeroSchemaChildren allowed = 9;
+}
+
+message ZeroSchemaChildren {
+  string type = 1;
+  repeated string children = 2;
+}
+
+message ZeroSchemaGrid {
+  string table = 1;
+  string row = 2;
+  string cell = 3;
+}
+
+// ZeroCancel is an undo that cancelled one deletion of a node.
+message ZeroCancel {
+  ZeroTicket deletion = 1;
+  ZeroTicket cancelled_at = 2;
+}
+
+// ZeroPurgedLedger is the uncancelled deletions of a purged piece
+// [start, end) of the insertion created_at.
+message ZeroPurgedLedger {
+  TimeTicket created_at = 1;
+  int32 start = 2;
+  int32 end = 3;
+  repeated TimeTicket dels = 4;
+}
+
+// ZeroTokens is a run of tokens. Consecutive characters travel as one
+// string. scope is the id of the scoped marker the run was inserted in.
+message ZeroTokens {
+  repeated ZeroToken tokens = 1;
+  string scope = 2;
+}
+
+// ghost is a run of characters a ghost purge (GC) dropped.
+message ZeroToken {
+  oneof body {
+    string chars = 1;
+    ZeroMarker marker = 2;
+    uint32 ghost = 3;
+  }
+}
+
+// ZeroMarker is the open marker of a Zero element node. attrs keep their
+// order; boundary is the split boundary key (empty: none).
+message ZeroMarker {
+  string type = 1;
+  int32 depth = 2;
+  repeated ZeroAttr attrs = 3;
+  string boundary = 4;
+}
+
+// ZeroAttr is one LWW register of a marker. is_removed: the value is null.
+message ZeroAttr {
+  string key = 1;
+  string value = 2;
+  TimeTicket updated_at = 3; // in operations
+  bool is_removed = 4;
+  ZeroTicket updated_at_ref = 5; // in a ZeroTree element (see actors)
+}
+
+// ZeroAttrWrite is one attribute write of ZeroTreeStyle (is_removed: null).
+message ZeroAttrWrite {
+  string key = 1;
+  string value = 2;
+  bool is_removed = 3;
+}
+
+// ZeroRestoreSpan is a token run of one insertion [start, end) for
+// identity-preserving undo/redo. removed_by is the deletion it undoes.
+message ZeroRestoreSpan {
+  TimeTicket created_at = 1;
+  int32 start = 2;
+  int32 end = 3;
+  ZeroTokens value = 4;
+  TimeTicket removed_by = 5;
 }
 
 message TreeNodes {
@@ -579,6 +739,7 @@ enum ValueType {
   VALUE_TYPE_TREE = 13;
   VALUE_TYPE_INTEGER_DEDUP_CNT = 14;
   reserved 15;
+  VALUE_TYPE_ZERO_TREE = 16; // PROTOTYPE
 }
 
 enum DocEventType {
