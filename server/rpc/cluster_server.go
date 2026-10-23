@@ -32,6 +32,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
+	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
 	"github.com/yorkie-team/yorkie/server/clients"
 	"github.com/yorkie-team/yorkie/server/documents"
@@ -78,26 +79,74 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 
-	// 01. Create request pack with presence clear change.
+	// 01. Create request pack with presence clear changes.
+	//
+	// Applying a clear runs presences.Delete(change.ID().ActorID()), so it only
+	// removes the entry under the actor the client itself stamped into its
+	// changes. The server cannot tell which of the client's two identities that
+	// is: ActivateClient derives a StableActorID for every client row, but the
+	// response carries both it and the per-session ID and the SDKs pick
+	// differently — the JS SDK stamps the stable actor, the Go SDK stamps the
+	// session ID (client.Activate stores ActivateClientResponse.client_id). So
+	// neither ClientInfo field identifies the stamping actor on its own, and
+	// stamping the wrong one deletes nothing: the departed client's presence
+	// stays in the document and in every snapshot of it (#2290).
+	//
+	// Clear both, as ClientInfo.IsOwnActor accepts both on the read side. A
+	// clear stamped with an identity that holds no presence deletes nothing and
+	// reconciles to no event on any replica (InternalDocument.applyChanges), so
+	// a redundant one is inert. The session ID is this row's alone, so its clear
+	// is always safe; it goes first so its change keeps the clientSeq that a
+	// single clear used to take.
+	//
+	// The stable actor is not this row's alone: it is
+	// DeriveActorID(project_id, client_key), which every session of one client
+	// key shares by design (docs/design/offline-resumable-attach.md), and so
+	// they share the single presence entry keyed under it. Clearing it while a
+	// sibling session is still attached to this document would delete presence
+	// that session still owns, so that clear is skipped while one remains.
 	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
-	cp := clientInfo.Checkpoint(docID)
-	latestChangeInfo, err := s.backend.DB.FindLatestChangeInfoByActor(
-		ctx,
-		refKey,
-		types.ID(req.Msg.ClientId),
-		cp.ServerSeq,
-	)
+	actorIDs := []time.ActorID{actorID}
+	ownActorID, err := clientInfo.OwnActorID()
 	if err != nil {
 		return nil, err
 	}
-	changeCtx := change.NewContext(
-		change.NewID(cp.ClientSeq, cp.ServerSeq, latestChangeInfo.Lamport, actorID, latestChangeInfo.VersionVector),
-		"",
-		nil,
-	)
-	p := presence.New(changeCtx, presence.NewData())
-	p.Clear()
-	pack := change.NewPack(docKey, cp, []*change.Change{changeCtx.ToChange()}, nil, nil)
+	if ownActorID != actorID {
+		shared, err := s.hasAttachedSibling(ctx, refKey, clientInfo)
+		if err != nil {
+			return nil, err
+		}
+		if !shared {
+			actorIDs = append(actorIDs, ownActorID)
+		}
+	}
+
+	// The clears carry no clocks, and there is nothing to inherit from the
+	// client's latest change: Context.ToChange rebuilds a presence-only change's
+	// ID as prevID.Next(true), which keeps the actor and the clientSeq and drops
+	// the lamport and the version vector (change/id.go). Every SDK-emitted
+	// presence change is stamped the same way, and a presence change that did
+	// carry a vector would put a liveness entry back under an actor that is
+	// leaving.
+	//
+	// Each clear takes the next clientSeq: a context built from clientSeq n
+	// emits a change at n+1, and pushPack drops anything at or below the
+	// checkpoint.
+	cp := clientInfo.Checkpoint(docID)
+	changes := make([]*change.Change, 0, len(actorIDs))
+	clientSeq := cp.ClientSeq
+	for _, id := range actorIDs {
+		changeCtx := change.NewContext(
+			change.NewID(clientSeq, cp.ServerSeq, time.InitialLamport, id, nil),
+			"",
+			nil,
+		)
+		p := presence.New(changeCtx, presence.NewData())
+		p.Clear()
+		changes = append(changes, changeCtx.ToChange())
+		clientSeq++
+	}
+	pack := change.NewPack(docKey, cp, changes, nil, nil)
 
 	// 02. Push the changePack to the document
 	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
@@ -149,6 +198,47 @@ func (s *clusterServer) DetachDocument(
 	// once. A future caller that detaches a single document through this
 	// handler must broadcast the invalidation itself.
 	return connect.NewResponse(&api.ClusterServiceDetachDocumentResponse{}), nil
+}
+
+// hasAttachedSibling reports whether another session of the same client key is
+// still attached to the given document, i.e. whether another activated client
+// row holds the same StableActorID. Because that actor is derived from
+// (project, client key) alone, such a row keys its presence under the very
+// actor a detach of this row would otherwise clear.
+//
+// Rows written before StableActorID existed leave it empty; an empty value is
+// no identity and never matches, mirroring ClientInfo.IsOwnActor.
+//
+// KNOWN LIMITATION: the query behind this only reports sessions the client row
+// already counts as attached. A sibling whose attach is still in flight sits in
+// the attaching state — TryAttaching stamps it at the start of AttachDocument
+// and UpdateClientInfoAfterPushPull only moves it to attached at the end of
+// PushPull — while the presence that attach pushes is already stored. Such a
+// sibling is invisible here, so its presence can still be cleared by this
+// detach. Closing that needs either a query over attaching sessions, which
+// database.Database does not expose, or an attach/detach-exclusive lock on the
+// document; both live outside this file.
+func (s *clusterServer) hasAttachedSibling(
+	ctx context.Context,
+	refKey types.DocRefKey,
+	clientInfo *database.ClientInfo,
+) (bool, error) {
+	if clientInfo.StableActorID == "" {
+		return false, nil
+	}
+
+	infos, err := s.backend.DB.FindAttachedClientInfosByRefKey(ctx, refKey)
+	if err != nil {
+		return false, err
+	}
+
+	for _, info := range infos {
+		if info.ID != clientInfo.ID && info.StableActorID == clientInfo.StableActorID {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // CompactDocument unnecessary data from the document and its metadata to reduce
