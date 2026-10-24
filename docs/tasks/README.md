@@ -1,5 +1,5 @@
 ---
-updated: 2026-10-23
+updated: 2026-10-24
 ---
 
 # Tasks Index
@@ -20,6 +20,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Read the sessions summary through rl_session_daily by name (2026-10-24) | [20261024-session-summary-rollup-hint-todo.md](./active/20261024-session-summary-rollup-hint-todo.md) | [20261024-session-summary-rollup-hint-lessons.md](./active/20261024-session-summary-rollup-hint-lessons.md) |
 | Deprecate dead proto fields and correct the MovedAt deprecation plan (2026-10-22) | [20261022-reserve-dead-proto-fields-todo.md](./active/20261022-reserve-dead-proto-fields-todo.md) | [20261022-reserve-dead-proto-fields-lessons.md](./active/20261022-reserve-dead-proto-fields-lessons.md) |
 | Remove the MCP server (2026-10-22) | [20261022-remove-mcp-server-todo.md](./active/20261022-remove-mcp-server-todo.md) | [20261022-remove-mcp-server-lessons.md](./active/20261022-remove-mcp-server-lessons.md) |
 | Redo after GC drops the attributes of re-inserted text (2026-10-22) | [20261022-redo-drops-reinserted-text-attributes-todo.md](./active/20261022-redo-drops-reinserted-text-attributes-todo.md) | [20261022-redo-drops-reinserted-text-attributes-lessons.md](./active/20261022-redo-drops-reinserted-text-attributes-lessons.md) |

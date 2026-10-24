@@ -7,12 +7,32 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Upgrade Notes
+
+- **`rl_session_daily` is required.** The sessions stats now read the rollup by
+  name, so a cluster with `starrocksSummaryEnabled` whose
+  `sum_session_hll_daily_ch` lacks it fails the sessions reads with `Unknown
+  table` instead of scanning the base index. `GetProjectStats` collects every
+  warehouse read in one `errgroup`, so that failure takes the whole project
+  stats response down, not only the sessions metrics. Clusters that followed
+  v0.7.20 already have the rollup; otherwise add it before upgrading with
+  `ALTER TABLE sum_session_hll_daily_ch ADD ROLLUP rl_session_daily
+  (project_id, dt, session_hll);` and wait for `SHOW ALTER TABLE ROLLUP FROM
+  yorkie` to report `State: FINISHED` for it — on StarRocks 3.3.22 the index
+  shows up in `desc <table> all` a moment before it can be named in a query,
+  so the `desc` probe alone is not enough of a gate.
+
 ### Removed
 
 - Remove the MCP server. `/mcp/` is no longer served: a request to it gets
   404 (a CORS preflight still gets 204), so assistants configured against it
   must be removed from their client. The Admin API still serves document and
   schema reads.
+
+### Fixed
+
+- Read the sessions summary through `rl_session_daily` by name, so project
+  stats over long windows stay on one sketch per day on StarRocks 3.3.22.
 
 ## [v0.7.25] - 2026-10-13
 

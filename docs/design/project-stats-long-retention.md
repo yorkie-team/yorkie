@@ -131,13 +131,41 @@ ROLLUP (rl_session_daily (project_id, dt, session_hll))
 PROPERTIES ("replication_num" = "1", "partition_live_number" = "465");
 ```
 
-`(project_id, dt)` is a key prefix, so StarRocks picks `rl_session_daily` for any
-read that does not mention `channel_key` — the sessions total and series — and
-keeps the base index for whatever does. Verified with `EXPLAIN`: the sessions
-history half reads `rollup: rl_session_daily`, one row per day, while a
-channel-grained read still reads `rollup: sum_session_hll_daily_ch`. The only
-remaining channel-grained reader is the refresh job that computes the daily peak;
-the peak read path does not touch this table at all (next section).
+`(project_id, dt)` is a key prefix, so StarRocks can answer any read that does
+not mention `channel_key` — the sessions total and series — from
+`rl_session_daily`, one row per day, and keeps the base index for whatever does.
+The only remaining channel-grained reader is the refresh job that computes the
+daily peak; the peak read path does not touch this table at all (next section).
+
+The sessions reads name the rollup rather than leave it to the optimizer:
+`FROM rl_session_daily [_SYNC_MV_]`. Planned alone, the summary branch picks the
+rollup on its own, and inside the dual read it does on StarRocks 3.3.9. On
+3.3.22 it does not: whenever the fresh branch of the same `UNION ALL` rewrites
+onto `mv_session_hll_daily_ch`, the summary branch is planned on the channel-day
+base index. On the largest production project that was ~390k sketches and
+~1.2 GB per 3-month query, enough to miss the dashboard's 3 s deadline. A
+`GROUP BY dt` in the branch, reordering the branches, a CTE, and
+`enable_sync_materialized_view_rewrite` do not change that; the hint plans the
+summary on the rollup and the fresh branch on its MV on both versions, with the
+same results. `[_SYNC_MV_]` is documented for synchronous materialized views,
+but a rollup index answers to it as well: on 3.3.22 both the inline
+`ROLLUP (...)` clause above and the `ALTER TABLE ... ADD ROLLUP` below produce
+an index that `FROM <name> [_SYNC_MV_]` resolves, planning as
+`TABLE: sum_session_hll_daily_ch / rollup: rl_session_daily`.
+
+The cost is a hard dependency: a cluster without the rollup fails the sessions
+reads with `Unknown table` instead of scanning the base index, which is why the
+`ALTER` below is a prerequisite rather than an optimization. `GetProjectStats`
+runs its warehouse reads in one `errgroup`, so that failure is the whole stats
+response, not only the sessions metrics — which also means the `ALTER` has to
+have finished before the upgraded server serves a single request. `desc <table>
+all` lists the index slightly before it is addressable by name, so the gate is
+`SHOW ALTER TABLE ROLLUP FROM yorkie` reporting `State: FINISHED`.
+
+The coverage probe still reads `sum_session_hll_daily_ch`; the rollup is written
+in the same load, so the two hold the same days.
+`TestE2EDualReadStaysOnTheRollups` checks the plan, and the local stack pins
+3.3.22 so that it checks the engine production runs.
 
 A rollup rather than a second summary table: StarRocks maintains it on insert, so
 the refresh job, the read path, and the retention property all stay as they are —
@@ -605,15 +633,22 @@ of carrying the fixed 16 over.
 
 ### Deployment sequencing
 
-Each step is lossless and reversible; the base scan is always a correct
-fallback. Per environment:
+Each step is lossless and reversible, and the base scan is a correct fallback
+for every metric whose summary the server does not name — which, since the
+sessions reads name `rl_session_daily`, no longer includes that rollup: without
+it the sessions reads fail with `Unknown table` and take the whole stats
+response with them. Per environment:
 
 1. Create the summary tables (empty, partitioned, 15-month TTL),
    `sum_session_peak_daily` among them. A cluster whose
    tables predate `rl_session_daily` also needs `ALTER TABLE
    sum_session_hll_daily_ch ADD ROLLUP …` — `CREATE TABLE IF NOT EXISTS` carries
    the clause but skips it on an existing table. The rollup builds
-   asynchronously; wait for it in `desc … all` before step 3.
+   asynchronously, and `desc … all` lists it slightly before a query can name
+   it, so the gate is `SHOW ALTER TABLE ROLLUP FROM yorkie` reporting
+   `State: FINISHED` — not the `desc` probe. This is a prerequisite of step 5,
+   not only of step 3: a server with `SummaryEnabled` that reaches a cluster
+   without a finished rollup serves no project stats at all.
 2. Backfill from the base — staged per table, `session_events` last and in a
    low-ingest window, as with the MV builds. Idempotent, and it stops before the
    running UTC day so the summary never holds a partial day for the read path to
