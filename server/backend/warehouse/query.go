@@ -60,11 +60,17 @@ func dayFmt(t time.Time) string {
 // the window instead of one per day: ~390k on a project with thousands of
 // channels over three months. GROUP BY in the branch, reordering the branches,
 // a CTE, and enable_sync_materialized_view_rewrite do not bring it back; the
-// hint does, on both versions, with the same results.
+// hint does, on both versions, with the same results. [_SYNC_MV_] is documented
+// for synchronous materialized views, but a rollup index answers to it too: on
+// 3.3.22 an index from either the inline ROLLUP clause or ALTER TABLE ... ADD
+// ROLLUP plans as TABLE: sum_session_hll_daily_ch / rollup: rl_session_daily.
 //
 // The hint makes the rollup a hard dependency: a cluster without it fails the
-// query instead of scanning the base index. Every cluster has needed it since
-// v0.7.20.
+// query with Unknown table instead of scanning the base index, and
+// GetProjectStats shares one errgroup, so that is the whole stats response
+// rather than the sessions metrics alone. Every cluster has needed the rollup
+// since v0.7.20; see the upgrade note in CHANGELOG.md for adding it to one that
+// does not have it.
 func (d metricDesc) summarySource() string {
 	if d.summaryRollup == "" {
 		return d.summaryTable

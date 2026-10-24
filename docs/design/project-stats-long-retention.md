@@ -147,12 +147,25 @@ base index. On the largest production project that was ~390k sketches and
 `GROUP BY dt` in the branch, reordering the branches, a CTE, and
 `enable_sync_materialized_view_rewrite` do not change that; the hint plans the
 summary on the rollup and the fresh branch on its MV on both versions, with the
-same results. The cost is a hard dependency: a cluster without the rollup fails
-the sessions reads instead of scanning the base index, which is why the `ALTER`
-below is a prerequisite rather than an optimization. The coverage probe still
-reads `sum_session_hll_daily_ch`; the rollup is written in the same load, so the
-two hold the same days. `TestE2EDualReadStaysOnTheRollups` checks the plan, and
-the local stack pins 3.3.22 so that it checks the engine production runs.
+same results. `[_SYNC_MV_]` is documented for synchronous materialized views,
+but a rollup index answers to it as well: on 3.3.22 both the inline
+`ROLLUP (...)` clause above and the `ALTER TABLE ... ADD ROLLUP` below produce
+an index that `FROM <name> [_SYNC_MV_]` resolves, planning as
+`TABLE: sum_session_hll_daily_ch / rollup: rl_session_daily`.
+
+The cost is a hard dependency: a cluster without the rollup fails the sessions
+reads with `Unknown table` instead of scanning the base index, which is why the
+`ALTER` below is a prerequisite rather than an optimization. `GetProjectStats`
+runs its warehouse reads in one `errgroup`, so that failure is the whole stats
+response, not only the sessions metrics — which also means the `ALTER` has to
+have finished before the upgraded server serves a single request. `desc <table>
+all` lists the index slightly before it is addressable by name, so the gate is
+`SHOW ALTER TABLE ROLLUP FROM yorkie` reporting `State: FINISHED`.
+
+The coverage probe still reads `sum_session_hll_daily_ch`; the rollup is written
+in the same load, so the two hold the same days.
+`TestE2EDualReadStaysOnTheRollups` checks the plan, and the local stack pins
+3.3.22 so that it checks the engine production runs.
 
 A rollup rather than a second summary table: StarRocks maintains it on insert, so
 the refresh job, the read path, and the retention property all stay as they are —

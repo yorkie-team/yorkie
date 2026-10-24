@@ -22,8 +22,38 @@ MV shows the regression.
 silently ignored; `FROM sum_session_hll_daily_ch [_SYNC_MV_ rl_session_daily]`
 is a syntax error.
 
+## A rollup answers to the sync MV hint, once it has finished building
+
+`[_SYNC_MV_]` is documented for synchronous materialized views, so the obvious
+worry is that a plain rollup index is not reachable through it. Checked on a
+3.3.22 stack: it is. Both `rl_session_daily` from the inline `ROLLUP (...)`
+clause and a scratch index from `ALTER TABLE ... ADD ROLLUP` plan as
+`TABLE: <base> / rollup: <index>` under the hint.
+
+The one trap is timing. Straight after the `ALTER`, `desc <table> all` already
+lists the new index while the same name in a `FROM` still fails with
+`Unknown table`; a few seconds later it resolves. So a `desc` poll is the wrong
+gate for a read that names the index — `SHOW ALTER TABLE ROLLUP FROM yorkie`
+reporting `State: FINISHED` is.
+
+## The hint widens a sessions failure into a whole-response failure
+
+`GetProjectStats` fans its eleven warehouse reads out through one `errgroup`,
+which returns on the first error. A cluster missing the rollup therefore loses
+the entire project stats response, not just the sessions series and total. That
+is what makes the `ALTER` an upgrade prerequisite rather than a tuning step, and
+it is why the upgrade note says so rather than describing it as a sessions-only
+degradation.
+
 ## Self review
 
+- Round 2 (design fit): the hint's resolution against an `ADD ROLLUP` index and
+  the build-completion gate verified on a local 3.3.22 stack; the blast radius
+  of a missing rollup corrected in the upgrade note, the design doc and the
+  `summarySource` comment. Known limitation, outside this change's files: the
+  provisioning scripts still treat a missing `rl_session_daily` as non-fatal,
+  and the chart adds it from a post-upgrade hook, so an upgrade can serve the
+  hinted query before the index exists.
 - Round 1 (correctness/tests): no blocking findings. Addressed: the rollup
   requirement moved to Upgrade Notes; sessions total pinned in
   `TestSteadyStateSQLIsUnchanged`; sessions cases added to the below-floor and
