@@ -47,6 +47,15 @@ degradation.
 
 ## Self review
 
+- Round 3 (blast radius): the deployment runbook in
+  `docs/design/project-stats-long-retention.md` still opened with "the base scan
+  is always a correct fallback" and gated the rollup build on `desc … all`, both
+  untrue for the sessions reads once they name the index; corrected, and the
+  rollup stated as a prerequisite of the server rollout rather than only of the
+  validation step. Still outside this change's files, so unchanged here: the
+  docker init script and the chart configmap swallow a failed `ADD ROLLUP`, poll
+  `desc … all` rather than `SHOW ALTER TABLE ROLLUP`, and the chart runs the
+  `ALTER` from a `post-upgrade` hook.
 - Round 2 (design fit): the hint's resolution against an `ADD ROLLUP` index and
   the build-completion gate verified on a local 3.3.22 stack; the blast radius
   of a missing rollup corrected in the upgrade note, the design doc and the

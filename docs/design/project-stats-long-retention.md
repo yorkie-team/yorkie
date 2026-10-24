@@ -633,15 +633,22 @@ of carrying the fixed 16 over.
 
 ### Deployment sequencing
 
-Each step is lossless and reversible; the base scan is always a correct
-fallback. Per environment:
+Each step is lossless and reversible, and the base scan is a correct fallback
+for every metric whose summary the server does not name — which, since the
+sessions reads name `rl_session_daily`, no longer includes that rollup: without
+it the sessions reads fail with `Unknown table` and take the whole stats
+response with them. Per environment:
 
 1. Create the summary tables (empty, partitioned, 15-month TTL),
    `sum_session_peak_daily` among them. A cluster whose
    tables predate `rl_session_daily` also needs `ALTER TABLE
    sum_session_hll_daily_ch ADD ROLLUP …` — `CREATE TABLE IF NOT EXISTS` carries
    the clause but skips it on an existing table. The rollup builds
-   asynchronously; wait for it in `desc … all` before step 3.
+   asynchronously, and `desc … all` lists it slightly before a query can name
+   it, so the gate is `SHOW ALTER TABLE ROLLUP FROM yorkie` reporting
+   `State: FINISHED` — not the `desc` probe. This is a prerequisite of step 5,
+   not only of step 3: a server with `SummaryEnabled` that reaches a cluster
+   without a finished rollup serves no project stats at all.
 2. Backfill from the base — staged per table, `session_events` last and in a
    low-ingest window, as with the MV builds. Idempotent, and it stops before the
    running UTC day so the summary never holds a partial day for the read path to
