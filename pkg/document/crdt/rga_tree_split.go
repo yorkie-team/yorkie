@@ -73,7 +73,9 @@ type restoreSpanValue[V RGATreeSplitValue] struct {
 }
 
 var (
-	initialNodeID = NewRGATreeSplitNodeID(time.InitialTicket, 0)
+	// initialNodeID is shared by the head of every Text, so its key is warmed
+	// here rather than on first read.
+	initialNodeID = NewRGATreeSplitNodeID(time.InitialTicket, 0).warm()
 )
 
 // RGATreeSplitValue is a value of RGATreeSplitNode.
@@ -99,16 +101,15 @@ type RGATreeSplitValue interface {
 
 // RGATreeSplitNodeID is an ID of RGATreeSplitNode.
 //
-// An ID is immutable once constructed, so it is safe to share a single
-// instance between goroutines. Its string form is computed in
-// NewRGATreeSplitNodeID rather than memoized on first use, because
-// initialNodeID is shared by the dummy head of every Text in the process.
+// key fills its cache lazily on first call, so a read of a cold ID is a write.
+// An ID shared between goroutines must be warmed when it is created, as
+// initialNodeID is.
 type RGATreeSplitNodeID struct {
 	createdAt *time.Ticket
 	offset    int
 
-	// key is the string representation of the ID.
-	key string
+	// cachedKey is the cache of the string representation of the ID.
+	cachedKey string
 }
 
 // NewRGATreeSplitNodeID creates a new instance of RGATreeSplitNodeID.
@@ -116,7 +117,6 @@ func NewRGATreeSplitNodeID(createdAt *time.Ticket, offset int) *RGATreeSplitNode
 	return &RGATreeSplitNodeID{
 		createdAt: createdAt,
 		offset:    offset,
-		key:       createdAt.Key() + ":" + strconv.FormatUint(uint64(offset), 10),
 	}
 }
 
@@ -172,6 +172,23 @@ func (id *RGATreeSplitNodeID) ToTestString() string {
 
 func (id *RGATreeSplitNodeID) hasSameCreatedAt(other *RGATreeSplitNodeID) bool {
 	return id.createdAt.Compare(other.createdAt) == 0
+}
+
+// key returns a string representation of the ID. The result will be
+// cached in the key field to prevent instantiation of a new string.
+func (id *RGATreeSplitNodeID) key() string {
+	if id.cachedKey == "" {
+		id.cachedKey = id.createdAt.Key() + ":" + strconv.FormatUint(uint64(id.offset), 10)
+	}
+
+	return id.cachedKey
+}
+
+// warm fills the lazy key cache of the ID, so that later reads of it are pure
+// reads. It returns the ID itself for chaining.
+func (id *RGATreeSplitNodeID) warm() *RGATreeSplitNodeID {
+	id.key()
+	return id
 }
 
 // RGATreeSplitNodePos is the position of the text inside the node.
@@ -244,7 +261,7 @@ func (s *RGATreeSplitNode[V]) ID() *RGATreeSplitNodeID {
 
 // IDString returns the string representation of the ID.
 func (s *RGATreeSplitNode[V]) IDString() string {
-	return s.id.key
+	return s.id.key()
 }
 
 // InsPrevID returns previous node ID at the time of this node insertion.
@@ -815,7 +832,7 @@ func (s *RGATreeSplit[V]) deleteNodes(
 		}
 
 		if n.Remove(editedAt, creationKnown, tombstoneKnown) {
-			removed[n.id.key] = n
+			removed[n.id.key()] = n
 		} else {
 			nodesToKeep = append(nodesToKeep, n)
 		}

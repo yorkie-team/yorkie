@@ -44,14 +44,14 @@ var (
 		0,
 		0,
 		InitialActorID,
-	)
+	).warm()
 
 	// MaxTicket is the maximum value of Ticket.
 	MaxTicket = NewTicket(
 		MaxLamport,
 		MaxDelimiter,
 		MaxActorID,
-	)
+	).warm()
 )
 
 // Ticket represents the logical clock. It is used to determine the order of
@@ -59,20 +59,19 @@ var (
 // to detect the relationship between changes whether they are causally related
 // or concurrent.
 //
-// A Ticket is immutable once constructed, so it is safe to share a single
-// instance between goroutines. Its string forms are computed in NewTicket
-// rather than memoized on first use, because shared tickets such as
-// InitialTicket and MaxTicket are read from several goroutines at once.
+// Key and ActorIDBase64 fill their caches lazily on first call, so a read of
+// a cold Ticket is a write. A Ticket shared between goroutines must be warmed
+// when it is created, as InitialTicket and MaxTicket are.
 type Ticket struct {
 	lamport   int64
 	delimiter uint32
 	actorID   ActorID
 
-	// key is the string representation of the ticket.
-	key string
+	// cachedKey is the cache of the string representation of the ticket.
+	cachedKey string
 
-	// actorIDBase64 is the base64 representation of the actorID.
-	actorIDBase64 string
+	// cachedActorIDBase64 is the cache of the base64 representation of the actorID.
+	cachedActorIDBase64 string
 }
 
 // NewTicket creates an instance of Ticket.
@@ -81,32 +80,41 @@ func NewTicket(
 	delimiter uint32,
 	actorID ActorID,
 ) *Ticket {
-	actorIDBase64 := actorID.StringBase64()
-
 	return &Ticket{
 		lamport:   lamport,
 		delimiter: delimiter,
 		actorID:   actorID,
-		key: strconv.FormatInt(lamport, 10) +
-			":" +
-			strconv.FormatInt(int64(delimiter), 10) +
-			":" +
-			actorIDBase64,
-		actorIDBase64: actorIDBase64,
 	}
+}
+
+// warm fills the lazy caches of the ticket, so that later reads of it are
+// pure reads. It returns the ticket itself for chaining.
+func (t *Ticket) warm() *Ticket {
+	t.Key()
+	t.ActorIDBase64()
+	return t
 }
 
 // ToTestString returns a string containing the metadata of the ticket
 // for debugging purpose.
 func (t *Ticket) ToTestString() string {
 	return fmt.Sprintf(
-		"%d:%d:%s", t.lamport, t.delimiter, t.actorIDBase64[14:16],
+		"%d:%d:%s", t.lamport, t.delimiter, t.actorID.StringBase64()[14:16],
 	)
 }
 
 // Key returns the key string for this Ticket.
 func (t *Ticket) Key() string {
-	return t.key
+	if t.cachedKey == "" {
+		t.cachedKey = strconv.FormatInt(t.lamport, 10) +
+			":" +
+			strconv.FormatInt(int64(t.delimiter), 10) +
+			":" +
+			t.actorID.StringBase64()
+
+	}
+
+	return t.cachedKey
 }
 
 // Lamport returns the lamport value.
@@ -126,7 +134,10 @@ func (t *Ticket) ActorID() ActorID {
 
 // ActorIDBase64 returns the actorID's base64 value.
 func (t *Ticket) ActorIDBase64() string {
-	return t.actorIDBase64
+	if t.cachedActorIDBase64 == "" {
+		t.cachedActorIDBase64 = t.actorID.StringBase64()
+	}
+	return t.cachedActorIDBase64
 }
 
 // ActorIDBytes returns the actorID's bytes value.
@@ -165,5 +176,9 @@ func (t *Ticket) Compare(other *Ticket) int {
 
 // SetActorID creates a new instance of Ticket with the given actorID.
 func (t *Ticket) SetActorID(actorID ActorID) *Ticket {
-	return NewTicket(t.lamport, t.delimiter, actorID)
+	return &Ticket{
+		lamport:   t.lamport,
+		delimiter: t.delimiter,
+		actorID:   actorID,
+	}
 }

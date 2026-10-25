@@ -17,6 +17,7 @@
 package time_test
 
 import (
+	"strconv"
 	"sync"
 	"testing"
 
@@ -61,33 +62,22 @@ func TestTicket(t *testing.T) {
 	})
 
 	t.Run("concurrent read of a shared ticket test", func(t *testing.T) {
-		actorID, _ := time.ActorIDFromHex("0123456789abcdef01234567")
-		tickets := []*time.Ticket{
-			time.InitialTicket,
-			time.MaxTicket,
-			time.NewTicket(1, 2, actorID),
-		}
+		// Tickets shared between goroutines are warmed at package init, so a
+		// read of them must be a pure read: `go test -race` fails here if a
+		// shared ticket is left cold.
+		for _, ticket := range []*time.Ticket{time.InitialTicket, time.MaxTicket} {
+			base64 := ticket.ActorID().StringBase64()
+			key := strconv.FormatInt(ticket.Lamport(), 10) + ":" +
+				strconv.FormatUint(uint64(ticket.Delimiter()), 10) + ":" + base64
 
-		// Every read of a shared ticket must be a read, not a lazily
-		// initializing write: `go test -race` fails here otherwise.
-		for _, ticket := range tickets {
 			var wg sync.WaitGroup
-			keys := make([]string, 10)
-			base64s := make([]string, 10)
-
-			for i := range keys {
+			for range 10 {
 				wg.Go(func() {
-					keys[i] = ticket.Key()
-					base64s[i] = ticket.ActorIDBase64()
+					assert.Equal(t, key, ticket.Key())
+					assert.Equal(t, base64, ticket.ActorIDBase64())
 				})
 			}
 			wg.Wait()
-
-			for i := range keys {
-				assert.Equal(t, keys[0], keys[i])
-				assert.Equal(t, base64s[0], base64s[i])
-			}
-			assert.Equal(t, ticket.ActorID().StringBase64(), base64s[0])
 		}
 	})
 

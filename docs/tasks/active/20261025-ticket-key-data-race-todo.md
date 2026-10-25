@@ -35,35 +35,36 @@ the Go memory model and the detector fails the build on it.
 
 ## Fix
 
-Compute both strings in `NewTicket`, making `Ticket` immutable after
-construction: no field is ever written after the constructor returns, so
-`Key()` and `ActorIDBase64()` are plain reads and need no synchronization.
+Only instances shared across goroutines can race: the package-level
+`time.InitialTicket` and `time.MaxTicket`, and `crdt.initialNodeID`, which the
+head of every `Text` shares. Every other ticket and split-node ID lives inside
+one document, behind that document's lock.
 
-Chosen over `sync.Once`/atomics because it keeps `Ticket` a plain copyable
-struct with no lock word, removes a branch from `Key()`, and leaves no second
-way to construct a ticket that could reintroduce the lazy path. The cost is
-two small allocations per ticket whose key is never read; the base64 encoding
-was already shared between the two caches, so a ticket that needs both pays
-exactly what it paid before.
+So the accessors stay lazy, as on `main`, and only those singletons are
+warmed at package init: `InitialTicket`, `MaxTicket` and `initialNodeID` are
+built through an unexported `warm()` that fills their caches, so a later read
+of them is a pure read. `time` is initialized before `crdt`, so warming
+`initialNodeID` reads an already warm `InitialTicket`. The type docs of
+`Ticket` and `RGATreeSplitNodeID` state that an instance shared between
+goroutines must be warmed when it is created.
 
-`SetActorID` builds its result through `NewTicket` so it cannot skip the
-computation.
+The first revision computed both strings eagerly in `NewTicket` and
+`NewRGATreeSplitNodeID` instead. Review measured the cost in the `bench` job
+against `main`: allocs/op +149% on `Array/random_delete`, +33% on
+`Document/counter`, +24–28% on `Document/text`, +21% on
+`RemoteApply`/`ChangeReplay` — most tickets on the decode/apply path never
+have their key read, and each paid two strings. That revision was dropped.
 
 ## Tasks
 
-- [x] Compute `key` and `actorIDBase64` in `NewTicket`; drop the lazy writes.
-- [x] Route `SetActorID` through `NewTicket`.
-- [x] Regression test: concurrent `Key()`/`ActorIDBase64()` on the shared
-      `InitialTicket` and `MaxTicket`, which fails under `-race` before the
-      fix.
-- [x] Fix the sibling: `RGATreeSplitNodeID.key()`
-      (`pkg/document/crdt/rga_tree_split.go`) has the identical lazy write,
-      and `initialNodeID` — built from `time.InitialTicket` — is the dummy
-      head ID of *every* `Text` in the process (`crdt/text.go:192`), so the
-      same `-race` conformance run would still fail with only `Ticket`
-      fixed. Computed in `NewRGATreeSplitNodeID`; the `key()` accessor is
-      gone (a field and a method cannot share a name) and its two in-package
-      call sites read `id.key` directly.
+- [x] Keep `Key()`, `ActorIDBase64()` and `RGATreeSplitNodeID.key()` lazy.
+- [x] Warm `InitialTicket`, `MaxTicket` and `initialNodeID` at package init.
+- [x] Document on both types that a shared instance must be warmed.
+- [x] Regression tests under `-race`: concurrent reads of `InitialTicket` and
+      `MaxTicket` (`TestTicket`), and of the shared head ID through
+      `crdt.InitialTextNode().IDString()` (`TestRGATreeSplit`). Both fail with
+      `WARNING: DATA RACE` when the `warm()` calls are removed.
+- [x] Confirm allocs/op on the affected benchmarks match `main`.
 
 ## See Also
 

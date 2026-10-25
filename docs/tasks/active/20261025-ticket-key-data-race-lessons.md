@@ -10,10 +10,20 @@ package-level singletons. The lazy cache quietly made the first call a write
 to shared memory, so sharing the value became unsafe without any call site
 looking like it mutated anything.
 
-For a type documented or used as immutable, the cheapest guarantee is that it
-really is: fill every derived field in the constructor. Memoization inside a
-value type buys a one-time allocation back and costs the ability to share the
-value freely.
+The tempting fix is to fill every derived field in the constructor. Here that
+was wrong: see the next lesson.
+
+## Fix the shared instances, not the type
+
+The race needs two goroutines on one instance, and only three instances are
+ever shared across goroutines — the package-level singletons. Making every
+ticket eager to protect those three cost +21–149% allocs/op on the decode and
+apply benchmarks, because most tickets there never have their key read.
+Warming the singletons at init closes the race at zero per-instance cost.
+
+Before changing a hot constructor, ask which instances actually exhibit the
+bug, and measure allocs/op against `main` — CI's `bench` job has no baseline,
+so a green run says nothing about a regression.
 
 ## The same shape usually appears more than once in a file
 
