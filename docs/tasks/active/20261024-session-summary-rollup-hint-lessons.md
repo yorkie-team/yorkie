@@ -71,3 +71,11 @@ succeeds.
   polls `desc`. Production already has the rollup, so it is a follow-up there.
 - Known limitation: `GetProjectStats` still fails whole when one read fails;
   the flag gate keeps the hinted read off clusters without the rollup.
+- Carried out of this change: the read path has no way to see whether the
+  rollup exists, so there is no fallback to `sum_session_hll_daily_ch` when it
+  does not. The shape that would give it one — the coverage probe asking
+  `SELECT 1 FROM rl_session_daily [_SYNC_MV_]` once per TTL, cached beside the
+  coverage days, and `summarySource()` reading the base index when the answer
+  is no — lives in `coverage.go` and `starrocks.go`, neither of which this
+  change touches. It is written up under *The session summary carries a coarse
+  rollup* in `docs/design/project-stats-long-retention.md`.

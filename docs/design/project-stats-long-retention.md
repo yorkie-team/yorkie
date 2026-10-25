@@ -164,6 +164,18 @@ failing if it never does. That read resolves when the build reaches
 `FINISHED`; `desc <table> all` is not the same wait, since it lists the index
 while the build is still running.
 
+Degrading to the base index instead of failing — for a cluster that has the
+summary tables but not the rollup — needs the read path to know whether the
+index is there, which the query builder cannot see on its own: the coverage
+probe would carry its own `SELECT 1 FROM rl_session_daily [_SYNC_MV_]`, cache
+that answer beside the coverage days, and `summarySource()` would return
+`sum_session_hll_daily_ch` when it says no, trading the plan regression for a
+response. That is `coverage.go` and `starrocks.go` work and is not part of this
+change; until it lands the gate is `starrocksSummaryEnabled`, which defaults
+off and is turned on only after the init Job that creates the rollup reports
+`Complete` — so the hinted read never reaches a cluster the Job has not
+provisioned, as long as that order is followed.
+
 The coverage probe still reads `sum_session_hll_daily_ch`; the rollup is written
 in the same load, so the two hold the same days.
 `TestE2EDualReadStaysOnTheRollups` checks the plan, and the local stack pins
