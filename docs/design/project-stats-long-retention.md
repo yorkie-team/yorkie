@@ -172,12 +172,12 @@ the same numbers, more slowly. A missing summary *table* has nothing
 correct to fall back to inside the summary, and stays a loud error.
 
 Both provisioning scripts add the rollup after the routine loads, unless it is
-queryable or an earlier build is still running, and stop if the `ALTER` fails.
+queryable, listed, or still being built, and stop if the `ALTER` fails.
 They then wait up to two minutes on the hinted read, which resolves when the
 build reaches `FINISHED`; `desc <table> all` is not the same wait, since it
 lists the index while the build is still running. A build still running after
 that is not a failure: it finishes on its own and the reads fall back until it
-does, so failing the run there would only hold the hook, and its Job reruns.
+does, so failing the run there would only hold the init Job and its reruns.
 
 The coverage probe still reads `sum_session_hll_daily_ch`; the rollup is written
 in the same load, so the two hold the same days.

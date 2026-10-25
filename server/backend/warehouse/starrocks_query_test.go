@@ -138,8 +138,8 @@ func TestSeriesQueryStraddlingConcatenatesHalves(t *testing.T) {
 func TestSessionTotalUnionsAcrossChannels(t *testing.T) {
 	got := norm(descSession.totalQuery(types.ID("p1"), day("2026-08-01"), day("2026-09-01"), covUntil("2026-08-31")))
 
-	// distinct sessions across the whole window: union every channel-day sketch,
-	// cardinality once. The summary half must NOT filter or group by channel_key.
+	// distinct sessions across the whole window: union one sketch per day from
+	// the rollup, cardinality once. The summary half must NOT filter or group by channel_key.
 	assert.Contains(t, got, "SELECT HLL_UNION_AGG(sketch) FROM")
 	assert.Contains(t, got, "SELECT session_hll AS sketch FROM rl_session_daily [_SYNC_MV_] "+
 		"WHERE project_id = 'p1' AND dt >= '2026-08-01' AND dt < '2026-08-31'")

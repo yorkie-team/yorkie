@@ -109,13 +109,14 @@ echo -e 'Adding the coarse session rollup'
 # a failed ALTER stops the script. It runs last so that a failure here does not
 # hold back the routine loads. CREATE TABLE IF NOT EXISTS
 # carries the ROLLUP clause but skips it on a summary table that predates it,
-# so add it there -- unless it is already queryable, or an earlier run's build
-# is still going, which `desc ... all` does not show while the job is PENDING.
+# so add it there -- unless it is queryable or listed by `desc ... all`, or an
+# earlier run's build is still PENDING, which `desc` does not show yet.
 rollup_ready() {
   mysql -h starrocks-fe -P 9030 -u root -D yorkie \
     -e "SELECT 1 FROM rl_session_daily [_SYNC_MV_] LIMIT 1" >/dev/null 2>&1
 }
-if ! rollup_ready; then
+if ! rollup_ready && ! mysql -h starrocks-fe -P 9030 -u root \
+  -e "desc yorkie.sum_session_hll_daily_ch all\G" | grep -q "IndexName: rl_session_daily"; then
   jobs=$(mysql -h starrocks-fe -P 9030 -u root -e "SHOW ALTER TABLE ROLLUP FROM yorkie\G")
   if ! echo "$jobs" | awk '
     /^ *TableName:/ { t = $2 }
