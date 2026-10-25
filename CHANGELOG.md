@@ -11,19 +11,11 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - **`rl_session_daily` is required.** The sessions stats now read the rollup by
   name, so a cluster with `starrocksSummaryEnabled` whose
-  `sum_session_hll_daily_ch` lacks it fails the sessions reads with `Unknown
-  table` instead of scanning the base index. `GetProjectStats` collects every
-  warehouse read in one `errgroup`, so that failure takes the whole project
-  stats response down, not only the sessions metrics. Clusters that followed
-  v0.7.20 already have the rollup; otherwise add it before upgrading with
-  `ALTER TABLE sum_session_hll_daily_ch ADD ROLLUP rl_session_daily
-  (project_id, dt, session_hll);` and wait for `SHOW ALTER TABLE ROLLUP FROM
-  yorkie` to report `State: FINISHED` for it — on StarRocks 3.3.22 the index
-  shows up in `desc <table> all` a moment before it can be named in a query,
-  so the `desc` probe alone is not enough of a gate. The analytics chart's
-  init job runs the same `ALTER`, but from a `post-upgrade` hook, without
-  failing the rollout when it errors, and gated on that `desc` probe — so it
-  is not a substitute for applying the `ALTER` ahead of the server rollout.
+  `sum_session_hll_daily_ch` lacks it fails `GetProjectStats` with `Unknown
+  table` instead of scanning the base index. Clusters that followed v0.7.20
+  already have it. The analytics init job now adds it when missing, waits until
+  it can be queried, and fails otherwise; upgrade `yorkie-analytics` first and
+  roll out the server once that job has succeeded.
 
 ### Removed
 

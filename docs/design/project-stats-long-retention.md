@@ -154,13 +154,13 @@ an index that `FROM <name> [_SYNC_MV_]` resolves, planning as
 `TABLE: sum_session_hll_daily_ch / rollup: rl_session_daily`.
 
 The cost is a hard dependency: a cluster without the rollup fails the sessions
-reads with `Unknown table` instead of scanning the base index, which is why the
-`ALTER` below is a prerequisite rather than an optimization. `GetProjectStats`
-runs its warehouse reads in one `errgroup`, so that failure is the whole stats
-response, not only the sessions metrics — which also means the `ALTER` has to
-have finished before the upgraded server serves a single request. `desc <table>
-all` lists the index slightly before it is addressable by name, so the gate is
-`SHOW ALTER TABLE ROLLUP FROM yorkie` reporting `State: FINISHED`.
+reads with `Unknown table` instead of scanning the base index, and
+`GetProjectStats` runs its warehouse reads in one `errgroup`, so that is the
+whole stats response. Both provisioning scripts therefore treat the rollup as a
+gate rather than an optimization: they add it when it is missing, stop if the
+`ALTER` fails, and wait until `SELECT 1 FROM rl_session_daily [_SYNC_MV_]`
+resolves, failing if it never does. `desc <table> all` is not that wait: it
+lists the index slightly before a query can name it.
 
 The coverage probe still reads `sum_session_hll_daily_ch`; the rollup is written
 in the same load, so the two hold the same days.
@@ -633,34 +633,20 @@ of carrying the fixed 16 over.
 
 ### Deployment sequencing
 
-Each step is lossless and reversible, and the base scan is a correct fallback
-for every metric whose summary the server does not name — which, since the
-sessions reads name `rl_session_daily`, no longer includes that rollup: without
-it the sessions reads fail with `Unknown table` and take the whole stats
-response with them. Per environment:
+Each step is lossless and reversible. The base scan is a correct fallback for
+every summary the server does not name; `rl_session_daily` is named, so it is a
+prerequisite of step 5. Per environment:
 
 1. Create the summary tables (empty, partitioned, 15-month TTL),
    `sum_session_peak_daily` among them. A cluster whose
    tables predate `rl_session_daily` also needs `ALTER TABLE
    sum_session_hll_daily_ch ADD ROLLUP …` — `CREATE TABLE IF NOT EXISTS` carries
    the clause but skips it on an existing table. The rollup builds
-   asynchronously, and `desc … all` lists it slightly before a query can name
-   it, so the gate is `SHOW ALTER TABLE ROLLUP FROM yorkie` reporting
-   `State: FINISHED` — not the `desc` probe. This is a prerequisite of step 5,
-   not only of step 3: a server with `SummaryEnabled` that reaches a cluster
-   without a finished rollup serves no project stats at all. The provisioning
-   the repo ships — `build/docker/analytics/init-starrocks-database.sh` and the
-   chart's init job — runs the `ALTER`, but it is not that gate: both continue
-   past a failed `ALTER` and poll `desc … all` rather than `SHOW ALTER TABLE
-   ROLLUP`, and the chart's init job is a `post-install,post-upgrade` hook, so
-   on an upgrade it runs after the new server is already serving. Until they
-   gate on the build state and fail the rollout when it does not reach
-   `FINISHED`, confirm the index by hand — `SHOW ALTER TABLE ROLLUP FROM
-   yorkie`, then a `SELECT … FROM rl_session_daily [_SYNC_MV_] LIMIT 1` that
-   returns rather than erroring — before step 5.
-   `TestSummaryRollupsAreProvisioned` keeps the name the server reads and the
-   name those scripts create from drifting apart, but it cannot tell whether a
-   given cluster has run them.
+   asynchronously. The init scripts add it and wait until a query naming it
+   resolves, failing the run otherwise, so a successful init Job is the gate
+   for step 5. The chart's Job is a post-install/post-upgrade hook of the
+   analytics release, while the server is a separate release, so hook order
+   does not hold the server back; `starrocksSummaryEnabled` does.
 2. Backfill from the base — staged per table, `session_events` last and in a
    low-ingest window, as with the MV builds. Idempotent, and it stops before the
    running UTC day so the summary never holds a partial day for the read path to

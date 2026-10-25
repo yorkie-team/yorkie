@@ -29,7 +29,6 @@ import (
 	"connectrpc.com/connect"
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/api/types"
@@ -105,8 +104,8 @@ func newUnavailableAuthServer(t *testing.T, recoveryCnt uint64) *httptest.Server
 
 func TestProjectAuthWebhook(t *testing.T) {
 	svr, err := server.New(helper.TestConfig())
-	require.NoError(t, err)
-	require.NoError(t, svr.Start())
+	assert.NoError(t, err)
+	assert.NoError(t, svr.Start())
 	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
@@ -262,8 +261,8 @@ func TestAuthWebhookErrorHandling(t *testing.T) {
 
 	conf := helper.TestConfig()
 	svr, err := server.New(conf)
-	require.NoError(t, err)
-	require.NoError(t, svr.Start())
+	assert.NoError(t, err)
+	assert.NoError(t, svr.Start())
 	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
@@ -451,8 +450,8 @@ func TestAuthWebhookCache(t *testing.T) {
 		conf.Backend.AuthWebhookCacheTTL = authTTL.String()
 
 		svr, err := server.New(conf)
-		require.NoError(t, err)
-		require.NoError(t, svr.Start())
+		assert.NoError(t, err)
+		assert.NoError(t, svr.Start())
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
@@ -529,8 +528,8 @@ func TestAuthWebhookCache(t *testing.T) {
 		conf.Backend.AuthWebhookCacheTTL = authTTL.String()
 
 		svr, err := server.New(conf)
-		require.NoError(t, err)
-		require.NoError(t, svr.Start())
+		assert.NoError(t, err)
+		assert.NoError(t, svr.Start())
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
@@ -593,8 +592,8 @@ func TestAuthWebhookCache(t *testing.T) {
 		conf.Backend.AuthWebhookCacheTTL = authTTL.String()
 
 		svr, err := server.New(conf)
-		require.NoError(t, err)
-		require.NoError(t, svr.Start())
+		assert.NoError(t, err)
+		assert.NoError(t, svr.Start())
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
@@ -642,8 +641,8 @@ func TestAuthWebhookNewToken(t *testing.T) {
 		authServer, validToken := newAuthServer(t)
 
 		svr, err := server.New(helper.TestConfig())
-		require.NoError(t, err)
-		require.NoError(t, svr.Start())
+		assert.NoError(t, err)
+		assert.NoError(t, svr.Start())
 		defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 		adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
@@ -710,8 +709,8 @@ func TestAuthWebhookWatchAttributes(t *testing.T) {
 	defer authServer.Close()
 
 	svr, err := server.New(helper.TestConfig())
-	require.NoError(t, err)
-	require.NoError(t, svr.Start())
+	assert.NoError(t, err)
+	assert.NoError(t, svr.Start())
 	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
@@ -800,8 +799,8 @@ func TestAuthWebhookPresenceOnly(t *testing.T) {
 	defer authServer.Close()
 
 	svr, err := server.New(helper.TestConfig())
-	require.NoError(t, err)
-	require.NoError(t, svr.Start())
+	assert.NoError(t, err)
+	assert.NoError(t, svr.Start())
 	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
@@ -1088,8 +1087,8 @@ func TestAuthWebhookInitialWatchDenied(t *testing.T) {
 	defer authServer.Close()
 
 	svr, err := server.New(helper.TestConfig())
-	require.NoError(t, err)
-	require.NoError(t, svr.Start())
+	assert.NoError(t, err)
+	assert.NoError(t, svr.Start())
 	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
 
 	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())

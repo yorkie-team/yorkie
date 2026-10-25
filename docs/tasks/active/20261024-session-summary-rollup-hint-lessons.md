@@ -32,34 +32,37 @@ clause and a scratch index from `ALTER TABLE ... ADD ROLLUP` plan as
 
 The one trap is timing. Straight after the `ALTER`, `desc <table> all` already
 lists the new index while the same name in a `FROM` still fails with
-`Unknown table`; a few seconds later it resolves. So a `desc` poll is the wrong
-gate for a read that names the index — `SHOW ALTER TABLE ROLLUP FROM yorkie`
-reporting `State: FINISHED` is.
+`Unknown table`; a few seconds later it resolves. So the provisioning waits on
+the read the server sends, `SELECT 1 FROM rl_session_daily [_SYNC_MV_]`, rather
+than on `desc`. That also covers an index from the inline `ROLLUP` clause,
+which has no alter job for `SHOW ALTER TABLE ROLLUP` to report.
 
-## The hint widens a sessions failure into a whole-response failure
+## A hard dependency moves its gate into provisioning
 
-`GetProjectStats` fans its eleven warehouse reads out through one `errgroup`,
-which returns on the first error. A cluster missing the rollup therefore loses
-the entire project stats response, not just the sessions series and total. That
-is what makes the `ALTER` an upgrade prerequisite rather than a tuning step, and
-it is why the upgrade note says so rather than describing it as a sessions-only
-degradation.
+`GetProjectStats` fans its warehouse reads out through one `errgroup`, so a
+cluster missing the rollup loses the entire project stats response. Once the
+read names the index, the scripts that create it have to fail when they cannot,
+or a cluster is reported as provisioned when it is not. Documenting the gap
+instead of closing it kept the review open for five rounds.
 
-## A failed `server.New` segfaults the whole integration package
+## Hook order does not reach another release
 
-The integration lane on this branch died in `TestAuthWebhookPresenceOnly` with
-`ping MongoDB: server selection error: context deadline exceeded` — the test
-MongoDB stopped answering mid-run, which nothing in this change touches. What
-turned that one transient failure into `panic: invalid memory address` and a
-dead package was the test's own shape: `server.New` returns `(nil, err)`,
-`assert.NoError` records the error and keeps going, and the next line calls
-`Start()` on the nil `*Yorkie`. The panic aborts the binary, so every test
-after it is never reported and the real cause has to be dug out of a stack
-trace. `require.NoError` there stops the test at the error it actually hit.
-Several other integration files still have the `assert` form at the same spot.
+The chart's init Job is a `post-install,post-upgrade` hook, which looks like it
+runs after the server is already serving. It cannot be a `pre-*` hook: it talks
+to the StarRocks that the same release deploys. And the server is the
+`yorkie-cluster` release, not this one, so no hook order in `yorkie-analytics`
+holds the server rollout back. The gate between the two is
+`starrocksSummaryEnabled`, which defaults off and is turned on after the Job
+succeeds.
 
 ## Self review
 
+- Round 6 (by hand): the provisioning scripts and the chart moved into this
+  change. Both now add the rollup only when it is missing, fail on a failed
+  `ALTER`, and wait on the hinted read, failing when it never resolves.
+  `TestSummaryRollupProvisioningIsAGate` runs instead of being skipped. The
+  Job stays a post hook, for the reason above. The `auth_webhook_test.go`
+  change from round 5 was reverted as outside this change.
 - Round 5: the provisioning gap is the whole of the remaining review surface —
   the rollup is created by both scripts but neither treats the `ALTER` as a
   gate, and the chart's Job is a `post-upgrade` hook. Closing it means editing
