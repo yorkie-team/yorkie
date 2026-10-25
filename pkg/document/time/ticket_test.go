@@ -17,6 +17,7 @@
 package time_test
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -48,6 +49,48 @@ func TestTicket(t *testing.T) {
 		assert.Equal(t, "0:1:"+ticket.ActorIDBase64(), ticket.Key())
 		assert.Equal(t, "0:1:"+ticket.ActorIDBase64()[14:16],
 			ticket.ToTestString())
+	})
+
+	t.Run("set actorID test", func(t *testing.T) {
+		actorID, _ := time.ActorIDFromHex("0123456789abcdef01234567")
+		ticket := time.NewTicket(1, 2, time.InitialActorID).SetActorID(actorID)
+
+		assert.Equal(t, actorID, ticket.ActorID())
+		assert.Equal(t, actorID.StringBase64(), ticket.ActorIDBase64())
+		assert.Equal(t, "1:2:"+actorID.StringBase64(), ticket.Key())
+	})
+
+	t.Run("concurrent read of a shared ticket test", func(t *testing.T) {
+		actorID, _ := time.ActorIDFromHex("0123456789abcdef01234567")
+		tickets := []*time.Ticket{
+			time.InitialTicket,
+			time.MaxTicket,
+			time.NewTicket(1, 2, actorID),
+		}
+
+		// Every read of a shared ticket must be a read, not a lazily
+		// initializing write: `go test -race` fails here otherwise.
+		for _, ticket := range tickets {
+			var wg sync.WaitGroup
+			keys := make([]string, 10)
+			base64s := make([]string, 10)
+
+			for i := range keys {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					keys[i] = ticket.Key()
+					base64s[i] = ticket.ActorIDBase64()
+				}()
+			}
+			wg.Wait()
+
+			for i := range keys {
+				assert.Equal(t, keys[0], keys[i])
+				assert.Equal(t, base64s[0], base64s[i])
+			}
+			assert.Equal(t, ticket.ActorID().StringBase64(), base64s[0])
+		}
 	})
 
 	t.Run("ticket comparing test", func(t *testing.T) {

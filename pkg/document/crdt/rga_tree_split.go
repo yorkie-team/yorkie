@@ -98,12 +98,17 @@ type RGATreeSplitValue interface {
 }
 
 // RGATreeSplitNodeID is an ID of RGATreeSplitNode.
+//
+// An ID is immutable once constructed, so it is safe to share a single
+// instance between goroutines. Its string form is computed in
+// NewRGATreeSplitNodeID rather than memoized on first use, because
+// initialNodeID is shared by the dummy head of every Text in the process.
 type RGATreeSplitNodeID struct {
 	createdAt *time.Ticket
 	offset    int
 
-	// cachedKey is the cache of the string representation of the ID.
-	cachedKey string
+	// key is the string representation of the ID.
+	key string
 }
 
 // NewRGATreeSplitNodeID creates a new instance of RGATreeSplitNodeID.
@@ -111,6 +116,7 @@ func NewRGATreeSplitNodeID(createdAt *time.Ticket, offset int) *RGATreeSplitNode
 	return &RGATreeSplitNodeID{
 		createdAt: createdAt,
 		offset:    offset,
+		key:       createdAt.Key() + ":" + strconv.FormatUint(uint64(offset), 10),
 	}
 }
 
@@ -166,16 +172,6 @@ func (id *RGATreeSplitNodeID) ToTestString() string {
 
 func (id *RGATreeSplitNodeID) hasSameCreatedAt(other *RGATreeSplitNodeID) bool {
 	return id.createdAt.Compare(other.createdAt) == 0
-}
-
-// key returns a string representation of the ID. The result will be
-// cached in the key field to prevent instantiation of a new string.
-func (id *RGATreeSplitNodeID) key() string {
-	if id.cachedKey == "" {
-		id.cachedKey = id.createdAt.Key() + ":" + strconv.FormatUint(uint64(id.offset), 10)
-	}
-
-	return id.cachedKey
 }
 
 // RGATreeSplitNodePos is the position of the text inside the node.
@@ -248,7 +244,7 @@ func (s *RGATreeSplitNode[V]) ID() *RGATreeSplitNodeID {
 
 // IDString returns the string representation of the ID.
 func (s *RGATreeSplitNode[V]) IDString() string {
-	return s.id.key()
+	return s.id.key
 }
 
 // InsPrevID returns previous node ID at the time of this node insertion.
@@ -819,7 +815,7 @@ func (s *RGATreeSplit[V]) deleteNodes(
 		}
 
 		if n.Remove(editedAt, creationKnown, tombstoneKnown) {
-			removed[n.id.key()] = n
+			removed[n.id.key] = n
 		} else {
 			nodesToKeep = append(nodesToKeep, n)
 		}
