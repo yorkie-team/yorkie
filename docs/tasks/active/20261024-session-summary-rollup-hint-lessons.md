@@ -60,6 +60,19 @@ Several other integration files still have the `assert` form at the same spot.
 
 ## Self review
 
+- Round 5: the provisioning gap is the whole of the remaining review surface —
+  the rollup is created by both scripts but neither treats the `ALTER` as a
+  gate, and the chart's Job is a `post-upgrade` hook. Closing it means editing
+  `build/docker/analytics/init-starrocks-database.sh` and the chart's
+  `configmap.yaml`/`job.yaml`, none of which this change touches, so it is
+  carried rather than fixed. What this round adds is a mechanical handle on it:
+  `TestSummaryRollupProvisioningIsAGate` spells out the three conditions — a
+  non-tolerant `ALTER`, a `SHOW ALTER TABLE ROLLUP` wait, and a Job that is not
+  a post-upgrade hook — and is skipped, so whoever moves those files deletes one
+  `t.Skip` instead of reconstructing the requirement from the upgrade note.
+  Nothing in the read path can soften the dependency on its own: `summarySource`
+  builds a SQL string, and SQL has no conditional table resolution, so naming
+  the index and tolerating its absence are not both available.
 - Round 4: added `TestSummaryRollupsAreProvisioned`, a plain unit test that
   every descriptor naming a `summaryRollup` is created by both provisioning
   paths the repo ships — the inline `ROLLUP (...)` clause for a fresh cluster

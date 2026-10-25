@@ -99,3 +99,41 @@ func TestSummaryRollupsAreProvisioned(t *testing.T) {
 	// dropped from every descriptor.
 	assert.Equal(t, 1, rollups, "sessions is the only metric read through a rollup")
 }
+
+// Creating the rollup is not the same as a deployment gate on it. Because the
+// read names the index, the provisioning that creates it has to (a) stop when
+// the ALTER fails rather than continue to the next step, and (b) wait on SHOW
+// ALTER TABLE ROLLUP reporting State: FINISHED, since desc <table> all lists
+// the index a moment before FROM <name> [_SYNC_MV_] resolves it.
+//
+// Neither script does that yet: both swallow the ALTER with `|| echo ...
+// continuing...` and poll the desc probe, and the chart runs its Job from a
+// post-upgrade hook, after the new server is already serving. Fixing that means
+// editing build/docker/analytics/init-starrocks-database.sh and
+// build/charts/yorkie-analytics/templates/starrocks/{configmap,job}.yaml, which
+// this change does not touch, so the assertions below still fail. They are kept
+// rather than written later so the gate is mechanical once those files move:
+// drop the Skip and the scripts have to satisfy it.
+func TestSummaryRollupProvisioningIsAGate(t *testing.T) {
+	t.Skip("still reproduces: rollup provisioning is non-fatal and gated on the desc probe")
+
+	for _, path := range []string{
+		"build/docker/analytics/init-starrocks-database.sh",
+		"build/charts/yorkie-analytics/templates/starrocks/configmap.yaml",
+	} {
+		t.Run(path, func(t *testing.T) {
+			body := repoFile(t, path)
+
+			assert.NotContains(t, body, "rl_session_daily may already exist, continuing...",
+				"a failed ADD ROLLUP must stop %s, not be echoed past", path)
+			assert.Contains(t, body, "SHOW ALTER TABLE ROLLUP",
+				"%s must wait on State: FINISHED, not on the desc probe", path)
+		})
+	}
+
+	// The chart's init Job runs the ALTER, so it cannot be a post-upgrade hook:
+	// by then the upgraded server is already answering with the hinted query.
+	job := repoFile(t, "build/charts/yorkie-analytics/templates/starrocks/job.yaml")
+	assert.NotContains(t, job, "post-upgrade",
+		"the Job that provisions the rollup must run before the server rollout")
+}
