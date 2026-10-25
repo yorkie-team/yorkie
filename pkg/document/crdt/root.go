@@ -641,6 +641,24 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 	// is purge-dependent today; using the key already in hand means none has
 	// to stay that way.
 	for key, pair := range r.gcNodePairMap {
+		// As in the element loop above, a registered pair is only a claim that
+		// its child is a tombstone, and EqualToOrAfter below derefs the ticket
+		// without checking it. Here the claim can actually go stale: removedAt
+		// IS cleared in place on Text and Tree nodes, and only the reviver's
+		// own UnregisterGCPair call takes the entry back off this worklist.
+		// Every revive traced today makes that call, so this guard has no
+		// known reachable trigger -- it is what makes a future one that forgets
+		// land as a skipped entry rather than a panic in a snapshot build.
+		//
+		// The entry stays registered rather than being deleted: registration
+		// moved the child's bytes Live->GC, and only UnregisterGCPair, which
+		// also credits back the removedAt ticket a live node no longer carries,
+		// or a real purge may move them out. Dropping it here would leave
+		// docSize.GC holding them for good.
+		if pair.Child.RemovedAt() == nil {
+			continue
+		}
+
 		if !vector.EqualToOrAfter(pair.Child.RemovedAt()) {
 			continue
 		}
