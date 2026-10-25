@@ -185,7 +185,8 @@ func (r *StarRocks) rollupResolves(ctx context.Context, d metricDesc) (bool, err
 
 // isUnknownTable reports whether StarRocks rejected a query for naming a table
 // or index it does not have. StarRocks reports every analysis error as 5502, so
-// the message is what tells this one apart.
+// the message is what tells this one apart. Re-run the TestE2E rehearsal with
+// the rollup dropped when the StarRocks version moves, in case it is reworded.
 func isUnknownTable(err error) bool {
 	var serverErr *mysql.MySQLError
 	return errors.As(err, &serverErr) && strings.Contains(serverErr.Message, "Unknown table")

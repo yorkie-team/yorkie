@@ -77,7 +77,8 @@ succeeds.
   mutation-tested (`|| echo`, a continued `|| echo`, `|| true`, `break`, no
   `set -e` are all caught); the chart Job stays a post hook.
 - The fallback was checked on 3.3.22 with the rollup dropped: the dual-read
-  rehearsal fails with `Unknown table` before it and matches the base after.
+  rehearsal fails with `Unknown table` before it and returns the same numbers
+  as with the rollup after.
 - Provisioning outside this repo should follow the same gate: the devops
   manifest that provisions production still tolerates a failed `ALTER` and
   polls `desc`. Production already has the rollup, so it is a follow-up there.

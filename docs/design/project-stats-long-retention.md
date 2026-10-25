@@ -158,7 +158,7 @@ rollup answers the hinted read with `Unknown table` instead of planning on the
 base index, and `GetProjectStats` runs its warehouse reads in one `errgroup`,
 so left alone that would be the whole stats response. The coverage probe
 therefore also asks `SELECT 1 FROM rl_session_daily [_SYNC_MV_] LIMIT 1` once
-per TTL. While StarRocks answers it with an error, the sessions reads use
+per TTL. While StarRocks answers it with `Unknown table`, the sessions reads use
 `sum_session_hll_daily_ch` — the plan they had before the hint — and the server
 logs a warning. Only `Unknown table` counts as that answer; any other error,
 from StarRocks or on the way to it, fails the probe as the coverage query does,
