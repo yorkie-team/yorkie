@@ -45,6 +45,19 @@ is what makes the `ALTER` an upgrade prerequisite rather than a tuning step, and
 it is why the upgrade note says so rather than describing it as a sessions-only
 degradation.
 
+## A failed `server.New` segfaults the whole integration package
+
+The integration lane on this branch died in `TestAuthWebhookPresenceOnly` with
+`ping MongoDB: server selection error: context deadline exceeded` — the test
+MongoDB stopped answering mid-run, which nothing in this change touches. What
+turned that one transient failure into `panic: invalid memory address` and a
+dead package was the test's own shape: `server.New` returns `(nil, err)`,
+`assert.NoError` records the error and keeps going, and the next line calls
+`Start()` on the nil `*Yorkie`. The panic aborts the binary, so every test
+after it is never reported and the real cause has to be dug out of a stack
+trace. `require.NoError` there stops the test at the error it actually hit.
+Several other integration files still have the `assert` form at the same spot.
+
 ## Self review
 
 - Round 4: added `TestSummaryRollupsAreProvisioned`, a plain unit test that
