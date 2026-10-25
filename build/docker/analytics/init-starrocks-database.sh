@@ -126,7 +126,7 @@ if ! rollup_ready && ! mysql -h starrocks-fe -P 9030 -u root \
     END { exit !found }'; then
     mysql -h starrocks-fe -P 9030 -u root \
       -e "ALTER TABLE yorkie.sum_session_hll_daily_ch ADD ROLLUP rl_session_daily (project_id, dt, session_hll);" \
-      || echo -e 'Could not add rl_session_daily; the sessions reads use the slower index until it exists'
+      || echo -e 'Could not add rl_session_daily; see the error above'
   fi
 fi
 

@@ -20,8 +20,9 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   is not queryable yet` instead of failing when it is not done, so a finished
   job does not mean a finished build. Upgrade `yorkie-analytics` first, and
   roll out the server once `SELECT 1 FROM rl_session_daily [_SYNC_MV_] LIMIT
-  1` returns rather than erroring. Provisioning kept outside the chart should wait on that read too,
-  not on `desc ... all`, which lists the index while it is still building.
+  1` returns rather than erroring. Provisioning kept outside the chart
+  should wait on that read too, not on `desc ... all`, which lists the index
+  while it is still building.
 
 ### Removed
 
