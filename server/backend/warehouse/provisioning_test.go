@@ -106,19 +106,23 @@ func TestSummaryRollupsAreProvisioned(t *testing.T) {
 // lists the index while the build is still running. The wait is bounded and
 // does not fail the run: a build still running finishes on its own, and the
 // server reads the slower index until then, so a failure there would only
-// hold the hook. The gate runs after the routine loads, so a rollup failure
-// does not hold back ingestion.
-func TestSummaryRollupProvisioningIsAGate(t *testing.T) {
+// hold the hook. It runs after the routine loads, so a rollup failure does not
+// hold back ingestion.
+func TestSummaryRollupProvisioningFailsFastAndWaitsBounded(t *testing.T) {
 	// How each script stops on a failed command: the docker one runs under
-	// set -e, the chart's has no set -e and exits explicitly.
+	// set -e, the chart's has no set -e and exits explicitly, both on the ALTER
+	// and on the SHOW ALTER TABLE ROLLUP that decides whether to run it.
 	scripts := []struct {
-		path    string
-		failure string
+		path     string
+		failures []string
 	}{
-		{path: "build/docker/analytics/init-starrocks-database.sh", failure: `(?m)^set -e$`},
+		{path: "build/docker/analytics/init-starrocks-database.sh", failures: []string{`(?m)^set -e$`}},
 		{
-			path:    "build/charts/yorkie-analytics/templates/starrocks/configmap.yaml",
-			failure: `ADD ROLLUP [^\n]*;" \\\n\s*\|\| exit 1`,
+			path: "build/charts/yorkie-analytics/templates/starrocks/configmap.yaml",
+			failures: []string{
+				`ADD ROLLUP [^\n]*;" \\\n\s*\|\| exit 1`,
+				`SHOW ALTER TABLE ROLLUP FROM yorkie\\G"\) \\\n\s*\|\| exit 1`,
+			},
 		},
 	}
 
@@ -131,7 +135,9 @@ func TestSummaryRollupProvisioningIsAGate(t *testing.T) {
 			t.Run(d.summaryRollup+"/"+sc.path, func(t *testing.T) {
 				body := repoFile(t, sc.path)
 
-				assert.Regexp(t, sc.failure, body, "a failed ADD ROLLUP must stop %s", sc.path)
+				for _, failure := range sc.failures {
+					assert.Regexp(t, failure, body, "a failed rollup step must stop %s", sc.path)
+				}
 				// Whatever follows the ALTER on its line or a continuation line
 				// may only be the explicit exit, never a fallback that swallows it.
 				alter := regexp.MustCompile(`ADD ROLLUP ` + d.summaryRollup + `[^\n]*;"((?: \\\n)?\s*\|\|[^\n]*)?`)
@@ -149,11 +155,12 @@ func TestSummaryRollupProvisioningIsAGate(t *testing.T) {
 
 				assert.NotContains(t, body, "set +e", "%s must not turn off failing on errors", sc.path)
 
-				gate := strings.Index(body, "until rollup_ready")
+				wait := strings.Index(body, "until rollup_ready")
 				loads := strings.Index(body, "init-create-routine-load.sql")
-				require.GreaterOrEqual(t, gate, 0, "%s must wait on rollup_ready", sc.path)
+				require.GreaterOrEqual(t, wait, 0, "%s must wait on rollup_ready", sc.path)
 				require.GreaterOrEqual(t, loads, 0, "%s must create the routine loads", sc.path)
-				assert.Greater(t, gate, loads, "%s must gate on the rollup after the routine loads", sc.path)
+				assert.Greater(t, wait, loads, "%s must add the rollup after the routine loads", sc.path)
+				assert.NotContains(t, body[wait:], "exit 1", "%s must not fail on a build still running", sc.path)
 			})
 		}
 	}

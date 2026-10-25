@@ -34,25 +34,28 @@ The trap is timing. Measured on a 3M-row scratch table: for ~10 s the job is
 `PENDING` and `desc <table> all` does not list the index; then `desc` lists it
 while the job is `RUNNING`; the hinted read resolves when the job reaches
 `FINISHED` (~20 s), not before. So the provisioning waits on the hinted read,
-which is the build-finished gate, and decides whether to `ALTER` from the
-read and `SHOW ALTER TABLE ROLLUP`, not from `desc`: a rerun during `PENDING`
-would otherwise issue a second `ALTER` and fail. `SHOW ALTER TABLE ROLLUP ...
-WHERE TableName = ...` ignores the filter on 3.3.22, so the script filters
-the rows itself.
+which resolves only once the build has finished, and decides whether to
+`ALTER` from the read and `SHOW ALTER TABLE ROLLUP`, not from `desc`: a rerun
+during `PENDING` would otherwise issue a second `ALTER` and fail. `SHOW ALTER
+TABLE ROLLUP ... WHERE TableName = ...` ignores the filter on 3.3.22, so the
+script filters the rows itself.
 
 ## Naming an index gives up the optimizer's fallback
 
 Left to the optimizer, a missing rollup costs a slower plan. Named with the
 hint, it is `Unknown table`, and `GetProjectStats` fans its reads out through
 one `errgroup`, so one failed read is the whole response. The read path has to
-take the fallback back itself: the coverage probe asks the hinted read once per
-TTL, and the sessions reads use the summary table while it answers `Unknown
-table`. Only that message means the read does not resolve: StarRocks reports
-every analysis error as 5502, and a timeout or a lost BE also arrives as a
-server error. Anything else keeps the hint. Failing the probe on it, as one
-round here did, widened a sessions-only question into every metric's failure,
-since the probe is shared; caching it as unresolved would have put a minute of
-reads on the heavier plan after a blip.
+take the fallback back itself, and per read: a sessions read answered with
+`Unknown table` runs again on the summary table. Only that message means the
+rollup does not resolve; StarRocks reports every analysis error as 5502, and a
+timeout or a lost BE also arrives as a server error.
+
+Two cached designs were tried first and both failed review. A probe that
+failed on an inconclusive answer widened a sessions-only question into every
+metric's failure, since the probe is shared. A probe that kept the hint on an
+inconclusive answer cached "resolves" for a TTL on a cluster still building
+the rollup, and every response in that minute failed. A verdict cached away
+from the query it is about goes stale; asking the query itself does not.
 
 ## Fail fast, not long
 
@@ -73,18 +76,18 @@ on `starrocksSummaryEnabled`, or upgrade the server, once the rollup resolves.
 
 ## Self review
 
-- Final state: the sessions reads name the rollup, and fall back to the
-  summary table while the coverage probe finds the hinted read does not
-  resolve; any other probe error keeps the hint. Both provisioning scripts add
+- Final state: the sessions reads name the rollup, and a read answered with
+  `Unknown table` runs again on the summary table; any other error is returned
+  as is. Both provisioning scripts add
   the rollup after the routine loads (when missing and not already building),
   fail on a failed `ALTER`, and wait up to two minutes on the hinted read
   without failing on a build still running;
-  `TestSummaryRollupProvisioningIsAGate` checks that shape and was
-  mutation-tested (`|| echo`, a continued `|| echo`, `|| true`, no `set -e`
-  are all caught); the chart Job stays a post hook.
+  `TestSummaryRollupProvisioningFailsFastAndWaitsBounded` checks that shape
+  and was mutation-tested (`|| echo`, a continued `|| echo`, `|| true`, no
+  `set -e` are all caught); the chart Job stays a post hook.
 - The fallback was checked on 3.3.22 with the rollup dropped: the dual-read
   rehearsal fails with `Unknown table` before it and returns the same numbers
   as with the rollup after.
-- Provisioning outside this repo should follow the same gate: the devops
+- Provisioning outside this repo should wait the same way: the devops
   manifest that provisions production still tolerates a failed `ALTER` and
   polls `desc`. Production already has the rollup, so it is a follow-up there.

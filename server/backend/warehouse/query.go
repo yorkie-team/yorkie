@@ -66,9 +66,8 @@ func dayFmt(t time.Time) string {
 // ROLLUP plans as TABLE: sum_session_hll_daily_ch / rollup: rl_session_daily.
 //
 // A named index the cluster lacks fails the query with Unknown table instead of
-// falling back the way the optimizer would, so summaryCoverage drops the rollup
-// from the descriptor while the coverage probe finds it does not resolve, and
-// the read goes to the summary table's channel-day index, as before the hint.
+// falling back the way the optimizer would, so readSummary runs that read again
+// on the summary table's channel-day index, as before the hint.
 func (d metricDesc) summarySource() string {
 	if d.summaryRollup == "" {
 		return d.summaryTable

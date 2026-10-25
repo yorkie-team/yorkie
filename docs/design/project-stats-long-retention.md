@@ -156,19 +156,19 @@ an index that `FROM <name> [_SYNC_MV_]` resolves, planning as
 Naming the index gives up the optimizer's own fallback: a cluster without the
 rollup answers the hinted read with `Unknown table` instead of planning on the
 base index, and `GetProjectStats` runs its warehouse reads in one `errgroup`,
-so left alone that would be the whole stats response. The coverage probe
-therefore also asks `SELECT 1 FROM rl_session_daily [_SYNC_MV_] LIMIT 1` once
-per TTL. While StarRocks answers it with `Unknown table`, the sessions reads use
-`sum_session_hll_daily_ch` — the plan they had before the hint — and the server
-logs a warning. Only `Unknown table` counts as that answer. Any other error,
-from StarRocks or on the way to it, keeps the hint and does not fail the probe:
-the probe is shared by every metric, and the question only picks an index for
-the sessions reads, so a timeout or a restarting BE neither moves them onto the
-heavier plan nor fails the other metrics with them.
+so left alone that would be the whole stats response. Each sessions read
+therefore runs again on `sum_session_hll_daily_ch` — the plan it had before the
+hint — when StarRocks answers it with `Unknown table`, and the server logs a
+warning. Only that message counts: StarRocks reports every analysis error as
+5502, and a timeout or a lost BE also arrives as a server error; those are the
+read's own answer and are returned as before. Deciding per read keeps the
+answer tied to the query it is about: nothing is cached, so the next read picks
+up a rollup that has finished building, or one that was dropped.
+
 This is the one exception to the loud error the *Fallback* section prefers, and
-it is narrower than the per-query fallback reserved there: the rollup is an
-index of a table that exists, so the fallback reads the same summary rows and
-returns the same numbers, more slowly. A missing summary *table* has nothing
+the per-query fallback reserved there, limited to the rollup: it is an index of
+a table that exists, so the fallback reads the same summary rows and returns
+the same numbers, more slowly. A missing summary *table* has nothing
 correct to fall back to inside the summary, and stays a loud error.
 
 Both provisioning scripts add the rollup after the routine loads, unless it is
@@ -505,9 +505,9 @@ sequencing). An automatic per-query fallback (catch a missing-table error, retry
 the retained base query) is a reserved hardening if a cluster ever needs the flag
 on before every summary exists. The one exception is `rl_session_daily`, an
 index of a summary table rather than a table: while it does not resolve, the
-sessions reads use that table's channel-day index, correct and slower, and the
-server logs a warning on every probe (see *The session summary carries a coarse
-rollup*).
+sessions reads run again on that table's channel-day index, correct and
+slower, and the server logs a warning on each (see *The session summary carries
+a coarse rollup*).
 
 **The flag-off path is only a lossless default before raw TTL.** It is
 byte-identical and complete only while the base still holds the full history —
@@ -664,10 +664,12 @@ environment:
    tables predate `rl_session_daily` also needs `ALTER TABLE
    sum_session_hll_daily_ch ADD ROLLUP …` — `CREATE TABLE IF NOT EXISTS` carries
    the clause but skips it on an existing table. The rollup builds
-   asynchronously. The init scripts add it and wait until a query naming it
-   resolves, failing the run otherwise. Until it resolves, a server with the
-   flag on reads the sessions summary on the slower channel-day index and logs
-   a warning, so let the init Job finish before step 5. The chart's Job is a
+   asynchronously. The init scripts add it, fail if the `ALTER` fails, and
+   wait up to two minutes for it, reporting a build still running without
+   failing; a finished Job therefore does not mean a finished build. Until the
+   build finishes, a server with the flag on reads the sessions summary on the
+   slower channel-day index and logs a warning, so reach step 5 once `SELECT 1
+   FROM rl_session_daily [_SYNC_MV_] LIMIT 1` returns. The chart's Job is a
    post-install/post-upgrade hook of the analytics release, while the server
    is a separate release, so hook order does not hold the server back.
 2. Backfill from the base — staged per table, `session_events` last and in a
@@ -738,7 +740,7 @@ DDL only, so it gets the `CREATE TABLE` and nothing else.
 | Backfill full-scans the billion-row tables | Staged per table, `session_events` in a low-ingest window; cost is the one-time base scan (~80ns/row), as measured for the MV builds. |
 | Enabling raw TTL before the summary is trusted would lose history irrecoverably | TTL is step 6, gated on steps 1–5; validation in step 3 runs while both paths overlap. |
 | Expression partitioning, `partition_ttl`, and the HLL functions need a recent StarRocks | Verify the engine clears the version floor per environment before creating the tables (deployed clusters run 3.3.x). |
-| A server that names `rl_session_daily` reaches a cluster where it is missing or still building | The sessions reads use the summary's channel-day index and warn once per probe; numbers stay correct but a large project can miss the 3 s deadline. Only `Unknown table` triggers it, matched on the message, so re-run the `TestE2E*` rehearsal with the rollup dropped when the StarRocks version moves. Mitigated by the init Job, which builds the rollup and fails on a failed `ALTER`, and by the order in step 1. |
+| A server that names `rl_session_daily` reaches a cluster where it is missing or still building | Each sessions read gets `Unknown table`, runs again on the summary's channel-day index, and warns; numbers stay correct but a large project can miss the 3 s deadline. Only `Unknown table` triggers it, matched on the message, so re-run the `TestE2E*` rehearsal with the rollup dropped when the StarRocks version moves. Mitigated by the init Job, which builds the rollup and fails on a failed `ALTER`, and by the order in step 1. |
 | A server that names `sum_session_peak_daily` reaches a cluster without it, and the single-round-trip coverage probe fails for *every* metric | Sequencing: the analytics manifest that creates and backfills the table lands and runs before the server version rolls out (steps 1–2 before step 5). The failure is loud and immediate rather than a silent wrong number, but it blanks the whole dashboard, so it is a release-order hazard, not a runtime one. |
 | `sum_session_peak_daily` lags `sum_session_hll_daily_ch`, since it is written from it | Peak has its own descriptor and its own entry in the coverage probe, so its reads split against *its* table's coverage; the days between the two tables' ranges are served from the base, exactly as for any other lagging summary. |
 | `BIGINT MAX` can only ever revise a day's peak upward, so an over-counted day cannot be corrected by re-running the refresh | Accepted, and identical in kind to `HLL_UNION`'s monotone merge on the other five tables. The input is itself monotone — a day's true peak only grows as late events land — so a re-run overwriting upward is the correct direction. A genuine over-count is repaired the same way a corrupt sketch is: drop the day's partition and rewrite it. |

@@ -19,10 +19,12 @@ package warehouse
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
@@ -106,11 +108,11 @@ func (r *StarRocks) GetActiveUsers(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		desc, cov, err := r.summaryCoverage(ctx, descUser)
+		cov, err := r.summaryCoverage(ctx, descUser)
 		if err != nil {
 			return nil, fmt.Errorf("get active users: %w", err)
 		}
-		query = desc.seriesQuery(id, from, to, cov)
+		query = descUser.seriesQuery(id, from, to, cov)
 	}
 
 	metrics, err := r.queryMetrics(ctx, query)
@@ -145,11 +147,11 @@ func (r *StarRocks) GetActiveUsersCount(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		desc, cov, err := r.summaryCoverage(ctx, descUser)
+		cov, err := r.summaryCoverage(ctx, descUser)
 		if err != nil {
 			return 0, fmt.Errorf("get active users count: %w", err)
 		}
-		query = desc.totalQuery(id, from, to, cov)
+		query = descUser.totalQuery(id, from, to, cov)
 	}
 
 	count, err := r.queryCount(ctx, query)
@@ -189,11 +191,11 @@ func (r *StarRocks) GetActiveDocuments(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		desc, cov, err := r.summaryCoverage(ctx, descDocument)
+		cov, err := r.summaryCoverage(ctx, descDocument)
 		if err != nil {
 			return nil, fmt.Errorf("get active documents: %w", err)
 		}
-		query = desc.seriesQuery(id, from, to, cov)
+		query = descDocument.seriesQuery(id, from, to, cov)
 	}
 
 	metrics, err := r.queryMetrics(ctx, query)
@@ -228,11 +230,11 @@ func (r *StarRocks) GetActiveDocumentsCount(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		desc, cov, err := r.summaryCoverage(ctx, descDocument)
+		cov, err := r.summaryCoverage(ctx, descDocument)
 		if err != nil {
 			return 0, fmt.Errorf("get active documents count: %w", err)
 		}
-		query = desc.totalQuery(id, from, to, cov)
+		query = descDocument.totalQuery(id, from, to, cov)
 	}
 
 	count, err := r.queryCount(ctx, query)
@@ -273,11 +275,11 @@ func (r *StarRocks) GetActiveClients(
 	`, id.String(), events.ClientActivatedEvent, from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		desc, cov, err := r.summaryCoverage(ctx, descClient)
+		cov, err := r.summaryCoverage(ctx, descClient)
 		if err != nil {
 			return nil, fmt.Errorf("get active clients: %w", err)
 		}
-		query = desc.seriesQuery(id, from, to, cov)
+		query = descClient.seriesQuery(id, from, to, cov)
 	}
 
 	metrics, err := r.queryMetrics(ctx, query)
@@ -313,11 +315,11 @@ func (r *StarRocks) GetActiveClientsCount(
 	`, id.String(), events.ClientActivatedEvent, from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		desc, cov, err := r.summaryCoverage(ctx, descClient)
+		cov, err := r.summaryCoverage(ctx, descClient)
 		if err != nil {
 			return 0, fmt.Errorf("get active clients count: %w", err)
 		}
-		query = desc.totalQuery(id, from, to, cov)
+		query = descClient.totalQuery(id, from, to, cov)
 	}
 
 	count, err := r.queryCount(ctx, query)
@@ -357,11 +359,11 @@ func (r *StarRocks) GetActiveChannels(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		desc, cov, err := r.summaryCoverage(ctx, descChannel)
+		cov, err := r.summaryCoverage(ctx, descChannel)
 		if err != nil {
 			return nil, fmt.Errorf("get active channels: %w", err)
 		}
-		query = desc.seriesQuery(id, from, to, cov)
+		query = descChannel.seriesQuery(id, from, to, cov)
 	}
 
 	metrics, err := r.queryMetrics(ctx, query)
@@ -396,11 +398,11 @@ func (r *StarRocks) GetActiveChannelsCount(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		desc, cov, err := r.summaryCoverage(ctx, descChannel)
+		cov, err := r.summaryCoverage(ctx, descChannel)
 		if err != nil {
 			return 0, fmt.Errorf("get active channels count: %w", err)
 		}
-		query = desc.totalQuery(id, from, to, cov)
+		query = descChannel.totalQuery(id, from, to, cov)
 	}
 
 	count, err := r.queryCount(ctx, query)
@@ -440,11 +442,17 @@ func (r *StarRocks) GetSessions(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		desc, cov, err := r.summaryCoverage(ctx, descSession)
+		cov, err := r.summaryCoverage(ctx, descSession)
 		if err != nil {
 			return nil, fmt.Errorf("get sessions: %w", err)
 		}
-		query = desc.seriesQuery(id, from, to, cov)
+		metrics, err := readSummary(descSession, func(d metricDesc) ([]types.MetricPoint, error) {
+			return r.queryMetrics(ctx, d.seriesQuery(id, from, to, cov))
+		})
+		if err != nil {
+			return nil, fmt.Errorf("get sessions: %w", err)
+		}
+		return metrics, nil
 	}
 
 	metrics, err := r.queryMetrics(ctx, query)
@@ -479,11 +487,17 @@ func (r *StarRocks) GetSessionsCount(
 	`, id.String(), from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	if r.summaryEnabled() {
-		desc, cov, err := r.summaryCoverage(ctx, descSession)
+		cov, err := r.summaryCoverage(ctx, descSession)
 		if err != nil {
 			return 0, fmt.Errorf("get sessions count: %w", err)
 		}
-		query = desc.totalQuery(id, from, to, cov)
+		count, err := readSummary(descSession, func(d metricDesc) (int, error) {
+			return r.queryCount(ctx, d.totalQuery(id, from, to, cov))
+		})
+		if err != nil {
+			return 0, fmt.Errorf("get sessions count: %w", err)
+		}
+		return count, nil
 	}
 
 	count, err := r.queryCount(ctx, query)
@@ -533,11 +547,11 @@ func (r *StarRocks) GetPeakSessionsPerChannel(
 	if r.summaryEnabled() {
 		// Peak splits on its own summary's coverage, not on descSession's: the
 		// two tables are refreshed separately and either may lag the other.
-		desc, cov, err := r.summaryCoverage(ctx, descPeak)
+		cov, err := r.summaryCoverage(ctx, descPeak)
 		if err != nil {
 			return nil, fmt.Errorf("get peak sessions per channel: %w", err)
 		}
-		query = desc.peakSeriesQuery(id, from, to, cov)
+		query = descPeak.peakSeriesQuery(id, from, to, cov)
 	}
 
 	metrics, err := r.queryMetrics(ctx, query)
@@ -573,6 +587,34 @@ func closeRows(rows *sql.Rows) {
 	if err := rows.Close(); err != nil {
 		logging.DefaultLogger().Errorf("close rows: %v", err)
 	}
+}
+
+// readSummary runs read with d and, when StarRocks rejects it because d's
+// rollup does not resolve, once more with d reading its summary table. That is
+// a cluster whose summary table predates the rollup, or whose build has not
+// reached FINISHED: the hint names an index the optimizer would otherwise have
+// skipped for it, so the retry is the plan the read had before the hint, and
+// returns the same numbers more slowly. Any other error is the read's answer.
+func readSummary[T any](d metricDesc, read func(metricDesc) (T, error)) (T, error) {
+	v, err := read(d)
+	if d.summaryRollup == "" || !isUnknownTable(err) {
+		return v, err
+	}
+
+	logging.DefaultLogger().Warnf(
+		"read %s instead of %s, which is not queryable yet: %v", d.summaryTable, d.summaryRollup, err,
+	)
+	d.summaryRollup = ""
+	return read(d)
+}
+
+// isUnknownTable reports whether StarRocks rejected a query for naming a table
+// or index it does not have. StarRocks reports every analysis error as 5502, so
+// the message is what tells this one apart. Re-run the TestE2E rehearsal with
+// the rollup dropped when the StarRocks version moves, in case it is reworded.
+func isUnknownTable(err error) bool {
+	var serverErr *mysql.MySQLError
+	return errors.As(err, &serverErr) && strings.Contains(serverErr.Message, "Unknown table")
 }
 
 // queryMetrics queries the metrics from the StarRocks.

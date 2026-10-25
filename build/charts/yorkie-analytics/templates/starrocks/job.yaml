@@ -9,8 +9,9 @@ metadata:
     app.kubernetes.io/part-of: yorkie-analytics
   # A post hook because the script talks to the StarRocks this release deploys.
   # The yorkie server is a separate release (yorkie-cluster), so hook order
-  # cannot hold its rollout back; until this Job has built the rollup, that
-  # server reads the sessions summary on a slower index and logs a warning.
+  # cannot hold its rollout back; until the rollup this Job adds has finished
+  # building, that server reads the sessions summary on a slower index and logs
+  # a warning.
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-delete-policy": before-hook-creation

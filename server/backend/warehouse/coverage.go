@@ -19,15 +19,10 @@ package warehouse
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/go-sql-driver/mysql"
-
-	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 // The dual read may only serve a day from the summary once the refresh job has
@@ -98,99 +93,38 @@ func coverageDays(days summaryDays, today time.Time) dayRange {
 	return newDayRange(days.Min, boundary)
 }
 
-// coverageProbe is one probe's answer: the days each summary table holds, and
-// the rollups the reads name that the hinted read does not resolve yet. A table
-// the probe did not report holds the zero value, i.e. covers nothing.
-type coverageProbe struct {
-	days       map[string]summaryDays
-	unresolved map[string]bool
-}
-
 // coverageCache holds the last coverage probe. The zero value is usable and
 // probes on first use.
 type coverageCache struct {
-	mu         sync.Mutex
-	fetchedAt  time.Time
-	probed     map[string]summaryDays
-	unresolved map[string]bool
+	mu        sync.Mutex
+	fetchedAt time.Time
+	probed    map[string]summaryDays
 }
 
-// probe returns the cached probe, running fetch when it is missing or stale.
-func (c *coverageCache) probe(
+// days returns the days the given summary table holds, running fetch when the
+// cached probe is missing or stale. A table the probe did not report is
+// reported as the zero value, i.e. covering nothing.
+func (c *coverageCache) days(
 	ctx context.Context,
-	fetch func(context.Context) (coverageProbe, error),
-) (coverageProbe, error) {
+	table string,
+	fetch func(context.Context) (map[string]summaryDays, error),
+) (summaryDays, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.probed == nil || time.Since(c.fetchedAt) > coverageTTL {
-		p, err := fetch(ctx)
+		probed, err := fetch(ctx)
 		if err != nil {
-			return coverageProbe{}, err
+			return summaryDays{}, err
 		}
-		c.probed, c.unresolved, c.fetchedAt = p.days, p.unresolved, time.Now()
+		c.probed, c.fetchedAt = probed, time.Now()
 	}
 
-	return coverageProbe{days: c.probed, unresolved: c.unresolved}, nil
+	return c.probed[table], nil
 }
 
-// fetchCoverage runs the coverage probe against StarRocks: the coverage query,
-// then one hinted read per rollup the reads name.
-func (r *StarRocks) fetchCoverage(ctx context.Context) (coverageProbe, error) {
-	days, err := r.fetchSummaryDays(ctx)
-	if err != nil {
-		return coverageProbe{}, err
-	}
-
-	unresolved := make(map[string]bool)
-	for _, d := range allDescs {
-		if d.summaryRollup != "" && !r.rollupResolves(ctx, d) {
-			unresolved[d.summaryRollup] = true
-		}
-	}
-
-	return coverageProbe{days: days, unresolved: unresolved}, nil
-}
-
-// rollupResolves reports whether d's rollup can be read by name. A cluster
-// whose summary table predates the rollup, or whose build has not reached
-// FINISHED, answers the hinted read with Unknown table: that is a no, and the
-// reads fall back to the summary table until a later probe says yes.
-//
-// Any other error, from StarRocks or on the way to it, is not an answer about
-// the rollup, and it does not fail the probe either: the probe is shared by
-// every metric, and the question only picks an index for the sessions reads.
-// It keeps the hint, so a timeout or a restarting BE neither moves the sessions
-// reads onto the heavier plan nor fails the other metrics with them.
-func (r *StarRocks) rollupResolves(ctx context.Context, d metricDesc) bool {
-	// The name comes from a descriptor, never from a request.
-	//nolint:gosec
-	rows, err := r.driver.QueryContext(ctx, "SELECT 1 FROM "+d.summarySource()+" LIMIT 1")
-	if err != nil {
-		if isUnknownTable(err) {
-			logging.DefaultLogger().Warnf(
-				"read %s instead of %s, which is not queryable yet: %v", d.summaryTable, d.summaryRollup, err,
-			)
-			return false
-		}
-		logging.DefaultLogger().Warnf("probe %s, keeping the hint: %v", d.summaryRollup, err)
-		return true
-	}
-	closeRows(rows)
-	return true
-}
-
-// isUnknownTable reports whether StarRocks rejected a query for naming a table
-// or index it does not have. StarRocks reports every analysis error as 5502, so
-// the message is what tells this one apart. Re-run the TestE2E rehearsal with
-// the rollup dropped when the StarRocks version moves, in case it is reworded.
-func isUnknownTable(err error) bool {
-	var serverErr *mysql.MySQLError
-	return errors.As(err, &serverErr) && strings.Contains(serverErr.Message, "Unknown table")
-}
-
-// fetchSummaryDays runs the coverage query.
-func (r *StarRocks) fetchSummaryDays(ctx context.Context) (map[string]summaryDays, error) {
+// fetchCoverage runs the coverage probe against StarRocks.
+func (r *StarRocks) fetchCoverage(ctx context.Context) (map[string]summaryDays, error) {
 	rows, err := r.driver.QueryContext(ctx, coverageQuery())
 	if err != nil {
 		return nil, fmt.Errorf("query summary coverage: %w", err)
@@ -228,17 +162,12 @@ func (r *StarRocks) fetchSummaryDays(ctx context.Context) (map[string]summaryDay
 }
 
 // summaryCoverage returns the day range the given metric's summary can serve,
-// the range its dual read splits the window against, and the metric as the
-// read should use it: without its rollup when the probe found the rollup does
-// not resolve.
-func (r *StarRocks) summaryCoverage(ctx context.Context, d metricDesc) (metricDesc, dayRange, error) {
-	p, err := r.coverage.probe(ctx, r.fetchCoverage)
+// the range its dual read splits the window against.
+func (r *StarRocks) summaryCoverage(ctx context.Context, d metricDesc) (dayRange, error) {
+	days, err := r.coverage.days(ctx, d.summaryTable, r.fetchCoverage)
 	if err != nil {
-		return d, dayRange{Empty: true}, err
+		return dayRange{Empty: true}, err
 	}
 
-	if p.unresolved[d.summaryRollup] {
-		d.summaryRollup = ""
-	}
-	return d, coverageDays(p.days[d.summaryTable], todayUTC()), nil
+	return coverageDays(days, todayUTC()), nil
 }

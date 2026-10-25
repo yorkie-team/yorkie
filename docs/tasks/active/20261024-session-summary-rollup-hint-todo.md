@@ -33,16 +33,15 @@ both 3.3.9 and 3.3.22, with the same results.
 - [x] Rehearsal green on 3.3.22 (and the hint still valid on 3.3.9)
 - [x] Update `docs/design/project-stats-long-retention.md`
 - [x] `make verify`, self review
-- [x] Make provisioning a gate on the rollup (docker init script and chart):
+- [x] Make provisioning fail fast on the rollup (docker init script and chart):
       add it only when missing, fail on a failed `ALTER`, wait on the hinted
       read for two minutes and report a build still running; add
-      `TestSummaryRollupProvisioningIsAGate`
+      `TestSummaryRollupProvisioningFailsFastAndWaitsBounded`
 - [x] Rehearse the init script on 3.3.22: fresh stack, and a summary table
       created without the rollup
-- [x] Fall back to the summary table while the hinted read does not resolve:
-      the coverage probe asks it once per TTL; only `Unknown table` means no,
-      any other error keeps the hint without failing the shared probe;
-      rehearsed on 3.3.22 with the rollup dropped
+- [x] Run a sessions read again on the summary table when StarRocks answers
+      the hinted read with `Unknown table`; any other error is returned as
+      is; rehearsed on 3.3.22 with the rollup dropped
 - [ ] PR; after release, `EXPLAIN` on production reads `rl_session_daily`
 
 ## Out of scope

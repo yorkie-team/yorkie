@@ -62,9 +62,9 @@ yorkie:
     githubClientSecret: ""
     # Serve project-stats history from the decoupled daily HLL summary tables
     # (--starrocks-summary-enabled). Enable only after the summary tables are
-    # backfilled and validated, and after the yorkie-analytics init Job has
-    # succeeded: until its rl_session_daily rollup is built, the sessions reads
-    # fall back to a slower index and the server logs a warning. See
+    # backfilled and validated, and once SELECT 1 FROM rl_session_daily
+    # [_SYNC_MV_] LIMIT 1 returns: until that rollup is built, the sessions
+    # reads fall back to a slower index and the server logs a warning. See
     # docs/design/project-stats-long-retention.md.
     starrocksSummaryEnabled: false
 
