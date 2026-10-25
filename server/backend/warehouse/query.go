@@ -68,7 +68,7 @@ func dayFmt(t time.Time) string {
 // The hint makes the rollup a hard dependency: a cluster without it fails the
 // query with Unknown table instead of scanning the base index, and
 // GetProjectStats shares one errgroup, so that is the whole stats response
-// rather than the sessions metrics alone. Every cluster has needed the rollup
+// rather than the sessions metrics alone. Every cluster has carried the rollup
 // since v0.7.20; see the upgrade note in CHANGELOG.md for adding it to one that
 // does not have it.
 func (d metricDesc) summarySource() string {

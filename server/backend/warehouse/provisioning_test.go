@@ -147,8 +147,12 @@ func TestSummaryRollupProvisioningIsAGate(t *testing.T) {
 				assert.Regexp(t, d.summaryRollup+` is not queryable[^\n]*\n\s*exit 1`, body,
 					"%s must fail when the hinted read never resolves", sc.path)
 
-				gate := strings.Index(body, "Adding the coarse session rollup")
-				loads := strings.Index(body, "Creating routine load")
+				assert.NotContains(t, body, "set +e", "%s must not turn off failing on errors", sc.path)
+
+				gate := strings.Index(body, "until rollup_ready")
+				loads := strings.Index(body, "init-create-routine-load.sql")
+				require.GreaterOrEqual(t, gate, 0, "%s must wait on rollup_ready", sc.path)
+				require.GreaterOrEqual(t, loads, 0, "%s must create the routine loads", sc.path)
 				assert.Greater(t, gate, loads, "%s must gate on the rollup after the routine loads", sc.path)
 			})
 		}

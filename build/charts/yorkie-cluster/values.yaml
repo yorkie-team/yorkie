@@ -63,8 +63,9 @@ yorkie:
     # Serve project-stats history from the decoupled daily HLL summary tables
     # (--starrocks-summary-enabled). Enable only after the summary tables are
     # backfilled and validated, and after the yorkie-analytics init Job has
-    # succeeded: the sessions reads name the rl_session_daily rollup, so a
-    # cluster without it fails GetProjectStats. See
+    # succeeded; with the flag on, upgrade this chart only after that Job too.
+    # The sessions reads name the rl_session_daily rollup, so a cluster without
+    # it fails GetProjectStats. See
     # docs/design/project-stats-long-retention.md.
     starrocksSummaryEnabled: false
 

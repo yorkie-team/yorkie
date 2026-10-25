@@ -37,9 +37,8 @@ mysql -h starrocks-fe -P 9030 -u root --force < /init-create-mv.sql \
 echo -e 'Checking materialized views'
 # The rollup build runs asynchronously and the index only shows up in `desc ...
 # all` once the build is under way, so poll rather than checking straight after
-# the CREATE.
-# A view that never shows up is not fatal: the queries fall back to scanning the
-# base table, which is slower but still correct.
+# the CREATE. A view that never shows up is not fatal: the queries fall back to
+# scanning the base table, which is slower but still correct.
 mvs=(user_events:mv_user_hll_daily document_events:mv_document_hll_daily channel_events:mv_channel_hll_daily session_events:mv_session_hll_daily_ch client_events:mv_client_hll_daily)
 for mv in "${mvs[@]}"; do
   table=${mv%%:*}

@@ -14,10 +14,14 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   `sum_session_hll_daily_ch` lacks it fails `GetProjectStats` with `Unknown
   table` instead of scanning the base index. Clusters that followed v0.7.20
   already have it. The analytics init job now adds it when missing, waits up to
-  10 minutes until it can be queried, and fails otherwise; upgrade
-  `yorkie-analytics` first (with a `helm --timeout` above 10m on a cluster
-  that still needs the rollup) and roll out the server once that job has
-  succeeded.
+  10 minutes until it can be queried, and fails otherwise. Upgrade
+  `yorkie-analytics` first, and roll out the server only once
+  `kubectl get job <name>-init-starrocks-database-job` shows `Complete`; on a
+  cluster that still needs the rollup, give the upgrade room for the earlier
+  init steps too (e.g. `helm --timeout 30m`). Provisioning kept outside the
+  chart has to wait the same way, on `SELECT 1 FROM rl_session_daily
+  [_SYNC_MV_]` rather than on `desc ... all`, which lists the index while it
+  is still building.
 
 ### Removed
 

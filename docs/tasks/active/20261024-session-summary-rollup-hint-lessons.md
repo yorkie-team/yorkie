@@ -63,10 +63,11 @@ succeeds.
   treat it as a gate, after the routine loads (add when missing and not
   already building, fail on a failed `ALTER`, wait up to 10 minutes on the
   hinted read, fail otherwise); `TestSummaryRollupProvisioningIsAGate` checks
-  that shape and was mutation-tested (`|| echo`, `|| true`, `break`, no
-  `set -e` are all caught); the chart Job stays a post hook.
-- Rounds 1-5 ran in the CI loop. The fixer could not edit the scripts (outside
-  the PR's original files), so it documented the gap and skipped the test
-  instead, and the panel kept blocking on it. Those edits were replaced here.
+  that shape and was mutation-tested (`|| echo`, a continued `|| echo`,
+  `|| true`, `break`, no `set -e` are all caught); the chart Job stays a post
+  hook.
+- Provisioning outside this repo has to follow the same gate: the devops
+  manifest that provisions production still tolerates a failed `ALTER` and
+  polls `desc`. Production already has the rollup, so it is a follow-up there.
 - Known limitation: `GetProjectStats` still fails whole when one read fails;
   the flag gate keeps the hinted read off clusters without the rollup.

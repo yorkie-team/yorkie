@@ -35,7 +35,7 @@ both 3.3.9 and 3.3.22, with the same results.
 - [x] `make verify`, self review
 - [x] Make provisioning a gate on the rollup (docker init script and chart):
       add it only when missing, fail on a failed `ALTER`, wait on the hinted
-      read and fail if it never resolves; un-skip
+      read and fail if it never resolves; add
       `TestSummaryRollupProvisioningIsAGate`
 - [x] Rehearse the init script on 3.3.22: fresh stack, and a summary table
       created without the rollup
