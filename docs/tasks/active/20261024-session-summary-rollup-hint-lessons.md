@@ -57,13 +57,14 @@ inconclusive answer cached "resolves" for a TTL on a cluster still building
 the rollup, and every response in that minute failed. A verdict cached away
 from the query it is about goes stale; asking the query itself does not.
 
-## Fail fast, not long
+## An optimization does not fail the release
 
-Once the server degrades instead of failing, the scripts have no reason to
-fail on a build that is merely slow. A failed `ALTER` is a real error and
-fails fast; a build still running after two minutes finishes on its own. An
-earlier round failed the run after a 10-minute wait, and with the Job's
-`backoffLimit: 10` that could hold a helm hook for hours.
+Once the server degrades instead of failing, the rollup is an optimization
+again, like the views, and the scripts have no reason to fail on it. Earlier
+rounds failed the run after a 10-minute wait, then on a failed `ALTER`; either
+failed the whole analytics release, and with the Job's `backoffLimit: 10`
+reran the whole script. Logging what went wrong is enough, since the server
+logs every read that falls back.
 
 ## Hook order does not reach another release
 
@@ -78,13 +79,13 @@ on `starrocksSummaryEnabled`, or upgrade the server, once the rollup resolves.
 
 - Final state: the sessions reads name the rollup, and a read answered with
   `Unknown table` runs again on the summary table; any other error is returned
-  as is. Both provisioning scripts add
-  the rollup after the routine loads (when missing and not already building),
-  fail on a failed `ALTER`, and wait up to two minutes on the hinted read
-  without failing on a build still running;
-  `TestSummaryRollupProvisioningFailsFastAndWaitsBounded` checks that shape
-  and was mutation-tested (`|| echo`, a continued `|| echo`, `|| true`, no
-  `set -e` are all caught); the chart Job stays a post hook.
+  as is. Both provisioning scripts add the rollup after the routine loads
+  (when missing and not already building) and wait up to two minutes on the
+  hinted read, logging rather than failing on anything in that step;
+  `TestSummaryRollupProvisioningNeverFailsTheRun` checks that shape and was
+  mutation-tested (an unguarded `ALTER` or `SHOW ALTER` under `set -e`, an
+  `exit 1` on either, an `exit 1` on timeout are all caught); the chart Job
+  stays a post hook.
 - The fallback was checked on 3.3.22 with the rollup dropped: the dual-read
   rehearsal fails with `Unknown table` before it and returns the same numbers
   as with the rollup after.

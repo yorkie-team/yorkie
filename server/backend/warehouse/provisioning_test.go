@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -100,67 +99,43 @@ func TestSummaryRollupsAreProvisioned(t *testing.T) {
 	assert.Equal(t, 1, rollups, "sessions is the only metric read through a rollup")
 }
 
-// Creating the rollup is not enough: because the read names the index, the
-// provisioning has to stop when the ALTER fails rather than echo past it, and
-// wait on the read the server sends rather than on desc <table> all, which
-// lists the index while the build is still running. The wait is bounded and
-// does not fail the run: a build still running finishes on its own, and the
-// server reads the slower index until then, so a failure there would only
-// hold the hook. It runs after the routine loads, so a rollup failure does not
-// hold back ingestion.
-func TestSummaryRollupProvisioningFailsFastAndWaitsBounded(t *testing.T) {
-	// How each script stops on a failed command: the docker one runs under
-	// set -e, the chart's has no set -e and exits explicitly, both on the ALTER
-	// and on the SHOW ALTER TABLE ROLLUP that decides whether to run it.
-	scripts := []struct {
-		path     string
-		failures []string
-	}{
-		{path: "build/docker/analytics/init-starrocks-database.sh", failures: []string{`(?m)^set -e$`}},
-		{
-			path: "build/charts/yorkie-analytics/templates/starrocks/configmap.yaml",
-			failures: []string{
-				`ADD ROLLUP [^\n]*;" \\\n\s*\|\| exit 1`,
-				`SHOW ALTER TABLE ROLLUP FROM yorkie\\G"\) \\\n\s*\|\| exit 1`,
-			},
-		},
-	}
-
+// The provisioning waits on the read the server sends rather than on desc
+// <table> all, which lists the index while the build is still running, and
+// the wait is bounded. Nothing in the rollup step fails the run: the server
+// reads the slower index while the rollup is missing, so a failed ALTER or a
+// build still running would only fail the analytics release, and the Job would
+// rerun the whole script. A set -e script has to guard each command that may
+// fail. The step runs after the routine loads, so it cannot hold back
+// ingestion either.
+func TestSummaryRollupProvisioningNeverFailsTheRun(t *testing.T) {
 	for _, d := range allDescs {
 		if d.summaryRollup == "" {
 			continue
 		}
 
-		for _, sc := range scripts {
-			t.Run(d.summaryRollup+"/"+sc.path, func(t *testing.T) {
-				body := repoFile(t, sc.path)
+		for _, path := range []string{
+			"build/docker/analytics/init-starrocks-database.sh",
+			"build/charts/yorkie-analytics/templates/starrocks/configmap.yaml",
+		} {
+			t.Run(d.summaryRollup+"/"+path, func(t *testing.T) {
+				body := repoFile(t, path)
 
-				for _, failure := range sc.failures {
-					assert.Regexp(t, failure, body, "a failed rollup step must stop %s", sc.path)
-				}
-				// Whatever follows the ALTER on its line or a continuation line
-				// may only be the explicit exit, never a fallback that swallows it.
-				alter := regexp.MustCompile(`ADD ROLLUP ` + d.summaryRollup + `[^\n]*;"((?: \\\n)?\s*\|\|[^\n]*)?`)
-				matches := alter.FindAllStringSubmatch(body, -1)
-				require.NotEmpty(t, matches, "%s must add %s", sc.path, d.summaryRollup)
-				for _, m := range matches {
-					if tail := strings.TrimSpace(strings.TrimLeft(m[1], " \\\n")); tail != "" {
-						assert.Equal(t, "|| exit 1", tail, "%s must not fall back past a failed ADD ROLLUP", sc.path)
-					}
-				}
-				assert.Contains(t, body, "SELECT 1 FROM "+d.summarySource()+" LIMIT 1",
-					"%s must wait until the hinted read resolves", sc.path)
-				assert.Regexp(t, d.summaryRollup+` is still building[^\n]*\n\s*break`, body,
-					"%s must stop waiting on a running build, not fail the run", sc.path)
-
-				assert.NotContains(t, body, "set +e", "%s must not turn off failing on errors", sc.path)
-
-				wait := strings.Index(body, "until rollup_ready")
+				step := strings.Index(body, "Adding the coarse session rollup")
 				loads := strings.Index(body, "init-create-routine-load.sql")
-				require.GreaterOrEqual(t, wait, 0, "%s must wait on rollup_ready", sc.path)
-				require.GreaterOrEqual(t, loads, 0, "%s must create the routine loads", sc.path)
-				assert.Greater(t, wait, loads, "%s must add the rollup after the routine loads", sc.path)
-				assert.NotContains(t, body[wait:], "exit 1", "%s must not fail on a build still running", sc.path)
+				require.GreaterOrEqual(t, step, 0, "%s must add the rollup", path)
+				require.GreaterOrEqual(t, loads, 0, "%s must create the routine loads", path)
+				assert.Greater(t, step, loads, "%s must add the rollup after the routine loads", path)
+
+				rollup := body[step:]
+				assert.NotContains(t, rollup, "exit 1", "%s must not fail on the rollup", path)
+				assert.Regexp(t, `ADD ROLLUP `+d.summaryRollup+`[^\n]*;" \\\n\s*\|\| echo`, rollup,
+					"%s must report a failed ADD ROLLUP and go on", path)
+				assert.Regexp(t, `SHOW ALTER TABLE ROLLUP FROM yorkie\\G"\)( \\\n\s*)? \|\| jobs=''`, rollup,
+					"%s must go on when SHOW ALTER TABLE ROLLUP fails", path)
+				assert.Contains(t, rollup, "SELECT 1 FROM "+d.summarySource()+" LIMIT 1",
+					"%s must wait until the hinted read resolves", path)
+				assert.Regexp(t, d.summaryRollup+` is not queryable yet[^\n]*\n\s*break`, rollup,
+					"%s must stop waiting on a running build, not fail the run", path)
 			})
 		}
 	}

@@ -15,14 +15,12 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   that table's channel-day index and logs `read sum_session_hll_daily_ch
   instead of rl_session_daily` until it is queryable — correct, but slow
   enough on a large project to miss the dashboard's deadline. Clusters that
-  followed v0.7.20 already have it. The analytics init job now adds it when
-  missing and fails if that `ALTER` or the `SHOW ALTER TABLE ROLLUP` before it
-  fails, where it used to log and continue;
-  it then waits up to two minutes for the build and logs `rl_session_daily is
-  still building` without failing, so a finished job does not mean a finished
-  build. Upgrade `yorkie-analytics` first, and roll out the server
-  once `SELECT 1 FROM rl_session_daily [_SYNC_MV_] LIMIT 1` returns rather than
-  erroring. Provisioning kept outside the chart should wait on that read too,
+  followed v0.7.20 already have it. The analytics init job adds it when
+  missing, waits up to two minutes for the build, and logs `rl_session_daily
+  is not queryable yet` instead of failing when it is not done, so a finished
+  job does not mean a finished build. Upgrade `yorkie-analytics` first, and
+  roll out the server once `SELECT 1 FROM rl_session_daily [_SYNC_MV_] LIMIT
+  1` returns rather than erroring. Provisioning kept outside the chart should wait on that read too,
   not on `desc ... all`, which lists the index while it is still building.
 
 ### Removed

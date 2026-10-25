@@ -356,13 +356,13 @@ data:
     echo -e 'Adding the coarse session rollup'
     # The sessions reads name rl_session_daily (FROM rl_session_daily
     # [_SYNC_MV_]). Without it they fall back to the summary table's channel-day
-    # index, correct but slow enough to miss the dashboard's deadline, so unlike
-    # the views above a failed ALTER fails the Job. It runs last so that a
-    # failure here does not hold back the routine loads. CREATE TABLE IF NOT
-    # EXISTS carries the ROLLUP clause but skips it on a summary table that
-    # predates it, so add it there -- unless it is queryable or listed by `desc
-    # ... all`, or an earlier run's build is still PENDING, which `desc` does
-    # not show yet.
+    # index: correct, but slow enough to miss the dashboard's deadline. Like the
+    # views above it is an optimization, so nothing here fails the Job; it runs
+    # last, after the routine loads, and says what went wrong instead. CREATE
+    # TABLE IF NOT EXISTS carries the ROLLUP clause but skips it on a summary
+    # table that predates it, so add it there -- unless it is queryable or
+    # listed by `desc ... all`, or an earlier run's build is still PENDING,
+    # which `desc` does not show yet.
     rollup_ready() {
       mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -D yorkie \
         -e "SELECT 1 FROM rl_session_daily [_SYNC_MV_] LIMIT 1" >/dev/null 2>&1
@@ -370,7 +370,7 @@ data:
     if ! rollup_ready && ! mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root \
       -e "desc yorkie.sum_session_hll_daily_ch all\G" | grep -q "IndexName: rl_session_daily"; then
       jobs=$(mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e "SHOW ALTER TABLE ROLLUP FROM yorkie\G") \
-        || exit 1
+        || jobs=''
       if ! echo "$jobs" | awk '
         /^ *TableName:/ { t = $2 }
         /^ *RollupIndexName:/ { n = $2 }
@@ -379,7 +379,7 @@ data:
         END { exit !found }'; then
         mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root \
           -e "ALTER TABLE yorkie.sum_session_hll_daily_ch ADD ROLLUP rl_session_daily (project_id, dt, session_hll);" \
-          || exit 1
+          || echo -e 'Could not add rl_session_daily; the sessions reads use the slower index until it exists'
       fi
     fi
 
@@ -392,7 +392,7 @@ data:
     until rollup_ready; do
       attempt=$((attempt + 1))
       if [ $attempt -ge 60 ]; then
-        echo -e 'rl_session_daily is still building; see SHOW ALTER TABLE ROLLUP FROM yorkie'
+        echo -e 'rl_session_daily is not queryable yet; see SHOW ALTER TABLE ROLLUP FROM yorkie'
         break
       fi
       sleep 2s

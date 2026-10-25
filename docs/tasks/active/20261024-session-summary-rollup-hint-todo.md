@@ -33,10 +33,9 @@ both 3.3.9 and 3.3.22, with the same results.
 - [x] Rehearsal green on 3.3.22 (and the hint still valid on 3.3.9)
 - [x] Update `docs/design/project-stats-long-retention.md`
 - [x] `make verify`, self review
-- [x] Make provisioning fail fast on the rollup (docker init script and chart):
-      add it only when missing, fail on a failed `ALTER`, wait on the hinted
-      read for two minutes and report a build still running; add
-      `TestSummaryRollupProvisioningFailsFastAndWaitsBounded`
+- [x] Provision the rollup properly (docker init script and chart): add it
+      only when missing, wait on the hinted read for two minutes, and log
+      rather than fail; add `TestSummaryRollupProvisioningNeverFailsTheRun`
 - [x] Rehearse the init script on 3.3.22: fresh stack, and a summary table
       created without the rollup
 - [x] Run a sessions read again on the summary table when StarRocks answers
