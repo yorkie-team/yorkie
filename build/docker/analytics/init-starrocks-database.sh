@@ -104,13 +104,13 @@ mysql -h starrocks-fe -P 9030 -u root -e 'show routine load from yorkie\G'
 
 echo -e 'Adding the coarse session rollup'
 # The sessions reads name rl_session_daily (FROM rl_session_daily [_SYNC_MV_]).
-# Without it they fall back to the channel-day base index, correct but slow
-# enough to miss the dashboard's deadline, so unlike the views above a rollup
-# that cannot be built fails the script. It runs last so that a failure here
-# does not hold back the routine loads. CREATE TABLE IF NOT EXISTS carries
-# the ROLLUP clause but skips it on a summary table that predates it, so add it
-# there -- unless it is already queryable, or an earlier run's build is still
-# going, which `desc ... all` does not show while the job is PENDING.
+# Without it they fall back to the summary table's channel-day index, correct
+# but slow enough to miss the dashboard's deadline, so unlike the views above,
+# a rollup that cannot be built fails the script. It runs last so that a
+# failure here does not hold back the routine loads. CREATE TABLE IF NOT EXISTS
+# carries the ROLLUP clause but skips it on a summary table that predates it,
+# so add it there -- unless it is already queryable, or an earlier run's build
+# is still going, which `desc ... all` does not show while the job is PENDING.
 rollup_ready() {
   mysql -h starrocks-fe -P 9030 -u root -D yorkie \
     -e "SELECT 1 FROM rl_session_daily [_SYNC_MV_] LIMIT 1" >/dev/null 2>&1

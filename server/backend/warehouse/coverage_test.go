@@ -121,6 +121,20 @@ func TestCoverageDays(t *testing.T) {
 	}
 }
 
+// cacheDays reads one summary table's days through the cache.
+func cacheDays(
+	ctx context.Context,
+	cache *coverageCache,
+	table string,
+	fetch func(context.Context) (coverageProbe, error),
+) (summaryDays, error) {
+	p, err := cache.probe(ctx, fetch)
+	if err != nil {
+		return summaryDays{}, err
+	}
+	return p.days[table], nil
+}
+
 func TestCoverageCacheProbesOncePerWindow(t *testing.T) {
 	var cache coverageCache
 
@@ -133,19 +147,19 @@ func TestCoverageCacheProbesOncePerWindow(t *testing.T) {
 
 	ctx := context.Background()
 	for range 3 {
-		got, err := cache.days(ctx, "sum_user_hll_daily", fetch)
+		got, err := cacheDays(ctx, &cache, "sum_user_hll_daily", fetch)
 		require.NoError(t, err)
 		assert.Equal(t, want, got)
 	}
 	assert.Equal(t, 1, calls, "a dashboard load must probe once, not once per metric")
 
 	// Another table from the same probe is answered from the same result.
-	_, err := cache.days(ctx, "sum_session_hll_daily_ch", fetch)
+	_, err := cacheDays(ctx, &cache, "sum_session_hll_daily_ch", fetch)
 	require.NoError(t, err)
 	assert.Equal(t, 1, calls)
 
 	cache.fetchedAt = time.Now().Add(-coverageTTL - time.Second)
-	_, err = cache.days(ctx, "sum_user_hll_daily", fetch)
+	_, err = cacheDays(ctx, &cache, "sum_user_hll_daily", fetch)
 	require.NoError(t, err)
 	assert.Equal(t, 2, calls, "the probe must be redone once the TTL is up")
 }
@@ -156,7 +170,7 @@ func TestCoverageCacheUnknownTableCoversNothing(t *testing.T) {
 		return coverageProbe{days: map[string]summaryDays{}}, nil
 	}
 
-	got, err := cache.days(context.Background(), "sum_user_hll_daily", fetch)
+	got, err := cacheDays(context.Background(), &cache, "sum_user_hll_daily", fetch)
 	require.NoError(t, err)
 	assert.Equal(t, summaryDays{}, got)
 	// The zero value has to read as covering nothing, or an unprobed table
@@ -173,11 +187,11 @@ func TestCoverageCachePropagatesProbeError(t *testing.T) {
 		return coverageProbe{}, want
 	}
 
-	_, err := cache.days(context.Background(), "sum_user_hll_daily", fetch)
+	_, err := cacheDays(context.Background(), &cache, "sum_user_hll_daily", fetch)
 	assert.ErrorIs(t, err, want)
 
 	// A failed probe must not be cached as "covers nothing".
-	_, err = cache.days(context.Background(), "sum_user_hll_daily", fetch)
+	_, err = cacheDays(context.Background(), &cache, "sum_user_hll_daily", fetch)
 	assert.ErrorIs(t, err, want)
 	assert.Equal(t, 2, calls)
 }
@@ -429,7 +443,7 @@ func TestReadBelowSummaryFloorGoesToTheBase(t *testing.T) {
 
 // A cluster whose summary table has no rl_session_daily yet, or whose build has
 // not finished, answers the hinted read with Unknown table. The sessions reads
-// then fall back to the channel-day base index: slower, but the stats response
+// then fall back to the summary table's channel-day index: slower, but the stats response
 // survives instead of failing as a whole with them.
 func TestUnresolvedRollupFallsBackToTheSummaryTable(t *testing.T) {
 	unknown := &mysql.MySQLError{Number: 5502, Message: "Unknown table 'yorkie.rl_session_daily'"}
@@ -475,14 +489,48 @@ func TestUnresolvedRollupFallsBackToTheSummaryTable(t *testing.T) {
 	}
 }
 
-// Failing to reach StarRocks is not an answer about the rollup. Caching it as
-// unresolved would put every sessions read on the slow path for a TTL after a
-// blip, so it fails the probe the way the coverage query does.
+// Only Unknown table is an answer about the rollup. Anything else — StarRocks
+// failing the query for another reason, or not being reached — cached as
+// unresolved would put every sessions read on the heavier plan for a TTL after
+// a blip, so it fails the probe the way the coverage query does.
 func TestRollupProbeErrorFailsTheProbe(t *testing.T) {
-	r := &StarRocks{conf: &Config{SummaryEnabled: true}, driver: sql.OpenDB(&probeConnector{rollupErr: errCaptured})}
-	defer func() { _ = r.Close() }()
+	for name, rollupErr := range map[string]error{
+		"unreachable":  errCaptured,
+		"server error": &mysql.MySQLError{Number: 1064, Message: "Backend node not found"},
+		"analysis":     &mysql.MySQLError{Number: 5502, Message: "Getting analyzing error. Detail message: timeout"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := &StarRocks{conf: &Config{SummaryEnabled: true}, driver: sql.OpenDB(&probeConnector{rollupErr: rollupErr})}
+			defer func() { _ = r.Close() }()
 
-	_, err := r.fetchCoverage(context.Background())
-	require.ErrorIs(t, err, errCaptured)
-	assert.ErrorContains(t, err, "probe rollup rl_session_daily")
+			_, err := r.fetchCoverage(context.Background())
+			require.ErrorIs(t, err, rollupErr)
+			assert.ErrorContains(t, err, "probe rollup rl_session_daily")
+		})
+	}
+}
+
+// Once the build finishes, the next probe has to put the reads back on the
+// rollup: a probe replaces the cached answer rather than adding to it.
+func TestResolvedRollupIsReadAgainAfterTheTTL(t *testing.T) {
+	r := &StarRocks{conf: &Config{SummaryEnabled: true}}
+	answers := []coverageProbe{
+		{unresolved: map[string]bool{descSession.summaryRollup: true}},
+		{},
+	}
+	fetch := func(context.Context) (coverageProbe, error) {
+		p := answers[0]
+		answers = answers[1:]
+		return p, nil
+	}
+
+	p, err := r.coverage.probe(context.Background(), fetch)
+	require.NoError(t, err)
+	assert.True(t, p.unresolved[descSession.summaryRollup])
+
+	r.coverage.fetchedAt = time.Now().Add(-coverageTTL - time.Second)
+	p, err = r.coverage.probe(context.Background(), fetch)
+	require.NoError(t, err)
+	assert.False(t, p.unresolved[descSession.summaryRollup], "a resolved rollup must not stay unresolved")
+	assert.Empty(t, answers, "the TTL must have cost a second probe")
 }

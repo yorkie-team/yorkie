@@ -99,7 +99,8 @@ func coverageDays(days summaryDays, today time.Time) dayRange {
 }
 
 // coverageProbe is one probe's answer: the days each summary table holds, and
-// the rollups the reads name that the hinted read does not resolve yet.
+// the rollups the reads name that the hinted read does not resolve yet. A table
+// the probe did not report holds the zero value, i.e. covers nothing.
 type coverageProbe struct {
 	days       map[string]summaryDays
 	unresolved map[string]bool
@@ -133,20 +134,6 @@ func (c *coverageCache) probe(
 	return coverageProbe{days: c.probed, unresolved: c.unresolved}, nil
 }
 
-// days returns the days the given summary table holds. A table the probe did
-// not report is reported as the zero value, i.e. covering nothing.
-func (c *coverageCache) days(
-	ctx context.Context,
-	table string,
-	fetch func(context.Context) (coverageProbe, error),
-) (summaryDays, error) {
-	p, err := c.probe(ctx, fetch)
-	if err != nil {
-		return summaryDays{}, err
-	}
-	return p.days[table], nil
-}
-
 // fetchCoverage runs the coverage probe against StarRocks: the coverage query,
 // then one hinted read per rollup the reads name.
 func (r *StarRocks) fetchCoverage(ctx context.Context) (coverageProbe, error) {
@@ -175,17 +162,18 @@ func (r *StarRocks) fetchCoverage(ctx context.Context) (coverageProbe, error) {
 // rollupResolves reports whether d's rollup can be read by name. A cluster
 // whose summary table predates the rollup, or whose build has not reached
 // FINISHED, answers the hinted read with Unknown table: that is a no, and the
-// reads fall back to the summary table until a later probe says yes. Failing to
-// reach StarRocks is not an answer, and fails the probe like the coverage query.
+// reads fall back to the summary table until a later probe says yes. Any other
+// error, from StarRocks or on the way to it, is not an answer about the rollup
+// and fails the probe like the coverage query: a timeout or a restarting BE
+// must not move every sessions read onto the heavier plan for a TTL.
 func (r *StarRocks) rollupResolves(ctx context.Context, d metricDesc) (bool, error) {
 	// The name comes from a descriptor, never from a request.
 	//nolint:gosec
 	rows, err := r.driver.QueryContext(ctx, "SELECT 1 FROM "+d.summarySource()+" LIMIT 1")
 	if err != nil {
-		var serverErr *mysql.MySQLError
-		if errors.As(err, &serverErr) {
+		if isUnknownTable(err) {
 			logging.DefaultLogger().Warnf(
-				"read %s instead of %s, which is not queryable: %v", d.summaryTable, d.summaryRollup, err,
+				"read %s instead of %s, which is not queryable yet: %v", d.summaryTable, d.summaryRollup, err,
 			)
 			return false, nil
 		}
@@ -193,6 +181,14 @@ func (r *StarRocks) rollupResolves(ctx context.Context, d metricDesc) (bool, err
 	}
 	closeRows(rows)
 	return true, nil
+}
+
+// isUnknownTable reports whether StarRocks rejected a query for naming a table
+// or index it does not have. StarRocks reports every analysis error as 5502, so
+// the message is what tells this one apart.
+func isUnknownTable(err error) bool {
+	var serverErr *mysql.MySQLError
+	return errors.As(err, &serverErr) && strings.Contains(serverErr.Message, "Unknown table")
 }
 
 // fetchSummaryDays runs the coverage query.

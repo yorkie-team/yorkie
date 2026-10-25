@@ -38,8 +38,8 @@ func repoFile(t *testing.T, rel string) string {
 }
 
 // A descriptor that names a summaryRollup reads it by name — FROM <rollup>
-// [_SYNC_MV_]. Without the index the reads fall back to the channel-day base
-// index, which is correct but what misses the dashboard's deadline.
+// [_SYNC_MV_]. Without the index the reads fall back to the summary table's
+// channel-day index, which is correct but what misses the dashboard's deadline.
 //
 // Unit tests have no StarRocks to ask whether the index exists on a given
 // cluster; TestE2EDualReadStaysOnTheRollups does that, behind the

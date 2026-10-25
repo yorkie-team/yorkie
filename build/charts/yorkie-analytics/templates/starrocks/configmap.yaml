@@ -355,8 +355,8 @@ data:
 
     echo -e 'Adding the coarse session rollup'
     # The sessions reads name rl_session_daily (FROM rl_session_daily
-    # [_SYNC_MV_]). Without it they fall back to the channel-day base index,
-    # correct but slow enough to miss the dashboard's deadline, so unlike the
+    # [_SYNC_MV_]). Without it they fall back to the summary table's
+    # channel-day index, correct but slow enough to miss the dashboard's deadline, so unlike the
     # views above a rollup that cannot be built fails the Job. It runs last so
     # that a failure here does not hold back the routine loads. CREATE TABLE
     # IF NOT EXISTS carries the ROLLUP clause but skips it on a summary table

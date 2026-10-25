@@ -46,11 +46,11 @@ Left to the optimizer, a missing rollup costs a slower plan. Named with the
 hint, it is `Unknown table`, and `GetProjectStats` fans its reads out through
 one `errgroup`, so one failed read is the whole response. The read path has to
 take the fallback back itself: the coverage probe asks the hinted read once per
-TTL, and the sessions reads use the summary table while it errors. The
-distinction that decides it is the server's error versus no answer at all:
-`*mysql.MySQLError` (5502 on 3.3.22) means the read does not resolve, while a
-network or context error fails the probe, so a blip does not put a minute of
-reads on the slow path.
+TTL, and the sessions reads use the summary table while it answers `Unknown
+table`. Only that message means the read does not resolve: StarRocks reports
+every analysis error as 5502, and a timeout or a lost BE also arrives as a
+server error, so the probe fails on anything else, as it does on a network or
+context error. A blip must not put a minute of reads on the heavier plan.
 
 The scripts still gate on the rollup, because the fallback is the plan that
 misses the deadline: they fail when they cannot build it, so a cluster is not
