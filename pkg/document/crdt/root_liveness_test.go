@@ -64,3 +64,42 @@ func TestGarbageCollectSkipsLiveRegisteredElement(t *testing.T) {
 	assert.True(t, root.Object().Has("obj"),
 		"the revived element was unlinked from its key")
 }
+
+// TestGarbageCollectSkipsLiveRegisteredNode is the node-worklist sibling of the
+// test above: collection tolerates a registered GC pair whose child is no
+// longer removed.
+//
+// The node side is where removedAt is actually cleared in place today --
+// TreeNode.unremove and RGATreeSplitNode.SetRemovedAt(nil) -- and the entry
+// comes off gcNodePairMap only because the reviver also calls
+// UnregisterGCPair. Every revive traced does, so this state is driven
+// directly. The guard is what makes a revive that forgets land as a skipped
+// entry instead of a nil-ticket deref inside a server-side snapshot build.
+func TestGarbageCollectSkipsLiveRegisteredNode(t *testing.T) {
+	root := helper.TestRoot()
+	ctx := helper.TextChangeContext(root)
+
+	treeRoot := crdt.NewTreeNode(crdt.NewTreeNodeID(ctx.IssueTimeTicket(), 0), "r", nil)
+	para := crdt.NewTreeNode(crdt.NewTreeNodeID(ctx.IssueTimeTicket(), 0), "p", nil)
+	require.NoError(t, treeRoot.Append(para))
+	text := crdt.NewTreeNode(crdt.NewTreeNodeID(ctx.IssueTimeTicket(), 0), "text", nil, "hello")
+	require.NoError(t, para.Append(text))
+
+	text.SetRemovedAt(ctx.IssueTimeTicket())
+
+	tree := crdt.NewTree(treeRoot, ctx.IssueTimeTicket())
+	root.Object().Set("tree", tree)
+	root.RegisterElement(tree, root.Object())
+	require.Equal(t, 1, root.GarbageLen(), "the tombstoned node is registered")
+
+	// Revive in place without unregistering the pair.
+	text.SetRemovedAt(nil)
+
+	n, err := root.GarbageCollect(helper.MaxVersionVector())
+	require.NoError(t, err)
+	assert.Equal(t, 0, n, "collection purged a node that is not removed")
+	assert.Equal(t, 1, root.GarbageLen(),
+		"the skipped entry has to stay on the worklist, not be dropped")
+	assert.Equal(t, "<r><p>hello</p></r>", tree.ToXML(),
+		"the revived node was unlinked from its parent")
+}
