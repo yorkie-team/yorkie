@@ -157,10 +157,12 @@ The cost is a hard dependency: a cluster without the rollup fails the sessions
 reads with `Unknown table` instead of scanning the base index, and
 `GetProjectStats` runs its warehouse reads in one `errgroup`, so that is the
 whole stats response. Both provisioning scripts therefore treat the rollup as a
-gate rather than an optimization: they add it when it is missing, stop if the
-`ALTER` fails, and wait until `SELECT 1 FROM rl_session_daily [_SYNC_MV_]`
-resolves, failing if it never does. `desc <table> all` is not that wait: it
-lists the index slightly before a query can name it.
+gate rather than an optimization: after the routine loads, they add it unless
+it is queryable or an earlier build is still running, stop if the `ALTER`
+fails, and wait until `SELECT 1 FROM rl_session_daily [_SYNC_MV_]` resolves,
+failing if it never does. That read resolves when the build reaches
+`FINISHED`; `desc <table> all` is not the same wait, since it lists the index
+while the build is still running.
 
 The coverage probe still reads `sum_session_hll_daily_ch`; the rollup is written
 in the same load, so the two hold the same days.

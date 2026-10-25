@@ -301,8 +301,8 @@ data:
 
     echo -e 'Checking materialized views'
     # The rollup build runs asynchronously and the index only shows up in `desc
-    # ... all` once it finishes, so poll rather than checking straight after the
-    # CREATE. A view that never shows up is not fatal: the queries fall back to
+    # ... all` once the build is under way, so poll rather than checking straight
+    # after the CREATE. A view that never shows up is not fatal: the queries fall back to
     # scanning the base table, which is slower but still correct.
     mvs=(user_events:mv_user_hll_daily document_events:mv_document_hll_daily channel_events:mv_channel_hll_daily session_events:mv_session_hll_daily_ch client_events:mv_client_hll_daily)
     for mv in ${mvs[@]}; do
@@ -326,35 +326,6 @@ data:
     else
       echo -e 'Summary tables may already exist, continuing...'
     fi
-
-    echo -e 'Adding the coarse session rollup'
-    # The sessions reads name rl_session_daily (FROM rl_session_daily
-    # [_SYNC_MV_]), so with SummaryEnabled the server fails without it: unlike
-    # the views above, this index is a gate, not an optimization. CREATE TABLE
-    # IF NOT EXISTS carries the ROLLUP clause but skips it on a summary table
-    # that predates it, so add it there, and fail the Job if the ALTER fails.
-    if ! mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root \
-      -e "desc yorkie.sum_session_hll_daily_ch all\G" | grep -q "IndexName: rl_session_daily"; then
-      mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root \
-        -e "ALTER TABLE yorkie.sum_session_hll_daily_ch ADD ROLLUP rl_session_daily (project_id, dt, session_hll);" \
-        || exit 1
-    fi
-
-    echo -e 'Waiting for the coarse session rollup'
-    # ADD ROLLUP builds asynchronously, and `desc ... all` lists the index a
-    # moment before a query can name it, so wait on the read the server sends
-    # instead. Failing here fails the hook, and the Job retries the wait.
-    attempt=0
-    until mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -D yorkie \
-      -e "SELECT 1 FROM rl_session_daily [_SYNC_MV_] LIMIT 1" >/dev/null 2>&1; do
-      attempt=$((attempt + 1))
-      if [ $attempt -ge 60 ]; then
-        echo -e 'rl_session_daily is not queryable; see SHOW ALTER TABLE ROLLUP FROM yorkie'
-        exit 1
-      fi
-      sleep 2s
-    done
-    echo -e 'rl_session_daily is ready on sum_session_hll_daily_ch'
 
     sleep 5s
     echo -e 'Creating routine load'
@@ -380,4 +351,47 @@ data:
 
     echo -e 'Final routine load status:'
     mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e 'show routine load from yorkie\G'
+
+    echo -e 'Adding the coarse session rollup'
+    # The sessions reads name rl_session_daily (FROM rl_session_daily
+    # [_SYNC_MV_]), so with SummaryEnabled the server fails without it: unlike
+    # the views above, this index is a gate, not an optimization. It runs last
+    # so that a failure here does not hold back the routine loads. CREATE TABLE
+    # IF NOT EXISTS carries the ROLLUP clause but skips it on a summary table
+    # that predates it, so add it there -- unless it is already queryable, or an
+    # earlier run's build is still going, which `desc ... all` does not show
+    # while the job is PENDING.
+    rollup_ready() {
+      mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -D yorkie \
+        -e "SELECT 1 FROM rl_session_daily [_SYNC_MV_] LIMIT 1" >/dev/null 2>&1
+    }
+    if ! rollup_ready; then
+      jobs=$(mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root -e "SHOW ALTER TABLE ROLLUP FROM yorkie\G") \
+        || exit 1
+      if ! echo "$jobs" | awk '
+        /^ *TableName:/ { t = $2 }
+        /^ *RollupIndexName:/ { n = $2 }
+        /^ *State:/ && t == "sum_session_hll_daily_ch" && n == "rl_session_daily" &&
+          $2 != "FINISHED" && $2 != "CANCELLED" { found = 1 }
+        END { exit !found }'; then
+        mysql -h $STARROCKS_MYSQL_HOST -P 9030 -u root \
+          -e "ALTER TABLE yorkie.sum_session_hll_daily_ch ADD ROLLUP rl_session_daily (project_id, dt, session_hll);" \
+          || exit 1
+      fi
+    fi
+
+    echo -e 'Waiting for the coarse session rollup'
+    # The hinted read resolves once the build reaches FINISHED, so wait on the
+    # read the server sends; `desc ... all` lists the index while it is still
+    # RUNNING. A failure here fails the hook; the Job then reruns the script.
+    attempt=0
+    until rollup_ready; do
+      attempt=$((attempt + 1))
+      if [ $attempt -ge 300 ]; then
+        echo -e 'rl_session_daily is not queryable; see SHOW ALTER TABLE ROLLUP FROM yorkie'
+        exit 1
+      fi
+      sleep 2s
+    done
+    echo -e 'rl_session_daily is ready on sum_session_hll_daily_ch'
 {{- end }}

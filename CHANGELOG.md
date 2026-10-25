@@ -13,9 +13,11 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   name, so a cluster with `starrocksSummaryEnabled` whose
   `sum_session_hll_daily_ch` lacks it fails `GetProjectStats` with `Unknown
   table` instead of scanning the base index. Clusters that followed v0.7.20
-  already have it. The analytics init job now adds it when missing, waits until
-  it can be queried, and fails otherwise; upgrade `yorkie-analytics` first and
-  roll out the server once that job has succeeded.
+  already have it. The analytics init job now adds it when missing, waits up to
+  10 minutes until it can be queried, and fails otherwise; upgrade
+  `yorkie-analytics` first (with a `helm --timeout` above 10m on a cluster
+  that still needs the rollup) and roll out the server once that job has
+  succeeded.
 
 ### Removed
 

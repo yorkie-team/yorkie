@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -101,29 +103,53 @@ func TestSummaryRollupsAreProvisioned(t *testing.T) {
 }
 
 // Creating the rollup is not enough: because the read names the index, the
-// provisioning has to be a gate on it. Both scripts have to (a) stop when the
-// ALTER fails rather than echo past it, and (b) wait until the read the server
-// sends resolves, failing if it never does. desc <table> all is not that wait:
-// it lists the index a moment before FROM <name> [_SYNC_MV_] resolves it.
+// provisioning has to be a gate on it. Both scripts have to stop when the ALTER
+// fails rather than echo past it, and wait until the read the server sends
+// resolves, failing if it never does. desc <table> all is not that wait: it
+// lists the index while the build is still running. The gate runs after the
+// routine loads, so a rollup failure does not hold back ingestion.
 func TestSummaryRollupProvisioningIsAGate(t *testing.T) {
+	// How each script stops on a failed command: the docker one runs under
+	// set -e, the chart's has no set -e and exits explicitly.
+	scripts := []struct {
+		path    string
+		failure string
+	}{
+		{path: "build/docker/analytics/init-starrocks-database.sh", failure: `(?m)^set -e$`},
+		{
+			path:    "build/charts/yorkie-analytics/templates/starrocks/configmap.yaml",
+			failure: `ADD ROLLUP [^\n]*;" \\\n\s*\|\| exit 1`,
+		},
+	}
+
 	for _, d := range allDescs {
 		if d.summaryRollup == "" {
 			continue
 		}
 
-		for _, path := range []string{
-			"build/docker/analytics/init-starrocks-database.sh",
-			"build/charts/yorkie-analytics/templates/starrocks/configmap.yaml",
-		} {
-			t.Run(d.summaryRollup+"/"+path, func(t *testing.T) {
-				body := repoFile(t, path)
+		for _, sc := range scripts {
+			t.Run(d.summaryRollup+"/"+sc.path, func(t *testing.T) {
+				body := repoFile(t, sc.path)
 
-				assert.NotContains(t, body, d.summaryRollup+" may already exist, continuing...",
-					"a failed ADD ROLLUP must stop %s, not be echoed past", path)
+				assert.Regexp(t, sc.failure, body, "a failed ADD ROLLUP must stop %s", sc.path)
+				// Whatever follows the ALTER on its line or a continuation line
+				// may only be the explicit exit, never a fallback that swallows it.
+				alter := regexp.MustCompile(`ADD ROLLUP ` + d.summaryRollup + `[^\n]*;"((?: \\\n)?\s*\|\|[^\n]*)?`)
+				matches := alter.FindAllStringSubmatch(body, -1)
+				require.NotEmpty(t, matches, "%s must add %s", sc.path, d.summaryRollup)
+				for _, m := range matches {
+					if tail := strings.TrimSpace(strings.TrimLeft(m[1], " \\\n")); tail != "" {
+						assert.Equal(t, "|| exit 1", tail, "%s must not fall back past a failed ADD ROLLUP", sc.path)
+					}
+				}
 				assert.Contains(t, body, "SELECT 1 FROM "+d.summarySource()+" LIMIT 1",
-					"%s must wait until the hinted read resolves", path)
-				assert.Contains(t, body, d.summaryRollup+" is not queryable",
-					"%s must fail when the hinted read never resolves", path)
+					"%s must wait until the hinted read resolves", sc.path)
+				assert.Regexp(t, d.summaryRollup+` is not queryable[^\n]*\n\s*exit 1`, body,
+					"%s must fail when the hinted read never resolves", sc.path)
+
+				gate := strings.Index(body, "Adding the coarse session rollup")
+				loads := strings.Index(body, "Creating routine load")
+				assert.Greater(t, gate, loads, "%s must gate on the rollup after the routine loads", sc.path)
 			})
 		}
 	}
