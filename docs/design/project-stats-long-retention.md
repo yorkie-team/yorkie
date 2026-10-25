@@ -648,7 +648,19 @@ response with them. Per environment:
    it, so the gate is `SHOW ALTER TABLE ROLLUP FROM yorkie` reporting
    `State: FINISHED` — not the `desc` probe. This is a prerequisite of step 5,
    not only of step 3: a server with `SummaryEnabled` that reaches a cluster
-   without a finished rollup serves no project stats at all.
+   without a finished rollup serves no project stats at all. The provisioning
+   the repo ships — `build/docker/analytics/init-starrocks-database.sh` and the
+   chart's init job — runs the `ALTER`, but it is not that gate: both continue
+   past a failed `ALTER` and poll `desc … all` rather than `SHOW ALTER TABLE
+   ROLLUP`, and the chart's init job is a `post-install,post-upgrade` hook, so
+   on an upgrade it runs after the new server is already serving. Until they
+   gate on the build state and fail the rollout when it does not reach
+   `FINISHED`, confirm the index by hand — `SHOW ALTER TABLE ROLLUP FROM
+   yorkie`, then a `SELECT … FROM rl_session_daily [_SYNC_MV_] LIMIT 1` that
+   returns rather than erroring — before step 5.
+   `TestSummaryRollupsAreProvisioned` keeps the name the server reads and the
+   name those scripts create from drifting apart, but it cannot tell whether a
+   given cluster has run them.
 2. Backfill from the base — staged per table, `session_events` last and in a
    low-ingest window, as with the MV builds. Idempotent, and it stops before the
    running UTC day so the summary never holds a partial day for the read path to

@@ -47,6 +47,16 @@ degradation.
 
 ## Self review
 
+- Round 4: added `TestSummaryRollupsAreProvisioned`, a plain unit test that
+  every descriptor naming a `summaryRollup` is created by both provisioning
+  paths the repo ships — the inline `ROLLUP (...)` clause for a fresh cluster
+  and the `ALTER ... ADD ROLLUP` for a summary table that predates it. CI has
+  no StarRocks, so it cannot check that a given cluster ran them; what it does
+  check is that the index the server names and the index the scripts create
+  cannot drift apart silently. The runbook step 1 and the upgrade note now say
+  outright that those scripts are not the deployment gate, since both continue
+  past a failed `ALTER` and the chart's init job is a post-upgrade hook.
+  Changing the scripts themselves stays outside this change's files.
 - Round 3 (blast radius): the deployment runbook in
   `docs/design/project-stats-long-retention.md` still opened with "the base scan
   is always a correct fallback" and gated the rollup build on `desc … all`, both

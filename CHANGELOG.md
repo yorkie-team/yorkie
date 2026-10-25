@@ -20,7 +20,10 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   (project_id, dt, session_hll);` and wait for `SHOW ALTER TABLE ROLLUP FROM
   yorkie` to report `State: FINISHED` for it — on StarRocks 3.3.22 the index
   shows up in `desc <table> all` a moment before it can be named in a query,
-  so the `desc` probe alone is not enough of a gate.
+  so the `desc` probe alone is not enough of a gate. The analytics chart's
+  init job runs the same `ALTER`, but from a `post-upgrade` hook, without
+  failing the rollout when it errors, and gated on that `desc` probe — so it
+  is not a substitute for applying the `ALTER` ahead of the server rollout.
 
 ### Removed
 
