@@ -66,10 +66,8 @@ func (m *MockDB) SetDisconnected(disconnected bool) {
 }
 
 func TestClusterNodes(t *testing.T) {
-	newTestConfig := func(addr string) *server.Config {
-		conf := helper.TestConfig()
-		conf.Backend.RPCAddr = addr
-		conf.Mongo = &mongo.Config{
+	newMongoConfig := func() *mongo.Config {
+		return &mongo.Config{
 			ConnectionTimeout:  helper.MongoConnectionTimeout,
 			ConnectionURI:      helper.MongoConnectionURI,
 			YorkieDatabase:     helper.TestDBName() + "-integration",
@@ -82,6 +80,12 @@ func TestClusterNodes(t *testing.T) {
 			ChangeCacheSize:    helper.MongoChangeCacheSize,
 			VectorCacheSize:    helper.MongoVectorCacheSize,
 		}
+	}
+
+	newTestConfig := func(addr string) *server.Config {
+		conf := helper.TestConfig()
+		conf.Backend.RPCAddr = addr
+		conf.Mongo = newMongoConfig()
 		conf.Membership.LeaseDuration = "300ms"
 		conf.Membership.RenewalInterval = "100ms"
 
@@ -98,10 +102,19 @@ func TestClusterNodes(t *testing.T) {
 		return svr, conf.Backend.RPCAddr
 	}
 
+	// The subtests clear the cluster nodes through a database client of their
+	// own rather than through a throwaway server. A server would hold an RPC
+	// port, a housekeeping loop and a membership loop that re-registers its own
+	// row right after the row is cleared, and every subtest would pay for one
+	// more MongoDB connection than the servers it actually asserts on.
+	db, err := mongo.Dial(newMongoConfig())
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		assert.NoError(t, db.Close())
+	})
+
 	clearClusterNodes := func(ctx context.Context) {
-		dummy, _ := startServer("dummy")
-		require.NoError(t, dummy.Backend().ClearClusterNodes(ctx))
-		require.NoError(t, dummy.Shutdown(true))
+		require.NoError(t, db.RemoveClusterNodes(ctx))
 	}
 
 	t.Run("Identical active cluster nodes across servers test", func(t *testing.T) {
@@ -171,10 +184,13 @@ func TestClusterNodes(t *testing.T) {
 
 		clearClusterNodes(ctx)
 
+		// NOTE: server.New and Start are checked with require: a failure of
+		// either leaves a nil server behind, and continuing would panic on the
+		// next method call and take the whole test binary down with it.
 		svr, err := server.New(newTestConfig("test-addr-1"))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
-		assert.NoError(t, svr.Start())
+		require.NoError(t, svr.Start())
 
 		assert.Eventually(t, func() bool {
 			svrs, err := svr.Backend().ClusterNodes(ctx)
@@ -185,9 +201,9 @@ func TestClusterNodes(t *testing.T) {
 		assert.NoError(t, svr.Shutdown(true))
 
 		svr2, err := server.New(newTestConfig("test-addr-1"))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
-		assert.NoError(t, svr2.Start())
+		require.NoError(t, svr2.Start())
 		defer func() {
 			assert.NoError(t, svr2.Shutdown(true))
 		}()
@@ -207,12 +223,12 @@ func TestClusterNodes(t *testing.T) {
 		clearClusterNodes(ctx)
 
 		svr, err := server.New(newTestConfig("test-addr-0"))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		be := svr.Backend()
 		mockDB := NewMockDB(be.DB)
 		be.SetMembershipDB(mockDB)
 
-		assert.NoError(t, svr.Start())
+		require.NoError(t, svr.Start())
 		defer func() {
 			assert.NoError(t, svr.Shutdown(true))
 		}()
@@ -257,7 +273,7 @@ func TestClusterNodes(t *testing.T) {
 		// token. The acquire pre-check in TryLeadership counts the caller's
 		// own row as an active leader, so the predicate also requires a token
 		// change to confirm reacquisition rather than a stale row resurfacing.
-		assert.Eventually(t, func() bool {
+		require.Eventually(t, func() bool {
 			infos, err := svr.Backend().ClusterNodes(ctx)
 			require.NoError(t, err)
 
@@ -328,7 +344,8 @@ func TestClusterNodes(t *testing.T) {
 		}, 1*gotime.Second, 50*gotime.Millisecond)
 
 		infos, err := svr2.Backend().ClusterNodes(ctx)
-		assert.NoError(t, err)
+		require.NoError(t, err)
+		require.NotEmpty(t, infos)
 		leader := infos[0].RPCAddr
 		var leaderSvr, followerSvr *server.Yorkie
 
