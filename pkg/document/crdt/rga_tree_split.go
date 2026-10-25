@@ -73,10 +73,14 @@ type restoreSpanValue[V RGATreeSplitValue] struct {
 }
 
 var (
-	// initialNodeID is shared by the head of every Text, so its key is warmed
-	// here rather than on first read.
-	initialNodeID = NewRGATreeSplitNodeID(time.InitialTicket, 0).warm()
+	initialNodeID = NewRGATreeSplitNodeID(time.InitialTicket, 0)
 )
+
+func init() {
+	// initialNodeID is shared by the head of every Text, so fill its key
+	// cache before any goroutine reads it.
+	initialNodeID.key()
+}
 
 // RGATreeSplitValue is a value of RGATreeSplitNode.
 // gcAttrSource is implemented by a split value that carries attributes of its
@@ -101,9 +105,9 @@ type RGATreeSplitValue interface {
 
 // RGATreeSplitNodeID is an ID of RGATreeSplitNode.
 //
-// key fills its cache lazily on first call, so a read of a cold ID is a write.
-// An ID shared between goroutines must be warmed when it is created, as
-// initialNodeID is.
+// An ID is not safe for concurrent use until its key is cached: key caches
+// its result on the first call. An ID shared between goroutines must have it
+// called before it is shared, as initialNodeID does in init.
 type RGATreeSplitNodeID struct {
 	createdAt *time.Ticket
 	offset    int
@@ -182,13 +186,6 @@ func (id *RGATreeSplitNodeID) key() string {
 	}
 
 	return id.cachedKey
-}
-
-// warm fills the lazy key cache of the ID, so that later reads of it are pure
-// reads. It returns the ID itself for chaining.
-func (id *RGATreeSplitNodeID) warm() *RGATreeSplitNodeID {
-	id.key()
-	return id
 }
 
 // RGATreeSplitNodePos is the position of the text inside the node.

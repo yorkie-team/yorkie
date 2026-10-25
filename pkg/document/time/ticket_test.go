@@ -62,7 +62,7 @@ func TestTicket(t *testing.T) {
 	})
 
 	t.Run("concurrent read of a shared ticket test", func(t *testing.T) {
-		// Tickets shared between goroutines are warmed at package init, so a
+		// Tickets shared between goroutines are cached in package init, so a
 		// read of them must be a pure read: `go test -race` fails here if a
 		// shared ticket is left cold.
 		for _, ticket := range []*time.Ticket{time.InitialTicket, time.MaxTicket} {

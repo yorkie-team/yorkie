@@ -19,7 +19,7 @@ The race needs two goroutines on one instance, and only three instances are
 ever shared across goroutines — the package-level singletons. Making every
 ticket eager to protect those three cost +21–149% allocs/op on the decode and
 apply benchmarks, because most tickets there never have their key read.
-Warming the singletons at init closes the race at zero per-instance cost.
+Filling the singletons' caches in `init` closes the race at zero per-instance cost.
 
 Before changing a hot constructor, ask which instances actually exhibit the
 bug, and measure allocs/op against `main` — CI's `bench` job has no baseline,

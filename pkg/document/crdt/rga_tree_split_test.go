@@ -33,7 +33,7 @@ func TestRGATreeSplit(t *testing.T) {
 	})
 
 	t.Run("concurrent read of the shared initial node ID test", func(t *testing.T) {
-		// The head of every Text shares one node ID, warmed at package init,
+		// The head of every Text shares one node ID, cached in package init,
 		// so a read of it must be a pure read: `go test -race` fails here if
 		// it is left cold.
 		key := time.InitialTicket.Key() + ":0"

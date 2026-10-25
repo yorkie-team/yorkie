@@ -40,13 +40,17 @@ Only instances shared across goroutines can race: the package-level
 head of every `Text` shares. Every other ticket and split-node ID lives inside
 one document, behind that document's lock.
 
-So the accessors stay lazy, as on `main`, and only those singletons are
-warmed at package init: `InitialTicket`, `MaxTicket` and `initialNodeID` are
-built through an unexported `warm()` that fills their caches, so a later read
-of them is a pure read. `time` is initialized before `crdt`, so warming
-`initialNodeID` reads an already warm `InitialTicket`. The type docs of
-`Ticket` and `RGATreeSplitNodeID` state that an instance shared between
-goroutines must be warmed when it is created.
+So the accessors stay lazy, as on `main`, and only those singletons have
+their caches filled, in each package's `init`. The Go memory model makes that
+sufficient: the completion of a package's `init` happens before any importer's
+`init` starts and before `main.main`, so every later goroutine sees the filled
+caches without synchronization, and `crdt`'s `init` reads an `InitialTicket`
+that `time`'s `init` already filled. This follows the `go/types` `Universe`
+shape — package state built in `init` — rather than a chained helper, which
+the standard library rarely uses. The type docs of `Ticket` and
+`RGATreeSplitNodeID` state, in the standard library's "safe for concurrent
+use" phrasing, that a shared instance must have its caches filled before it is
+shared.
 
 The first revision computed both strings eagerly in `NewTicket` and
 `NewRGATreeSplitNodeID` instead. Review measured the cost in the `bench` job
@@ -58,12 +62,14 @@ have their key read, and each paid two strings. That revision was dropped.
 ## Tasks
 
 - [x] Keep `Key()`, `ActorIDBase64()` and `RGATreeSplitNodeID.key()` lazy.
-- [x] Warm `InitialTicket`, `MaxTicket` and `initialNodeID` at package init.
-- [x] Document on both types that a shared instance must be warmed.
+- [x] Fill the caches of `InitialTicket`, `MaxTicket` and `initialNodeID` in
+      `init`.
+- [x] Document on both types that a shared instance must have its caches
+      filled before it is shared.
 - [x] Regression tests under `-race`: concurrent reads of `InitialTicket` and
       `MaxTicket` (`TestTicket`), and of the shared head ID through
       `crdt.InitialTextNode().IDString()` (`TestRGATreeSplit`). Both fail with
-      `WARNING: DATA RACE` when the `warm()` calls are removed.
+      `WARNING: DATA RACE` when the `init` functions are removed.
 - [x] Confirm allocs/op on the affected benchmarks match `main`.
 
 ## See Also

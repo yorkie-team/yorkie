@@ -44,24 +44,34 @@ var (
 		0,
 		0,
 		InitialActorID,
-	).warm()
+	)
 
 	// MaxTicket is the maximum value of Ticket.
 	MaxTicket = NewTicket(
 		MaxLamport,
 		MaxDelimiter,
 		MaxActorID,
-	).warm()
+	)
 )
+
+func init() {
+	// InitialTicket and MaxTicket are shared by every document in the
+	// process, so fill their caches before any goroutine reads them.
+	for _, t := range []*Ticket{InitialTicket, MaxTicket} {
+		t.Key()
+		t.ActorIDBase64()
+	}
+}
 
 // Ticket represents the logical clock. It is used to determine the order of
 // changes and identify elements and nodes in the document. It can't be used
 // to detect the relationship between changes whether they are causally related
 // or concurrent.
 //
-// Key and ActorIDBase64 fill their caches lazily on first call, so a read of
-// a cold Ticket is a write. A Ticket shared between goroutines must be warmed
-// when it is created, as InitialTicket and MaxTicket are.
+// A Ticket is not safe for concurrent use until its caches are filled: Key
+// and ActorIDBase64 cache their result on the first call. A Ticket shared
+// between goroutines must have both called before it is shared, as
+// InitialTicket and MaxTicket do in init.
 type Ticket struct {
 	lamport   int64
 	delimiter uint32
@@ -85,14 +95,6 @@ func NewTicket(
 		delimiter: delimiter,
 		actorID:   actorID,
 	}
-}
-
-// warm fills the lazy caches of the ticket, so that later reads of it are
-// pure reads. It returns the ticket itself for chaining.
-func (t *Ticket) warm() *Ticket {
-	t.Key()
-	t.ActorIDBase64()
-	return t
 }
 
 // ToTestString returns a string containing the metadata of the ticket
