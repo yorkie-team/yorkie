@@ -20,8 +20,16 @@ _See [`helm repo`](https://helm.sh/docs/helm/helm_repo/) for command documentati
 
 ```bash
 # Install yorkie analytics helm chart
-helm install [RELEASE_NAME] yorkie-team/yorkie-analytics -n analytics --create-namespace
+helm install [RELEASE_NAME] yorkie-team/yorkie-analytics -n analytics --create-namespace --timeout 30m
 ```
+
+`--timeout` is not optional here. The chart provisions the StarRocks schema
+from a post-install/post-upgrade hook Job, and helm always waits for a hook
+Job. That Job waits for the pods and the materialized views, and then up to 10
+minutes for the `rl_session_daily` rollup before failing, which helm's 5m
+default does not cover: left at the default, an install on a cluster that
+still has to build the rollup fails on helm's own timeout while the Job is
+still working.
 
 _See [configuration](#configuration) below for custom installation_
 
@@ -49,8 +57,11 @@ _See [`helm uninstall`](https://helm.sh/docs/helm/helm_uninstall/) for command d
 ## Upgrading Chart
 
 ```bash
-helm upgrade [RELEASE_NAME] yorkie-team/yorkie-analytics -n analytics
+helm upgrade [RELEASE_NAME] yorkie-team/yorkie-analytics -n analytics --timeout 30m
 ```
+
+`--timeout` for the same reason as on install: the hook Job runs again on every
+upgrade, and an upgrade that still has to build `rl_session_daily` waits for it.
 
 With Helm v3, CRDs created by this chart are not updated by default and should be manually updated.
 Consult also the [Helm Documentation on CRDs](https://helm.sh/docs/chart_best_practices/custom_resource_definitions).
