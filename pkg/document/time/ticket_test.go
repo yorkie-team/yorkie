@@ -76,12 +76,10 @@ func TestTicket(t *testing.T) {
 			base64s := make([]string, 10)
 
 			for i := range keys {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 					keys[i] = ticket.Key()
 					base64s[i] = ticket.ActorIDBase64()
-				}()
+				})
 			}
 			wg.Wait()
 
