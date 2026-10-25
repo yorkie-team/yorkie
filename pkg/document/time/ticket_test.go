@@ -17,6 +17,8 @@
 package time_test
 
 import (
+	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -48,6 +50,35 @@ func TestTicket(t *testing.T) {
 		assert.Equal(t, "0:1:"+ticket.ActorIDBase64(), ticket.Key())
 		assert.Equal(t, "0:1:"+ticket.ActorIDBase64()[14:16],
 			ticket.ToTestString())
+	})
+
+	t.Run("set actorID test", func(t *testing.T) {
+		actorID, _ := time.ActorIDFromHex("0123456789abcdef01234567")
+		ticket := time.NewTicket(1, 2, time.InitialActorID).SetActorID(actorID)
+
+		assert.Equal(t, actorID, ticket.ActorID())
+		assert.Equal(t, actorID.StringBase64(), ticket.ActorIDBase64())
+		assert.Equal(t, "1:2:"+actorID.StringBase64(), ticket.Key())
+	})
+
+	t.Run("concurrent read of a shared ticket test", func(t *testing.T) {
+		// Tickets shared between goroutines are cached in package init, so a
+		// read of them must be a pure read: `go test -race` fails here if a
+		// shared ticket is left cold.
+		for _, ticket := range []*time.Ticket{time.InitialTicket, time.MaxTicket} {
+			base64 := ticket.ActorID().StringBase64()
+			key := strconv.FormatInt(ticket.Lamport(), 10) + ":" +
+				strconv.FormatUint(uint64(ticket.Delimiter()), 10) + ":" + base64
+
+			var wg sync.WaitGroup
+			for range 10 {
+				wg.Go(func() {
+					assert.Equal(t, key, ticket.Key())
+					assert.Equal(t, base64, ticket.ActorIDBase64())
+				})
+			}
+			wg.Wait()
+		}
 	})
 
 	t.Run("ticket comparing test", func(t *testing.T) {
