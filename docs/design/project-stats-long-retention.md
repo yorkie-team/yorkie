@@ -153,28 +153,26 @@ but a rollup index answers to it as well: on 3.3.22 both the inline
 an index that `FROM <name> [_SYNC_MV_]` resolves, planning as
 `TABLE: sum_session_hll_daily_ch / rollup: rl_session_daily`.
 
-The cost is a hard dependency: a cluster without the rollup fails the sessions
-reads with `Unknown table` instead of scanning the base index, and
-`GetProjectStats` runs its warehouse reads in one `errgroup`, so that is the
-whole stats response. Both provisioning scripts therefore treat the rollup as a
-gate rather than an optimization: after the routine loads, they add it unless
-it is queryable or an earlier build is still running, stop if the `ALTER`
-fails, and wait until `SELECT 1 FROM rl_session_daily [_SYNC_MV_]` resolves,
-failing if it never does. That read resolves when the build reaches
-`FINISHED`; `desc <table> all` is not the same wait, since it lists the index
-while the build is still running.
+Naming the index gives up the optimizer's own fallback: a cluster without the
+rollup answers the hinted read with `Unknown table` instead of planning on the
+base index, and `GetProjectStats` runs its warehouse reads in one `errgroup`,
+so left alone that would be the whole stats response. The coverage probe
+therefore also asks `SELECT 1 FROM rl_session_daily [_SYNC_MV_] LIMIT 1` once
+per TTL. While StarRocks answers it with an error, the sessions reads use
+`sum_session_hll_daily_ch` — the plan they had before the hint — and the server
+logs a warning; failing to reach StarRocks still fails the probe, as the
+coverage query does. This is narrower than the per-query fallback the
+*Fallback* section reserves: a missing summary *table* is still a loud error,
+because it means the flag was turned on before provisioning, while a missing
+or still-building rollup is a state every cluster passes through when the
+`ALTER` below runs, since the build is asynchronous.
 
-Degrading to the base index instead of failing — for a cluster that has the
-summary tables but not the rollup — needs the read path to know whether the
-index is there, which the query builder cannot see on its own: the coverage
-probe would carry its own `SELECT 1 FROM rl_session_daily [_SYNC_MV_]`, cache
-that answer beside the coverage days, and `summarySource()` would return
-`sum_session_hll_daily_ch` when it says no, trading the plan regression for a
-response. That is `coverage.go` and `starrocks.go` work and is not part of this
-change; until it lands the gate is `starrocksSummaryEnabled`, which defaults
-off and is turned on only after the init Job that creates the rollup reports
-`Complete` — so the hinted read never reaches a cluster the Job has not
-provisioned, as long as that order is followed.
+Both provisioning scripts still treat the rollup as a gate, since the fallback
+is what misses the deadline: after the routine loads, they add it unless it is
+queryable or an earlier build is still running, stop if the `ALTER` fails, and
+wait until the hinted read resolves, failing if it never does. That read
+resolves when the build reaches `FINISHED`; `desc <table> all` is not the same
+wait, since it lists the index while the build is still running.
 
 The coverage probe still reads `sum_session_hll_daily_ch`; the rollup is written
 in the same load, so the two hold the same days.
@@ -647,9 +645,8 @@ of carrying the fixed 16 over.
 
 ### Deployment sequencing
 
-Each step is lossless and reversible. The base scan is a correct fallback for
-every summary the server does not name; `rl_session_daily` is named, so it is a
-prerequisite of step 5. Per environment:
+Each step is lossless and reversible; the base scan is always a correct
+fallback. Per environment:
 
 1. Create the summary tables (empty, partitioned, 15-month TTL),
    `sum_session_peak_daily` among them. A cluster whose
@@ -657,10 +654,11 @@ prerequisite of step 5. Per environment:
    sum_session_hll_daily_ch ADD ROLLUP …` — `CREATE TABLE IF NOT EXISTS` carries
    the clause but skips it on an existing table. The rollup builds
    asynchronously. The init scripts add it and wait until a query naming it
-   resolves, failing the run otherwise, so a successful init Job is the gate
-   for step 5. The chart's Job is a post-install/post-upgrade hook of the
-   analytics release, while the server is a separate release, so hook order
-   does not hold the server back; `starrocksSummaryEnabled` does.
+   resolves, failing the run otherwise. Until it resolves, a server with the
+   flag on reads the sessions summary on the slower channel-day index and logs
+   a warning, so let the init Job finish before step 5. The chart's Job is a
+   post-install/post-upgrade hook of the analytics release, while the server
+   is a separate release, so hook order does not hold the server back.
 2. Backfill from the base — staged per table, `session_events` last and in a
    low-ingest window, as with the MV builds. Idempotent, and it stops before the
    running UTC day so the summary never holds a partial day for the read path to

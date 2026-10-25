@@ -9,20 +9,20 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Upgrade Notes
 
-- **`rl_session_daily` is required.** The sessions stats now read the rollup by
-  name, so a cluster with `starrocksSummaryEnabled` whose
-  `sum_session_hll_daily_ch` lacks it fails `GetProjectStats` with `Unknown
-  table` instead of scanning the base index. Clusters that followed v0.7.20
-  already have it. The analytics init job now adds it when missing, waits up to
-  10 minutes until it can be queried, and fails otherwise, so it can now fail
-  an analytics install or upgrade where it used to log and continue. Upgrade
-  `yorkie-analytics` first, and roll out the server only once
-  `kubectl get job <name>-init-starrocks-database-job` shows `Complete`; on a
-  cluster that still needs the rollup, give the upgrade room for the earlier
-  init steps too (e.g. `helm --timeout 30m`). Provisioning kept outside the
-  chart has to wait the same way, on `SELECT 1 FROM rl_session_daily
-  [_SYNC_MV_]` rather than on `desc ... all`, which lists the index while it
-  is still building.
+- **Build `rl_session_daily` before the server.** The sessions stats now read
+  the rollup by name. A cluster with `starrocksSummaryEnabled` whose
+  `sum_session_hll_daily_ch` lacks it, or is still building it, falls back to
+  the channel-day base index and logs `read sum_session_hll_daily_ch instead
+  of rl_session_daily` until it is queryable — correct, but slow enough on a
+  large project to miss the dashboard's deadline. Clusters that followed
+  v0.7.20 already have it. The analytics init job now adds it when missing,
+  waits up to 10 minutes until it can be queried, and fails otherwise, so it
+  can now fail an analytics install or upgrade where it used to log and
+  continue; on a cluster that still needs the rollup, give the upgrade room
+  for the earlier init steps too (e.g. `helm --timeout 30m`). Provisioning
+  kept outside the chart should wait the same way, on `SELECT 1 FROM
+  rl_session_daily [_SYNC_MV_]` rather than on `desc ... all`, which lists the
+  index while it is still building.
 
 ### Removed
 

@@ -39,6 +39,9 @@ both 3.3.9 and 3.3.22, with the same results.
       `TestSummaryRollupProvisioningIsAGate`
 - [x] Rehearse the init script on 3.3.22: fresh stack, and a summary table
       created without the rollup
+- [x] Fall back to the summary table while the hinted read does not resolve:
+      the coverage probe asks it once per TTL; a server error means no, a
+      network error fails the probe; rehearsed on 3.3.22 with the rollup dropped
 - [ ] PR; after release, `EXPLAIN` on production reads `rl_session_daily`
 
 ## Out of scope

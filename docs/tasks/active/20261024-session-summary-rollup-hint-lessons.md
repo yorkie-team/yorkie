@@ -40,12 +40,21 @@ would otherwise issue a second `ALTER` and fail. `SHOW ALTER TABLE ROLLUP ...
 WHERE TableName = ...` ignores the filter on 3.3.22, so the script filters
 the rows itself.
 
-## A hard dependency moves its gate into provisioning
+## Naming an index gives up the optimizer's fallback
 
-`GetProjectStats` fans its warehouse reads out through one `errgroup`, so a
-cluster missing the rollup loses the entire project stats response. Once the
-read names the index, the scripts that create it have to fail when they cannot,
-or a cluster is reported as provisioned when it is not.
+Left to the optimizer, a missing rollup costs a slower plan. Named with the
+hint, it is `Unknown table`, and `GetProjectStats` fans its reads out through
+one `errgroup`, so one failed read is the whole response. The read path has to
+take the fallback back itself: the coverage probe asks the hinted read once per
+TTL, and the sessions reads use the summary table while it errors. The
+distinction that decides it is the server's error versus no answer at all:
+`*mysql.MySQLError` (5502 on 3.3.22) means the read does not resolve, while a
+network or context error fails the probe, so a blip does not put a minute of
+reads on the slow path.
+
+The scripts still gate on the rollup, because the fallback is the plan that
+misses the deadline: they fail when they cannot build it, so a cluster is not
+reported as provisioned when it is not.
 
 ## Hook order does not reach another release
 
@@ -59,23 +68,16 @@ succeeds.
 
 ## Self review
 
-- Final state: the sessions reads name the rollup; both provisioning scripts
-  treat it as a gate, after the routine loads (add when missing and not
-  already building, fail on a failed `ALTER`, wait up to 10 minutes on the
-  hinted read, fail otherwise); `TestSummaryRollupProvisioningIsAGate` checks
-  that shape and was mutation-tested (`|| echo`, a continued `|| echo`,
-  `|| true`, `break`, no `set -e` are all caught); the chart Job stays a post
-  hook.
-- Provisioning outside this repo has to follow the same gate: the devops
+- Final state: the sessions reads name the rollup, and fall back to the
+  summary table while the coverage probe finds the hinted read does not
+  resolve. Both provisioning scripts treat the rollup as a gate, after the
+  routine loads (add when missing and not already building, fail on a failed
+  `ALTER`, wait up to 10 minutes on the hinted read, fail otherwise);
+  `TestSummaryRollupProvisioningIsAGate` checks that shape and was
+  mutation-tested (`|| echo`, a continued `|| echo`, `|| true`, `break`, no
+  `set -e` are all caught); the chart Job stays a post hook.
+- The fallback was checked on 3.3.22 with the rollup dropped: the dual-read
+  rehearsal fails with `Unknown table` before it and matches the base after.
+- Provisioning outside this repo should follow the same gate: the devops
   manifest that provisions production still tolerates a failed `ALTER` and
   polls `desc`. Production already has the rollup, so it is a follow-up there.
-- Known limitation: `GetProjectStats` still fails whole when one read fails;
-  the flag gate keeps the hinted read off clusters without the rollup.
-- Carried out of this change: the read path has no way to see whether the
-  rollup exists, so there is no fallback to `sum_session_hll_daily_ch` when it
-  does not. The shape that would give it one — the coverage probe asking
-  `SELECT 1 FROM rl_session_daily [_SYNC_MV_]` once per TTL, cached beside the
-  coverage days, and `summarySource()` reading the base index when the answer
-  is no — lives in `coverage.go` and `starrocks.go`, neither of which this
-  change touches. It is written up under *The session summary carries a coarse
-  rollup* in `docs/design/project-stats-long-retention.md`.

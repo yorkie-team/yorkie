@@ -33,7 +33,9 @@ type metricDesc struct {
 	// series and total read instead of the table itself. It is set only for
 	// sessions, whose summary carries a channel_key the reads do not need.
 	// The coverage probe still reads summaryTable: a rollup is written in the
-	// same load as its base index, so the two hold the same days.
+	// same load as its base index, so the two hold the same days. It also asks
+	// whether the rollup resolves, and the reads use summaryTable when it does
+	// not; see coverage.go.
 	summaryRollup string
 	// hllColumn is the HLL_UNION sketch column in summaryTable, e.g. "user_hll".
 	// It is empty for a metric whose summary stores a plain number instead of a

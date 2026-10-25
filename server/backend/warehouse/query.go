@@ -65,12 +65,10 @@ func dayFmt(t time.Time) string {
 // 3.3.22 an index from either the inline ROLLUP clause or ALTER TABLE ... ADD
 // ROLLUP plans as TABLE: sum_session_hll_daily_ch / rollup: rl_session_daily.
 //
-// The hint makes the rollup a hard dependency: a cluster without it fails the
-// query with Unknown table instead of scanning the base index, and
-// GetProjectStats shares one errgroup, so that is the whole stats response
-// rather than the sessions metrics alone. Every cluster has carried the rollup
-// since v0.7.20; see the upgrade note in CHANGELOG.md for adding it to one that
-// does not have it.
+// A named index the cluster lacks fails the query with Unknown table instead of
+// falling back the way the optimizer would, so summaryCoverage drops the rollup
+// from the descriptor while the coverage probe finds it does not resolve, and
+// the read goes to the channel-day base index as it did before the hint.
 func (d metricDesc) summarySource() string {
 	if d.summaryRollup == "" {
 		return d.summaryTable

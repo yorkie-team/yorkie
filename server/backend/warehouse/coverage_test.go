@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -125,9 +126,9 @@ func TestCoverageCacheProbesOncePerWindow(t *testing.T) {
 
 	calls := 0
 	want := summaryDays{Min: day("2026-06-01"), Max: day("2026-09-05")}
-	fetch := func(context.Context) (map[string]summaryDays, error) {
+	fetch := func(context.Context) (coverageProbe, error) {
 		calls++
-		return map[string]summaryDays{"sum_user_hll_daily": want}, nil
+		return coverageProbe{days: map[string]summaryDays{"sum_user_hll_daily": want}}, nil
 	}
 
 	ctx := context.Background()
@@ -151,8 +152,8 @@ func TestCoverageCacheProbesOncePerWindow(t *testing.T) {
 
 func TestCoverageCacheUnknownTableCoversNothing(t *testing.T) {
 	var cache coverageCache
-	fetch := func(context.Context) (map[string]summaryDays, error) {
-		return map[string]summaryDays{}, nil
+	fetch := func(context.Context) (coverageProbe, error) {
+		return coverageProbe{days: map[string]summaryDays{}}, nil
 	}
 
 	got, err := cache.days(context.Background(), "sum_user_hll_daily", fetch)
@@ -167,9 +168,9 @@ func TestCoverageCachePropagatesProbeError(t *testing.T) {
 	var cache coverageCache
 	want := errors.New("boom")
 	calls := 0
-	fetch := func(context.Context) (map[string]summaryDays, error) {
+	fetch := func(context.Context) (coverageProbe, error) {
 		calls++
-		return nil, want
+		return coverageProbe{}, want
 	}
 
 	_, err := cache.days(context.Background(), "sum_user_hll_daily", fetch)
@@ -326,10 +327,11 @@ func (r *probeRows) Next(dest []driver.Value) error {
 	return nil
 }
 
-// probeConnector answers the coverage probe with probeRows and every other
-// query with errCaptured.
+// probeConnector answers the coverage probe with probeRows, the rollup probe
+// with no rows or rollupErr, and every other query with errCaptured.
 type probeConnector struct {
-	rows [][]driver.Value
+	rows      [][]driver.Value
+	rollupErr error
 }
 
 func (c *probeConnector) Connect(context.Context) (driver.Conn, error) { return &probeConn{c: c}, nil }
@@ -346,6 +348,12 @@ func (c *probeConn) Begin() (driver.Tx, error)           { return nil, errCaptur
 func (c *probeConn) QueryContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
 	if strings.Contains(query, "min_dt") {
 		return &probeRows{rows: c.c.rows}, nil
+	}
+	if strings.Contains(query, "[_SYNC_MV_] LIMIT 1") {
+		if c.c.rollupErr != nil {
+			return nil, c.c.rollupErr
+		}
+		return &probeRows{}, nil
 	}
 	return nil, errCaptured
 }
@@ -368,8 +376,10 @@ func TestFetchCoverageReadsBothEnds(t *testing.T) {
 	r := &StarRocks{conf: &Config{SummaryEnabled: true}, driver: sql.OpenDB(&probeConnector{rows: rows})}
 	defer func() { _ = r.Close() }()
 
-	probed, err := r.fetchCoverage(context.Background())
+	probe, err := r.fetchCoverage(context.Background())
 	require.NoError(t, err)
+	probed := probe.days
+	assert.Empty(t, probe.unresolved, "a rollup that answers the hinted read resolves")
 
 	for i, d := range allDescs {
 		if i == 0 {
@@ -381,7 +391,7 @@ func TestFetchCoverageReadsBothEnds(t *testing.T) {
 	}
 
 	// The whole probe is one statement, so one read of it answers every metric.
-	cov, err := r.summaryCoverage(context.Background(), descPeak)
+	_, cov, err := r.summaryCoverage(context.Background(), descPeak)
 	require.NoError(t, err)
 	assert.Equal(t, day("2026-06-01"), cov.Start)
 	assert.Equal(t, day("2026-09-06"), cov.End)
@@ -415,4 +425,64 @@ func TestReadBelowSummaryFloorGoesToTheBase(t *testing.T) {
 	assert.Contains(t, got, "FROM sum_session_peak_daily WHERE project_id = 'p1' "+
 		"AND dt >= '"+dayFmt(first)+"' AND dt < '"+dayFmt(today)+"'")
 	assert.NotContains(t, got, "dt >= '"+dayFmt(from)+"'")
+}
+
+// A cluster whose summary table has no rl_session_daily yet, or whose build has
+// not finished, answers the hinted read with Unknown table. The sessions reads
+// then fall back to the channel-day base index: slower, but the stats response
+// survives instead of failing as a whole with them.
+func TestUnresolvedRollupFallsBackToTheSummaryTable(t *testing.T) {
+	unknown := &mysql.MySQLError{Number: 5502, Message: "Unknown table 'yorkie.rl_session_daily'"}
+	r := &StarRocks{conf: &Config{SummaryEnabled: true}, driver: sql.OpenDB(&probeConnector{rollupErr: unknown})}
+	defer func() { _ = r.Close() }()
+
+	probe, err := r.fetchCoverage(context.Background())
+	require.NoError(t, err, "the server answering that the rollup does not resolve is not a probe failure")
+	assert.True(t, probe.unresolved[descSession.summaryRollup])
+
+	today := todayUTC()
+	for name, unresolved := range map[string]map[string]bool{
+		"resolves":   nil,
+		"unresolved": probe.unresolved,
+	} {
+		t.Run(name, func(t *testing.T) {
+			conn := &captureConnector{}
+			r := &StarRocks{conf: &Config{SummaryEnabled: true}, driver: sql.OpenDB(conn)}
+			defer func() { _ = r.Close() }()
+			r.coverage.probed = map[string]summaryDays{
+				descSession.summaryTable: {Min: today.AddDate(0, 0, -90), Max: today.AddDate(0, 0, -2)},
+			}
+			r.coverage.unresolved = unresolved
+			r.coverage.fetchedAt = time.Now()
+
+			from, to := today.AddDate(0, 0, -30), today
+			_, err := r.GetSessionsCount(context.Background(), types.ID("p1"), from, to)
+			require.ErrorIs(t, err, errCaptured)
+			_, err = r.GetSessions(context.Background(), types.ID("p1"), from, to)
+			require.ErrorIs(t, err, errCaptured)
+			require.Len(t, conn.queries, 2, "the primed probe must not have cost a round trip")
+
+			for _, q := range conn.queries {
+				got := norm(q)
+				if unresolved == nil {
+					assert.Contains(t, got, "FROM rl_session_daily [_SYNC_MV_] WHERE project_id = 'p1'")
+					continue
+				}
+				assert.Contains(t, got, "FROM sum_session_hll_daily_ch WHERE project_id = 'p1'")
+				assert.NotContains(t, got, "_SYNC_MV_")
+			}
+		})
+	}
+}
+
+// Failing to reach StarRocks is not an answer about the rollup. Caching it as
+// unresolved would put every sessions read on the slow path for a TTL after a
+// blip, so it fails the probe the way the coverage query does.
+func TestRollupProbeErrorFailsTheProbe(t *testing.T) {
+	r := &StarRocks{conf: &Config{SummaryEnabled: true}, driver: sql.OpenDB(&probeConnector{rollupErr: errCaptured})}
+	defer func() { _ = r.Close() }()
+
+	_, err := r.fetchCoverage(context.Background())
+	require.ErrorIs(t, err, errCaptured)
+	assert.ErrorContains(t, err, "probe rollup rl_session_daily")
 }
