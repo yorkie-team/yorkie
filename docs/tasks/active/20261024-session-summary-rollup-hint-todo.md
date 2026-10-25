@@ -42,6 +42,10 @@ both 3.3.9 and 3.3.22, with the same results.
 - [x] Fall back to the summary table while the hinted read does not resolve:
       the coverage probe asks it once per TTL; only `Unknown table` means no,
       any other error fails the probe; rehearsed on 3.3.22 with the rollup dropped
+- [ ] Follow-up, outside this change's files: degrade the shared coverage probe
+      instead of failing it when a rollup probe is inconclusive, pin the chart's
+      StarRocks FE tag, and bound the init Job with `activeDeadlineSeconds`
+      inside the helm `--timeout`. Recorded in the design doc's Risks table.
 - [ ] PR; after release, `EXPLAIN` on production reads `rl_session_daily`
 
 ## Out of scope
