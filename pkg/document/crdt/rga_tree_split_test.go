@@ -17,6 +17,7 @@
 package crdt_test
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -29,5 +30,20 @@ func TestRGATreeSplit(t *testing.T) {
 	t.Run("compare nil id panic test", func(t *testing.T) {
 		id := crdt.NewRGATreeSplitNodeID(time.InitialTicket, 0)
 		assert.Panics(t, func() { id.Compare(nil) }, "ID cannot be null")
+	})
+
+	t.Run("concurrent read of the shared initial node ID test", func(t *testing.T) {
+		// The head of every Text shares one node ID, cached in package init,
+		// so a read of it must be a pure read: `go test -race` fails here if
+		// it is left cold.
+		key := time.InitialTicket.Key() + ":0"
+
+		var wg sync.WaitGroup
+		for range 10 {
+			wg.Go(func() {
+				assert.Equal(t, key, crdt.InitialTextNode().IDString())
+			})
+		}
+		wg.Wait()
 	})
 }

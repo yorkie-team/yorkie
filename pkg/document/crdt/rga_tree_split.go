@@ -76,6 +76,12 @@ var (
 	initialNodeID = NewRGATreeSplitNodeID(time.InitialTicket, 0)
 )
 
+func init() {
+	// initialNodeID is shared by the head of every Text, so fill its key
+	// cache before any goroutine reads it.
+	initialNodeID.key()
+}
+
 // RGATreeSplitValue is a value of RGATreeSplitNode.
 // gcAttrSource is implemented by a split value that carries attributes of its
 // own. Splitting deep-copies them, so the copy of a TOMBSTONED attribute is new
@@ -98,6 +104,10 @@ type RGATreeSplitValue interface {
 }
 
 // RGATreeSplitNodeID is an ID of RGATreeSplitNode.
+//
+// An ID is not safe for concurrent use until its key is cached: key caches
+// its result on the first call. An ID shared between goroutines must have it
+// called before it is shared, as initialNodeID does in init.
 type RGATreeSplitNodeID struct {
 	createdAt *time.Ticket
 	offset    int

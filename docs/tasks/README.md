@@ -1,5 +1,5 @@
 ---
-updated: 2026-10-24
+updated: 2026-10-26
 ---
 
 # Tasks Index
@@ -20,6 +20,10 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| `version --output json` mixes the server-fetch error into stdout (2026-10-25) | [20261025-version-server-error-to-stderr-todo.md](./active/20261025-version-server-error-to-stderr-todo.md) | [20261025-version-server-error-to-stderr-lessons.md](./active/20261025-version-server-error-to-stderr-lessons.md) |
+| Ticket.Key caches its key without synchronization (2026-10-25) | [20261025-ticket-key-data-race-todo.md](./active/20261025-ticket-key-data-race-todo.md) | [20261025-ticket-key-data-race-lessons.md](./active/20261025-ticket-key-data-race-lessons.md) |
+| Pin how a reader decodes CHANGE_TYPE_UNSPECIFIED presence (2026-10-25) | [20261025-presence-unspecified-decode-test-todo.md](./active/20261025-presence-unspecified-decode-test-todo.md) | [20261025-presence-unspecified-decode-test-lessons.md](./active/20261025-presence-unspecified-decode-test-lessons.md) |
+| The node GC worklist has no guard for a child whose removal was cleared (2026-10-25) | [20261025-gc-node-worklist-live-guard-todo.md](./active/20261025-gc-node-worklist-live-guard-todo.md) | [20261025-gc-node-worklist-live-guard-lessons.md](./active/20261025-gc-node-worklist-live-guard-lessons.md) |
 | Read the sessions summary through rl_session_daily by name (2026-10-24) | [20261024-session-summary-rollup-hint-todo.md](./active/20261024-session-summary-rollup-hint-todo.md) | [20261024-session-summary-rollup-hint-lessons.md](./active/20261024-session-summary-rollup-hint-lessons.md) |
 | Deprecate dead proto fields and correct the MovedAt deprecation plan (2026-10-22) | [20261022-reserve-dead-proto-fields-todo.md](./active/20261022-reserve-dead-proto-fields-todo.md) | [20261022-reserve-dead-proto-fields-lessons.md](./active/20261022-reserve-dead-proto-fields-lessons.md) |
 | Remove the MCP server (2026-10-22) | [20261022-remove-mcp-server-todo.md](./active/20261022-remove-mcp-server-todo.md) | [20261022-remove-mcp-server-lessons.md](./active/20261022-remove-mcp-server-lessons.md) |
