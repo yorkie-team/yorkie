@@ -490,22 +490,26 @@ func TestUnresolvedRollupFallsBackToTheSummaryTable(t *testing.T) {
 }
 
 // Only Unknown table is an answer about the rollup. Anything else — StarRocks
-// failing the query for another reason, or not being reached — cached as
-// unresolved would put every sessions read on the heavier plan for a TTL after
-// a blip, so it fails the probe the way the coverage query does.
-func TestRollupProbeErrorFailsTheProbe(t *testing.T) {
+// failing the query for another reason, or not being reached — keeps the hint
+// and leaves the probe intact: failing it would fail every metric over a
+// question that only picks the sessions reads' index, and caching it as
+// unresolved would move them onto the heavier plan for a TTL after a blip.
+func TestInconclusiveRollupProbeKeepsTheHint(t *testing.T) {
 	for name, rollupErr := range map[string]error{
 		"unreachable":  errCaptured,
 		"server error": &mysql.MySQLError{Number: 1064, Message: "Backend node not found"},
 		"analysis":     &mysql.MySQLError{Number: 5502, Message: "Getting analyzing error. Detail message: timeout"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			r := &StarRocks{conf: &Config{SummaryEnabled: true}, driver: sql.OpenDB(&probeConnector{rollupErr: rollupErr})}
+			rows := [][]driver.Value{{descSession.summaryTable, "2026-06-01", "2026-09-05"}}
+			conn := &probeConnector{rows: rows, rollupErr: rollupErr}
+			r := &StarRocks{conf: &Config{SummaryEnabled: true}, driver: sql.OpenDB(conn)}
 			defer func() { _ = r.Close() }()
 
-			_, err := r.fetchCoverage(context.Background())
-			require.ErrorIs(t, err, rollupErr)
-			assert.ErrorContains(t, err, "probe rollup rl_session_daily")
+			desc, cov, err := r.summaryCoverage(context.Background(), descSession)
+			require.NoError(t, err, "the shared probe must survive an inconclusive rollup read")
+			assert.Equal(t, descSession.summaryRollup, desc.summaryRollup, "the hint stays")
+			assert.Equal(t, day("2026-06-01"), cov.Start)
 		})
 	}
 }

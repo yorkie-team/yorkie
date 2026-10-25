@@ -106,8 +106,8 @@ echo -e 'Adding the coarse session rollup'
 # The sessions reads name rl_session_daily (FROM rl_session_daily [_SYNC_MV_]).
 # Without it they fall back to the summary table's channel-day index, correct
 # but slow enough to miss the dashboard's deadline, so unlike the views above,
-# a rollup that cannot be built fails the script. It runs last so that a
-# failure here does not hold back the routine loads. CREATE TABLE IF NOT EXISTS
+# a failed ALTER stops the script. It runs last so that a failure here does not
+# hold back the routine loads. CREATE TABLE IF NOT EXISTS
 # carries the ROLLUP clause but skips it on a summary table that predates it,
 # so add it there -- unless it is already queryable, or an earlier run's build
 # is still going, which `desc ... all` does not show while the job is PENDING.
@@ -131,13 +131,17 @@ fi
 echo -e 'Waiting for the coarse session rollup'
 # The hinted read resolves once the build reaches FINISHED, so wait on the read
 # the server sends; `desc ... all` lists the index while it is still RUNNING.
+# A build still running after two minutes is not a failure: it finishes on its
+# own, and until then the server reads the slower index and logs a warning.
 attempt=0
 until rollup_ready; do
   attempt=$((attempt + 1))
-  if [ $attempt -ge 300 ]; then
-    echo -e 'rl_session_daily is not queryable; see SHOW ALTER TABLE ROLLUP FROM yorkie'
-    exit 1
+  if [ $attempt -ge 60 ]; then
+    echo -e 'rl_session_daily is still building; see SHOW ALTER TABLE ROLLUP FROM yorkie'
+    break
   fi
   sleep 2s
 done
-echo -e 'rl_session_daily is ready on sum_session_hll_daily_ch'
+if [ $attempt -lt 60 ]; then
+  echo -e 'rl_session_daily is ready on sum_session_hll_daily_ch'
+fi

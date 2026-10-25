@@ -16,15 +16,12 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   instead of rl_session_daily` until it is queryable — correct, but slow
   enough on a large project to miss the dashboard's deadline. Clusters that
   followed v0.7.20 already have it. The analytics init job now adds it when
-  missing, waits up to 10 minutes until it can be queried, and fails
-  otherwise, so it can now fail an analytics install or upgrade where it used
-  to log and continue. Upgrade `yorkie-analytics` first, and roll out the
-  server once `kubectl get job <name>-init-starrocks-database-job` shows
-  `Complete`; on a cluster that still needs the rollup, give the upgrade room
-  for the earlier init steps too (e.g. `helm --timeout 30m`). Provisioning
-  kept outside the chart should wait the same way, on `SELECT 1 FROM
-  rl_session_daily [_SYNC_MV_]` rather than on `desc ... all`, which lists the
-  index while it is still building.
+  missing and fails if that `ALTER` fails, where it used to log and continue;
+  it then waits up to two minutes for the build and reports one still running
+  without failing. Upgrade `yorkie-analytics` first, and roll out the server
+  once `SELECT 1 FROM rl_session_daily [_SYNC_MV_] LIMIT 1` returns rather than
+  erroring. Provisioning kept outside the chart should wait on that read too,
+  not on `desc ... all`, which lists the index while it is still building.
 
 ### Removed
 

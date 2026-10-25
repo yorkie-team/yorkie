@@ -49,12 +49,18 @@ take the fallback back itself: the coverage probe asks the hinted read once per
 TTL, and the sessions reads use the summary table while it answers `Unknown
 table`. Only that message means the read does not resolve: StarRocks reports
 every analysis error as 5502, and a timeout or a lost BE also arrives as a
-server error, so the probe fails on anything else, as it does on a network or
-context error. A blip must not put a minute of reads on the heavier plan.
+server error. Anything else keeps the hint. Failing the probe on it, as one
+round here did, widened a sessions-only question into every metric's failure,
+since the probe is shared; caching it as unresolved would have put a minute of
+reads on the heavier plan after a blip.
 
-The scripts still gate on the rollup, because the fallback is the plan that
-misses the deadline: they fail when they cannot build it, so a cluster is not
-reported as provisioned when it is not.
+## Fail fast, not long
+
+Once the server degrades instead of failing, the scripts have no reason to
+fail on a build that is merely slow. A failed `ALTER` is a real error and
+fails fast; a build still running after two minutes finishes on its own. An
+earlier round failed the run after a 10-minute wait, and with the Job's
+`backoffLimit: 10` that could hold a helm hook for hours.
 
 ## Hook order does not reach another release
 
@@ -62,20 +68,20 @@ The chart's init Job is a `post-install,post-upgrade` hook, which looks like it
 runs after the server is already serving. It cannot be a `pre-*` hook: it talks
 to the StarRocks that the same release deploys. And the server is the
 `yorkie-cluster` release, not this one, so no hook order in `yorkie-analytics`
-holds the server rollout back. The gate between the two is
-`starrocksSummaryEnabled`, which defaults off and is turned on after the Job
-succeeds.
+holds the server rollout back. The order between them is the operator's: turn
+on `starrocksSummaryEnabled`, or upgrade the server, once the rollup resolves.
 
 ## Self review
 
 - Final state: the sessions reads name the rollup, and fall back to the
   summary table while the coverage probe finds the hinted read does not
-  resolve. Both provisioning scripts treat the rollup as a gate, after the
-  routine loads (add when missing and not already building, fail on a failed
-  `ALTER`, wait up to 10 minutes on the hinted read, fail otherwise);
+  resolve; any other probe error keeps the hint. Both provisioning scripts add
+  the rollup after the routine loads (when missing and not already building),
+  fail on a failed `ALTER`, and wait up to two minutes on the hinted read
+  without failing on a build still running;
   `TestSummaryRollupProvisioningIsAGate` checks that shape and was
-  mutation-tested (`|| echo`, a continued `|| echo`, `|| true`, `break`, no
-  `set -e` are all caught); the chart Job stays a post hook.
+  mutation-tested (`|| echo`, a continued `|| echo`, `|| true`, no `set -e`
+  are all caught); the chart Job stays a post hook.
 - The fallback was checked on 3.3.22 with the rollup dropped: the dual-read
   rehearsal fails with `Unknown table` before it and returns the same numbers
   as with the rollup after.

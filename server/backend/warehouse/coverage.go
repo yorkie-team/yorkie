@@ -144,14 +144,7 @@ func (r *StarRocks) fetchCoverage(ctx context.Context) (coverageProbe, error) {
 
 	unresolved := make(map[string]bool)
 	for _, d := range allDescs {
-		if d.summaryRollup == "" {
-			continue
-		}
-		ok, err := r.rollupResolves(ctx, d)
-		if err != nil {
-			return coverageProbe{}, err
-		}
-		if !ok {
+		if d.summaryRollup != "" && !r.rollupResolves(ctx, d) {
 			unresolved[d.summaryRollup] = true
 		}
 	}
@@ -162,11 +155,14 @@ func (r *StarRocks) fetchCoverage(ctx context.Context) (coverageProbe, error) {
 // rollupResolves reports whether d's rollup can be read by name. A cluster
 // whose summary table predates the rollup, or whose build has not reached
 // FINISHED, answers the hinted read with Unknown table: that is a no, and the
-// reads fall back to the summary table until a later probe says yes. Any other
-// error, from StarRocks or on the way to it, is not an answer about the rollup
-// and fails the probe like the coverage query: a timeout or a restarting BE
-// must not move every sessions read onto the heavier plan for a TTL.
-func (r *StarRocks) rollupResolves(ctx context.Context, d metricDesc) (bool, error) {
+// reads fall back to the summary table until a later probe says yes.
+//
+// Any other error, from StarRocks or on the way to it, is not an answer about
+// the rollup, and it does not fail the probe either: the probe is shared by
+// every metric, and the question only picks an index for the sessions reads.
+// It keeps the hint, so a timeout or a restarting BE neither moves the sessions
+// reads onto the heavier plan nor fails the other metrics with them.
+func (r *StarRocks) rollupResolves(ctx context.Context, d metricDesc) bool {
 	// The name comes from a descriptor, never from a request.
 	//nolint:gosec
 	rows, err := r.driver.QueryContext(ctx, "SELECT 1 FROM "+d.summarySource()+" LIMIT 1")
@@ -175,12 +171,13 @@ func (r *StarRocks) rollupResolves(ctx context.Context, d metricDesc) (bool, err
 			logging.DefaultLogger().Warnf(
 				"read %s instead of %s, which is not queryable yet: %v", d.summaryTable, d.summaryRollup, err,
 			)
-			return false, nil
+			return false
 		}
-		return false, fmt.Errorf("probe rollup %s: %w", d.summaryRollup, err)
+		logging.DefaultLogger().Warnf("probe %s, keeping the hint: %v", d.summaryRollup, err)
+		return true
 	}
 	closeRows(rows)
-	return true, nil
+	return true
 }
 
 // isUnknownTable reports whether StarRocks rejected a query for naming a table

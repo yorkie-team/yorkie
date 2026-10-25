@@ -101,11 +101,13 @@ func TestSummaryRollupsAreProvisioned(t *testing.T) {
 }
 
 // Creating the rollup is not enough: because the read names the index, the
-// provisioning has to be a gate on it. Both scripts have to stop when the ALTER
-// fails rather than echo past it, and wait until the read the server sends
-// resolves, failing if it never does. desc <table> all is not that wait: it
-// lists the index while the build is still running. The gate runs after the
-// routine loads, so a rollup failure does not hold back ingestion.
+// provisioning has to stop when the ALTER fails rather than echo past it, and
+// wait on the read the server sends rather than on desc <table> all, which
+// lists the index while the build is still running. The wait is bounded and
+// does not fail the run: a build still running finishes on its own, and the
+// server reads the slower index until then, so a failure there would only
+// hold the hook. The gate runs after the routine loads, so a rollup failure
+// does not hold back ingestion.
 func TestSummaryRollupProvisioningIsAGate(t *testing.T) {
 	// How each script stops on a failed command: the docker one runs under
 	// set -e, the chart's has no set -e and exits explicitly.
@@ -142,8 +144,8 @@ func TestSummaryRollupProvisioningIsAGate(t *testing.T) {
 				}
 				assert.Contains(t, body, "SELECT 1 FROM "+d.summarySource()+" LIMIT 1",
 					"%s must wait until the hinted read resolves", sc.path)
-				assert.Regexp(t, d.summaryRollup+` is not queryable[^\n]*\n\s*exit 1`, body,
-					"%s must fail when the hinted read never resolves", sc.path)
+				assert.Regexp(t, d.summaryRollup+` is still building[^\n]*\n\s*break`, body,
+					"%s must stop waiting on a running build, not fail the run", sc.path)
 
 				assert.NotContains(t, body, "set +e", "%s must not turn off failing on errors", sc.path)
 

@@ -11,8 +11,6 @@ metadata:
   # The yorkie server is a separate release (yorkie-cluster), so hook order
   # cannot hold its rollout back; until this Job has built the rollup, that
   # server reads the sessions summary on a slower index and logs a warning.
-  # The Job waits up to 10 minutes for the rollup after the earlier steps, so an
-  # upgrade that still has to build it needs a longer helm --timeout than 5m.
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-delete-policy": before-hook-creation
