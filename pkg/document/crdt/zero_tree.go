@@ -25,7 +25,10 @@ package crdt
 // only; Marshal shows the tokens.
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf16"
 
@@ -224,6 +227,116 @@ type ZeroAttrWrite struct {
 	Removed bool
 }
 
+// ZeroRegionPrefix names the register a marker keeps a pending range write
+// in, keyed by the write's ticket, so a snapshot carries it (see
+// ZeroStyleRegion).
+const ZeroRegionPrefix = "zt.r."
+
+// ZeroStyleRange makes a style write on a text node a range: up to the token
+// that ended the node in its author's view, or to the end of the document
+// when Until is nil.
+type ZeroStyleRange struct {
+	Until *RGATreeSplitNodeID
+}
+
+// ZeroStyleRegion is a style write on a text node taken as a range: from the
+// node's marker to the token that ended the node in its author's view
+// (Until). Every marker of the same type between the two in the token order
+// gets the write too (LWW, at the write's ticket), so a node someone split off
+// concurrently keeps the style written on what it was split from.
+//
+// The markers between the two when the write arrives get it then. A marker
+// that arrives later gets it if it is concurrent with the write (its change
+// does not know the write). So the write stays pending until every replica
+// knows it -- it is a GC pair whose removal time is its ticket -- and the
+// marker keeps it in a register (ZeroRegionPrefix) until then, for
+// snapshots. Mirrors the JS SDK's ZeroStyleRegion.
+type ZeroStyleRegion struct {
+	MarkerID *RGATreeSplitNodeID
+	Type     string
+	Until    *RGATreeSplitNodeID
+	Writes   []ZeroAttrWrite
+	Ticket   *time.Ticket
+}
+
+// key returns the register the start marker keeps this write in.
+func (r *ZeroStyleRegion) key() string {
+	return ZeroRegionPrefix + zeroTicketIDString(r.Ticket)
+}
+
+// IDString returns a string that identifies this write.
+func (r *ZeroStyleRegion) IDString() string {
+	return zeroIDString(r.MarkerID.createdAt, r.MarkerID.offset) + "#" + zeroTicketIDString(r.Ticket)
+}
+
+// RemovedAt returns when this write may be dropped: once it is known
+// everywhere, no marker concurrent with it can arrive.
+func (r *ZeroStyleRegion) RemovedAt() *time.Ticket { return r.Ticket }
+
+// DataSize returns nothing: the register is part of the marker.
+func (r *ZeroStyleRegion) DataSize() resource.DataSize { return resource.DataSize{} }
+
+// encode returns what the start marker keeps of this write, byte for byte
+// what the JS SDK writes.
+func (r *ZeroStyleRegion) encode() string {
+	until := ""
+	if r.Until != nil {
+		until = encodeZeroNodeID(r.Until)
+	}
+	writes := make([]any, 0, len(r.Writes))
+	for _, w := range r.Writes {
+		if w.Removed {
+			writes = append(writes, []any{w.Key, nil})
+		} else {
+			writes = append(writes, []any{w.Key, w.Value})
+		}
+	}
+	return `{"u":` + jsonString(until) + `,"w":` + jsonString(writes) + `}`
+}
+
+// jsonString encodes v as JSON.stringify does for the values used here.
+func jsonString(v any) string {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		panic(err)
+	}
+	return strings.TrimSuffix(buf.String(), "\n")
+}
+
+// zeroTicketIDString is the JS SDK's TimeTicket.toIDString.
+func zeroTicketIDString(t *time.Ticket) string {
+	return strconv.FormatInt(t.Lamport(), 10) + ":" + t.ActorID().String() + ":" +
+		strconv.FormatUint(uint64(t.Delimiter()), 10)
+}
+
+// encodeZeroNodeID is the JS SDK's encodeNodeID.
+func encodeZeroNodeID(id *RGATreeSplitNodeID) string {
+	at := id.createdAt
+	return jsonString([]any{strconv.FormatInt(at.Lamport(), 10), at.Delimiter(), at.ActorID().String(), id.offset})
+}
+
+// decodeZeroNodeID decodes what encodeZeroNodeID made.
+func decodeZeroNodeID(value string) (*RGATreeSplitNodeID, error) {
+	var lamportStr, actor string
+	var delimiter uint32
+	var offset int
+	parts := []any{&lamportStr, &delimiter, &actor, &offset}
+	if err := json.Unmarshal([]byte(value), &parts); err != nil {
+		return nil, fmt.Errorf("decode zero node id %q: %w", value, err)
+	}
+	lamport, err := strconv.ParseInt(lamportStr, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("decode zero node id %q: %w", value, err)
+	}
+	actorID, err := time.ActorIDFromHex(actor)
+	if err != nil {
+		return nil, fmt.Errorf("decode zero node id %q: %w", value, err)
+	}
+	return NewRGATreeSplitNodeID(time.NewTicket(lamport, delimiter, actorID), offset), nil
+}
+
 // InitialZeroTreeNode creates the head node of a ZeroTree.
 func InitialZeroTreeNode() *RGATreeSplitNode[*ZeroTokens] {
 	return NewRGATreeSplitNode(initialNodeID, &ZeroTokens{})
@@ -238,6 +351,10 @@ type ZeroTree struct {
 	// schema is the schema the creator's editor gave the tree (nil: the
 	// default). It is document state: the model is built with it.
 	schema *ZeroSchema
+	// pending is the range style writes still pending, by key, read from the
+	// markers that keep them the first time it is needed (see
+	// ZeroStyleRegion).
+	pending map[string]*ZeroStyleRegion
 }
 
 // NewZeroTree creates a new instance of ZeroTree.
@@ -345,6 +462,10 @@ func (t *ZeroTree) GCPairs() []GCPair {
 			pairs = append(pairs, GCPair{Parent: t.rgaTreeSplit, Child: node, GCOnlySize: &gcSize})
 		}
 	}
+	for _, region := range t.pendingRegions() {
+		size := region.DataSize()
+		pairs = append(pairs, GCPair{Parent: t, Child: region, GCOnlySize: &size})
+	}
 	return pairs
 }
 
@@ -391,6 +512,9 @@ func (t *ZeroTree) Edit(
 	_, pairs, diff, removed, err := t.rgaTreeSplit.edit(from, to, content, executedAt, versionVector)
 	if err != nil {
 		return pairs, diff, nil, err
+	}
+	if len(content.Tokens) > 0 {
+		t.applyPending(executedAt, versionVector)
 	}
 	spans := make([]*ZeroRestoreSpan, 0, len(removed))
 	for _, span := range removed {
@@ -456,15 +580,18 @@ func (t *ZeroTree) FindMarker(id *RGATreeSplitNodeID) *ZeroMarker {
 }
 
 // SetAttrs writes attributes on the marker of the given id. It returns the
-// previous values of the keys that applied, for the reverse operation.
+// previous values of the keys that applied, for the reverse operation, and
+// the GC pair of a range write. With rng the write is a range (see
+// ZeroStyleRegion).
 func (t *ZeroTree) SetAttrs(
 	markerID *RGATreeSplitNodeID,
 	writes []ZeroAttrWrite,
 	executedAt *time.Ticket,
-) []ZeroAttrWrite {
+	rng *ZeroStyleRange,
+) ([]ZeroAttrWrite, []GCPair) {
 	marker := t.FindMarker(markerID)
 	if marker == nil {
-		return nil
+		return nil, nil
 	}
 	var prev []ZeroAttrWrite
 	for _, w := range writes {
@@ -478,7 +605,196 @@ func (t *ZeroTree) SetAttrs(
 			prev = append(prev, ZeroAttrWrite{Key: w.Key, Value: old.Value, Removed: old.Removed})
 		}
 	}
-	return prev
+	if rng == nil {
+		return prev, nil
+	}
+	region := &ZeroStyleRegion{
+		MarkerID: markerID,
+		Type:     marker.Type,
+		Until:    rng.Until,
+		Writes:   writes,
+		Ticket:   executedAt,
+	}
+	marker.setRaw(region.key(), region.encode(), executedAt)
+	t.pendingRegions()[region.key()] = region
+	t.applyRegion(region, nil)
+	size := region.DataSize()
+	return prev, []GCPair{{Parent: t, Child: region, GCOnlySize: &size}}
+}
+
+// setRaw writes a register as it is, without last-writer-wins: a pending
+// range write's register (one key per write).
+func (m *ZeroMarker) setRaw(key, value string, ticket *time.Ticket) {
+	for i, attr := range m.Attrs {
+		if attr.Key == key {
+			m.Attrs[i] = &ZeroAttr{Key: key, Value: value, UpdatedAt: ticket}
+			return
+		}
+	}
+	m.Attrs = append(m.Attrs, &ZeroAttr{Key: key, Value: value, UpdatedAt: ticket})
+}
+
+// pendingRegions returns the range writes still pending, read from the
+// markers that keep them the first time (a snapshot, a copy).
+func (t *ZeroTree) pendingRegions() map[string]*ZeroStyleRegion {
+	if t.pending != nil {
+		return t.pending
+	}
+	t.pending = make(map[string]*ZeroStyleRegion)
+	for _, node := range t.Nodes() {
+		if node.value == nil {
+			continue
+		}
+		for i, tok := range node.value.Tokens {
+			if tok.Marker == nil {
+				continue
+			}
+			for _, attr := range tok.Marker.Attrs {
+				if !strings.HasPrefix(attr.Key, ZeroRegionPrefix) || attr.Removed {
+					continue
+				}
+				region, err := decodeZeroRegion(attr.Value)
+				if err != nil {
+					continue
+				}
+				region.MarkerID = NewRGATreeSplitNodeID(node.id.createdAt, node.id.offset+i)
+				region.Type = tok.Marker.Type
+				region.Ticket = attr.UpdatedAt
+				t.pending[attr.Key] = region
+			}
+		}
+	}
+	return t.pending
+}
+
+// decodeZeroRegion reads what ZeroStyleRegion.encode wrote.
+func decodeZeroRegion(value string) (*ZeroStyleRegion, error) {
+	var raw struct {
+		U string      `json:"u"`
+		W [][]*string `json:"w"`
+	}
+	if err := json.Unmarshal([]byte(value), &raw); err != nil {
+		return nil, fmt.Errorf("decode zero style region %q: %w", value, err)
+	}
+	region := &ZeroStyleRegion{}
+	if raw.U != "" {
+		until, err := decodeZeroNodeID(raw.U)
+		if err != nil {
+			return nil, err
+		}
+		region.Until = until
+	}
+	for _, w := range raw.W {
+		if len(w) != 2 || w[0] == nil {
+			return nil, fmt.Errorf("decode zero style region %q: bad write", value)
+		}
+		if w[1] == nil {
+			region.Writes = append(region.Writes, ZeroAttrWrite{Key: *w[0], Removed: true})
+		} else {
+			region.Writes = append(region.Writes, ZeroAttrWrite{Key: *w[0], Value: *w[1]})
+		}
+	}
+	return region, nil
+}
+
+// applyRegion writes a range write on the markers of its type between its
+// marker and Until, removed ones included (an undo may bring them back), or
+// only on target when it is given. It returns whether it reached target.
+func (t *ZeroTree) applyRegion(region *ZeroStyleRegion, target *ZeroMarker) bool {
+	node := t.rgaTreeSplit.FindNode(region.MarkerID)
+	if node == nil {
+		return false
+	}
+	until := region.Until
+	i := region.MarkerID.offset - node.id.offset + 1
+	for ; node != nil; node = node.next {
+		if node.value != nil {
+			last := until != nil && node.id.createdAt.Compare(until.createdAt) == 0
+			for ; i < len(node.value.Tokens); i++ {
+				if last && node.id.offset+i == until.offset {
+					return false
+				}
+				m := node.value.Tokens[i].Marker
+				if m == nil || m.Type != region.Type {
+					continue
+				}
+				if target == nil || m == target {
+					for _, w := range region.Writes {
+						m.Set(w.Key, w.Value, w.Removed, region.Ticket)
+					}
+					if target != nil {
+						return true
+					}
+				}
+			}
+		}
+		i = 0
+	}
+	return false
+}
+
+// applyPending gives the markers of a run inserted by a change that did not
+// know a pending range write the write, when they fall in its range.
+func (t *ZeroTree) applyPending(executedAt *time.Ticket, versionVector time.VersionVector) {
+	if len(versionVector) == 0 {
+		return
+	}
+	pending := t.pendingRegions()
+	if len(pending) == 0 {
+		return
+	}
+	var regions []*ZeroStyleRegion
+	for _, region := range pending {
+		if !versionVector.EqualToOrAfter(region.Ticket) {
+			regions = append(regions, region)
+		}
+	}
+	if len(regions) == 0 {
+		return
+	}
+	// in ticket order, as in JS: the writes do not depend on it (LWW), but
+	// the order a marker first gets its keys in is part of its encoding
+	sortRegions(regions)
+	node := t.rgaTreeSplit.FindNode(NewRGATreeSplitNodeID(executedAt, 0))
+	if node == nil || node.value == nil {
+		return
+	}
+	for _, tok := range node.value.Tokens {
+		if tok.Marker == nil {
+			continue
+		}
+		for _, region := range regions {
+			if region.Type == tok.Marker.Type {
+				t.applyRegion(region, tok.Marker)
+			}
+		}
+	}
+}
+
+func sortRegions(regions []*ZeroStyleRegion) {
+	for i := 1; i < len(regions); i++ {
+		for j := i; j > 0 && regions[j].Ticket.Compare(regions[j-1].Ticket) < 0; j-- {
+			regions[j], regions[j-1] = regions[j-1], regions[j]
+		}
+	}
+}
+
+// Purge drops a range write once every replica knows it.
+func (t *ZeroTree) Purge(child GCChild) error {
+	region, ok := child.(*ZeroStyleRegion)
+	if !ok {
+		return nil
+	}
+	delete(t.pendingRegions(), region.key())
+	if marker := t.FindMarker(region.MarkerID); marker != nil {
+		for i, attr := range marker.Attrs {
+			if attr.Key == region.key() {
+				marker.Attrs = append(marker.Attrs[:i], marker.Attrs[i+1:]...)
+				break
+			}
+		}
+	}
+	return nil
 }
 
 // ToTestString shows every node, tombstones included.

@@ -190,6 +190,10 @@ message Operation {
     TextNodeID marker_id = 2;
     repeated ZeroAttrWrite writes = 3;
     TimeTicket executed_at = 4;
+    // range, when present, makes the write a range: the markers of the same
+    // type between marker_id and range.until get it too, and so does such a
+    // marker inserted later by a change that did not know the write.
+    ZeroStyleRange range = 5;
   }
 
   oneof body {
@@ -475,6 +479,13 @@ message ZeroAttr {
   TimeTicket updated_at = 3; // in operations
   bool is_removed = 4;
   ZeroTicket updated_at_ref = 5; // in a ZeroTree element (see actors)
+}
+
+// ZeroStyleRange is the range of a style write on a text node: up to the
+// token that ended the node in its author's view. Absent until: to the end
+// of the document.
+message ZeroStyleRange {
+  TextNodeID until = 1;
 }
 
 // ZeroAttrWrite is one attribute write of ZeroTreeStyle (is_removed: null).

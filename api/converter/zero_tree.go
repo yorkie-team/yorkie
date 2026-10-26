@@ -345,6 +345,12 @@ func toZeroTreeStyle(e *operations.ZeroTreeStyle) *api.Operation_ZeroTreeStyle_ 
 			Key: w.Key, Value: w.Value, IsRemoved: w.Removed,
 		})
 	}
+	if rng := e.Range(); rng != nil {
+		pbStyle.Range = &api.ZeroStyleRange{}
+		if rng.Until != nil {
+			pbStyle.Range.Until = toTextNodeID(rng.Until)
+		}
+	}
 	return &api.Operation_ZeroTreeStyle_{ZeroTreeStyle: pbStyle}
 }
 
@@ -371,7 +377,18 @@ func fromZeroTreeStyle(pbStyle *api.Operation_ZeroTreeStyle) (*operations.ZeroTr
 	for _, w := range pbStyle.Writes {
 		writes = append(writes, crdt.ZeroAttrWrite{Key: w.Key, Value: w.Value, Removed: w.IsRemoved})
 	}
-	return operations.NewZeroTreeStyle(parentCreatedAt, markerID, writes, executedAt), nil
+	var rng *crdt.ZeroStyleRange
+	if pbStyle.Range != nil {
+		rng = &crdt.ZeroStyleRange{}
+		if pbStyle.Range.Until != nil {
+			until, err := fromTextNodeID(pbStyle.Range.Until)
+			if err != nil {
+				return nil, err
+			}
+			rng.Until = until
+		}
+	}
+	return operations.NewZeroTreeStyle(parentCreatedAt, markerID, writes, executedAt, rng), nil
 }
 
 func toZeroTree(tree *crdt.ZeroTree) *api.JSONElement {

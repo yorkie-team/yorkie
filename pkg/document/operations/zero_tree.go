@@ -230,6 +230,8 @@ type ZeroTreeStyle struct {
 	markerID        *crdt.RGATreeSplitNodeID
 	writes          []crdt.ZeroAttrWrite
 	executedAt      *time.Ticket
+	// rng makes the write a range (see crdt.ZeroStyleRegion).
+	rng *crdt.ZeroStyleRange
 }
 
 // NewZeroTreeStyle creates a new instance of ZeroTreeStyle.
@@ -238,12 +240,14 @@ func NewZeroTreeStyle(
 	markerID *crdt.RGATreeSplitNodeID,
 	writes []crdt.ZeroAttrWrite,
 	executedAt *time.Ticket,
+	rng *crdt.ZeroStyleRange,
 ) *ZeroTreeStyle {
 	return &ZeroTreeStyle{
 		parentCreatedAt: parentCreatedAt,
 		markerID:        markerID,
 		writes:          writes,
 		executedAt:      executedAt,
+		rng:             rng,
 	}
 }
 
@@ -253,12 +257,18 @@ func (e *ZeroTreeStyle) Execute(root *crdt.Root, source OpSource, _ time.Version
 	if !ok {
 		return ExecutionResult{}, ErrNotApplicableDataType
 	}
-	prev := tree.SetAttrs(e.markerID, e.writes, e.executedAt)
+	prev, pairs := tree.SetAttrs(e.markerID, e.writes, e.executedAt, e.rng)
+	for _, pair := range pairs {
+		root.RegisterGCPair(pair)
+	}
+	// a range write may change other markers even when its own kept a newer
+	// value; an undo writes the same range
+	observable := len(prev) > 0 || e.rng != nil
 	if !source.NeedsReverse() || len(prev) == 0 {
-		return ExecutionResult{Observable: len(prev) > 0}, nil
+		return ExecutionResult{Observable: observable}, nil
 	}
 	return ExecutionResult{
-		Reverse:    NewZeroTreeStyle(e.parentCreatedAt, e.markerID, prev, nil),
+		Reverse:    NewZeroTreeStyle(e.parentCreatedAt, e.markerID, prev, nil, e.rng),
 		Observable: true,
 	}, nil
 }
@@ -282,3 +292,6 @@ func (e *ZeroTreeStyle) MarkerID() *crdt.RGATreeSplitNodeID { return e.markerID 
 
 // Writes returns the attribute writes.
 func (e *ZeroTreeStyle) Writes() []crdt.ZeroAttrWrite { return e.writes }
+
+// Range returns the range of a range write, or nil.
+func (e *ZeroTreeStyle) Range() *crdt.ZeroStyleRange { return e.rng }

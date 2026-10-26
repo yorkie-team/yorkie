@@ -1797,6 +1797,15 @@ components:
           description: ""
           title: parent_created_at
           type: object
+        range:
+          $ref: '#/components/schemas/yorkie.v1.ZeroStyleRange'
+          additionalProperties: false
+          description: |-
+            range, when present, makes the write a range: the markers of the same
+             type between marker_id and range.until get it too, and so does such a
+             marker inserted later by a change that did not know the write.
+          title: range
+          type: object
         writes:
           additionalProperties: false
           description: ""
@@ -3315,6 +3324,21 @@ components:
           title: table
           type: string
       title: ZeroSchemaGrid
+      type: object
+    yorkie.v1.ZeroStyleRange:
+      additionalProperties: false
+      description: |-
+        ZeroStyleRange is the range of a style write on a text node: up to the
+         token that ended the node in its author's view. Absent until: to the end
+         of the document.
+      properties:
+        until:
+          $ref: '#/components/schemas/yorkie.v1.TextNodeID'
+          additionalProperties: false
+          description: ""
+          title: until
+          type: object
+      title: ZeroStyleRange
       type: object
     yorkie.v1.ZeroTicket:
       additionalProperties: false

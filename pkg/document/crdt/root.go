@@ -86,6 +86,7 @@ func gcParentsAreComparable() {
 	comparableGCParent[*TextValue](nil)
 	comparableGCParent[*RGATreeList](nil)
 	comparableGCParent[*RGATreeSplit[*TextValue]](nil)
+	comparableGCParent[*ZeroTree](nil)
 }
 
 var _ = gcParentsAreComparable
