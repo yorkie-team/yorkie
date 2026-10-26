@@ -309,19 +309,25 @@ type dealiasOpen struct {
 	typ   string
 	seen  map[string]bool
 	attrs *omap[string]
+	// at is the index in the result of the node the marker opened (or was
+	// folded into), -1 for the root
+	at int
 }
 
 // dealias folds the markers of concurrent splits of one boundary into the
 // first split there, and leaves out what a gone scope marker, a deleted grid
-// column or a second `single` child hides (JS `dealias`).
+// column or a second `single` child hides (JS `dealias`). A folded marker's
+// registers join the node of its type open where it stands: the first
+// split's, unless another split came between the two.
 //
 //nolint:gocyclo // PROTOTYPE: mirrors dealias in the JS SDK one to one; split once the design settles
 func dealias(entries []viewEntry, schema *ZeroSchema) []viewEntry {
 	var out []viewEntry
 	firstRuns := map[string][]int{}
 	shown := map[string]bool{}
-	open := []dealiasOpen{{depth: 0, typ: schema.RootType, seen: map[string]bool{}}}
+	open := []dealiasOpen{{depth: 0, typ: schema.RootType, seen: map[string]bool{}, at: -1}}
 	hideDepth := math.Inf(1)
+	holder := -1
 	var into []int
 	isFirst := false
 	j := 0
@@ -330,6 +336,9 @@ func dealias(entries []viewEntry, schema *ZeroSchema) []viewEntry {
 		if entry.scope != "" && !shown[entry.scope] {
 			continue
 		}
+		// a folded marker opens nothing in the view: the open nodes stay as they
+		// were before it
+		openBefore := append([]dealiasOpen(nil), open...)
 		if entry.marker != nil && levelOf(entry.marker) <= hideDepth {
 			hideDepth = math.Inf(1)
 		}
@@ -338,6 +347,15 @@ func dealias(entries []viewEntry, schema *ZeroSchema) []viewEntry {
 		}
 		if m := entry.marker; m != nil {
 			depth := levelOf(m)
+			// the node of this type open at this depth: what follows a folded
+			// marker goes into it (see the fold below)
+			holder = -1
+			for _, o := range open {
+				if o.depth == depth && o.typ == m.typ && o.at >= 0 {
+					holder = o.at
+					break
+				}
+			}
 			for len(open) > 1 && open[len(open)-1].depth >= depth {
 				open = open[:len(open)-1]
 			}
@@ -364,7 +382,7 @@ func dealias(entries []viewEntry, schema *ZeroSchema) []viewEntry {
 				}
 				parent.seen[m.typ] = true
 			}
-			open = append(open, dealiasOpen{depth: depth, typ: m.typ, seen: map[string]bool{}, attrs: m.attrs})
+			open = append(open, dealiasOpen{depth: depth, typ: m.typ, seen: map[string]bool{}, attrs: m.attrs, at: len(out)})
 			shown[entry.id] = true
 		}
 		key := ""
@@ -391,15 +409,28 @@ func dealias(entries []viewEntry, schema *ZeroSchema) []viewEntry {
 				into = nil
 			}
 		}
+		// A folded marker is the first split's line: it goes with that node (a
+		// merge or delete takes it). But what follows a folded marker is in the
+		// node of its type open where it stands -- another split may have come
+		// between the two -- so its registers show there.
 		if !isFirst && j < len(into) {
-			target := out[into[j]]
+			fold := into[j]
+			target := out[fold]
 			if target.marker.typ == entry.marker.typ && target.marker.depth == entry.marker.depth {
-				regs, attrs := mergeRegisters(target.marker.registers, entry.marker.registers)
-				nm := *target.marker
+				open = openBefore
+				route := fold
+				if holder >= 0 && holder != fold && out[holder].marker != nil && out[holder].marker.typ == entry.marker.typ {
+					route = holder
+				}
+				dest := out[route]
+				regs, attrs := mergeRegisters(dest.marker.registers, entry.marker.registers)
+				nm := *dest.marker
 				nm.attrs, nm.registers = attrs, regs
-				target.marker = &nm
+				dest.marker = &nm
+				out[route] = dest
+				target = out[fold]
 				target.aliases = append(append([]string(nil), target.aliases...), entry.id)
-				out[into[j]] = target
+				out[fold] = target
 				continue
 			}
 		}
