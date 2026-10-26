@@ -28,9 +28,9 @@ import (
 func TestZeroStyleRegionEncoding(t *testing.T) {
 	actor, err := time.ActorIDFromHex("000000000000000000000003")
 	require.NoError(t, err)
-	until := NewRGATreeSplitNodeID(time.NewTicket(1, 1, actor), 8)
+	last := NewRGATreeSplitNodeID(time.NewTicket(1, 1, actor), 8)
 	region := &ZeroStyleRegion{
-		Until: until,
+		Last: last,
 		Writes: []ZeroAttrWrite{
 			{Key: "style.bold", Value: "true"},
 			{Key: "style.italic", Removed: true},
@@ -40,9 +40,9 @@ func TestZeroStyleRegionEncoding(t *testing.T) {
 	}
 
 	t.Run("encodes as the JS SDK does", func(t *testing.T) {
-		// JSON.stringify({u: encodeNodeID(until), w: writes}) in the JS SDK
+		// JSON.stringify({l: encodeNodeID(last), w: writes}) in the JS SDK
 		assert.Equal(t,
-			`{"u":"[\"1\",1,\"000000000000000000000003\",8]",`+
+			`{"l":"[\"1\",1,\"000000000000000000000003\",8]",`+
 				`"w":[["style.bold","true"],["style.italic",null],["data.src","\"<a&b>\""]]}`,
 			region.encode())
 		assert.Equal(t, "zt.r.9:000000000000000000000003:2", region.key())
@@ -51,15 +51,15 @@ func TestZeroStyleRegionEncoding(t *testing.T) {
 	t.Run("decodes what it encodes", func(t *testing.T) {
 		got, err := decodeZeroRegion(region.encode())
 		require.NoError(t, err)
-		assert.Equal(t, 0, got.Until.createdAt.Compare(until.createdAt))
-		assert.Equal(t, until.offset, got.Until.offset)
+		assert.Equal(t, 0, got.Last.createdAt.Compare(last.createdAt))
+		assert.Equal(t, last.offset, got.Last.offset)
 		assert.Equal(t, region.Writes, got.Writes)
 	})
 
 	t.Run("decodes a range to the end of the document", func(t *testing.T) {
-		got, err := decodeZeroRegion(`{"u":"","w":[["style.bold","true"]]}`)
+		got, err := decodeZeroRegion(`{"l":"","w":[["style.bold","true"]]}`)
 		require.NoError(t, err)
-		assert.Nil(t, got.Until)
+		assert.Nil(t, got.Last)
 	})
 }
 
@@ -121,8 +121,10 @@ func TestZeroStyleCancels(t *testing.T) {
 			})
 		}
 		m.repick(cancels)
-		// every kept write is cancelled: what the oldest one's marker held
+		// every kept write is cancelled: what the oldest one's marker held,
+		// at the initial ticket so any value it meets in a merge wins
 		assert.Equal(t, "black", value(m, "style.color"))
+		assert.Equal(t, 0, m.Attrs[0].UpdatedAt.Compare(time.InitialTicket))
 	})
 
 	t.Run("reserved keys stay plain registers", func(t *testing.T) {
@@ -132,5 +134,72 @@ func TestZeroStyleCancels(t *testing.T) {
 		m.Set("zt.col", `"b"`, false, at(2), cancels)
 		assert.Nil(t, m.Attrs[0].History)
 		assert.Equal(t, `"b"`, value(m, "zt.col"))
+	})
+}
+
+// Two people format abutting ranges at once: A bolds [0,1) of "abc", B
+// underlines [1,3). Both split at 1, and B's split marker sits right after
+// A's range in the token order: it opens what follows the range, so it must
+// not get A's bold, whichever change arrives first (the JS SDK's
+// `ZeroStyleRegion` follows the same rule).
+func TestZeroStyleRangeAbutting(t *testing.T) {
+	a, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	b, err := time.ActorIDFromHex("000000000000000000000002")
+	require.NoError(t, err)
+	created := time.NewTicket(1, 0, a)
+	id := func(at *time.Ticket, offset int) *RGATreeSplitNodeID { return NewRGATreeSplitNodeID(at, offset) }
+	marker := func(typ string, depth int) ZeroToken {
+		return ZeroToken{Marker: &ZeroMarker{Type: typ, Depth: depth, Boundary: "a|b"}}
+	}
+	known := func() time.VersionVector {
+		vv := time.NewVersionVector()
+		vv.Set(a, 1)
+		return vv
+	}
+
+	newTree := func(t *testing.T) *ZeroTree {
+		tree := NewZeroTree(NewRGATreeSplit(InitialZeroTreeNode()), created)
+		head := NewRGATreeSplitNodePos(initialNodeID, 0)
+		content := NewZeroTokens([]ZeroToken{
+			{Marker: &ZeroMarker{Type: "paragraph", Depth: 1}},
+			{Marker: &ZeroMarker{Type: "inline-text", Depth: 2}},
+			{Char: 'a'}, {Char: 'b'}, {Char: 'c'},
+		}, "")
+		_, _, _, err := tree.Edit(head, head, content, created, nil)
+		require.NoError(t, err)
+		return tree
+	}
+	// both split right after "a" (token 2 of the first insertion)
+	afterA := NewRGATreeSplitNodePos(id(created, 0), 3)
+	splitA, styleA := time.NewTicket(2, 0, a), time.NewTicket(2, 1, a)
+	splitB, styleB := time.NewTicket(3, 0, b), time.NewTicket(3, 1, b)
+	applyA := func(t *testing.T, tree *ZeroTree) {
+		_, _, _, err := tree.Edit(afterA, afterA, NewZeroTokens([]ZeroToken{marker("inline-text", 2)}, ""), splitA, known())
+		require.NoError(t, err)
+		tree.SetAttrs(id(created, 1), []ZeroAttrWrite{{Key: "style.bold", Value: "true"}}, styleA,
+			&ZeroStyleRange{Last: id(created, 2)}, nil)
+	}
+	applyB := func(t *testing.T, tree *ZeroTree) {
+		_, _, _, err := tree.Edit(afterA, afterA, NewZeroTokens([]ZeroToken{marker("inline-text", 2)}, ""), splitB, known())
+		require.NoError(t, err)
+		tree.SetAttrs(id(splitB, 0), []ZeroAttrWrite{{Key: "style.underline", Value: "true"}}, styleB,
+			&ZeroStyleRange{Last: id(created, 4)}, nil)
+	}
+
+	want := `{"children":[{"children":[` +
+		`{"data":"a","style":{"bold":true},"type":"inline-text"},` +
+		`{"data":"bc","style":{"underline":true},"type":"inline-text"}],"type":"paragraph"}],"type":"content"}`
+	t.Run("A first", func(t *testing.T) {
+		tree := newTree(t)
+		applyA(t, tree)
+		applyB(t, tree)
+		assert.Equal(t, want, tree.ContentJSON())
+	})
+	t.Run("B first", func(t *testing.T) {
+		tree := newTree(t)
+		applyB(t, tree)
+		applyA(t, tree)
+		assert.Equal(t, want, tree.ContentJSON())
 	})
 }

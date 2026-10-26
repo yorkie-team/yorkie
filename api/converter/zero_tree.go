@@ -374,8 +374,8 @@ func toZeroTreeStyle(e *operations.ZeroTreeStyle) *api.Operation_ZeroTreeStyle_ 
 	pbStyle.Writes = toZeroAttrWrites(e.Writes())
 	if rng := e.Range(); rng != nil {
 		pbStyle.Range = &api.ZeroStyleRange{}
-		if rng.Until != nil {
-			pbStyle.Range.Until = toTextNodeID(rng.Until)
+		if rng.Last != nil {
+			pbStyle.Range.Last = toTextNodeID(rng.Last)
 		}
 	}
 	if c := e.Cancel(); c != nil {
@@ -427,12 +427,12 @@ func fromZeroTreeStyle(pbStyle *api.Operation_ZeroTreeStyle) (*operations.ZeroTr
 	var rng *crdt.ZeroStyleRange
 	if pbStyle.Range != nil {
 		rng = &crdt.ZeroStyleRange{}
-		if pbStyle.Range.Until != nil {
-			until, err := fromTextNodeID(pbStyle.Range.Until)
+		if pbStyle.Range.Last != nil {
+			last, err := fromTextNodeID(pbStyle.Range.Last)
 			if err != nil {
 				return nil, err
 			}
-			rng.Until = until
+			rng.Last = last
 		}
 	}
 	var cancel *crdt.ZeroCancelWrite

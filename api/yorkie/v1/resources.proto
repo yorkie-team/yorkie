@@ -191,7 +191,7 @@ message Operation {
     repeated ZeroAttrWrite writes = 3;
     TimeTicket executed_at = 4;
     // range, when present, makes the write a range: the markers of the same
-    // type between marker_id and range.until get it too, and so does such a
+    // type between marker_id and range.last get it too, and so does such a
     // marker inserted later by a change that did not know the write.
     ZeroStyleRange range = 5;
     // cancel, when present, cancels or brings back an earlier write (an
@@ -513,10 +513,10 @@ message ZeroStyleCancel {
 }
 
 // ZeroStyleRange is the range of a style write on a text node: up to the
-// token that ended the node in its author's view. Absent until: to the end
+// last character of the node in its author's view. Absent last: to the end
 // of the document.
 message ZeroStyleRange {
-  TextNodeID until = 1;
+  TextNodeID last = 1;
 }
 
 // ZeroAttrWrite is one attribute write of ZeroTreeStyle (is_removed: null).

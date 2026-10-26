@@ -2802,11 +2802,11 @@ func (x *ZeroStyleCancel) GetAtRef() *ZeroTicket {
 }
 
 // ZeroStyleRange is the range of a style write on a text node: up to the
-// token that ended the node in its author's view. Absent until: to the end
+// last character of the node in its author's view. Absent last: to the end
 // of the document.
 type ZeroStyleRange struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Until         *TextNodeID            `protobuf:"bytes,1,opt,name=until,proto3" json:"until,omitempty"`
+	Last          *TextNodeID            `protobuf:"bytes,1,opt,name=last,proto3" json:"last,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2841,9 +2841,9 @@ func (*ZeroStyleRange) Descriptor() ([]byte, []int) {
 	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{30}
 }
 
-func (x *ZeroStyleRange) GetUntil() *TextNodeID {
+func (x *ZeroStyleRange) GetLast() *TextNodeID {
 	if x != nil {
-		return x.Until
+		return x.Last
 	}
 	return nil
 }
@@ -6029,7 +6029,7 @@ type Operation_ZeroTreeStyle struct {
 	Writes          []*ZeroAttrWrite       `protobuf:"bytes,3,rep,name=writes,proto3" json:"writes,omitempty"`
 	ExecutedAt      *TimeTicket            `protobuf:"bytes,4,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
 	// range, when present, makes the write a range: the markers of the same
-	// type between marker_id and range.until get it too, and so does such a
+	// type between marker_id and range.last get it too, and so does such a
 	// marker inserted later by a change that did not know the write.
 	Range *ZeroStyleRange `protobuf:"bytes,5,opt,name=range,proto3" json:"range,omitempty"`
 	// cancel, when present, cancels or brings back an earlier write (an
@@ -7284,9 +7284,9 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x02on\x18\x02 \x01(\bR\x02on\x124\n" +
 	"\bfallback\x18\x03 \x03(\v2\x18.yorkie.v1.ZeroAttrWriteR\bfallback\x122\n" +
 	"\twrite_ref\x18\x04 \x01(\v2\x15.yorkie.v1.ZeroTicketR\bwriteRef\x12,\n" +
-	"\x06at_ref\x18\x05 \x01(\v2\x15.yorkie.v1.ZeroTicketR\x05atRef\"=\n" +
-	"\x0eZeroStyleRange\x12+\n" +
-	"\x05until\x18\x01 \x01(\v2\x15.yorkie.v1.TextNodeIDR\x05until\"V\n" +
+	"\x06at_ref\x18\x05 \x01(\v2\x15.yorkie.v1.ZeroTicketR\x05atRef\";\n" +
+	"\x0eZeroStyleRange\x12)\n" +
+	"\x04last\x18\x01 \x01(\v2\x15.yorkie.v1.TextNodeIDR\x04last\"V\n" +
 	"\rZeroAttrWrite\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\x12\x1d\n" +
@@ -7764,7 +7764,7 @@ var file_yorkie_v1_resources_proto_depIdxs = []int32{
 	36,  // 83: yorkie.v1.ZeroStyleCancel.fallback:type_name -> yorkie.v1.ZeroAttrWrite
 	22,  // 84: yorkie.v1.ZeroStyleCancel.write_ref:type_name -> yorkie.v1.ZeroTicket
 	22,  // 85: yorkie.v1.ZeroStyleCancel.at_ref:type_name -> yorkie.v1.ZeroTicket
-	19,  // 86: yorkie.v1.ZeroStyleRange.until:type_name -> yorkie.v1.TextNodeID
+	19,  // 86: yorkie.v1.ZeroStyleRange.last:type_name -> yorkie.v1.TextNodeID
 	54,  // 87: yorkie.v1.ZeroRestoreSpan.created_at:type_name -> yorkie.v1.TimeTicket
 	29,  // 88: yorkie.v1.ZeroRestoreSpan.value:type_name -> yorkie.v1.ZeroTokens
 	54,  // 89: yorkie.v1.ZeroRestoreSpan.removed_by:type_name -> yorkie.v1.TimeTicket

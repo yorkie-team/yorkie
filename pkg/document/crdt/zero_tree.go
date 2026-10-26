@@ -346,18 +346,24 @@ type ZeroAttrWrite struct {
 // ZeroStyleRegion).
 const ZeroRegionPrefix = "zt.r."
 
-// ZeroStyleRange makes a style write on a text node a range: up to the token
-// that ended the node in its author's view, or to the end of the document
-// when Until is nil.
+// ZeroStyleRange makes a style write on a text node a range: up to the last
+// character of the node in its author's view, or to the end of the document
+// when Last is nil.
 type ZeroStyleRange struct {
-	Until *RGATreeSplitNodeID
+	Last *RGATreeSplitNodeID
 }
 
 // ZeroStyleRegion is a style write on a text node taken as a range: from the
-// node's marker to the token that ended the node in its author's view
-// (Until). Every marker of the same type between the two in the token order
+// node's marker to the last character of the node in its author's view
+// (Last). Every marker of the same type between the two in the token order
 // gets the write too (LWW, at the write's ticket), so a node someone split off
 // concurrently keeps the style written on what it was split from.
+//
+// The range ends at that character, not at the token after it: a marker
+// someone put concurrently right after the node's text opens what follows the
+// range, so it does not get the write. The token order between two tokens
+// never changes, so whether a marker falls in the range does not depend on
+// when anything arrives.
 //
 // The markers between the two when the write arrives get it then. A marker
 // that arrives later gets it if it is concurrent with the write (its change
@@ -368,7 +374,7 @@ type ZeroStyleRange struct {
 type ZeroStyleRegion struct {
 	MarkerID *RGATreeSplitNodeID
 	Type     string
-	Until    *RGATreeSplitNodeID
+	Last     *RGATreeSplitNodeID
 	Writes   []ZeroAttrWrite
 	Ticket   *time.Ticket
 }
@@ -393,9 +399,9 @@ func (r *ZeroStyleRegion) DataSize() resource.DataSize { return resource.DataSiz
 // encode returns what the start marker keeps of this write, byte for byte
 // what the JS SDK writes.
 func (r *ZeroStyleRegion) encode() string {
-	until := ""
-	if r.Until != nil {
-		until = encodeZeroNodeID(r.Until)
+	last := ""
+	if r.Last != nil {
+		last = encodeZeroNodeID(r.Last)
 	}
 	writes := make([]any, 0, len(r.Writes))
 	for _, w := range r.Writes {
@@ -405,7 +411,7 @@ func (r *ZeroStyleRegion) encode() string {
 			writes = append(writes, []any{w.Key, w.Value})
 		}
 	}
-	return `{"u":` + jsonString(until) + `,"w":` + jsonString(writes) + `}`
+	return `{"l":` + jsonString(last) + `,"w":` + jsonString(writes) + `}`
 }
 
 // jsonString encodes v as JSON.stringify does for the values used here.
@@ -540,15 +546,17 @@ func (cs *ZeroStyleCancels) pick(key string, history []*ZeroAttrEntry) *ZeroAttr
 			return e
 		}
 	}
+	// the value before predates every write the register keeps: it carries
+	// the initial ticket, so a value it meets in a merge or a copy wins
 	oldest := history[len(history)-1]
 	if c := cs.get(oldest.At); c != nil {
 		for _, w := range c.Fallback {
 			if w.Key == key {
-				return &ZeroAttrEntry{Value: w.Value, Removed: w.Removed, At: oldest.At}
+				return &ZeroAttrEntry{Value: w.Value, Removed: w.Removed, At: time.InitialTicket}
 			}
 		}
 	}
-	return &ZeroAttrEntry{Removed: true, At: oldest.At}
+	return &ZeroAttrEntry{Removed: true, At: time.InitialTicket}
 }
 
 func (cs *ZeroStyleCancels) deepCopy() *ZeroStyleCancels {
@@ -905,7 +913,7 @@ func (t *ZeroTree) SetAttrs(
 			region := &ZeroStyleRegion{
 				MarkerID: markerID,
 				Type:     marker.Type,
-				Until:    rng.Until,
+				Last:     rng.Last,
 				Writes:   writes,
 				Ticket:   executedAt,
 			}
@@ -978,19 +986,19 @@ func (t *ZeroTree) pendingRegions() map[string]*ZeroStyleRegion {
 // decodeZeroRegion reads what ZeroStyleRegion.encode wrote.
 func decodeZeroRegion(value string) (*ZeroStyleRegion, error) {
 	var raw struct {
-		U string      `json:"u"`
+		L string      `json:"l"`
 		W [][]*string `json:"w"`
 	}
 	if err := json.Unmarshal([]byte(value), &raw); err != nil {
 		return nil, fmt.Errorf("decode zero style region %q: %w", value, err)
 	}
 	region := &ZeroStyleRegion{}
-	if raw.U != "" {
-		until, err := decodeZeroNodeID(raw.U)
+	if raw.L != "" {
+		last, err := decodeZeroNodeID(raw.L)
 		if err != nil {
 			return nil, err
 		}
-		region.Until = until
+		region.Last = last
 	}
 	for _, w := range raw.W {
 		if len(w) != 2 || w[0] == nil {
@@ -1006,14 +1014,14 @@ func decodeZeroRegion(value string) (*ZeroStyleRegion, error) {
 }
 
 // applyRegion writes a range write on the markers of its type between its
-// marker and Until, removed ones included (an undo may bring them back), or
+// marker and Last, removed ones included (an undo may bring them back), or
 // only on target when it is given. It returns whether it reached target.
 func (t *ZeroTree) applyRegion(region *ZeroStyleRegion, target *ZeroMarker) bool {
 	node := t.rgaTreeSplit.FindNode(region.MarkerID)
 	if node == nil {
 		return false
 	}
-	until := region.Until
+	until := region.Last
 	i := region.MarkerID.offset - node.id.offset + 1
 	for ; node != nil; node = node.next {
 		if node.value != nil {
