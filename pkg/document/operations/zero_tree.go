@@ -224,7 +224,9 @@ func (e *ZeroTreeEdit) RestoreMode() crdt.RestoreMode { return e.restoreMode }
 // RetombstoneSpans returns the spans an undo re-removes.
 func (e *ZeroTreeEdit) RetombstoneSpans() []*crdt.ZeroRestoreSpan { return e.retombstoneSpans }
 
-// ZeroTreeStyle writes attributes on one marker with last-writer-wins.
+// ZeroTreeStyle writes attributes on one marker with last-writer-wins. Its
+// reverse cancels the write (see crdt.ZeroStyleCancels) and writes back the
+// reserved keys; the reverse of that brings the write back.
 type ZeroTreeStyle struct {
 	parentCreatedAt *time.Ticket
 	markerID        *crdt.RGATreeSplitNodeID
@@ -232,6 +234,8 @@ type ZeroTreeStyle struct {
 	executedAt      *time.Ticket
 	// rng makes the write a range (see crdt.ZeroStyleRegion).
 	rng *crdt.ZeroStyleRange
+	// cancel cancels or brings back an earlier write (an undo or redo).
+	cancel *crdt.ZeroCancelWrite
 }
 
 // NewZeroTreeStyle creates a new instance of ZeroTreeStyle.
@@ -241,6 +245,7 @@ func NewZeroTreeStyle(
 	writes []crdt.ZeroAttrWrite,
 	executedAt *time.Ticket,
 	rng *crdt.ZeroStyleRange,
+	cancel *crdt.ZeroCancelWrite,
 ) *ZeroTreeStyle {
 	return &ZeroTreeStyle{
 		parentCreatedAt: parentCreatedAt,
@@ -248,6 +253,7 @@ func NewZeroTreeStyle(
 		writes:          writes,
 		executedAt:      executedAt,
 		rng:             rng,
+		cancel:          cancel,
 	}
 }
 
@@ -257,18 +263,22 @@ func (e *ZeroTreeStyle) Execute(root *crdt.Root, source OpSource, _ time.Version
 	if !ok {
 		return ExecutionResult{}, ErrNotApplicableDataType
 	}
-	prev, pairs := tree.SetAttrs(e.markerID, e.writes, e.executedAt, e.rng)
+	prev, pairs, cancel := tree.SetAttrs(e.markerID, e.writes, e.executedAt, e.rng, e.cancel)
 	for _, pair := range pairs {
 		root.RegisterGCPair(pair)
 	}
 	// a range write may change other markers even when its own kept a newer
-	// value; an undo writes the same range
-	observable := len(prev) > 0 || e.rng != nil
-	if !source.NeedsReverse() || len(prev) == 0 {
+	// value, and so may a cancel
+	observable := len(prev) > 0 || e.rng != nil || cancel != nil
+	if !source.NeedsReverse() || (len(prev) == 0 && cancel == nil) {
 		return ExecutionResult{Observable: observable}, nil
 	}
+	var rng *crdt.ZeroStyleRange
+	if len(prev) > 0 {
+		rng = e.rng
+	}
 	return ExecutionResult{
-		Reverse:    NewZeroTreeStyle(e.parentCreatedAt, e.markerID, prev, nil, e.rng),
+		Reverse:    NewZeroTreeStyle(e.parentCreatedAt, e.markerID, prev, nil, rng, cancel),
 		Observable: true,
 	}, nil
 }
@@ -295,3 +305,6 @@ func (e *ZeroTreeStyle) Writes() []crdt.ZeroAttrWrite { return e.writes }
 
 // Range returns the range of a range write, or nil.
 func (e *ZeroTreeStyle) Range() *crdt.ZeroStyleRange { return e.rng }
+
+// Cancel returns the cancel of an undo or redo of a write, or nil.
+func (e *ZeroTreeStyle) Cancel() *crdt.ZeroCancelWrite { return e.cancel }

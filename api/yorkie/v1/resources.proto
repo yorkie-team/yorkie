@@ -194,6 +194,9 @@ message Operation {
     // type between marker_id and range.until get it too, and so does such a
     // marker inserted later by a change that did not know the write.
     ZeroStyleRange range = 5;
+    // cancel, when present, cancels or brings back an earlier write (an
+    // undo or redo of it) wherever registers keep it.
+    ZeroStyleCancel cancel = 6;
   }
 
   oneof body {
@@ -291,6 +294,9 @@ message JSONElement {
     // actors are the actor ids the tickets of this tree's nodes point at
     // (ZeroTicket.actor), so a snapshot writes each id once.
     repeated bytes actors = 8;
+    // style_cancels are the style writes undone (or redone) in this tree,
+    // in the order of the writes' tickets.
+    repeated ZeroStyleCancel style_cancels = 9;
   }
 
   oneof body {
@@ -473,12 +479,37 @@ message ZeroMarker {
 }
 
 // ZeroAttr is one LWW register of a marker. is_removed: the value is null.
+// history, when present, is the newest writes the register keeps, newest
+// first; the value is the newest one no undo cancelled (see
+// ZeroStyleCancel).
 message ZeroAttr {
   string key = 1;
   string value = 2;
   TimeTicket updated_at = 3; // in operations
   bool is_removed = 4;
   ZeroTicket updated_at_ref = 5; // in a ZeroTree element (see actors)
+  repeated ZeroAttrEntry history = 6;
+}
+
+// ZeroAttrEntry is one write a register keeps (see ZeroAttr.history).
+message ZeroAttrEntry {
+  string value = 1;
+  bool is_removed = 2;
+  TimeTicket updated_at = 3; // in operations
+  ZeroTicket updated_at_ref = 4; // in a ZeroTree element (see actors)
+}
+
+// ZeroStyleCancel cancels (on) or brings back (not on) one style write: a
+// register skips a cancelled write when it picks its value. fallback is what
+// the write's own marker held before it, for a register whose kept writes are
+// all cancelled. In an operation the write is write; in a ZeroTree element it
+// is write_ref, with at_ref the undo or redo that set it (last writer wins).
+message ZeroStyleCancel {
+  TimeTicket write = 1;
+  bool on = 2;
+  repeated ZeroAttrWrite fallback = 3;
+  ZeroTicket write_ref = 4;
+  ZeroTicket at_ref = 5;
 }
 
 // ZeroStyleRange is the range of a style write on a text node: up to the

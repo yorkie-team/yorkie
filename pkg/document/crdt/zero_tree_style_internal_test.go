@@ -62,3 +62,75 @@ func TestZeroStyleRegionEncoding(t *testing.T) {
 		assert.Nil(t, got.Until)
 	})
 }
+
+func TestZeroStyleCancels(t *testing.T) {
+	actor, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	at := func(lamport int64) *time.Ticket { return time.NewTicket(lamport, 0, actor) }
+	value := func(m *ZeroMarker, key string) string {
+		for _, attr := range m.Attrs {
+			if attr.Key == key {
+				if attr.Removed {
+					return "<removed>"
+				}
+				return attr.Value
+			}
+		}
+		return "<none>"
+	}
+
+	t.Run("an undo takes back its write and only it", func(t *testing.T) {
+		cancels := &ZeroStyleCancels{}
+		m := &ZeroMarker{Type: "inline-text"}
+		m.Set("style.color", "red", false, at(1), cancels)
+		m.Set("style.color", "blue", false, at(2), cancels)
+		m.Set("style.color", "green", false, at(3), cancels)
+		assert.Equal(t, "green", value(m, "style.color"))
+
+		// cancelling blue: green stays, it is newer
+		cancels.set(&ZeroStyleCancel{Write: at(2), On: true, At: at(4)})
+		m.repick(cancels)
+		assert.Equal(t, "green", value(m, "style.color"))
+
+		// cancelling green too: back to red
+		cancels.set(&ZeroStyleCancel{Write: at(3), On: true, At: at(5)})
+		m.repick(cancels)
+		assert.Equal(t, "red", value(m, "style.color"))
+
+		// a redo of blue brings it back
+		cancels.set(&ZeroStyleCancel{Write: at(2), On: false, At: at(6)})
+		m.repick(cancels)
+		assert.Equal(t, "blue", value(m, "style.color"))
+
+		// an older undo of blue does not win over the redo
+		assert.False(t, cancels.set(&ZeroStyleCancel{Write: at(2), On: true, At: at(5)}))
+	})
+
+	t.Run("a register keeps the newest writes and falls back past them", func(t *testing.T) {
+		cancels := &ZeroStyleCancels{}
+		m := &ZeroMarker{Type: "inline-text"}
+		for i, c := range []string{"red", "blue", "green", "yellow", "white"} {
+			m.Set("style.color", c, false, at(int64(i+1)), cancels)
+		}
+		require.Len(t, m.Attrs[0].History, ZeroHistoryDepth)
+		assert.Equal(t, 0, m.Attrs[0].History[0].At.Compare(at(5)))
+		for i := int64(2); i <= 5; i++ {
+			cancels.set(&ZeroStyleCancel{
+				Write: at(i), On: true, At: at(10 + i),
+				Fallback: []ZeroAttrWrite{{Key: "style.color", Value: "black"}},
+			})
+		}
+		m.repick(cancels)
+		// every kept write is cancelled: what the oldest one's marker held
+		assert.Equal(t, "black", value(m, "style.color"))
+	})
+
+	t.Run("reserved keys stay plain registers", func(t *testing.T) {
+		cancels := &ZeroStyleCancels{}
+		m := &ZeroMarker{Type: "cell"}
+		m.Set("zt.col", `"a"`, false, at(1), cancels)
+		m.Set("zt.col", `"b"`, false, at(2), cancels)
+		assert.Nil(t, m.Attrs[0].History)
+		assert.Equal(t, `"b"`, value(m, "zt.col"))
+	})
+}

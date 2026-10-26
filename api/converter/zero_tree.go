@@ -63,9 +63,16 @@ func zeroActorsOf(tree *crdt.ZeroTree) *zeroActors {
 			if tok.Marker != nil {
 				for _, attr := range tok.Marker.Attrs {
 					add(attr.UpdatedAt)
+					for _, e := range attr.History {
+						add(e.At)
+					}
 				}
 			}
 		}
+	}
+	for _, c := range tree.StyleCancels() {
+		add(c.Write)
+		add(c.At)
 	}
 	keys := make([]string, 0, len(seen))
 	for k := range seen {
@@ -173,6 +180,15 @@ func toZeroTokens(value *crdt.ZeroTokens, actors ...*zeroActors) *api.ZeroTokens
 			if len(actors) > 0 {
 				pbAttr.UpdatedAt, pbAttr.UpdatedAtRef = nil, actors[0].ticket(attr.UpdatedAt)
 			}
+			for _, e := range attr.History {
+				pbEntry := &api.ZeroAttrEntry{Value: e.Value, IsRemoved: e.Removed}
+				if len(actors) > 0 {
+					pbEntry.UpdatedAtRef = actors[0].ticket(e.At)
+				} else {
+					pbEntry.UpdatedAt = ToTimeTicket(e.At)
+				}
+				pbAttr.History = append(pbAttr.History, pbEntry)
+			}
 			pbMarker.Attrs = append(pbMarker.Attrs, pbAttr)
 		}
 		pbTokens.Tokens = append(pbTokens.Tokens, &api.ZeroToken{
@@ -215,12 +231,27 @@ func fromZeroTokens(pbTokens *api.ZeroTokens, actors ...*zeroActors) (*crdt.Zero
 				if err != nil {
 					return nil, err
 				}
-				marker.Attrs = append(marker.Attrs, &crdt.ZeroAttr{
+				attr := &crdt.ZeroAttr{
 					Key:       pbAttr.Key,
 					Value:     pbAttr.Value,
 					Removed:   pbAttr.IsRemoved,
 					UpdatedAt: updatedAt,
-				})
+				}
+				for _, pbEntry := range pbAttr.History {
+					var at *time.Ticket
+					if pbEntry.UpdatedAtRef != nil && len(actors) > 0 {
+						at, err = actors[0].fromRequired(pbEntry.UpdatedAtRef, "zero_attr_entry.updated_at_ref")
+					} else {
+						at, err = fromRequiredTimeTicket(pbEntry.UpdatedAt, "zero_attr_entry.updated_at")
+					}
+					if err != nil {
+						return nil, err
+					}
+					attr.History = append(attr.History, &crdt.ZeroAttrEntry{
+						Value: pbEntry.Value, Removed: pbEntry.IsRemoved, At: at,
+					})
+				}
+				marker.Attrs = append(marker.Attrs, attr)
 			}
 			tokens = append(tokens, crdt.ZeroToken{Marker: marker})
 		default:
@@ -340,18 +371,37 @@ func toZeroTreeStyle(e *operations.ZeroTreeStyle) *api.Operation_ZeroTreeStyle_ 
 		MarkerId:        toTextNodeID(e.MarkerID()),
 		ExecutedAt:      ToTimeTicket(e.ExecutedAt()),
 	}
-	for _, w := range e.Writes() {
-		pbStyle.Writes = append(pbStyle.Writes, &api.ZeroAttrWrite{
-			Key: w.Key, Value: w.Value, IsRemoved: w.Removed,
-		})
-	}
+	pbStyle.Writes = toZeroAttrWrites(e.Writes())
 	if rng := e.Range(); rng != nil {
 		pbStyle.Range = &api.ZeroStyleRange{}
 		if rng.Until != nil {
 			pbStyle.Range.Until = toTextNodeID(rng.Until)
 		}
 	}
+	if c := e.Cancel(); c != nil {
+		pbStyle.Cancel = &api.ZeroStyleCancel{
+			Write:    ToTimeTicket(c.Write),
+			On:       c.On,
+			Fallback: toZeroAttrWrites(c.Fallback),
+		}
+	}
 	return &api.Operation_ZeroTreeStyle_{ZeroTreeStyle: pbStyle}
+}
+
+func toZeroAttrWrites(writes []crdt.ZeroAttrWrite) []*api.ZeroAttrWrite {
+	var out []*api.ZeroAttrWrite
+	for _, w := range writes {
+		out = append(out, &api.ZeroAttrWrite{Key: w.Key, Value: w.Value, IsRemoved: w.Removed})
+	}
+	return out
+}
+
+func fromZeroAttrWrites(pbWrites []*api.ZeroAttrWrite) []crdt.ZeroAttrWrite {
+	writes := make([]crdt.ZeroAttrWrite, 0, len(pbWrites))
+	for _, w := range pbWrites {
+		writes = append(writes, crdt.ZeroAttrWrite{Key: w.Key, Value: w.Value, Removed: w.IsRemoved})
+	}
+	return writes
 }
 
 func fromZeroTreeStyle(pbStyle *api.Operation_ZeroTreeStyle) (*operations.ZeroTreeStyle, error) {
@@ -373,10 +423,7 @@ func fromZeroTreeStyle(pbStyle *api.Operation_ZeroTreeStyle) (*operations.ZeroTr
 	if err != nil {
 		return nil, err
 	}
-	writes := make([]crdt.ZeroAttrWrite, 0, len(pbStyle.Writes))
-	for _, w := range pbStyle.Writes {
-		writes = append(writes, crdt.ZeroAttrWrite{Key: w.Key, Value: w.Value, Removed: w.IsRemoved})
-	}
+	writes := fromZeroAttrWrites(pbStyle.Writes)
 	var rng *crdt.ZeroStyleRange
 	if pbStyle.Range != nil {
 		rng = &crdt.ZeroStyleRange{}
@@ -388,7 +435,19 @@ func fromZeroTreeStyle(pbStyle *api.Operation_ZeroTreeStyle) (*operations.ZeroTr
 			rng.Until = until
 		}
 	}
-	return operations.NewZeroTreeStyle(parentCreatedAt, markerID, writes, executedAt, rng), nil
+	var cancel *crdt.ZeroCancelWrite
+	if pbStyle.Cancel != nil {
+		write, err := fromRequiredTimeTicket(pbStyle.Cancel.Write, "zero_style_cancel.write")
+		if err != nil {
+			return nil, err
+		}
+		cancel = &crdt.ZeroCancelWrite{
+			Write:    write,
+			On:       pbStyle.Cancel.On,
+			Fallback: fromZeroAttrWrites(pbStyle.Cancel.Fallback),
+		}
+	}
+	return operations.NewZeroTreeStyle(parentCreatedAt, markerID, writes, executedAt, rng, cancel), nil
 }
 
 func toZeroTree(tree *crdt.ZeroTree) *api.JSONElement {
@@ -475,6 +534,14 @@ func toZeroTree(tree *crdt.ZeroTree) *api.JSONElement {
 			pbEntry.Dels = append(pbEntry.Dels, ToTimeTicket(d))
 		}
 		pbTree.PurgedLedger = append(pbTree.PurgedLedger, pbEntry)
+	}
+	for _, c := range tree.StyleCancels() {
+		pbTree.StyleCancels = append(pbTree.StyleCancels, &api.ZeroStyleCancel{
+			WriteRef: actors.ticket(c.Write),
+			On:       c.On,
+			Fallback: toZeroAttrWrites(c.Fallback),
+			AtRef:    actors.ticket(c.At),
+		})
 	}
 	return &api.JSONElement{Body: &api.JSONElement_ZeroTree_{ZeroTree: pbTree}}
 }
@@ -590,7 +657,28 @@ func fromJSONZeroTree(pbTree *api.JSONElement_ZeroTree) (*crdt.ZeroTree, error) 
 	tree.SetSchema(fromZeroSchema(pbTree.Schema))
 	tree.SetMovedAt(movedAt)
 	tree.SetRemovedAt(removedAt)
+	if err := loadZeroStyleCancels(tree, pbTree.StyleCancels, actors); err != nil {
+		return nil, err
+	}
 	return tree, nil
+}
+
+// loadZeroStyleCancels keeps the undone style writes of a snapshot in tree.
+func loadZeroStyleCancels(tree *crdt.ZeroTree, pbCancels []*api.ZeroStyleCancel, actors *zeroActors) error {
+	for _, c := range pbCancels {
+		write, err := actors.fromRequired(c.WriteRef, "zero_style_cancel.write_ref")
+		if err != nil {
+			return err
+		}
+		at, err := actors.fromRequired(c.AtRef, "zero_style_cancel.at_ref")
+		if err != nil {
+			return err
+		}
+		tree.LoadStyleCancel(&crdt.ZeroStyleCancel{
+			Write: write, On: c.On, At: at, Fallback: fromZeroAttrWrites(c.Fallback),
+		})
+	}
+	return nil
 }
 
 func toSchemaChildren(list []crdt.ZeroSchemaChildren) []*api.ZeroSchemaChildren {

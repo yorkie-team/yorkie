@@ -38,11 +38,34 @@ import (
 
 // ZeroAttr is one LWW attribute register of a marker. Removed means the
 // value is null; the register is kept so an older write cannot bring it back.
+//
+// A register a write reached keeps the newest writes (History, at most
+// ZeroHistoryDepth, newest first) so an undo can cancel one of them wherever
+// it went (see ZeroStyleCancels): the value is then that of the newest write
+// no undo cancelled (JS ZeroAttr). Reserved keys (zt.*) stay plain registers.
 type ZeroAttr struct {
 	Key       string
 	Value     string
 	Removed   bool
 	UpdatedAt *time.Ticket
+	History   []*ZeroAttrEntry
+}
+
+// ZeroAttrEntry is one write a register keeps (see ZeroAttr.History).
+type ZeroAttrEntry struct {
+	Value   string
+	Removed bool
+	At      *time.Ticket
+}
+
+// ZeroHistoryDepth is how many writes a register keeps. An undo that cancels
+// all of them falls back to what its write's marker held before.
+const ZeroHistoryDepth = 4
+
+// keepsHistory tells whether a register of key keeps its writes: the reserved
+// keys (zt.*) are bookkeeping, undone by writing them back.
+func keepsHistory(key string) bool {
+	return !strings.HasPrefix(key, "zt.")
 }
 
 // ZeroMarker is the open marker of a Zero element node. Attrs keep the
@@ -55,20 +78,100 @@ type ZeroMarker struct {
 }
 
 // Set writes one attribute with last-writer-wins. It returns the register
-// before the write (nil: none) and whether the write applied.
-func (m *ZeroMarker) Set(key, value string, removed bool, ticket *time.Ticket) (*ZeroAttr, bool) {
+// before the write (nil: none) and whether the write applied. With cancels a
+// register of a non-reserved key keeps the write in its history and takes the
+// newest write not cancelled.
+func (m *ZeroMarker) Set(
+	key, value string,
+	removed bool,
+	ticket *time.Ticket,
+	cancels *ZeroStyleCancels,
+) (*ZeroAttr, bool) {
+	at := -1
+	var prev *ZeroAttr
 	for i, attr := range m.Attrs {
-		if attr.Key != key {
+		if attr.Key == key {
+			at, prev = i, attr
+			break
+		}
+	}
+	if cancels == nil || !keepsHistory(key) {
+		if prev != nil && !ticket.After(prev.UpdatedAt) {
+			return prev, false
+		}
+		m.put(at, &ZeroAttr{Key: key, Value: value, Removed: removed, UpdatedAt: ticket})
+		return prev, true
+	}
+	var history []*ZeroAttrEntry
+	if prev != nil {
+		if prev.History != nil {
+			history = append(history, prev.History...)
+		} else {
+			history = append(history, &ZeroAttrEntry{Value: prev.Value, Removed: prev.Removed, At: prev.UpdatedAt})
+		}
+	}
+	seen := false
+	for _, e := range history {
+		if e.At.Compare(ticket) == 0 {
+			seen = true
+			break
+		}
+	}
+	if !seen {
+		history = append(history, &ZeroAttrEntry{Value: value, Removed: removed, At: ticket})
+		sortHistory(history)
+		if len(history) > ZeroHistoryDepth {
+			history = history[:ZeroHistoryDepth]
+		}
+	}
+	picked := cancels.pick(key, history)
+	m.put(at, &ZeroAttr{Key: key, Value: picked.Value, Removed: picked.Removed, UpdatedAt: picked.At, History: history})
+	return prev, picked.At.Compare(ticket) == 0
+}
+
+// put replaces the register at index at, or adds it when at is -1.
+func (m *ZeroMarker) put(at int, attr *ZeroAttr) {
+	if at < 0 {
+		m.Attrs = append(m.Attrs, attr)
+		return
+	}
+	m.Attrs[at] = attr
+}
+
+// sortHistory orders kept writes newest first.
+func sortHistory(history []*ZeroAttrEntry) {
+	for i := 1; i < len(history); i++ {
+		for j := i; j > 0 && history[j].At.After(history[j-1].At); j-- {
+			history[j], history[j-1] = history[j-1], history[j]
+		}
+	}
+}
+
+// holds tells whether a register of this marker keeps the write of ticket.
+func (m *ZeroMarker) holds(ticket *time.Ticket) bool {
+	for _, attr := range m.Attrs {
+		for _, e := range attr.History {
+			if e.At.Compare(ticket) == 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// repick makes every register with a history take its value again under
+// cancels.
+func (m *ZeroMarker) repick(cancels *ZeroStyleCancels) {
+	for i, attr := range m.Attrs {
+		if attr.History == nil {
 			continue
 		}
-		if !ticket.After(attr.UpdatedAt) {
-			return attr, false
+		picked := cancels.pick(attr.Key, attr.History)
+		m.Attrs[i] = &ZeroAttr{
+			Key: attr.Key, Value: picked.Value, Removed: picked.Removed,
+			UpdatedAt: picked.At, History: attr.History,
 		}
-		m.Attrs[i] = &ZeroAttr{Key: key, Value: value, Removed: removed, UpdatedAt: ticket}
-		return attr, true
 	}
-	m.Attrs = append(m.Attrs, &ZeroAttr{Key: key, Value: value, Removed: removed, UpdatedAt: ticket})
-	return nil, true
 }
 
 // DeepCopy copies this marker.
@@ -76,6 +179,13 @@ func (m *ZeroMarker) DeepCopy() *ZeroMarker {
 	attrs := make([]*ZeroAttr, len(m.Attrs))
 	for i, attr := range m.Attrs {
 		cp := *attr
+		if attr.History != nil {
+			cp.History = make([]*ZeroAttrEntry, len(attr.History))
+			for j, e := range attr.History {
+				ce := *e
+				cp.History[j] = &ce
+			}
+		}
 		attrs[i] = &cp
 	}
 	return &ZeroMarker{Type: m.Type, Depth: m.Depth, Attrs: attrs, Boundary: m.Boundary}
@@ -205,6 +315,10 @@ func (z *ZeroTokens) DataSize() resource.DataSize {
 		for _, attr := range t.Marker.Attrs {
 			size.Data += (utf16Len(attr.Key) + utf16Len(attr.Value)) * 2
 			size.Meta += time.TicketSize
+			for _, e := range attr.History {
+				size.Data += utf16Len(e.Value) * 2
+				size.Meta += time.TicketSize
+			}
 		}
 	}
 	return size
@@ -337,6 +451,117 @@ func decodeZeroNodeID(value string) (*RGATreeSplitNodeID, error) {
 	return NewRGATreeSplitNodeID(time.NewTicket(lamport, delimiter, actorID), offset), nil
 }
 
+// ZeroCancelWrite is what an undo (or redo) of a style write carries: cancel
+// (On) or bring back the write of Write; Fallback is what the write's marker
+// held before it (see ZeroStyleCancels.pick).
+type ZeroCancelWrite struct {
+	Write    *time.Ticket
+	On       bool
+	Fallback []ZeroAttrWrite
+}
+
+// ZeroStyleCancel is the state of one style write's undo in a tree: set by
+// the undo or redo of At (last writer wins). It may be dropped once every
+// replica knows it and no register keeps the write (see PurgeBarrierAt).
+type ZeroStyleCancel struct {
+	Write    *time.Ticket
+	On       bool
+	At       *time.Ticket
+	Fallback []ZeroAttrWrite
+}
+
+// IDString returns a string that identifies this state.
+func (c *ZeroStyleCancel) IDString() string {
+	return c.Write.Key() + "@" + c.At.Key()
+}
+
+// RemovedAt returns when this state may be dropped (see PurgeBarrierAt for
+// the other condition).
+func (c *ZeroStyleCancel) RemovedAt() *time.Ticket { return c.At }
+
+// DataSize returns nothing: it is bookkeeping of the tree.
+func (c *ZeroStyleCancel) DataSize() resource.DataSize { return resource.DataSize{} }
+
+// ZeroStyleCancels is a tree's table of undone style writes (JS
+// ZeroStyleCancels): a register skips a cancelled write when it picks its
+// value, so an undo takes back exactly its write wherever it went.
+type ZeroStyleCancels struct {
+	m map[string]*ZeroStyleCancel
+}
+
+func (cs *ZeroStyleCancels) get(write *time.Ticket) *ZeroStyleCancel {
+	if cs == nil || cs.m == nil {
+		return nil
+	}
+	return cs.m[write.Key()]
+}
+
+// set keeps c unless a later undo or redo of its write is known.
+func (cs *ZeroStyleCancels) set(c *ZeroStyleCancel) bool {
+	if cs.m == nil {
+		cs.m = make(map[string]*ZeroStyleCancel)
+	}
+	if cur := cs.m[c.Write.Key()]; cur != nil && !c.At.After(cur.At) {
+		return false
+	}
+	cs.m[c.Write.Key()] = c
+	return true
+}
+
+func (cs *ZeroStyleCancels) isCurrent(c *ZeroStyleCancel) bool {
+	return cs.get(c.Write) == c
+}
+
+func (cs *ZeroStyleCancels) isCancelled(ticket *time.Ticket) bool {
+	c := cs.get(ticket)
+	return c != nil && c.On
+}
+
+// values returns the states in the order of their writes' tickets.
+func (cs *ZeroStyleCancels) values() []*ZeroStyleCancel {
+	out := make([]*ZeroStyleCancel, 0, len(cs.m))
+	for _, c := range cs.m {
+		out = append(out, c)
+	}
+	for i := 1; i < len(out); i++ {
+		for j := i; j > 0 && out[j].Write.Compare(out[j-1].Write) < 0; j-- {
+			out[j], out[j-1] = out[j-1], out[j]
+		}
+	}
+	return out
+}
+
+// pick returns the write a register keeping history (newest first, never
+// empty) shows: the newest one not cancelled, or, when all are, what the
+// oldest one's marker held before it.
+func (cs *ZeroStyleCancels) pick(key string, history []*ZeroAttrEntry) *ZeroAttrEntry {
+	for _, e := range history {
+		if !cs.isCancelled(e.At) {
+			return e
+		}
+	}
+	oldest := history[len(history)-1]
+	if c := cs.get(oldest.At); c != nil {
+		for _, w := range c.Fallback {
+			if w.Key == key {
+				return &ZeroAttrEntry{Value: w.Value, Removed: w.Removed, At: oldest.At}
+			}
+		}
+	}
+	return &ZeroAttrEntry{Removed: true, At: oldest.At}
+}
+
+func (cs *ZeroStyleCancels) deepCopy() *ZeroStyleCancels {
+	clone := &ZeroStyleCancels{}
+	for k, v := range cs.m {
+		if clone.m == nil {
+			clone.m = make(map[string]*ZeroStyleCancel)
+		}
+		clone.m[k] = v
+	}
+	return clone
+}
+
 // InitialZeroTreeNode creates the head node of a ZeroTree.
 func InitialZeroTreeNode() *RGATreeSplitNode[*ZeroTokens] {
 	return NewRGATreeSplitNode(initialNodeID, &ZeroTokens{})
@@ -355,6 +580,8 @@ type ZeroTree struct {
 	// markers that keep them the first time it is needed (see
 	// ZeroStyleRegion).
 	pending map[string]*ZeroStyleRegion
+	// cancels is the style writes undone or redone (see ZeroStyleCancels).
+	cancels ZeroStyleCancels
 }
 
 // NewZeroTree creates a new instance of ZeroTree.
@@ -450,6 +677,7 @@ func (t *ZeroTree) DeepCopy() (Element, error) {
 	tree.schema = t.schema
 	tree.movedAt = t.movedAt
 	tree.removedAt = t.removedAt
+	tree.cancels = *t.cancels.deepCopy()
 	return tree, nil
 }
 
@@ -465,6 +693,10 @@ func (t *ZeroTree) GCPairs() []GCPair {
 	for _, region := range t.pendingRegions() {
 		size := region.DataSize()
 		pairs = append(pairs, GCPair{Parent: t, Child: region, GCOnlySize: &size})
+	}
+	for _, cancel := range t.cancels.values() {
+		size := cancel.DataSize()
+		pairs = append(pairs, GCPair{Parent: t, Child: cancel, GCOnlySize: &size})
 	}
 	return pairs
 }
@@ -515,6 +747,7 @@ func (t *ZeroTree) Edit(
 	}
 	if len(content.Tokens) > 0 {
 		t.applyPending(executedAt, versionVector)
+		t.settleInserted(t.rgaTreeSplit.FindNode(NewRGATreeSplitNodeID(executedAt, 0)))
 	}
 	spans := make([]*ZeroRestoreSpan, 0, len(removed))
 	for _, span := range removed {
@@ -549,7 +782,59 @@ func (t *ZeroTree) Restore(
 	executedAt *time.Ticket,
 	from *RGATreeSplitNodePos,
 ) (untombstoned, recreated []*RGATreeSplitNode[*ZeroTokens], stillTombstoned []GCPair, err error) {
-	return t.rgaTreeSplit.restore(toRestoreSpanValues(spans), from, executedAt)
+	untombstoned, recreated, stillTombstoned, err = t.rgaTreeSplit.restore(toRestoreSpanValues(spans), from, executedAt)
+	// a piece made again from its span: the span's copy of the markers
+	// predates the undos since
+	for _, node := range recreated {
+		t.settleInserted(node)
+	}
+	return untombstoned, recreated, stillTombstoned, err
+}
+
+// settleInserted makes the markers of an inserted run take their values under
+// the cancels: a copy made without knowing an undo keeps the write it
+// cancelled.
+func (t *ZeroTree) settleInserted(node *RGATreeSplitNode[*ZeroTokens]) {
+	if node == nil || node.value == nil || len(t.cancels.m) == 0 {
+		return
+	}
+	for _, tok := range node.value.Tokens {
+		if tok.Marker != nil {
+			tok.Marker.repick(&t.cancels)
+		}
+	}
+}
+
+// IsCancelled tells whether an undo cancelled the style write of ticket.
+func (t *ZeroTree) IsCancelled(ticket *time.Ticket) bool {
+	return t.cancels.isCancelled(ticket)
+}
+
+// StyleCancels returns the undone style writes in the order of their tickets.
+func (t *ZeroTree) StyleCancels() []*ZeroStyleCancel {
+	return t.cancels.values()
+}
+
+// LoadStyleCancel keeps a state read from a snapshot.
+func (t *ZeroTree) LoadStyleCancel(c *ZeroStyleCancel) {
+	t.cancels.set(c)
+}
+
+// holders returns the markers whose registers keep the write of ticket, live
+// or not.
+func (t *ZeroTree) holders(ticket *time.Ticket) []*ZeroMarker {
+	var out []*ZeroMarker
+	for _, node := range t.Nodes() {
+		if node.value == nil {
+			continue
+		}
+		for _, tok := range node.value.Tokens {
+			if tok.Marker != nil && tok.Marker.holds(ticket) {
+				out = append(out, tok.Marker)
+			}
+		}
+	}
+	return out
 }
 
 // Retombstone re-removes the spans under their original identities (redo).
@@ -579,47 +864,70 @@ func (t *ZeroTree) FindMarker(id *RGATreeSplitNodeID) *ZeroMarker {
 	return node.value.Tokens[idx].Marker
 }
 
-// SetAttrs writes attributes on the marker of the given id. It returns the
-// previous values of the keys that applied, for the reverse operation, and
-// the GC pair of a range write. With rng the write is a range (see
-// ZeroStyleRegion).
+// SetAttrs writes attributes on the marker of the given id. It returns, for
+// the reverse operation, the previous values of the reserved keys that
+// applied (written back on undo) and the cancel of this write (or, for an
+// undo or redo, of the write it undid), and the GC pairs of a range write and
+// of a cancel. With rng the write is a range (see ZeroStyleRegion); cancel
+// cancels or brings back an earlier write (see ZeroStyleCancels).
 func (t *ZeroTree) SetAttrs(
 	markerID *RGATreeSplitNodeID,
 	writes []ZeroAttrWrite,
 	executedAt *time.Ticket,
 	rng *ZeroStyleRange,
-) ([]ZeroAttrWrite, []GCPair) {
+	cancel *ZeroCancelWrite,
+) ([]ZeroAttrWrite, []GCPair, *ZeroCancelWrite) {
 	marker := t.FindMarker(markerID)
-	if marker == nil {
-		return nil, nil
-	}
 	var prev []ZeroAttrWrite
-	for _, w := range writes {
-		old, applied := marker.Set(w.Key, w.Value, w.Removed, executedAt)
-		if !applied {
-			continue
+	var pairs []GCPair
+	var reverse *ZeroCancelWrite
+	if marker != nil && len(writes) > 0 {
+		var fallback []ZeroAttrWrite
+		for _, w := range writes {
+			old, applied := marker.Set(w.Key, w.Value, w.Removed, executedAt, &t.cancels)
+			if !applied {
+				continue
+			}
+			before := ZeroAttrWrite{Key: w.Key, Removed: true}
+			if old != nil {
+				before = ZeroAttrWrite{Key: w.Key, Value: old.Value, Removed: old.Removed}
+			}
+			if keepsHistory(w.Key) {
+				fallback = append(fallback, before)
+			} else {
+				prev = append(prev, before)
+			}
 		}
-		if old == nil {
-			prev = append(prev, ZeroAttrWrite{Key: w.Key, Removed: true})
-		} else {
-			prev = append(prev, ZeroAttrWrite{Key: w.Key, Value: old.Value, Removed: old.Removed})
+		if len(fallback) > 0 {
+			reverse = &ZeroCancelWrite{Write: executedAt, On: true, Fallback: fallback}
+		}
+		if rng != nil {
+			region := &ZeroStyleRegion{
+				MarkerID: markerID,
+				Type:     marker.Type,
+				Until:    rng.Until,
+				Writes:   writes,
+				Ticket:   executedAt,
+			}
+			marker.setRaw(region.key(), region.encode(), executedAt)
+			t.pendingRegions()[region.key()] = region
+			t.applyRegion(region, nil)
+			size := region.DataSize()
+			pairs = append(pairs, GCPair{Parent: t, Child: region, GCOnlySize: &size})
 		}
 	}
-	if rng == nil {
-		return prev, nil
+	if cancel != nil {
+		state := &ZeroStyleCancel{Write: cancel.Write, On: cancel.On, At: executedAt, Fallback: cancel.Fallback}
+		if t.cancels.set(state) {
+			size := state.DataSize()
+			pairs = append(pairs, GCPair{Parent: t, Child: state, GCOnlySize: &size})
+			for _, m := range t.holders(cancel.Write) {
+				m.repick(&t.cancels)
+			}
+		}
+		reverse = &ZeroCancelWrite{Write: cancel.Write, On: !cancel.On, Fallback: cancel.Fallback}
 	}
-	region := &ZeroStyleRegion{
-		MarkerID: markerID,
-		Type:     marker.Type,
-		Until:    rng.Until,
-		Writes:   writes,
-		Ticket:   executedAt,
-	}
-	marker.setRaw(region.key(), region.encode(), executedAt)
-	t.pendingRegions()[region.key()] = region
-	t.applyRegion(region, nil)
-	size := region.DataSize()
-	return prev, []GCPair{{Parent: t, Child: region, GCOnlySize: &size}}
+	return prev, pairs, reverse
 }
 
 // setRaw writes a register as it is, without last-writer-wins: a pending
@@ -720,7 +1028,7 @@ func (t *ZeroTree) applyRegion(region *ZeroStyleRegion, target *ZeroMarker) bool
 				}
 				if target == nil || m == target {
 					for _, w := range region.Writes {
-						m.Set(w.Key, w.Value, w.Removed, region.Ticket)
+						m.Set(w.Key, w.Value, w.Removed, region.Ticket, &t.cancels)
 					}
 					if target != nil {
 						return true
@@ -779,8 +1087,30 @@ func sortRegions(regions []*ZeroStyleRegion) {
 	}
 }
 
-// Purge drops a range write once every replica knows it.
+// PurgeBarrierAt holds back the state of an undone write while a register
+// keeps the write or its range write is pending: either can still pick it.
+func (t *ZeroTree) PurgeBarrierAt(child GCChild) *time.Ticket {
+	cancel, ok := child.(*ZeroStyleCancel)
+	if !ok || !t.cancels.isCurrent(cancel) {
+		return nil
+	}
+	if _, pending := t.pendingRegions()[ZeroRegionPrefix+zeroTicketIDString(cancel.Write)]; pending ||
+		len(t.holders(cancel.Write)) > 0 {
+		return time.MaxTicket
+	}
+	return nil
+}
+
+// Purge drops a range write once every replica knows it, and the state of an
+// undone write once every replica knows it and nothing keeps the write (see
+// PurgeBarrierAt).
 func (t *ZeroTree) Purge(child GCChild) error {
+	if cancel, ok := child.(*ZeroStyleCancel); ok {
+		if t.cancels.isCurrent(cancel) {
+			delete(t.cancels.m, cancel.Write.Key())
+		}
+		return nil
+	}
 	region, ok := child.(*ZeroStyleRegion)
 	if !ok {
 		return nil
