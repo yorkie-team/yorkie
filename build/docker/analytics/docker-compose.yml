@@ -2,7 +2,7 @@ name: yorkie-analytics
 
 services:
   starrocks-fe:
-    image: starrocks/fe-ubuntu:3.3.9
+    image: starrocks/fe-ubuntu:3.3.22
     hostname: starrocks-fe
     user: root
     ports:
@@ -21,7 +21,7 @@ services:
       - ./starrocks/fe/log:/opt/starrocks/fe/log
 
   starrocks-be:
-    image: starrocks/be-ubuntu:3.3.9
+    image: starrocks/be-ubuntu:3.3.22
     hostname: starrocks-be
     user: root
     ports:
@@ -92,7 +92,7 @@ services:
       - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
 
   init-starrocks-database:
-    image: starrocks/fe-ubuntu:3.3.9
+    image: starrocks/fe-ubuntu:3.3.22
     depends_on:
       starrocks-fe:
         condition: service_healthy

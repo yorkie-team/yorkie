@@ -49,6 +49,32 @@ func dayFmt(t time.Time) string {
 	return t.UTC().Format("2006-01-02")
 }
 
+// summarySource returns what the series and total summary branches read FROM:
+// the summary table, or its rollup when the metric names one.
+//
+// The rollup is named with the sync MV hint rather than left to the optimizer.
+// StarRocks picks rl_session_daily for the summary branch when it is planned
+// alone, and inside the dual read on 3.3.9, but 3.3.22 plans it on the
+// channel-day base index whenever the fresh branch of the same UNION ALL
+// rewrites onto mv_session_hll_daily_ch. That is every channel-day sketch of
+// the window instead of one per day: ~390k on a project with thousands of
+// channels over three months. GROUP BY in the branch, reordering the branches,
+// a CTE, and enable_sync_materialized_view_rewrite do not bring it back; the
+// hint does, on both versions, with the same results. [_SYNC_MV_] is documented
+// for synchronous materialized views, but a rollup index answers to it too: on
+// 3.3.22 an index from either the inline ROLLUP clause or ALTER TABLE ... ADD
+// ROLLUP plans as TABLE: sum_session_hll_daily_ch / rollup: rl_session_daily.
+//
+// A named index the cluster lacks fails the query with Unknown table instead of
+// falling back the way the optimizer would, so readSummary runs that read again
+// on the summary table's channel-day index, as before the hint.
+func (d metricDesc) summarySource() string {
+	if d.summaryRollup == "" {
+		return d.summaryTable
+	}
+	return d.summaryRollup + " [_SYNC_MV_]"
+}
+
 // summaryEventTypePred returns the summary-table event_type predicate for the
 // client metric, or an empty string for the others.
 func (d metricDesc) summaryEventTypePred() string {
@@ -129,7 +155,7 @@ func (d metricDesc) seriesQuery(id types.ID, from, to time.Time, cov dayRange) s
 		histSQL = fmt.Sprintf(
 			"SELECT dt AS event_date, HLL_UNION_AGG(%s) AS metric_value "+
 				"FROM %s WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s'%s GROUP BY dt",
-			d.hllColumn, d.summaryTable, id.String(),
+			d.hllColumn, d.summarySource(), id.String(),
 			dayFmt(hist.Start), dayFmt(hist.End), d.summaryEventTypePred(),
 		)
 	}
@@ -173,7 +199,7 @@ func (d metricDesc) totalQuery(id types.ID, from, to time.Time, cov dayRange) st
 	if emitSummary(pre, hist, fresh) {
 		histSQL = fmt.Sprintf(
 			"SELECT %s AS sketch FROM %s WHERE project_id = '%s' AND dt >= '%s' AND dt < '%s'%s",
-			d.hllColumn, d.summaryTable, id.String(),
+			d.hllColumn, d.summarySource(), id.String(),
 			dayFmt(hist.Start), dayFmt(hist.End), d.summaryEventTypePred(),
 		)
 	}

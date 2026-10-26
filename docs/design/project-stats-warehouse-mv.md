@@ -213,7 +213,7 @@ Events ingested after the views were built are reflected without any rebuild.
 | The 5509 check only fires when the table holds rows | Never validate a purge against an empty table — it will pass and teach you the wrong thing. |
 | Rewrite silently stops if someone rewrites the predicate back to a raw `timestamp` | Comment at the call site in `starrocks.go`; `ScanRows` in the FE audit log is the check. |
 | Aggregate rollups produce frequent small writes under continuous ingest, and compaction under heavy ingest has deadlocked before | Summary volume is tiny next to the base table, and the compaction score stayed at zero on the public cluster — but public ingest is a trickle, so this has to be re-measured under heavier ingest before relying on it. |
-| Expressions in synchronous views need StarRocks 3.1 or newer | The chart pins `3.3-latest` and the local stack pins 3.3.9. Check the version before creating the views in any other environment. |
+| Expressions in synchronous views need StarRocks 3.1 or newer | The chart pins `3.3-latest` and the local stack pins 3.3.22, the version production runs. Check the version before creating the views in any other environment. |
 | The init hook re-runs on every chart upgrade and `CREATE MATERIALIZED VIEW IF NOT EXISTS` still errors when the view exists | The init script runs the view DDL with `mysql --force` and then polls `desc <table> all` for each index. |
 | The event tables hold UTC, but StarRocks defaults its `time_zone` to `Asia/Shanghai`, so anything written against `NOW()` is eight hours off the data | These queries pass explicit date strings from Go and never ask the server what time it is. Ad-hoc queries should not: either set the FE `time_zone` to UTC or use `UTC_TIMESTAMP()`. |
 
