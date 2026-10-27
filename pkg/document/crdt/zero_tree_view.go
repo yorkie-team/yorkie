@@ -170,6 +170,8 @@ func (s *ZeroSchema) textTypeFor(t string) string {
 type zeroRegister struct {
 	value *string
 	at    *time.Ticket
+	// byRange: the write it shows is one a range write gave it
+	byRange bool
 }
 
 // omap is a string-keyed map that keeps insertion order, as a JS object does.
@@ -263,7 +265,14 @@ func (t *ZeroTree) liveEntries() []viewEntry {
 					v = &val
 					attrs.set(a.Key, val)
 				}
-				regs.set(a.Key, zeroRegister{value: v, at: a.UpdatedAt})
+				byRange := false
+				for _, e := range a.History {
+					if e.ByRange && e.At.Compare(a.UpdatedAt) == 0 {
+						byRange = true
+						break
+					}
+				}
+				regs.set(a.Key, zeroRegister{value: v, at: a.UpdatedAt, byRange: byRange})
 			}
 			entries = append(entries, viewEntry{id: id, scope: node.value.Scope, marker: &viewMarker{
 				typ: tok.Marker.Type, depth: tok.Marker.Depth, attrs: attrs,
@@ -314,16 +323,93 @@ type dealiasOpen struct {
 	at int
 }
 
-// dealias folds the markers of concurrent splits of one boundary into the
-// first split there, and leaves out what a gone scope marker, a deleted grid
-// column or a second `single` child hides (JS `dealias`). A folded marker's
-// registers join the node of its type open where it stands: the first
-// split's, unless another split came between the two.
+// ticketAfterID tells whether the insertion ticket of view id a is after that
+// of b (ids are lamport:actor:delimiter:offset, see zeroIDString).
+func ticketAfterID(a, b string) bool {
+	pa, pb := strings.SplitN(a, ":", 4), strings.SplitN(b, ":", 4)
+	la, _ := strconv.ParseInt(pa[0], 10, 64)
+	lb, _ := strconv.ParseInt(pb[0], 10, 64)
+	if la != lb {
+		return la > lb
+	}
+	if pa[1] != pb[1] {
+		return pa[1] > pb[1]
+	}
+	da, _ := strconv.ParseUint(pa[2], 10, 32)
+	db, _ := strconv.ParseUint(pb[2], 10, 32)
+	return da > db
+}
+
+// foldReps picks, for each boundary key split more than once, the run the
+// others fold into: [start, end] in entries (JS `foldReps`). It is the first
+// run followed, past the other runs of its key, by the token right of the
+// place, by a token with a later ticket (typed into the split's node), or by
+// nothing; the first run when none is.
+func foldReps(entries []viewEntry) map[string][2]int {
+	runs := map[string][][2]int{}
+	var keys []string
+	for i, e := range entries {
+		if e.marker == nil || e.marker.boundary == "" {
+			continue
+		}
+		key := e.marker.boundary
+		list, seen := runs[key]
+		if !seen {
+			keys = append(keys, key)
+		}
+		if i > 0 && entries[i-1].marker != nil && entries[i-1].marker.boundary == key &&
+			e.marker.depth > entries[i-1].marker.depth && len(list) > 0 {
+			list[len(list)-1][1] = i
+		} else {
+			list = append(list, [2]int{i, i})
+		}
+		runs[key] = list
+	}
+	reps := map[string][2]int{}
+	for _, key := range keys {
+		list := runs[key]
+		if len(list) < 2 {
+			continue
+		}
+		right := key
+		if h := strings.LastIndex(right, "#"); h >= 0 {
+			right = right[:h]
+		}
+		if p := strings.Index(right, "|"); p >= 0 {
+			right = right[p+1:]
+		}
+		rep := list[0]
+		for _, run := range list {
+			k := run[1] + 1
+			for k < len(entries) && entries[k].marker != nil && entries[k].marker.boundary == key {
+				k++
+			}
+			if k >= len(entries) || entries[k].id == right || ticketAfterID(entries[k].id, entries[run[0]].id) {
+				rep = run
+				break
+			}
+		}
+		reps[key] = rep
+	}
+	return reps
+}
+
+// dealias folds the markers of concurrent splits of one boundary into one
+// split there, and leaves out what a gone scope marker, a deleted grid column
+// or a second `single` child hides (JS `dealias`). The opening run is picked
+// by foldReps; a run before it gives it its registers, a run after it gives
+// them to the node of its type open where it stands: the opening run's,
+// unless another split came between the two.
 //
 //nolint:gocyclo // PROTOTYPE: mirrors dealias in the JS SDK one to one; split once the design settles
 func dealias(entries []viewEntry, schema *ZeroSchema) []viewEntry {
 	var out []viewEntry
+	reps := foldReps(entries)
 	firstRuns := map[string][]int{}
+	// the markers of runs before their key's opening run, by key and place in
+	// the run, until it comes
+	early := map[string]map[int][]viewEntry{}
+	isEarly := false
 	shown := map[string]bool{}
 	open := []dealiasOpen{{depth: 0, typ: schema.RootType, seen: map[string]bool{}, at: -1}}
 	hideDepth := math.Inf(1)
@@ -403,11 +489,56 @@ func dealias(entries []viewEntry, schema *ZeroSchema) []viewEntry {
 			j = 0
 			var ok bool
 			into, ok = firstRuns[key]
-			isFirst = !ok
+			rep, hasRep := reps[key]
+			isEarly = !ok && hasRep && rep[0] > i
+			isFirst = !ok && !isEarly
 			if isFirst {
 				firstRuns[key] = []int{}
 				into = nil
 			}
+		}
+		if isEarly {
+			// a run before the opening one: folded when the opening run has a
+			// marker of the same shape at this place, shown otherwise
+			rep := reps[key]
+			if p := rep[0] + j; p <= rep[1] && entries[p].marker != nil &&
+				entries[p].marker.typ == entry.marker.typ && entries[p].marker.depth == entry.marker.depth {
+				open = openBefore
+				// its id joins the opening run when it comes, and so does what
+				// was written on its node; what a range write gave it goes to
+				// the node open here, which holds the characters after it
+				rest := entry
+				if holder >= 0 && out[holder].marker != nil && out[holder].marker.typ == entry.marker.typ &&
+					entry.marker.registers != nil {
+					mine, theirs := newOmap[zeroRegister](), newOmap[zeroRegister]()
+					for _, k := range entry.marker.registers.keys {
+						if reg := entry.marker.registers.vals[k]; reg.byRange {
+							theirs.set(k, reg)
+						} else {
+							mine.set(k, reg)
+						}
+					}
+					if len(theirs.keys) > 0 {
+						dest := out[holder]
+						regs, attrs := mergeRegisters(dest.marker.registers, theirs)
+						nm := *dest.marker
+						nm.attrs, nm.registers = attrs, regs
+						dest.marker = &nm
+						out[holder] = dest
+						_, own := mergeRegisters(nil, mine)
+						nr := *entry.marker
+						nr.attrs, nr.registers = own, mine
+						rest.marker = &nr
+					}
+				}
+				if early[key] == nil {
+					early[key] = map[int][]viewEntry{}
+				}
+				early[key][j] = append(early[key][j], rest)
+				continue
+			}
+			out = append(out, entry)
+			continue
 		}
 		// A folded marker is the first split's line: it goes with that node (a
 		// merge or delete takes it). But what follows a folded marker is in the
@@ -436,6 +567,20 @@ func dealias(entries []viewEntry, schema *ZeroSchema) []viewEntry {
 		}
 		if isFirst {
 			firstRuns[key] = append(firstRuns[key], len(out))
+			if folded := early[key][j]; len(folded) > 0 {
+				// the runs before it: their registers and ids join it
+				regs, attrs := entry.marker.registers, entry.marker.attrs
+				for _, f := range folded {
+					regs, attrs = mergeRegisters(regs, f.marker.registers)
+				}
+				nm := *entry.marker
+				nm.attrs, nm.registers = attrs, regs
+				entry.marker = &nm
+				entry.aliases = nil
+				for _, f := range folded {
+					entry.aliases = append(entry.aliases, f.id)
+				}
+			}
 		}
 		out = append(out, entry)
 	}

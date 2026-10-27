@@ -181,7 +181,7 @@ func toZeroTokens(value *crdt.ZeroTokens, actors ...*zeroActors) *api.ZeroTokens
 				pbAttr.UpdatedAt, pbAttr.UpdatedAtRef = nil, actors[0].ticket(attr.UpdatedAt)
 			}
 			for _, e := range attr.History {
-				pbEntry := &api.ZeroAttrEntry{Value: e.Value, IsRemoved: e.Removed}
+				pbEntry := &api.ZeroAttrEntry{Value: e.Value, IsRemoved: e.Removed, ByRange: e.ByRange}
 				if len(actors) > 0 {
 					pbEntry.UpdatedAtRef = actors[0].ticket(e.At)
 				} else {
@@ -248,7 +248,7 @@ func fromZeroTokens(pbTokens *api.ZeroTokens, actors ...*zeroActors) (*crdt.Zero
 						return nil, err
 					}
 					attr.History = append(attr.History, &crdt.ZeroAttrEntry{
-						Value: pbEntry.Value, Removed: pbEntry.IsRemoved, At: at,
+						Value: pbEntry.Value, Removed: pbEntry.IsRemoved, At: at, ByRange: pbEntry.ByRange,
 					})
 				}
 				marker.Attrs = append(marker.Attrs, attr)

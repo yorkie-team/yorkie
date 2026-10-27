@@ -2652,12 +2652,15 @@ func (x *ZeroAttr) GetHistory() []*ZeroAttrEntry {
 }
 
 // ZeroAttrEntry is one write a register keeps (see ZeroAttr.history).
+// by_range: a range write gave it to this marker, which lay in the range
+// (rather than someone writing on the marker's node).
 type ZeroAttrEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
 	IsRemoved     bool                   `protobuf:"varint,2,opt,name=is_removed,json=isRemoved,proto3" json:"is_removed,omitempty"`
 	UpdatedAt     *TimeTicket            `protobuf:"bytes,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`            // in operations
 	UpdatedAtRef  *ZeroTicket            `protobuf:"bytes,4,opt,name=updated_at_ref,json=updatedAtRef,proto3" json:"updated_at_ref,omitempty"` // in a ZeroTree element (see actors)
+	ByRange       bool                   `protobuf:"varint,5,opt,name=by_range,json=byRange,proto3" json:"by_range,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2718,6 +2721,13 @@ func (x *ZeroAttrEntry) GetUpdatedAtRef() *ZeroTicket {
 		return x.UpdatedAtRef
 	}
 	return nil
+}
+
+func (x *ZeroAttrEntry) GetByRange() bool {
+	if x != nil {
+		return x.ByRange
+	}
+	return false
 }
 
 // ZeroStyleCancel cancels (on) or brings back (not on) one style write: a
@@ -7271,14 +7281,15 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\n" +
 	"is_removed\x18\x04 \x01(\bR\tisRemoved\x12;\n" +
 	"\x0eupdated_at_ref\x18\x05 \x01(\v2\x15.yorkie.v1.ZeroTicketR\fupdatedAtRef\x122\n" +
-	"\ahistory\x18\x06 \x03(\v2\x18.yorkie.v1.ZeroAttrEntryR\ahistory\"\xb7\x01\n" +
+	"\ahistory\x18\x06 \x03(\v2\x18.yorkie.v1.ZeroAttrEntryR\ahistory\"\xd2\x01\n" +
 	"\rZeroAttrEntry\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x12\x1d\n" +
 	"\n" +
 	"is_removed\x18\x02 \x01(\bR\tisRemoved\x124\n" +
 	"\n" +
 	"updated_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\tupdatedAt\x12;\n" +
-	"\x0eupdated_at_ref\x18\x04 \x01(\v2\x15.yorkie.v1.ZeroTicketR\fupdatedAtRef\"\xe6\x01\n" +
+	"\x0eupdated_at_ref\x18\x04 \x01(\v2\x15.yorkie.v1.ZeroTicketR\fupdatedAtRef\x12\x19\n" +
+	"\bby_range\x18\x05 \x01(\bR\abyRange\"\xe6\x01\n" +
 	"\x0fZeroStyleCancel\x12+\n" +
 	"\x05write\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\x05write\x12\x0e\n" +
 	"\x02on\x18\x02 \x01(\bR\x02on\x124\n" +

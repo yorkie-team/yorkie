@@ -52,10 +52,13 @@ type ZeroAttr struct {
 }
 
 // ZeroAttrEntry is one write a register keeps (see ZeroAttr.History).
+// ByRange: a range write gave it to this marker, which lay in the range,
+// rather than someone writing on the marker's node (see dealias).
 type ZeroAttrEntry struct {
 	Value   string
 	Removed bool
 	At      *time.Ticket
+	ByRange bool
 }
 
 // ZeroHistoryDepth is how many writes a register keeps. An undo that cancels
@@ -80,12 +83,13 @@ type ZeroMarker struct {
 // Set writes one attribute with last-writer-wins. It returns the register
 // before the write (nil: none) and whether the write applied. With cancels a
 // register of a non-reserved key keeps the write in its history and takes the
-// newest write not cancelled.
+// newest write not cancelled; byRange marks a write a range write gave it.
 func (m *ZeroMarker) Set(
 	key, value string,
 	removed bool,
 	ticket *time.Ticket,
 	cancels *ZeroStyleCancels,
+	byRange bool,
 ) (*ZeroAttr, bool) {
 	at := -1
 	var prev *ZeroAttr
@@ -118,7 +122,7 @@ func (m *ZeroMarker) Set(
 		}
 	}
 	if !seen {
-		history = append(history, &ZeroAttrEntry{Value: value, Removed: removed, At: ticket})
+		history = append(history, &ZeroAttrEntry{Value: value, Removed: removed, At: ticket, ByRange: byRange})
 		sortHistory(history)
 		if len(history) > ZeroHistoryDepth {
 			history = history[:ZeroHistoryDepth]
@@ -892,7 +896,7 @@ func (t *ZeroTree) SetAttrs(
 	if marker != nil && len(writes) > 0 {
 		var fallback []ZeroAttrWrite
 		for _, w := range writes {
-			old, applied := marker.Set(w.Key, w.Value, w.Removed, executedAt, &t.cancels)
+			old, applied := marker.Set(w.Key, w.Value, w.Removed, executedAt, &t.cancels, false)
 			if !applied {
 				continue
 			}
@@ -1036,7 +1040,7 @@ func (t *ZeroTree) applyRegion(region *ZeroStyleRegion, target *ZeroMarker) bool
 				}
 				if target == nil || m == target {
 					for _, w := range region.Writes {
-						m.Set(w.Key, w.Value, w.Removed, region.Ticket, &t.cancels)
+						m.Set(w.Key, w.Value, w.Removed, region.Ticket, &t.cancels, true)
 					}
 					if target != nil {
 						return true

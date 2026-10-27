@@ -24,6 +24,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // listSchema is ProseMirror's basic schema with lists, in Zero's shape.
@@ -181,5 +183,101 @@ func TestZeroTreeVirtualParents(t *testing.T) {
 				node("list_item", node("paragraph", text("cd"))),
 			),
 		)), got)
+	})
+}
+
+// Concurrent splits of one place fold into one (JS `foldReps`). B split
+// "a|b" at a later ticket than all of A's edits, not knowing them; A had split
+// there too and then typed at the end of "a" (and, in the second case, split
+// "a|x" and bolded "x"). What A typed left of its split stays left, and what
+// A wrote on its split's node stays on "b".
+func TestZeroTreeFoldWithTextBetween(t *testing.T) {
+	const a1, a2 = "000000000000000000000001", "000000000000000000000002"
+	id := func(lamport int, actor string, offset int) string {
+		return fmt.Sprintf("%d:%s:0:%d", lamport, actor, offset)
+	}
+	char := func(lamport int, actor string, offset int, c string) viewEntry {
+		return viewEntry{id: id(lamport, actor, offset), char: c}
+	}
+	// a style named "~k" is one a range write gave the marker
+	marker := func(lamport int, actor string, typ string, depth int, boundary string, style ...string) viewEntry {
+		attrs, regs := newOmap[string](), newOmap[zeroRegister]()
+		for _, k := range style {
+			v := "true"
+			byRange := strings.HasPrefix(k, "~")
+			k = strings.TrimPrefix(k, "~")
+			attrs.set("style."+k, v)
+			at := time.NewTicket(int64(lamport), 9, time.InitialActorID)
+			regs.set("style."+k, zeroRegister{value: &v, at: at, byRange: byRange})
+		}
+		return viewEntry{id: id(lamport, actor, 0), marker: &viewMarker{
+			typ: typ, depth: depth, attrs: attrs, boundary: boundary, registers: regs,
+		}}
+	}
+	ab := id(1, a1, 2) + "|" + id(1, a1, 3)
+	head := []viewEntry{
+		{id: id(1, a1, 0), marker: &viewMarker{typ: "paragraph", depth: 1, attrs: newOmap[string]()}},
+		{id: id(1, a1, 1), marker: &viewMarker{typ: "inline-text", depth: 2, attrs: newOmap[string]()}},
+		char(1, a1, 2, "a"),
+	}
+	b := char(1, a1, 3, "b")
+	styled := func(n map[string]any, keys ...string) map[string]any {
+		style := map[string]any{}
+		for _, k := range keys {
+			style[k] = true
+		}
+		n["style"] = style
+		return n
+	}
+	bold := func(n map[string]any) map[string]any { return styled(n, "bold") }
+
+	t.Run("a character typed at the end of the left node stays left", func(t *testing.T) {
+		entries := append(append([]viewEntry{}, head...),
+			marker(20, a2, "inline-text", 2, ab),
+			char(5, a1, 0, "x"),
+			marker(3, a1, "inline-text", 2, ab, "bold"),
+			b,
+		)
+		assert.Equal(t, jsonOf(node("content", node("paragraph", text("ax"), bold(text("b"))))),
+			modelOf(entries, listSchema()))
+	})
+
+	t.Run("a range write over the node before a folded split stays on that node", func(t *testing.T) {
+		// A, knowing all, italicized "ax": the range walked over B's split
+		entries := []viewEntry{
+			head[0],
+			marker(1, a1, "inline-text", 2, "", "italic"),
+			head[2],
+			marker(20, a2, "inline-text", 2, ab, "~italic"),
+			char(5, a1, 0, "x"),
+			marker(3, a1, "inline-text", 2, ab, "bold"),
+			b,
+		}
+		entries[1].id = id(1, a1, 1)
+		assert.Equal(t, jsonOf(node("content", node("paragraph", styled(text("ax"), "italic"), bold(text("b"))))),
+			modelOf(entries, listSchema()))
+	})
+
+	t.Run("what the author of a folded split wrote on it stays after the split", func(t *testing.T) {
+		entries := append(append([]viewEntry{}, head...),
+			marker(20, a2, "inline-text", 2, ab, "bold"),
+			char(5, a1, 0, "x"),
+			marker(3, a1, "inline-text", 2, ab),
+			b,
+		)
+		assert.Equal(t, jsonOf(node("content", node("paragraph", text("ax"), bold(text("b"))))),
+			modelOf(entries, listSchema()))
+	})
+
+	t.Run("a split between the folded ones keeps its style to itself", func(t *testing.T) {
+		entries := append(append([]viewEntry{}, head...),
+			marker(20, a2, "inline-text", 2, ab),
+			marker(6, a1, "inline-text", 2, id(1, a1, 2)+"|"+id(5, a1, 0), "bold"),
+			char(5, a1, 0, "x"),
+			marker(3, a1, "inline-text", 2, ab),
+			b,
+		)
+		assert.Equal(t, jsonOf(node("content", node("paragraph", text("a"), bold(text("x")), text("b")))),
+			modelOf(entries, listSchema()))
 	})
 }

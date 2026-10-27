@@ -82,9 +82,9 @@ func TestZeroStyleCancels(t *testing.T) {
 	t.Run("an undo takes back its write and only it", func(t *testing.T) {
 		cancels := &ZeroStyleCancels{}
 		m := &ZeroMarker{Type: "inline-text"}
-		m.Set("style.color", "red", false, at(1), cancels)
-		m.Set("style.color", "blue", false, at(2), cancels)
-		m.Set("style.color", "green", false, at(3), cancels)
+		m.Set("style.color", "red", false, at(1), cancels, false)
+		m.Set("style.color", "blue", false, at(2), cancels, false)
+		m.Set("style.color", "green", false, at(3), cancels, false)
 		assert.Equal(t, "green", value(m, "style.color"))
 
 		// cancelling blue: green stays, it is newer
@@ -110,7 +110,7 @@ func TestZeroStyleCancels(t *testing.T) {
 		cancels := &ZeroStyleCancels{}
 		m := &ZeroMarker{Type: "inline-text"}
 		for i, c := range []string{"red", "blue", "green", "yellow", "white"} {
-			m.Set("style.color", c, false, at(int64(i+1)), cancels)
+			m.Set("style.color", c, false, at(int64(i+1)), cancels, false)
 		}
 		require.Len(t, m.Attrs[0].History, ZeroHistoryDepth)
 		assert.Equal(t, 0, m.Attrs[0].History[0].At.Compare(at(5)))
@@ -130,8 +130,8 @@ func TestZeroStyleCancels(t *testing.T) {
 	t.Run("reserved keys stay plain registers", func(t *testing.T) {
 		cancels := &ZeroStyleCancels{}
 		m := &ZeroMarker{Type: "cell"}
-		m.Set("zt.col", `"a"`, false, at(1), cancels)
-		m.Set("zt.col", `"b"`, false, at(2), cancels)
+		m.Set("zt.col", `"a"`, false, at(1), cancels, false)
+		m.Set("zt.col", `"b"`, false, at(2), cancels, false)
 		assert.Nil(t, m.Attrs[0].History)
 		assert.Equal(t, `"b"`, value(m, "zt.col"))
 	})

@@ -492,11 +492,14 @@ message ZeroAttr {
 }
 
 // ZeroAttrEntry is one write a register keeps (see ZeroAttr.history).
+// by_range: a range write gave it to this marker, which lay in the range
+// (rather than someone writing on the marker's node).
 message ZeroAttrEntry {
   string value = 1;
   bool is_removed = 2;
   TimeTicket updated_at = 3; // in operations
   ZeroTicket updated_at_ref = 4; // in a ZeroTree element (see actors)
+  bool by_range = 5;
 }
 
 // ZeroStyleCancel cancels (on) or brings back (not on) one style write: a
