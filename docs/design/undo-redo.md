@@ -297,14 +297,22 @@ the ledger is materialized only when a second deletion or a cancel needs it.
   the deletion anyway, so a later undo of the other deletion keeps it removed
   in every order. A redo (`Retombstone`) applies the same rule with the
   change's version vector.
-- GC keeps what a purged piece's ledger still said (`PurgedLedger`, keyed by
-  insertion). A restore that finds the piece gone recreates only offsets no
-  other deletion holds, piece by piece along the purged boundaries, the
-  answer and the node partition an unpurged replica has.
+- A redo, and the undo of an insertion, return a reverse that names only the
+  pieces they actually recorded a removal on. A restore therefore never names
+  a deletion the piece does not hold, so a replica that purged the piece can
+  answer it without the piece's ledger.
+- GC keeps a tombstone whose ledger still matters: one held by two or more
+  uncancelled deletions, or one whose deletions and cancels are not all known
+  to every replica (`HeldFromPurge`). Once that ledger is stable, every change
+  that arrives later already knew it, and the one remaining deletion is the
+  only one a restore can name; a restore that finds the piece gone recreates
+  it, which is what the ledger would have said. Nothing is kept for a purged
+  piece.
 - Snapshots carry the ledgers (`TextNode.has_ledger`, `removals`,
-  `removal_cancels`) and purged ledgers (`JSONElement.Text.purged_removals`,
-  sorted). The default ledger is elided, so a text without undo encodes to
-  the same bytes as before.
+  `removal_cancels`). The default ledger is elided, so a text without undo
+  encodes to the same bytes as before.
+- An undo or redo is propagated whenever an operation ran, as in JS: a cancel
+  that leaves a character removed changes the ledger but shows nothing.
 
 A server re-encodes every change pack and drops fields it does not know, so
 an older server would strip `removed_by`: the undoer would cancel one
@@ -315,8 +323,8 @@ without it restores as before.
 
 Not covered: an undo after GC still anchors a recreated piece next to the
 following piece of its insertion, which can land after text inserted
-concurrently there; and purged ledgers are kept for the life of the
-document.
+concurrently there. A tombstone held by two concurrent deletions that are
+never undone is never collected.
 
 ### Tree.Edit Undo/Redo
 

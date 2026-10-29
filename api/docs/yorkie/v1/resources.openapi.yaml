@@ -845,16 +845,6 @@ components:
             type: object
           title: nodes
           type: array
-        purgedRemovals:
-          additionalProperties: false
-          description: |-
-            purged_removals is what the removal ledgers of purged pieces still
-             said, so an undo that arrives after GC answers as the ledger would.
-          items:
-            $ref: '#/components/schemas/yorkie.v1.PurgedRemovals'
-            type: object
-          title: purged_removals
-          type: array
         removedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
@@ -1873,38 +1863,6 @@ components:
           title: updated_at
           type: object
       title: Project
-      type: object
-    yorkie.v1.PurgedRemovals:
-      additionalProperties: false
-      description: |-
-        PurgedRemovals is the uncancelled removals of a purged piece
-         [start, end) of the insertion created_at.
-      properties:
-        createdAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
-          additionalProperties: false
-          description: ""
-          title: created_at
-          type: object
-        end:
-          additionalProperties: false
-          description: ""
-          title: end
-          type: integer
-        removals:
-          additionalProperties: false
-          description: ""
-          items:
-            $ref: '#/components/schemas/yorkie.v1.TimeTicket'
-            type: object
-          title: removals
-          type: array
-        start:
-          additionalProperties: false
-          description: ""
-          title: start
-          type: integer
-      title: PurgedRemovals
       type: object
     yorkie.v1.RGANode:
       additionalProperties: false

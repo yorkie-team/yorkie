@@ -663,6 +663,10 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 			continue
 		}
 
+		if h, ok := pair.Child.(GCHold); ok && h.HeldFromPurge(vector) {
+			continue
+		}
+
 		if parent, ok := pair.Parent.(GCBarrier[GCChild]); ok {
 			if at := parent.PurgeBarrierAt(pair.Child); at != nil && !vector.EqualToOrAfter(at) {
 				deferred++

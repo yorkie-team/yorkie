@@ -25,7 +25,6 @@ import (
 	"github.com/yorkie-team/yorkie/api/converter"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -134,6 +133,19 @@ func ledgerText(t *testing.T, doc *document.Document) string {
 	return textOf(t, doc, "t").String()
 }
 
+// ledgerTombstones counts the removed nodes still in the Text under "t".
+func ledgerTombstones(t *testing.T, doc *document.Document) int {
+	t.Helper()
+
+	n := 0
+	for _, node := range textOf(t, doc, "t").Nodes() {
+		if node.RemovedAt() != nil {
+			n++
+		}
+	}
+	return n
+}
+
 func TestTextUndoRemovalLedger(t *testing.T) {
 	for _, undoerFirst := range []bool{true, false} {
 		name := "deleter first"
@@ -224,25 +236,47 @@ func TestTextUndoRemovalLedger(t *testing.T) {
 		assert.Equal(t, "abc", ledgerText(t, c))
 	})
 
-	t.Run("does not recreate a purged piece another deletion still holds", func(t *testing.T) {
+	t.Run("keeps a piece another deletion still holds out of GC", func(t *testing.T) {
 		a, b := ledgerReplicas(t, "abcdefgh")
 		ledgerEdit(t, b, 3, 4, "")
 		ledgerEdit(t, a, 3, 8, "")
 		ledgerExchange(t, a, b)
 
-		// Both deletions are known everywhere: b collects `d` before undoing.
+		// Both deletions are known everywhere. b collects `efgh` but keeps
+		// `d`: an undo of either deletion must find it held by the other.
 		assert.Positive(t, b.GarbageCollect(b.VersionVector()))
-		purged := 0
-		textOf(t, b, "t").RGATreeSplit().PurgedLedgers(
-			func(_ *time.Ticket, entries []*crdt.PurgedLedger) { purged += len(entries) },
-		)
-		assert.Positive(t, purged)
+		assert.Equal(t, 1, ledgerTombstones(t, b))
 
 		require.NoError(t, b.Undo())
 		ledgerExchange(t, a, b)
-
 		assert.Equal(t, "abc", ledgerText(t, a))
 		assert.Equal(t, "abc", ledgerText(t, b))
+
+		// Only a's deletion is left on `d`, so it can be collected now.
+		assert.Positive(t, b.GarbageCollect(b.VersionVector()))
+		assert.Equal(t, 0, ledgerTombstones(t, b))
+	})
+
+	t.Run("does not recreate a purged piece a redo never removed", func(t *testing.T) {
+		a, b := ledgerReplicas(t, "abcdefgh")
+		// b deletes `d` and undoes it while a deletes `d` too.
+		ledgerEdit(t, b, 3, 4, "")
+		require.NoError(t, b.Undo())
+		ledgerEdit(t, a, 3, 4, "")
+		ledgerExchange(t, a, b)
+		assert.Equal(t, "abcefgh", ledgerText(t, b))
+
+		// b's redo finds `d` already removed by a, so it records nothing
+		// there, and the undo of the redo must not name `d` either: a has
+		// collected `d` and would recreate it.
+		require.NoError(t, b.Redo())
+		ledgerExchange(t, a, b)
+		assert.Positive(t, a.GarbageCollect(a.VersionVector()))
+		require.NoError(t, b.Undo())
+		ledgerExchange(t, a, b)
+
+		assert.Equal(t, "abcefgh", ledgerText(t, a))
+		assert.Equal(t, "abcefgh", ledgerText(t, b))
 	})
 
 	t.Run("revives a deletion nobody else made, also after a snapshot", func(t *testing.T) {
@@ -276,5 +310,77 @@ func TestTextUndoRemovalLedger(t *testing.T) {
 		// removed, leaves it alone there as it did on a.
 		assert.Equal(t, "abcdef", ledgerText(t, a))
 		assert.Equal(t, "abcdef", ledgerText(t, b))
+	})
+
+	t.Run("propagates an undo that leaves the text as it was", func(t *testing.T) {
+		a, b := ledgerReplicas(t, "abcdefgh")
+		// Both delete `a` concurrently; b learns of a's deletion first.
+		ledgerEdit(t, a, 0, 1, "")
+		ledgerEdit(t, b, 0, 1, "")
+		ledgerSend(t, a, b)
+		ledgerAck(t, a)
+
+		// b's undo cancels its own deletion while a's still holds `a`, so b's
+		// text does not change. Its change has to reach a all the same.
+		require.NoError(t, a.Undo())
+		require.NoError(t, b.Undo())
+		assert.Equal(t, "bcdefgh", ledgerText(t, b))
+		ledgerSend(t, b, a)
+		ledgerSend(t, a, b)
+
+		assert.Equal(t, "abcdefgh", ledgerText(t, a))
+		assert.Equal(t, "abcdefgh", ledgerText(t, b))
+	})
+
+	t.Run("redo leaves alone a piece removed in its view", func(t *testing.T) {
+		a, b := ledgerReplicas(t, "abcdefgh")
+		ledgerEdit(t, a, 0, 1, "")
+		ledgerEdit(t, b, 0, 3, "")
+		ledgerSend(t, b, a)
+		ledgerAck(t, b)
+		// b undoes before a hears of it, so in a's view `a` stays removed by
+		// b's deletion: a's undo and redo leave it removed, and the redo
+		// must not remove it on b, where b's undo already revived it.
+		require.NoError(t, b.Undo())
+		require.NoError(t, a.Undo())
+		require.NoError(t, a.Redo())
+		ledgerSend(t, a, b)
+		ledgerSend(t, b, a)
+
+		assert.Equal(t, ledgerText(t, a), ledgerText(t, b))
+		assert.Equal(t, "abcdefgh", ledgerText(t, a))
+	})
+
+	t.Run("keeps a piece until its cancelled removals are known everywhere", func(t *testing.T) {
+		a, b := ledgerReplicas(t, "abc")
+		c := ledgerFromSnapshot(t, a)
+		// a and b remove `b` concurrently; c hears only of a's removal and
+		// removes the text around it.
+		ledgerEdit(t, a, 1, 2, "")
+		ledgerEdit(t, b, 1, 2, "")
+		ledgerSend(t, a, c)
+		ledgerEdit(t, c, 0, 2, "")
+
+		// a undoes its removal. b learns all of it, so only b's own removal
+		// holds `b` there; c still knows nothing of a's undo.
+		ledgerSend(t, a, b)
+		ledgerAck(t, a)
+		require.NoError(t, a.Undo())
+		ledgerSend(t, a, b)
+		ledgerSend(t, b, a, c)
+		ledgerAck(t, b)
+		vector := time.MinVersionVector(a.VersionVector(), b.VersionVector(), c.VersionVector())
+		b.GarbageCollect(vector)
+
+		// b's undo revives `b`; c's removal, which saw `b` removed by a,
+		// must leave it alone on b as on a, whether or not b purged it.
+		require.NoError(t, b.Undo())
+		ledgerSend(t, b, a, c)
+		ledgerSend(t, c, a, b)
+		ledgerSend(t, a, c)
+
+		assert.Equal(t, "b", ledgerText(t, a))
+		assert.Equal(t, "b", ledgerText(t, b))
+		assert.Equal(t, "b", ledgerText(t, c))
 	})
 }

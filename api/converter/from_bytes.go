@@ -337,25 +337,6 @@ func fromJSONText(
 		}
 	}
 
-	for _, e := range pbText.PurgedRemovals {
-		if e == nil {
-			return nil, fmt.Errorf("json_text.purged_removals: %w", ErrMissingTicket)
-		}
-		pieceCreatedAt, err := fromRequiredTimeTicket(e.CreatedAt, "purged_removals.created_at")
-		if err != nil {
-			return nil, err
-		}
-		entry := &crdt.PurgedLedger{Start: int(e.Start), End: int(e.End)}
-		for _, d := range e.Removals {
-			removal, err := fromRequiredTimeTicket(d, "purged_removals.removals")
-			if err != nil {
-				return nil, err
-			}
-			entry.Dels = append(entry.Dels, removal)
-		}
-		rgaTreeSplit.AddPurgedLedger(pieceCreatedAt, entry)
-	}
-
 	text := crdt.NewText(
 		rgaTreeSplit,
 		createdAt,

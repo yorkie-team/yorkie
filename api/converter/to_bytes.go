@@ -20,14 +20,12 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-	"sort"
 
 	"google.golang.org/protobuf/proto"
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
-	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/index"
 )
 
@@ -171,11 +169,10 @@ func toPrimitive(primitive *crdt.Primitive) (*api.JSONElement, error) {
 func toText(text *crdt.Text) *api.JSONElement {
 	return &api.JSONElement{
 		Body: &api.JSONElement_Text_{Text: &api.JSONElement_Text{
-			Nodes:          toTextNodes(text.Nodes()),
-			CreatedAt:      ToTimeTicket(text.CreatedAt()),
-			MovedAt:        ToTimeTicket(text.MovedAt()),
-			RemovedAt:      ToTimeTicket(text.RemovedAt()),
-			PurgedRemovals: toPurgedRemovals(text.RGATreeSplit()),
+			Nodes:     toTextNodes(text.Nodes()),
+			CreatedAt: ToTimeTicket(text.CreatedAt()),
+			MovedAt:   ToTimeTicket(text.MovedAt()),
+			RemovedAt: ToTimeTicket(text.RemovedAt()),
 		}},
 	}
 }
@@ -313,53 +310,6 @@ func writeRemovalLedger(pbNode *api.TextNode, node *crdt.RGATreeSplitNode[*crdt.
 			CancelledAt: ToTimeTicket(c.CancelledAt),
 		})
 	}
-}
-
-// toPurgedRemovals writes what the ledgers of purged pieces still said.
-// Purge order depends on map iteration, so the entries go out sorted: one
-// state, one snapshot.
-func toPurgedRemovals[V crdt.RGATreeSplitValue](rga *crdt.RGATreeSplit[V]) []*api.PurgedRemovals {
-	type entry struct {
-		createdAt *time.Ticket
-		ledger    *crdt.PurgedLedger
-	}
-	var entries []entry
-	rga.PurgedLedgers(func(createdAt *time.Ticket, list []*crdt.PurgedLedger) {
-		for _, l := range list {
-			entries = append(entries, entry{createdAt, l})
-		}
-	})
-	sort.SliceStable(entries, func(i, j int) bool {
-		a, b := entries[i], entries[j]
-		if c := a.createdAt.Compare(b.createdAt); c != 0 {
-			return c < 0
-		}
-		if a.ledger.Start != b.ledger.Start {
-			return a.ledger.Start < b.ledger.Start
-		}
-		if a.ledger.End != b.ledger.End {
-			return a.ledger.End < b.ledger.End
-		}
-		for k := 0; k < min(len(a.ledger.Dels), len(b.ledger.Dels)); k++ {
-			if c := a.ledger.Dels[k].Compare(b.ledger.Dels[k]); c != 0 {
-				return c < 0
-			}
-		}
-		return len(a.ledger.Dels) < len(b.ledger.Dels)
-	})
-	var out []*api.PurgedRemovals
-	for _, e := range entries {
-		pb := &api.PurgedRemovals{
-			CreatedAt: ToTimeTicket(e.createdAt),
-			Start:     int32(e.ledger.Start),
-			End:       int32(e.ledger.End),
-		}
-		for _, d := range e.ledger.Dels {
-			pb.Removals = append(pb.Removals, ToTimeTicket(d))
-		}
-		out = append(out, pb)
-	}
-	return out
 }
 
 func toTextNodeID(id *crdt.RGATreeSplitNodeID) *api.TextNodeID {

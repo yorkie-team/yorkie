@@ -17,6 +17,8 @@
 package crdt_test
 
 import (
+	"strings"
+
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -70,7 +72,7 @@ func restoreSpans(t *testing.T, text *crdt.Text, spans []*crdt.RestoreSpan, at *
 // retombstoneSpans re-removes spans and asserts no error.
 func retombstoneSpans(t *testing.T, text *crdt.Text, spans []*crdt.RestoreSpan, at *time.Ticket) {
 	t.Helper()
-	_, _, err := text.Retombstone(spans, at, nil)
+	_, _, _, err := text.Retombstone(spans, at, nil)
 	assert.NoError(t, err)
 }
 
@@ -596,4 +598,29 @@ func TestTextRestoreDocSizeReversibleAcrossUndoRedoCycle(t *testing.T) {
 	assert.Equal(t, "0123456789", text.String())
 	assert.Equal(t, revived, root.DocSize(),
 		"the revived docSize is bit-identical across cycles, including meta")
+}
+
+// TestTextEditRemovedSpansInDocumentOrder pins the order of the spans a
+// removal returns: restore anchors each recreated fragment after the one
+// before it, so the reverse of an edit has to list them left to right.
+func TestTextEditRemovedSpansInDocumentOrder(t *testing.T) {
+	text := seededText(t, tick(1))
+	for i, pos := range []int{8, 6, 4, 2} {
+		from, to, err := text.CreateRange(pos, pos)
+		assert.NoError(t, err)
+		_, _, _, _, _, err = text.Edit(from, to, "x", nil, tick(int64(2+i)), nil)
+		assert.NoError(t, err)
+	}
+	assert.Equal(t, "01x23x45x67x89", text.String())
+
+	from, to, err := text.CreateRange(0, 14)
+	assert.NoError(t, err)
+	_, _, _, _, spans, err := text.Edit(from, to, "", nil, tick(10), nil)
+	assert.NoError(t, err)
+
+	var removed strings.Builder
+	for _, span := range spans {
+		removed.WriteString(span.Content)
+	}
+	assert.Equal(t, "01x23x45x67x89", removed.String())
 }

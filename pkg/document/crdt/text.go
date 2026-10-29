@@ -295,14 +295,6 @@ func (t *Text) DeepCopy() (Element, error) {
 		}
 	}
 
-	t.rgaTreeSplit.PurgedLedgers(func(createdAt *time.Ticket, entries []*PurgedLedger) {
-		for _, e := range entries {
-			rgaTreeSplit.AddPurgedLedger(createdAt, &PurgedLedger{
-				Start: e.Start, End: e.End, Dels: append([]*time.Ticket(nil), e.Dels...),
-			})
-		}
-	})
-
 	text := NewText(rgaTreeSplit, t.createdAt)
 	text.movedAt = t.movedAt
 	text.removedAt = t.removedAt
@@ -495,13 +487,14 @@ func (t *Text) Restore(
 }
 
 // Retombstone re-removes a previously restored range under its original
-// identities. Returns GC pairs for the newly tombstoned nodes and the net
-// docSize diff from splitting live pieces.
+// identities. Returns GC pairs for the newly tombstoned nodes, the net
+// docSize diff from splitting live pieces, and the spans the removal was
+// recorded on, named as the removal a reverse would cancel.
 func (t *Text) Retombstone(
 	spans []*RestoreSpan,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, error) {
+) ([]GCPair, resource.DataSize, []*RestoreSpan, error) {
 	internal := make([]restoreSpanValue[*TextValue], 0, len(spans))
 	for _, s := range spans {
 		internal = append(internal, restoreSpanValue[*TextValue]{
@@ -511,7 +504,30 @@ func (t *Text) Retombstone(
 			value:     NewTextValue(s.Content, NewRHT()),
 		})
 	}
-	return t.rgaTreeSplit.retombstone(internal, executedAt, versionVector)
+	pairs, diff, recorded, err := t.rgaTreeSplit.retombstone(internal, executedAt, versionVector)
+	if err != nil {
+		return nil, diff, nil, err
+	}
+
+	out := make([]*RestoreSpan, 0, len(recorded))
+	for _, r := range recorded {
+		var attrs map[string]string
+		for _, s := range spans {
+			if s.CreatedAt.Compare(r.createdAt) == 0 && s.Start <= r.start && r.end <= s.End {
+				attrs = s.Attributes
+				break
+			}
+		}
+		out = append(out, &RestoreSpan{
+			CreatedAt:  r.createdAt,
+			Start:      r.start,
+			End:        r.end,
+			Content:    r.value.String(),
+			Attributes: attrs,
+			RemovedBy:  executedAt,
+		})
+	}
+	return pairs, diff, out, nil
 }
 
 // NormalizePos converts the given position into a single absolute offset

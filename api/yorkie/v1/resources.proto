@@ -246,9 +246,6 @@ message JSONElement {
     TimeTicket moved_at = 3;
     TimeTicket removed_at = 4;
     TimeTicket revived_at = 5;
-    // purged_removals is what the removal ledgers of purged pieces still
-    // said, so an undo that arrives after GC answers as the ledger would.
-    repeated PurgedRemovals purged_removals = 6;
   }
   message Counter {
     ValueType type = 1;
@@ -323,15 +320,6 @@ message TextNode {
 message RemovalCancel {
   TimeTicket removal = 1;
   TimeTicket cancelled_at = 2;
-}
-
-// PurgedRemovals is the uncancelled removals of a purged piece
-// [start, end) of the insertion created_at.
-message PurgedRemovals {
-  TimeTicket created_at = 1;
-  int32 start = 2;
-  int32 end = 3;
-  repeated TimeTicket removals = 4;
 }
 
 message TextNodeID {
