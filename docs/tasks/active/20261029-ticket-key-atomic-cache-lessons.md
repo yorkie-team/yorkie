@@ -80,30 +80,56 @@ Left as known limitations:
   they need MongoDB. The deep-equality regression guards above cover the
   mechanism at pkg level; the integration lane runs on push.
 
-## The integration lane failed on an unrelated docCache/epoch race
+## The integration lane fails on a per-node docCache staleness, not on this
 
 `TestAuthWebhookPresenceOnly/a_reader_attaching_alone_keeps_the_bound_schema`
-failed the first integration run with
+failed two integration runs with
 `client epoch(1) != document epoch(0): epoch mismatch`, preceded by
-`discarding 1 changes from stale epoch: client(1) != doc(0)`. A client epoch
-*ahead* of the document's can only come from two reads of the same `DocInfo`
-disagreeing, the later one lower.
+`discarding 1 changes from stale epoch: client(1) != doc(0)`. Both runs fail
+at the same assertion, `auth_webhook_test.go:1037`, the final
+`writer.Attach`, and both log an `HSKP: compaction` cycle in the same
+millisecond. A client epoch *ahead* of the document's can only come from two
+reads of the same `DocInfo` disagreeing, the later one lower, and the attach
+makes exactly two:
 
-`DocInfo.Epoch` is incremented in exactly one place:
-`CompactChangeInfos` (`server/backend/database/mongo/client.go`). That
-function calls `c.docCache.Remove(refKey)` *before* the `UpdateOne` that
-`$inc`s `epoch`, and the success path never removes again afterwards.
-`FindDocInfoByRefKey` re-populates the cache unconditionally on a miss, so a
-read landing between the `Remove` and the `UpdateOne` caches the
-pre-compaction `DocInfo` and the cache then serves `Epoch` 0 indefinitely.
-`clients.AttachDocument` seeds `ClientDocInfo.Epoch` from a `DocInfo` read
-before that window and `preparePack` compares against one read from the
-poisoned cache, so the two disagree. Housekeeping compaction runs on a 500ms
-interval in the integration config, which is why it collides with a test at
-all. The log confirms compaction firing inside the failing subtest.
+1. `AttachDocument` (`server/rpc/yorkie_server.go`) reads through
+   `documents.FindOrCreateDocInfo`. The mongo implementation is a
+   `FindOneAndUpdate` upsert that neither reads nor writes `docCache`, so it
+   always returns MongoDB's current row — `Epoch` 1 once a compaction has
+   landed. `clients.AttachDocument` seeds `ClientDocInfo.Epoch` from it.
+2. `packs.PushPull` takes a `DocRefKey`, not that `DocInfo`, and `pushPack`
+   re-reads it with `be.DB.FindDocInfoByRefKey` — which serves `docCache` —
+   then compares `clientDocInfo.Epoch` against it
+   (`server/packs/pushpull.go:400`).
+
+`DocInfo.Epoch` is incremented in one place, `CompactChangeInfos`
+(`server/backend/database/mongo/client.go`), and that evicts only its *own*
+node's `docCache`. The integration package runs two servers at once — the
+package-wide one `TestMain` starts plus the one this test stands up — over
+one MongoDB, each with its own cache. When `TestMain`'s server compacts the
+document, the test's server keeps serving `Epoch` 0 from its cache while the
+uncached upsert read already returns 1, so read 1 is ahead of read 2 with no
+window to hit. That is the production multi-node topology, not a test
+artifact.
+
+Why this subtest and not its siblings: it is the only one that sets
+`MaxAttachmentsPerDocument`, so `project.HasAttachmentLimit()` is true and
+the attach takes the attachment-count/schema-rebind branch, and it is the
+only one that re-attaches a document that was left with zero attachments —
+which is what makes the document a compaction candidate in the first place
+(`HousekeepingCompactionMinChanges` is 5 and the interval 500ms under
+`helper.TestConfig`).
 
 Nothing in this change reaches that path: the ticket and node-ID key caches
 hold a derived string, `Epoch` is a MongoDB field, and no production code
 compares either struct structurally (`reflect.DeepEqual` appears only in
-tests). The cache-fill window predates this branch and lives in a file this
-change does not touch, so it is left for a separate fix.
+tests). The branch's own first run passed this subtest with the identical
+`Key()` contract, which places the variable in compaction timing rather than
+in the cache change.
+
+Both reads and the eviction live in files this PR does not touch, so the fix
+is not this PR's: it belongs with whoever makes the `Epoch` the attach seeds
+and the `Epoch` `pushPack` checks come from one read — either by having
+`PushPull` take the `DocInfo` the attach already read, or by making
+`docCache` entries verifiable against the row they describe. The failure
+repeats on the integration lane until then.

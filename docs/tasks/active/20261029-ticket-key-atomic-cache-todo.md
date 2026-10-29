@@ -76,3 +76,14 @@ the structs are smaller.
 
 Not run here: the server-side integration tests and benchmarks, which need
 MongoDB.
+
+## Known limitation
+
+The integration lane fails on
+`TestAuthWebhookPresenceOnly/a_reader_attaching_alone_keeps_the_bound_schema`
+with `client epoch(1) != document epoch(0)`. The attach seeds the client's
+epoch from an uncached `FindOrCreateDocInfo` read and `pushPack` checks it
+against a `FindDocInfoByRefKey` read served from a per-node `docCache` that
+another node's compaction does not evict. The lessons file traces it; the
+reads and the eviction are all in `server/`, which this change does not
+touch, so it is left for a separate fix.
