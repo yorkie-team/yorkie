@@ -1149,12 +1149,19 @@ func (s *RGATreeSplit[V]) restore(
 				// resolves through a stale insertion pointer in
 				// findFloorNodePreferToLeft and miscomputes its offset
 				// (yorkie-team/yorkie-js-sdk#1327).
+				// The neighbours are the nearest surviving pieces, not just the
+				// ones covering the adjacent offsets: with the piece before the
+				// gap purged too, the one before that would keep pointing past
+				// the new fragment, and purging it later would hand the piece
+				// after the gap an insPrev that skips the fragment.
 				if cursor > 0 {
-					if insPrev := s.findPieceCovering(span.createdAt, cursor-1); insPrev != nil {
+					prevID := NewRGATreeSplitNodeID(span.createdAt, cursor-1)
+					if key, insPrev := s.treeByID.Floor(prevID); key != nil && key.hasSameCreatedAt(prevID) {
 						newNode.SetInsPrev(insPrev)
 					}
 				}
-				if insNext := s.findPieceCovering(span.createdAt, gapEnd); insNext != nil {
+				nextID := NewRGATreeSplitNodeID(span.createdAt, gapEnd)
+				if key, insNext := s.treeByID.Ceiling(nextID); key != nil && key.hasSameCreatedAt(nextID) {
 					insNext.SetInsPrev(newNode)
 				}
 				recreated = append(recreated, newNode)
@@ -1333,7 +1340,7 @@ func (s *RGATreeSplit[V]) isolateRange(
 //
 //	(a) piece covering gapEnd → before it (exact original slot)
 //	(b) nearest surviving piece left of gapStart → after it
-//	(c) rightmost surviving piece (right of gap) → before it
+//	(c) nearest surviving piece at or after gapEnd → before it
 //	(d) chain anchor: the fragment placed just before this one in the same
 //	    restore (document order) → after it, so a purged multi-fragment run is
 //	    rebuilt left-to-right rather than reversed
@@ -1355,9 +1362,12 @@ func (s *RGATreeSplit[V]) findRestoreAnchor(
 			return node
 		}
 	}
-	rightmostID := NewRGATreeSplitNodeID(createdAt, math.MaxInt32)
-	if key, node := s.treeByID.Floor(rightmostID); key != nil &&
-		key.hasSameCreatedAt(rightmostID) && node.ID().Offset() >= gapEnd {
+	// The nearest surviving piece of the insertion after the gap, not the
+	// rightmost one: anchoring before a later piece would place the gap
+	// after the pieces in between, and a deletion that later spans from the
+	// gap to one of them would run from its start to the end of the text.
+	afterID := NewRGATreeSplitNodeID(createdAt, gapEnd)
+	if key, node := s.treeByID.Ceiling(afterID); key != nil && key.hasSameCreatedAt(afterID) {
 		return node.prev
 	}
 	if chainAnchor != nil {

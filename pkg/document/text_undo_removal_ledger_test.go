@@ -351,6 +351,28 @@ func TestTextUndoRemovalLedger(t *testing.T) {
 		assert.Equal(t, "abcdefgh", ledgerText(t, a))
 	})
 
+	t.Run("recreates a purged piece before the piece that follows it", func(t *testing.T) {
+		a, b := ledgerReplicas(t, "abcdefghij")
+		ledgerEdit(t, a, 1, 3, "")
+		ledgerEdit(t, a, 0, 1, "")
+		// b splits `defghij` by removing `e`, so two pieces of the insertion
+		// survive after the gap a's undo will recreate.
+		ledgerEdit(t, b, 4, 5, "")
+		ledgerSend(t, a, b)
+		ledgerAck(t, a)
+		assert.Positive(t, b.GarbageCollect(b.VersionVector()))
+
+		// a revives `a` and removes `d`. On b, `a` must come back before `d`:
+		// placed after a later piece, a's removal would run from `a` to the
+		// end of the text.
+		require.NoError(t, a.Undo())
+		ledgerEdit(t, a, 1, 2, "")
+		ledgerExchange(t, a, b)
+
+		assert.Equal(t, "afghij", ledgerText(t, a))
+		assert.Equal(t, "afghij", ledgerText(t, b))
+	})
+
 	t.Run("keeps a piece until its cancelled removals are known everywhere", func(t *testing.T) {
 		a, b := ledgerReplicas(t, "abc")
 		c := ledgerFromSnapshot(t, a)
@@ -382,5 +404,35 @@ func TestTextUndoRemovalLedger(t *testing.T) {
 		assert.Equal(t, "b", ledgerText(t, a))
 		assert.Equal(t, "b", ledgerText(t, b))
 		assert.Equal(t, "b", ledgerText(t, c))
+	})
+
+	t.Run("links a recreated piece to the nearest surviving neighbours", func(t *testing.T) {
+		a, b := ledgerReplicas(t, "abcdefghij")
+		// a removes `g`, then `h`; b collects both.
+		ledgerEdit(t, a, 6, 7, "")
+		ledgerEdit(t, a, 6, 7, "")
+		ledgerSend(t, a, b)
+		ledgerAck(t, a)
+		assert.Positive(t, b.GarbageCollect(b.VersionVector()))
+
+		// b removes `f`, the piece before the gap, and a learns of it.
+		ledgerEdit(t, b, 5, 6, "")
+		ledgerSend(t, b, a)
+		ledgerAck(t, b)
+
+		// a's undo recreates `h` on b, which then collects `f` too: `f` still
+		// pointed past the recreated `h`, so purging it must not hand `ij`
+		// an insertion predecessor that skips `h`.
+		require.NoError(t, a.Undo())
+		ledgerSend(t, a, b)
+		ledgerAck(t, a)
+		assert.Positive(t, b.GarbageCollect(time.MinVersionVector(a.VersionVector(), b.VersionVector())))
+
+		// An edit ending right after `h` resolves through `ij`'s predecessor.
+		ledgerEdit(t, a, 5, 6, "")
+		ledgerSend(t, a, b)
+
+		assert.Equal(t, "abcdeij", ledgerText(t, a))
+		assert.Equal(t, "abcdeij", ledgerText(t, b))
 	})
 }

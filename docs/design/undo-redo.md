@@ -321,10 +321,15 @@ advertises `restore-removed-by` (`api.CapRestoreRemovedBy`), and the JS SDK
 sends `removed_by` only while the last returned pack carries it. A span
 without it restores as before.
 
-Not covered: an undo after GC still anchors a recreated piece next to the
-following piece of its insertion, which can land after text inserted
-concurrently there. A tombstone held by two concurrent deletions that are
-never undone is never collected.
+A recreated piece is anchored before the nearest surviving piece of its
+insertion after the gap. Anchoring before a later piece put the gap after the
+pieces in between, and a deletion that then spanned from the gap to one of
+them ran from its start to the end of the text.
+
+Not covered: that anchor can still land after text another insertion placed
+between the gap and that piece, so a replica that collected and one that did
+not can order the recreated piece differently. A tombstone held by two
+concurrent deletions that are never undone is never collected.
 
 ### Tree.Edit Undo/Redo
 
