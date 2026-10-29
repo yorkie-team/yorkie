@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"sync/atomic"
 )
 
 const (
@@ -54,34 +55,26 @@ var (
 	)
 )
 
-func init() {
-	// InitialTicket and MaxTicket are shared by every document in the
-	// process, so fill their caches before any goroutine reads them.
-	for _, t := range []*Ticket{InitialTicket, MaxTicket} {
-		t.Key()
-		t.ActorIDBase64()
-	}
-}
-
 // Ticket represents the logical clock. It is used to determine the order of
 // changes and identify elements and nodes in the document. It can't be used
 // to detect the relationship between changes whether they are causally related
 // or concurrent.
 //
-// A Ticket is not safe for concurrent use until its caches are filled: Key
-// and ActorIDBase64 cache their result on the first call. A Ticket shared
-// between goroutines must have both called before it is shared, as
-// InitialTicket and MaxTicket do in init.
+// A Ticket is immutable and safe for concurrent use. Key builds its string on
+// the first call and caches it atomically.
 type Ticket struct {
 	lamport   int64
 	delimiter uint32
 	actorID   ActorID
 
 	// cachedKey is the cache of the string representation of the ticket.
-	cachedKey string
-
-	// cachedActorIDBase64 is the cache of the base64 representation of the actorID.
-	cachedActorIDBase64 string
+	//
+	// NOTE(hackerwins): This is an atomic.Value holding a string rather than
+	// an atomic.Pointer[string]. A Ticket is compared with reflect.DeepEqual
+	// in tests, which compares an interface by its dynamic value but a
+	// pointer field by address: a *string box would make two logically
+	// identical tickets unequal once both had built their key.
+	cachedKey atomic.Value
 }
 
 // NewTicket creates an instance of Ticket.
@@ -107,16 +100,20 @@ func (t *Ticket) ToTestString() string {
 
 // Key returns the key string for this Ticket.
 func (t *Ticket) Key() string {
-	if t.cachedKey == "" {
-		t.cachedKey = strconv.FormatInt(t.lamport, 10) +
-			":" +
-			strconv.FormatInt(int64(t.delimiter), 10) +
-			":" +
-			t.actorID.StringBase64()
-
+	if key, ok := t.cachedKey.Load().(string); ok {
+		return key
 	}
 
-	return t.cachedKey
+	// NOTE(hackerwins): Goroutines that miss at the same time each build
+	// the same string, and the last store wins. That is cheaper than a lock
+	// on a path where a miss happens once per ticket.
+	key := strconv.FormatInt(t.lamport, 10) +
+		":" +
+		strconv.FormatInt(int64(t.delimiter), 10) +
+		":" +
+		t.actorID.StringBase64()
+	t.cachedKey.Store(key)
+	return key
 }
 
 // Lamport returns the lamport value.
@@ -136,10 +133,7 @@ func (t *Ticket) ActorID() ActorID {
 
 // ActorIDBase64 returns the actorID's base64 value.
 func (t *Ticket) ActorIDBase64() string {
-	if t.cachedActorIDBase64 == "" {
-		t.cachedActorIDBase64 = t.actorID.StringBase64()
-	}
-	return t.cachedActorIDBase64
+	return t.actorID.StringBase64()
 }
 
 // ActorIDBytes returns the actorID's bytes value.
