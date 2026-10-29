@@ -324,6 +324,10 @@ the ledger is materialized only when a second deletion or a cancel needs it.
   later change carries covers the stand-in too. A reader that finds events
   breaking these rules keeps `removed_at` alone rather than failing the
   snapshot.
+- GC also shrinks ledgers. A removal whose cancel every replica knows is
+  dropped with that cancel: any change that arrives later knows both, so the
+  pair never decides anything again. Without this, a text revived by undo
+  kept every removal it ever had in each piece and each snapshot.
 - An undo or redo is propagated whenever an operation ran, as in JS: a cancel
   that leaves a character removed changes the ledger but shows nothing.
 

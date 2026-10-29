@@ -391,6 +391,18 @@ func (s *RGATreeSplitNode[V]) copyLedger(other *RGATreeSplitNode[V]) {
 	s.cancels = append([]LedgerCancel(nil), other.cancels...)
 }
 
+// removals returns the deletions in the ledger without building one: a node
+// without a ledger was removed by removedAt alone, if at all.
+func (s *RGATreeSplitNode[V]) removals() []*time.Ticket {
+	if s.ledgered {
+		return s.dels
+	}
+	if s.removedAt != nil {
+		return []*time.Ticket{s.removedAt}
+	}
+	return nil
+}
+
 func (s *RGATreeSplitNode[V]) ledger() []*time.Ticket {
 	if !s.ledgered {
 		s.ledgered = true
@@ -424,8 +436,14 @@ func (s *RGATreeSplitNode[V]) recompute() {
 	s.removedAt = latest
 }
 
-// recordRemoval adds a deletion to the ledger.
+// recordRemoval adds a deletion to the ledger. A node's first removal is
+// just removedAt; the ledger is built only when a second removal or a cancel
+// needs it.
 func (s *RGATreeSplitNode[V]) recordRemoval(removedAt *time.Ticket) {
+	if !s.ledgered && s.removedAt == nil {
+		s.removedAt = removedAt
+		return
+	}
 	found := false
 	for _, d := range s.ledger() {
 		if d.Compare(removedAt) == 0 {
@@ -457,9 +475,38 @@ func (s *RGATreeSplitNode[V]) cancelRemoval(deletion, at *time.Ticket) bool {
 	return s.removedAt == nil
 }
 
+// pruneStable drops each removal whose cancel is known to every replica, with
+// that cancel. A change that arrives later knows both, so the pair never
+// decides isRemovedInView again, and dropping it keeps an undo-heavy text
+// from carrying every removal it ever had. A removal is older than its
+// cancel by the same actor, so the cancel being known is enough. What is
+// left is the default ledger once removedAt alone says it.
+func (s *RGATreeSplitNode[V]) pruneStable(vector time.VersionVector) {
+	var cancels []LedgerCancel
+	dels := s.dels
+	for _, c := range s.cancels {
+		if !vector.EqualToOrAfter(c.CancelledAt) {
+			cancels = append(cancels, c)
+			continue
+		}
+		kept := dels[:0:0]
+		for _, d := range dels {
+			if d.Compare(c.Deletion) != 0 {
+				kept = append(kept, d)
+			}
+		}
+		dels = kept
+	}
+	s.dels, s.cancels = dels, cancels
+	if len(cancels) == 0 && (len(dels) == 0 ||
+		(len(dels) == 1 && s.removedAt != nil && dels[0].Compare(s.removedAt) == 0)) {
+		s.ledgered, s.dels = false, nil
+	}
+}
+
 // uncancelledRemovalBy returns the removal by actor no undo cancelled, if any.
 func (s *RGATreeSplitNode[V]) uncancelledRemovalBy(actor time.ActorID) *time.Ticket {
-	for _, d := range s.ledger() {
+	for _, d := range s.removals() {
 		if d.ActorID() == actor && !s.isCancelled(d) {
 			return d
 		}
@@ -501,7 +548,7 @@ func (s *RGATreeSplitNode[V]) HeldFromPurge(vector time.VersionVector) bool {
 // isRemovedInView tells whether the node was removed in the view of the
 // given version vector: a deletion it knew that no undo it knew cancelled.
 func (s *RGATreeSplitNode[V]) isRemovedInView(vector time.VersionVector) bool {
-	for _, d := range s.ledger() {
+	for _, d := range s.removals() {
 		if !time.TicketKnown(vector, d) {
 			continue
 		}
@@ -669,6 +716,52 @@ type RGATreeSplit[V RGATreeSplitValue] struct {
 	// otherwise never be registered for GC. edit, Text.Style and
 	// Text.RemoveStyle drain this buffer into the GC pairs they return.
 	pendingGCPairs []GCPair
+
+	// cancelled holds the nodes whose ledger has a cancel, the only ones
+	// PruneLedgers can drop anything from. Nil until first needed: a tree
+	// decoded from a snapshot or deep-copied fills it with one scan.
+	cancelled map[*RGATreeSplitNode[V]]struct{}
+}
+
+// trackCancelled records that node's ledger has a cancel.
+func (s *RGATreeSplit[V]) trackCancelled(node *RGATreeSplitNode[V]) {
+	if s.cancelled == nil {
+		s.scanCancelled()
+	}
+	s.cancelled[node] = struct{}{}
+}
+
+func (s *RGATreeSplit[V]) scanCancelled() {
+	s.cancelled = make(map[*RGATreeSplitNode[V]]struct{})
+	for node := s.initialHead; node != nil; node = node.next {
+		if len(node.cancels) > 0 {
+			s.cancelled[node] = struct{}{}
+		}
+	}
+}
+
+// HasCancelledRemovals reports whether any node's ledger holds a cancel.
+func (s *RGATreeSplit[V]) HasCancelledRemovals() bool {
+	if s.cancelled == nil {
+		s.scanCancelled()
+	}
+	return len(s.cancelled) > 0
+}
+
+// PruneLedgers drops, from every node's ledger, the removals whose cancels
+// the given vector covers (see pruneStable). It returns how many nodes still
+// hold a cancel.
+func (s *RGATreeSplit[V]) PruneLedgers(vector time.VersionVector) int {
+	if s.cancelled == nil {
+		s.scanCancelled()
+	}
+	for node := range s.cancelled {
+		node.pruneStable(vector)
+		if len(node.cancels) == 0 {
+			delete(s.cancelled, node)
+		}
+	}
+	return len(s.cancelled)
 }
 
 // NewRGATreeSplit creates a new instance of RGATreeSplit.
@@ -841,6 +934,9 @@ func (s *RGATreeSplit[V]) splitNode(
 	prevSize := node.DataSize()
 
 	splitNode := node.split(offset)
+	if len(splitNode.cancels) > 0 && s.cancelled != nil {
+		s.cancelled[splitNode] = struct{}{}
+	}
 	s.treeByIndex.UpdateWeight(splitNode.indexNode)
 	s.InsertAfter(node, splitNode)
 
@@ -1194,6 +1290,7 @@ func (s *RGATreeSplit[V]) restore(
 					live := false
 					if d := target.uncancelledRemovalBy(executedAt.ActorID()); d != nil {
 						live = target.cancelRemoval(d, executedAt)
+						s.trackCancelled(target)
 					}
 					if live {
 						s.treeByIndex.Splay(target.indexNode)
@@ -1225,6 +1322,7 @@ func (s *RGATreeSplit[V]) restore(
 				stable := time.NewTicket(0, 0, executedAt.ActorID())
 				newNode.recordRemoval(stable)
 				newNode.cancelRemoval(stable, executedAt)
+				s.trackCancelled(newNode)
 				prev := s.findRestoreAnchor(
 					span.createdAt, cursor, gapEnd, chainAnchor, fromPos, executedAt)
 				s.InsertAfter(prev, newNode)
@@ -1521,6 +1619,9 @@ func (s *RGATreeSplit[V]) PurgeBarrierAt(child GCChild) *time.Ticket {
 
 func (s *RGATreeSplit[V]) Purge(child GCChild) error {
 	node := child.(*RGATreeSplitNode[V])
+	if s.cancelled != nil {
+		delete(s.cancelled, node)
+	}
 
 	s.treeByIndex.Delete(node.indexNode)
 	s.treeByID.Remove(node.id)

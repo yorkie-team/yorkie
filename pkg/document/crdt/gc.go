@@ -107,3 +107,13 @@ type GCHold interface {
 	// vector, the versions every replica has seen.
 	HeldFromPurge(vector time.VersionVector) bool
 }
+
+// LedgerHolder is an element whose nodes keep removal ledgers that a vector
+// every replica has seen can shrink (Text). Root.GarbageCollect prunes each
+// registered holder before collecting, and drops it once nothing is left to
+// prune.
+type LedgerHolder interface {
+	Element
+	HasCancelledRemovals() bool
+	PruneLedgers(vector time.VersionVector) int
+}

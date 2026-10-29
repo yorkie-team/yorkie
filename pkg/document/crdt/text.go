@@ -162,6 +162,18 @@ func (t *TextValue) Purge(child GCChild) error {
 	return t.attrs.Purge(rhtNode)
 }
 
+// HasCancelledRemovals reports whether any piece's removal ledger holds a
+// cancel that PruneLedgers may drop later.
+func (t *Text) HasCancelledRemovals() bool {
+	return t.rgaTreeSplit.HasCancelledRemovals()
+}
+
+// PruneLedgers drops the removals whose cancels the given vector covers from
+// the pieces' ledgers, and returns how many pieces still hold a cancel.
+func (t *Text) PruneLedgers(vector time.VersionVector) int {
+	return t.rgaTreeSplit.PruneLedgers(vector)
+}
+
 // GCPairs returns the pairs of GC.
 func (t *TextValue) GCPairs() []GCPair {
 	if t.attrs == nil {

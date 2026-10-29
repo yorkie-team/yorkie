@@ -490,4 +490,26 @@ func TestTextUndoRemovalLedger(t *testing.T) {
 			assert.Empty(t, node.RemovalEvents())
 		}
 	})
+
+	t.Run("drops cancelled removals every replica knows", func(t *testing.T) {
+		a, b := ledgerReplicas(t, "abcdefgh")
+		events := func() int {
+			n := 0
+			for _, node := range textOf(t, a, "t").Nodes() {
+				n += len(node.RemovalEvents())
+			}
+			return n
+		}
+		for range 5 {
+			ledgerEdit(t, a, 0, 8, "")
+			require.NoError(t, a.Undo())
+			ledgerExchange(t, a, b)
+		}
+		// Every removal is cancelled, but only a vector both replicas have
+		// seen lets the pairs go; until then they decide later deletions.
+		assert.Positive(t, events())
+		a.GarbageCollect(time.MinVersionVector(a.VersionVector(), b.VersionVector()))
+		assert.Zero(t, events())
+		assert.Equal(t, "abcdefgh", ledgerText(t, a))
+	})
 }

@@ -215,6 +215,9 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 				if err != nil {
 					return ExecutionResult{}, err
 				}
+				if obj.HasCancelledRemovals() {
+					root.RegisterLedgerHolder(obj)
+				}
 				observable = observable || len(untombstoned) > 0 || len(recreated) > 0
 
 				// Register the still-tombstoned split remainders (which include
