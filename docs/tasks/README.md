@@ -1,5 +1,5 @@
 ---
-updated: 2026-10-26
+updated: 2026-10-29
 ---
 
 # Tasks Index
@@ -20,6 +20,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Make the lazy ticket and node-ID key caches race-free (2026-10-29) | [20261029-ticket-key-atomic-cache-todo.md](./active/20261029-ticket-key-atomic-cache-todo.md) | [20261029-ticket-key-atomic-cache-lessons.md](./active/20261029-ticket-key-atomic-cache-lessons.md) |
 | `version --output json` mixes the server-fetch error into stdout (2026-10-25) | [20261025-version-server-error-to-stderr-todo.md](./active/20261025-version-server-error-to-stderr-todo.md) | [20261025-version-server-error-to-stderr-lessons.md](./active/20261025-version-server-error-to-stderr-lessons.md) |
 | Ticket.Key caches its key without synchronization (2026-10-25) | [20261025-ticket-key-data-race-todo.md](./active/20261025-ticket-key-data-race-todo.md) | [20261025-ticket-key-data-race-lessons.md](./active/20261025-ticket-key-data-race-lessons.md) |
 | Pin how a reader decodes CHANGE_TYPE_UNSPECIFIED presence (2026-10-25) | [20261025-presence-unspecified-decode-test-todo.md](./active/20261025-presence-unspecified-decode-test-todo.md) | [20261025-presence-unspecified-decode-test-lessons.md](./active/20261025-presence-unspecified-decode-test-lessons.md) |

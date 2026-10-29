@@ -33,15 +33,34 @@ func TestRGATreeSplit(t *testing.T) {
 	})
 
 	t.Run("concurrent read of the shared initial node ID test", func(t *testing.T) {
-		// The head of every Text shares one node ID, cached in package init,
-		// so a read of it must be a pure read: `go test -race` fails here if
-		// it is left cold.
+		// The head of every Text shares one node ID: `go test -race` fails
+		// here if reading it is not race-free.
 		key := time.InitialTicket.Key() + ":0"
 
 		var wg sync.WaitGroup
 		for range 10 {
 			wg.Go(func() {
 				assert.Equal(t, key, crdt.InitialTextNode().IDString())
+			})
+		}
+		wg.Wait()
+	})
+
+	t.Run("concurrent read of a fresh node ID test", func(t *testing.T) {
+		// DeepCopy of a split node shares its ID, so the first read of a cold
+		// ID must be race-free: `go test -race` fails here if key fills its
+		// cache with a plain write.
+		actorID, _ := time.ActorIDFromHex("0123456789abcdef01234567")
+		createdAt := time.NewTicket(7, 3, actorID)
+		node := crdt.NewRGATreeSplitNode(
+			crdt.NewRGATreeSplitNodeID(createdAt, 2),
+			crdt.NewTextValue("abc", crdt.NewRHT()),
+		)
+
+		var wg sync.WaitGroup
+		for range 10 {
+			wg.Go(func() {
+				assert.Equal(t, "7:3:"+actorID.StringBase64()+":2", node.IDString())
 			})
 		}
 		wg.Wait()

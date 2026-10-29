@@ -21,6 +21,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -76,12 +77,6 @@ var (
 	initialNodeID = NewRGATreeSplitNodeID(time.InitialTicket, 0)
 )
 
-func init() {
-	// initialNodeID is shared by the head of every Text, so fill its key
-	// cache before any goroutine reads it.
-	initialNodeID.key()
-}
-
 // RGATreeSplitValue is a value of RGATreeSplitNode.
 // gcAttrSource is implemented by a split value that carries attributes of its
 // own. Splitting deep-copies them, so the copy of a TOMBSTONED attribute is new
@@ -103,17 +98,14 @@ type RGATreeSplitValue interface {
 	DataSize() resource.DataSize
 }
 
-// RGATreeSplitNodeID is an ID of RGATreeSplitNode.
-//
-// An ID is not safe for concurrent use until its key is cached: key caches
-// its result on the first call. An ID shared between goroutines must have it
-// called before it is shared, as initialNodeID does in init.
+// RGATreeSplitNodeID is an ID of RGATreeSplitNode. It is immutable and safe
+// for concurrent use: key caches its string atomically on the first call.
 type RGATreeSplitNodeID struct {
 	createdAt *time.Ticket
 	offset    int
 
 	// cachedKey is the cache of the string representation of the ID.
-	cachedKey string
+	cachedKey atomic.Pointer[string]
 }
 
 // NewRGATreeSplitNodeID creates a new instance of RGATreeSplitNodeID.
@@ -178,14 +170,16 @@ func (id *RGATreeSplitNodeID) hasSameCreatedAt(other *RGATreeSplitNodeID) bool {
 	return id.createdAt.Compare(other.createdAt) == 0
 }
 
-// key returns a string representation of the ID. The result will be
-// cached in the key field to prevent instantiation of a new string.
+// key returns a string representation of the ID. The result is cached in
+// cachedKey, atomically, so the string is built once per ID.
 func (id *RGATreeSplitNodeID) key() string {
-	if id.cachedKey == "" {
-		id.cachedKey = id.createdAt.Key() + ":" + strconv.FormatUint(uint64(id.offset), 10)
+	if key := id.cachedKey.Load(); key != nil {
+		return *key
 	}
 
-	return id.cachedKey
+	key := id.createdAt.Key() + ":" + strconv.FormatUint(uint64(id.offset), 10)
+	id.cachedKey.Store(&key)
+	return key
 }
 
 // RGATreeSplitNodePos is the position of the text inside the node.

@@ -62,9 +62,9 @@ func TestTicket(t *testing.T) {
 	})
 
 	t.Run("concurrent read of a shared ticket test", func(t *testing.T) {
-		// Tickets shared between goroutines are cached in package init, so a
-		// read of them must be a pure read: `go test -race` fails here if a
-		// shared ticket is left cold.
+		// InitialTicket and MaxTicket are shared by every document in the
+		// process: `go test -race` fails here if reading them is not
+		// race-free.
 		for _, ticket := range []*time.Ticket{time.InitialTicket, time.MaxTicket} {
 			base64 := ticket.ActorID().StringBase64()
 			key := strconv.FormatInt(ticket.Lamport(), 10) + ":" +
@@ -79,6 +79,25 @@ func TestTicket(t *testing.T) {
 			}
 			wg.Wait()
 		}
+	})
+
+	t.Run("concurrent read of a fresh ticket test", func(t *testing.T) {
+		// Any ticket can end up shared, e.g. through a DeepCopy of a cached
+		// document, so the first read of a cold ticket must be race-free:
+		// `go test -race` fails here if Key or ActorIDBase64 fills its cache
+		// with a plain write.
+		actorID, _ := time.ActorIDFromHex("0123456789abcdef01234567")
+		ticket := time.NewTicket(7, 3, actorID)
+		base64 := actorID.StringBase64()
+
+		var wg sync.WaitGroup
+		for range 10 {
+			wg.Go(func() {
+				assert.Equal(t, "7:3:"+base64, ticket.Key())
+				assert.Equal(t, base64, ticket.ActorIDBase64())
+			})
+		}
+		wg.Wait()
 	})
 
 	t.Run("ticket comparing test", func(t *testing.T) {
