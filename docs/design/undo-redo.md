@@ -287,10 +287,13 @@ some of them (`cancels`, deletion and cancel ticket). `removedAt` is the
 latest uncancelled deletion, so a node no undo touched looks as before, and
 the ledger is materialized only when a second deletion or a cancel needs it.
 
-- A `RestoreSpan` carries `removed_by`, the deletion it undoes. The restore
-  cancels only that one, so the node stays removed while another deletion
-  holds it. A redo records a new deletion, and the reverse it returns names
-  the redo, so the next undo cancels the redo rather than the original.
+- A restore cancels one deletion: the uncancelled one by the actor that runs
+  the undo. An undo reverses its own actor's change, and an actor removes a
+  piece only while it is live in its view, so a piece holds at most one
+  uncancelled deletion by that actor, and the restore needs no field to name
+  it. The node stays removed while another deletion holds it. A redo records
+  a new deletion by the same actor, so the next undo cancels the redo rather
+  than the original.
 - A remote deletion removes a node only if it was live in the deleter's view:
   its creation is known and every deletion known to the deleter was cancelled
   by an undo known to it. A node it saw live but someone else removed records
@@ -298,28 +301,48 @@ the ledger is materialized only when a second deletion or a cancel needs it.
   in every order. A redo (`Retombstone`) applies the same rule with the
   change's version vector.
 - A redo, and the undo of an insertion, return a reverse that names only the
-  pieces they actually recorded a removal on. A restore therefore never names
-  a deletion the piece does not hold, so a replica that purged the piece can
-  answer it without the piece's ledger.
+  pieces they actually recorded a removal on. A restore therefore never
+  reaches a piece that holds no removal by its actor, so a replica that
+  purged the piece can answer it without the piece's ledger.
 - GC keeps a tombstone whose ledger still matters: one held by two or more
   uncancelled deletions, or one whose deletions and cancels are not all known
   to every replica (`HeldFromPurge`). Once that ledger is stable, every change
   that arrives later already knew it, and the one remaining deletion is the
-  only one a restore can name; a restore that finds the piece gone recreates
-  it, which is what the ledger would have said. Nothing is kept for a purged
+  only one a restore can cancel; a restore that finds the piece gone
+  recreates it, which is what the ledger would have said. Nothing is kept for a purged
   piece.
-- Snapshots carry the ledgers (`TextNode.has_ledger`, `removals`,
-  `removal_cancels`). The default ledger is elided, so a text without undo
-  encodes to the same bytes as before.
+- Snapshots carry the ledger beyond `removed_at` in one field,
+  `TextNode.removal_events`: every deletion and every cancel ticket except
+  `removed_at` itself. For each actor these alternate in ticket order -- a
+  deletion, then the cancel of it -- for the reason above, so the reader
+  tells them apart by place. A node whose `removed_at` says it all writes
+  nothing: a text whose characters were each removed by one deletion encodes
+  to the same bytes as before, and only a character removed by concurrent
+  deletions or touched by an undo writes its tickets. A piece recreated
+  after GC records a stand-in removal by the undoing actor at lamport 0 and
+  its cancel: the purged removal was known to every replica, so any vector a
+  later change carries covers the stand-in too. A reader that finds events
+  breaking these rules keeps `removed_at` alone rather than failing the
+  snapshot.
 - An undo or redo is propagated whenever an operation ran, as in JS: a cancel
   that leaves a character removed changes the ledger but shows nothing.
 
-A server re-encodes every change pack and drops fields it does not know, so
-an older server would strip `removed_by`: the undoer would cancel one
-deletion and every other replica would revive the span outright. The server
-advertises `restore-removed-by` (`api.CapRestoreRemovedBy`), and the JS SDK
-sends `removed_by` only while the last returned pack carries it. A span
-without it restores as before.
+The server does not check an operation's own tickets against the change's
+actor (#2114), so a client that forges `executed_at` can cancel another
+actor's removal; main lets any restore clear any tombstone, so this is no
+looser. The pairing rule above is therefore enforced when a removal is
+recorded, not only assumed of honest clients.
+
+Operations do not change on the wire, so there is no capability to
+negotiate, but every replica has to run these rules to converge. An older
+SDK clears a tombstone outright on undo, removes whatever it knew the
+creation of, and collects regardless of the ledger, so it can disagree with
+an upgraded replica whenever undo meets a concurrent deletion, as it does
+today. The server builds snapshots with its own copy of these rules, so it
+is upgraded first and not rolled back once clients write ledgers: an older
+server drops `removal_events` when it re-encodes a document. An older
+reader of a snapshot ignores `removal_events` and sees `removed_at` as
+before.
 
 A recreated piece is anchored before the nearest surviving piece of its
 insertion after the gap. Anchoring before a later piece put the gap after the
@@ -329,7 +352,9 @@ them ran from its start to the end of the text.
 Not covered: that anchor can still land after text another insertion placed
 between the gap and that piece, so a replica that collected and one that did
 not can order the recreated piece differently. A tombstone held by two
-concurrent deletions that are never undone is never collected.
+concurrent deletions that are never undone is never collected, whether or
+not anyone uses undo: either could still be undone, and only the tombstone
+can say that the other holds it.
 
 ### Tree.Edit Undo/Redo
 

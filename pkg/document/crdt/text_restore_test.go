@@ -624,3 +624,30 @@ func TestTextEditRemovedSpansInDocumentOrder(t *testing.T) {
 	}
 	assert.Equal(t, "01x23x45x67x89", removed.String())
 }
+
+// TestTextRemovalKeepsOneUncancelledRemovalPerActor pins that a removal by
+// an actor that already holds an uncancelled one is not recorded: only a
+// change that leaves its own earlier removal out of its vector can send it.
+func TestTextRemovalKeepsOneUncancelledRemovalPerActor(t *testing.T) {
+	text := seededText(t, tick(1))
+	from, to, err := text.CreateRange(2, 4)
+	assert.NoError(t, err)
+	_, _, _, _, _, err = text.Edit(from, to, "", nil, tick(2), nil)
+	assert.NoError(t, err)
+
+	// The same actor removes [1,3) of "01456789" again, with a vector that
+	// knows the insertion but not its own removal of "23".
+	from, to, err = text.CreateRange(1, 3)
+	assert.NoError(t, err)
+	vector := time.NewVersionVector()
+	vector.Set(restoreActor, 1)
+	_, _, _, _, _, err = text.Edit(from, to, "", nil, tick(5), vector)
+	assert.NoError(t, err)
+
+	for _, node := range text.Nodes() {
+		if node.ID().Offset() == 2 {
+			assert.Equal(t, 0, node.RemovedAt().Compare(tick(2)))
+			assert.Empty(t, node.RemovalEvents())
+		}
+	}
+}

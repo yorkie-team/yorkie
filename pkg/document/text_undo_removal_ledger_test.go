@@ -21,17 +21,20 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/yorkie-team/yorkie/api/converter"
+	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
 // ledgerPack returns the pending changes of doc after a protobuf round trip,
-// so the restore spans' removed_by is part of what is tested.
+// so what the wire carries is part of what is tested.
 func ledgerPack(t *testing.T, doc *document.Document) *change.Pack {
 	t.Helper()
 
@@ -434,5 +437,57 @@ func TestTextUndoRemovalLedger(t *testing.T) {
 
 		assert.Equal(t, "abcdeij", ledgerText(t, a))
 		assert.Equal(t, "abcdeij", ledgerText(t, b))
+	})
+
+	t.Run("keeps a recreated piece out of a deletion that saw it removed", func(t *testing.T) {
+		a, b := ledgerReplicas(t, "abc")
+		c := ledgerFromSnapshot(t, a)
+		ledgerEdit(t, b, 1, 2, "")
+		ledgerSend(t, b, a, c)
+		ledgerAck(t, b)
+		vector := time.MinVersionVector(a.VersionVector(), b.VersionVector(), c.VersionVector())
+		assert.Positive(t, a.GarbageCollect(vector))
+
+		// b undoes; c, which saw `b` removed but not the undo, removes the
+		// text around it. a recreates `b` from the undo, so the recreated
+		// node has to answer c's view as b's own ledger does.
+		require.NoError(t, b.Undo())
+		ledgerEdit(t, c, 0, 2, "")
+		ledgerSend(t, b, a, c)
+		ledgerSend(t, c, a, b)
+
+		assert.Equal(t, "b", ledgerText(t, a))
+		assert.Equal(t, "b", ledgerText(t, b))
+		assert.Equal(t, "b", ledgerText(t, c))
+	})
+
+	t.Run("loads a snapshot whose removal events break the rules", func(t *testing.T) {
+		a, _ := ledgerReplicas(t, "abc")
+		ledgerEdit(t, a, 1, 2, "")
+		bytes, err := converter.SnapshotToBytes(a.RootObject(), nil)
+		require.NoError(t, err)
+
+		// Repeat removed_at as an event: no undo can produce that.
+		pbSnapshot := &api.Snapshot{}
+		require.NoError(t, proto.Unmarshal(bytes, pbSnapshot))
+		var removedAt *api.TimeTicket
+		for _, node := range pbSnapshot.Root.GetJsonObject().Nodes[0].Element.GetText().Nodes {
+			if node.RemovedAt != nil {
+				removedAt = node.RemovedAt
+				node.RemovalEvents = []*api.TimeTicket{node.RemovedAt}
+			}
+		}
+		require.NotNil(t, removedAt)
+		bytes, err = proto.Marshal(pbSnapshot)
+		require.NoError(t, err)
+
+		// The document still loads, with removed_at alone.
+		obj, _, err := converter.BytesToSnapshot(bytes)
+		require.NoError(t, err)
+		text := obj.Get("t").(*crdt.Text)
+		assert.Equal(t, "ac", text.String())
+		for _, node := range text.Nodes() {
+			assert.Empty(t, node.RemovalEvents())
+		}
 	})
 }

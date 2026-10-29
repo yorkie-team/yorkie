@@ -308,18 +308,15 @@ message TextNode {
   TimeTicket removed_at = 3;
   TextNodeID ins_prev_id = 4;
   map<string, NodeAttr> attributes = 5;
-  // The removal ledger: the deletions that removed this node and the undos
-  // that cancelled some of them. has_ledger is false when the ledger is just
-  // removed_at (the default), which is then not written.
-  bool has_ledger = 6;
-  repeated TimeTicket removals = 7;
-  repeated RemovalCancel removal_cancels = 8;
-}
-
-// RemovalCancel is an undo that cancelled one removal of a node.
-message RemovalCancel {
-  TimeTicket removal = 1;
-  TimeTicket cancelled_at = 2;
+  // removal_events is the removal ledger beyond removed_at: every removal of
+  // this node and every undo that cancelled one, except removed_at itself.
+  // An actor's events alternate in ticket order, a removal then the undo
+  // cancelling it, so each is told apart by its place. Empty when removed_at
+  // says it all. A piece recreated after GC records a stand-in removal by the
+  // undoing actor at lamport 0, then its cancel. The pairing relies on an
+  // undo cancelling only its own actor's removal; a change to that rule needs
+  // a new field, not a new reading of this one.
+  repeated TimeTicket removal_events = 6;
 }
 
 message TextNodeID {
@@ -519,10 +516,6 @@ message RestoreSpan {
   int32 end = 3;
   string content = 4;
   map<string, string> attributes = 5;
-  // removed_by is the removal this span undoes. Restore cancels exactly that
-  // removal, so a concurrent removal the undo never saw keeps the piece
-  // removed. Absent (older clients): restore clears the tombstone.
-  TimeTicket removed_by = 6;
 }
 
 // RestoreMode selects the identity-preserving path. RESTORE_MODE_UNSPECIFIED

@@ -285,30 +285,12 @@ func toTextNodes(textNodes []*crdt.RGATreeSplitNode[*crdt.TextValue]) []*api.Tex
 	return pbTextNodes
 }
 
-// writeRemovalLedger writes the removal ledger of a node. A ledger that says
-// only "removed by removedAt" is what a node without one starts from, so it
-// is not written (the JS SDK applies the same rule).
+// writeRemovalLedger writes the removal ledger of a node beyond removed_at.
+// A node whose removed_at says it all writes nothing, so a character removed
+// by one deletion and never restored encodes to the same bytes as before.
 func writeRemovalLedger(pbNode *api.TextNode, node *crdt.RGATreeSplitNode[*crdt.TextValue]) {
-	ledgered, dels, cancels := node.Ledger()
-	if !ledgered {
-		return
-	}
-	if len(cancels) == 0 {
-		removedAt := node.RemovedAt()
-		if (removedAt == nil && len(dels) == 0) ||
-			(removedAt != nil && len(dels) == 1 && dels[0].Compare(removedAt) == 0) {
-			return
-		}
-	}
-	pbNode.HasLedger = true
-	for _, d := range dels {
-		pbNode.Removals = append(pbNode.Removals, ToTimeTicket(d))
-	}
-	for _, c := range cancels {
-		pbNode.RemovalCancels = append(pbNode.RemovalCancels, &api.RemovalCancel{
-			Removal:     ToTimeTicket(c.Deletion),
-			CancelledAt: ToTimeTicket(c.CancelledAt),
-		})
+	for _, t := range node.RemovalEvents() {
+		pbNode.RemovalEvents = append(pbNode.RemovalEvents, ToTimeTicket(t))
 	}
 }
 

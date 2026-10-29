@@ -1925,24 +1925,6 @@ components:
           type: string
       title: RHTNode
       type: object
-    yorkie.v1.RemovalCancel:
-      additionalProperties: false
-      description: RemovalCancel is an undo that cancelled one removal of a node.
-      properties:
-        cancelledAt:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
-          additionalProperties: false
-          description: ""
-          title: cancelled_at
-          type: object
-        removal:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
-          additionalProperties: false
-          description: ""
-          title: removal
-          type: object
-      title: RemovalCancel
-      type: object
     yorkie.v1.RestoreMode:
       description: |-
         RestoreMode selects the identity-preserving path. RESTORE_MODE_UNSPECIFIED
@@ -2000,15 +1982,6 @@ components:
           description: ""
           title: end
           type: integer
-        removedBy:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
-          additionalProperties: false
-          description: |-
-            removed_by is the removal this span undoes. Restore cancels exactly that
-             removal, so a concurrent removal the undo never saw keeps the piece
-             removed. Absent (older clients): restore clears the tombstone.
-          title: removed_by
-          type: object
         start:
           additionalProperties: false
           description: ""
@@ -2174,14 +2147,6 @@ components:
           description: ""
           title: attributes
           type: object
-        hasLedger:
-          additionalProperties: false
-          description: |-
-            The removal ledger: the deletions that removed this node and the undos
-             that cancelled some of them. has_ledger is false when the ledger is just
-             removed_at (the default), which is then not written.
-          title: has_ledger
-          type: boolean
         id:
           $ref: '#/components/schemas/yorkie.v1.TextNodeID'
           additionalProperties: false
@@ -2194,21 +2159,21 @@ components:
           description: ""
           title: ins_prev_id
           type: object
-        removalCancels:
+        removalEvents:
           additionalProperties: false
-          description: ""
-          items:
-            $ref: '#/components/schemas/yorkie.v1.RemovalCancel'
-            type: object
-          title: removal_cancels
-          type: array
-        removals:
-          additionalProperties: false
-          description: ""
+          description: |-
+            removal_events is the removal ledger beyond removed_at: every removal of
+             this node and every undo that cancelled one, except removed_at itself.
+             An actor's events alternate in ticket order, a removal then the undo
+             cancelling it, so each is told apart by its place. Empty when removed_at
+             says it all. A piece recreated after GC records a stand-in removal by the
+             undoing actor at lamport 0, then its cancel. The pairing relies on an
+             undo cancelling only its own actor's removal; a change to that rule needs
+             a new field, not a new reading of this one.
           items:
             $ref: '#/components/schemas/yorkie.v1.TimeTicket'
             type: object
-          title: removals
+          title: removal_events
           type: array
         removedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'

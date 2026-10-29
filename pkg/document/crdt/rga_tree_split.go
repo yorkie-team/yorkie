@@ -19,6 +19,7 @@ package crdt
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -62,8 +63,6 @@ type RestoreSpan struct {
 	End        int
 	Content    string
 	Attributes map[string]string
-	// RemovedBy is the removal this span undoes (nil: an older client).
-	RemovedBy *time.Ticket
 }
 
 // restoreSpanValue is the internal form of a RestoreSpan carrying a real
@@ -73,11 +72,6 @@ type restoreSpanValue[V RGATreeSplitValue] struct {
 	start     int
 	end       int
 	value     V
-	// removedBy is the deletion this span undoes. When set, restore cancels
-	// exactly that deletion instead of clearing the tombstone, so a
-	// concurrent deletion the undo never saw keeps the node removed on every
-	// replica. Nil (a span from an older client): clear the tombstone.
-	removedBy *time.Ticket
 }
 
 // LedgerCancel is an undo that cancelled one deletion of a node.
@@ -317,9 +311,78 @@ func (s *RGATreeSplitNode[V]) Ledger() (bool, []*time.Ticket, []LedgerCancel) {
 	return s.ledgered, s.dels, s.cancels
 }
 
-// SetLedger sets the ledger decoded with removedAt.
-func (s *RGATreeSplitNode[V]) SetLedger(dels []*time.Ticket, cancels []LedgerCancel) {
+// RemovalEvents returns the ledger as one list: every removal and every
+// cancel's ticket except removedAt, in ticket order. Nil when removedAt says
+// it all. An actor's events alternate in ticket order -- it removes a piece
+// only while the piece is live in its view, and its undo cancels its one
+// uncancelled removal -- so SetRemovalEvents can tell them apart by place.
+func (s *RGATreeSplitNode[V]) RemovalEvents() []*time.Ticket {
+	if !s.ledgered {
+		return nil
+	}
+	var events []*time.Ticket
+	for _, d := range s.dels {
+		if s.removedAt == nil || d.Compare(s.removedAt) != 0 {
+			events = append(events, d)
+		}
+	}
+	for _, c := range s.cancels {
+		events = append(events, c.CancelledAt)
+	}
+	sort.Slice(events, func(i, j int) bool { return events[i].Compare(events[j]) < 0 })
+	return events
+}
+
+// SetRemovalEvents rebuilds the ledger from removedAt and the events
+// RemovalEvents returned: per actor, in ticket order, a removal then the
+// cancel of it. It fails on a repeated ticket, which would pair a cancel
+// with a removal that is not older, and when the result does not reproduce
+// removedAt, and leaves the node as it was.
+func (s *RGATreeSplitNode[V]) SetRemovalEvents(events []*time.Ticket) error {
+	if len(events) == 0 {
+		return nil
+	}
+	if err := s.setRemovalEvents(events); err != nil {
+		s.ledgered, s.dels, s.cancels = false, nil, nil
+		return err
+	}
+	return nil
+}
+
+func (s *RGATreeSplitNode[V]) setRemovalEvents(events []*time.Ticket) error {
+	all := append([]*time.Ticket(nil), events...)
+	if s.removedAt != nil {
+		all = append(all, s.removedAt)
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].Compare(all[j]) < 0 })
+	for i := 1; i < len(all); i++ {
+		if all[i].Compare(all[i-1]) == 0 {
+			return fmt.Errorf("removal events repeat a ticket")
+		}
+	}
+
+	var dels []*time.Ticket
+	var cancels []LedgerCancel
+	open := map[time.ActorID]*time.Ticket{}
+	for _, t := range all {
+		if d, ok := open[t.ActorID()]; ok {
+			cancels = append(cancels, LedgerCancel{Deletion: d, CancelledAt: t})
+			delete(open, t.ActorID())
+			continue
+		}
+		dels = append(dels, t)
+		open[t.ActorID()] = t
+	}
+
+	removedAt := s.removedAt
 	s.ledgered, s.dels, s.cancels = true, dels, cancels
+	s.recompute()
+	if (removedAt == nil) != (s.removedAt == nil) ||
+		(removedAt != nil && removedAt.Compare(s.removedAt) != 0) {
+		s.removedAt = removedAt
+		return fmt.Errorf("removal events do not reproduce removed_at")
+	}
+	return nil
 }
 
 func (s *RGATreeSplitNode[V]) copyLedger(other *RGATreeSplitNode[V]) {
@@ -369,6 +432,13 @@ func (s *RGATreeSplitNode[V]) recordRemoval(removedAt *time.Ticket) {
 			found = true
 			break
 		}
+		// An actor removes a piece only while it is live in its view, so it
+		// never holds two uncancelled removals; a change whose vector leaves
+		// out its own earlier removal is not honest, and recording it would
+		// break the pairing removal_events relies on and grow the ledger.
+		if d.ActorID() == removedAt.ActorID() && !s.isCancelled(d) {
+			return
+		}
 	}
 	if !found {
 		s.dels = append(s.dels, removedAt)
@@ -385,6 +455,16 @@ func (s *RGATreeSplitNode[V]) cancelRemoval(deletion, at *time.Ticket) bool {
 	}
 	s.recompute()
 	return s.removedAt == nil
+}
+
+// uncancelledRemovalBy returns the removal by actor no undo cancelled, if any.
+func (s *RGATreeSplitNode[V]) uncancelledRemovalBy(actor time.ActorID) *time.Ticket {
+	for _, d := range s.ledger() {
+		if d.ActorID() == actor && !s.isCancelled(d) {
+			return d
+		}
+	}
+	return nil
 }
 
 // HeldFromPurge tells whether GC must keep this tombstone under vector, the
@@ -1107,11 +1187,13 @@ func (s *RGATreeSplit[V]) restore(
 					if isoErr != nil {
 						return nil, nil, nil, isoErr
 					}
-					live := true
-					if span.removedBy != nil {
-						live = target.cancelRemoval(span.removedBy, executedAt)
-					} else {
-						target.SetRemovedAt(nil)
+					// An undo reverses its own actor's change, so the removal it
+					// cancels is the one uncancelled removal by that actor:
+					// one actor cannot remove a piece already removed in its
+					// view. No other removal holds it if there is none.
+					live := false
+					if d := target.uncancelledRemovalBy(executedAt.ActorID()); d != nil {
+						live = target.cancelRemoval(d, executedAt)
 					}
 					if live {
 						s.treeByIndex.Splay(target.indexNode)
@@ -1133,11 +1215,16 @@ func (s *RGATreeSplit[V]) restore(
 				val := subValue(span.value, cursor-span.start, gapEnd-span.start)
 				newNode := NewRGATreeSplitNode(
 					NewRGATreeSplitNodeID(span.createdAt, cursor), val)
-				if span.removedBy != nil {
-					// A node recreated after GC keeps what its ledger said.
-					newNode.recordRemoval(span.removedBy)
-					newNode.cancelRemoval(span.removedBy, executedAt)
-				}
+				// The purged removal was known to every replica before the
+				// purge, so every change that can arrive later knows it. A
+				// stand-in removal by the same actor at lamport 0, which
+				// every such change's vector covers, keeps that answer for
+				// isRemovedInView, with this cancel. The pair is dropped once
+				// the cancel is known everywhere (pruneStable); until then
+				// snapshots carry it, and the JS SDK has to record the same.
+				stable := time.NewTicket(0, 0, executedAt.ActorID())
+				newNode.recordRemoval(stable)
+				newNode.cancelRemoval(stable, executedAt)
 				prev := s.findRestoreAnchor(
 					span.createdAt, cursor, gapEnd, chainAnchor, fromPos, executedAt)
 				s.InsertAfter(prev, newNode)

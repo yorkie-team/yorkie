@@ -2477,15 +2477,6 @@ components:
           description: ""
           title: end
           type: integer
-        removedBy:
-          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
-          additionalProperties: false
-          description: |-
-            removed_by is the removal this span undoes. Restore cancels exactly that
-             removal, so a concurrent removal the undo never saw keeps the piece
-             removed. Absent (older clients): restore clears the tombstone.
-          title: removed_by
-          type: object
         start:
           additionalProperties: false
           description: ""

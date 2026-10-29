@@ -444,14 +444,12 @@ func (t *Text) Edit(
 		if span.value.Attrs().Len() > 0 {
 			attrs = span.value.Attrs().Elements()
 		}
-		// An undo of this edit cancels exactly this removal.
 		removedSpans = append(removedSpans, RestoreSpan{
 			CreatedAt:  span.createdAt,
 			Start:      span.start,
 			End:        span.end,
 			Content:    content,
 			Attributes: attrs,
-			RemovedBy:  executedAt,
 		})
 	}
 
@@ -477,7 +475,6 @@ func (t *Text) Restore(
 			start:     s.Start,
 			end:       s.End,
 			value:     NewTextValue(s.Content, attrs),
-			removedBy: s.RemovedBy,
 		})
 	}
 	// `from` is the op's left boundary; it anchors a fragment whose whole
@@ -524,7 +521,6 @@ func (t *Text) Retombstone(
 			End:        r.end,
 			Content:    r.value.String(),
 			Attributes: attrs,
-			RemovedBy:  executedAt,
 		})
 	}
 	return pairs, diff, out, nil
