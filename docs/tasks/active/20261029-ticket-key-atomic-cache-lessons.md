@@ -79,3 +79,31 @@ Left as known limitations:
 - Integration tests that `assert.Equal` on `*Ticket` were not run, because
   they need MongoDB. The deep-equality regression guards above cover the
   mechanism at pkg level; the integration lane runs on push.
+
+## The integration lane failed on an unrelated docCache/epoch race
+
+`TestAuthWebhookPresenceOnly/a_reader_attaching_alone_keeps_the_bound_schema`
+failed the first integration run with
+`client epoch(1) != document epoch(0): epoch mismatch`, preceded by
+`discarding 1 changes from stale epoch: client(1) != doc(0)`. A client epoch
+*ahead* of the document's can only come from two reads of the same `DocInfo`
+disagreeing, the later one lower.
+
+`DocInfo.Epoch` is incremented in exactly one place:
+`CompactChangeInfos` (`server/backend/database/mongo/client.go`). That
+function calls `c.docCache.Remove(refKey)` *before* the `UpdateOne` that
+`$inc`s `epoch`, and the success path never removes again afterwards.
+`FindDocInfoByRefKey` re-populates the cache unconditionally on a miss, so a
+read landing between the `Remove` and the `UpdateOne` caches the
+pre-compaction `DocInfo` and the cache then serves `Epoch` 0 indefinitely.
+`clients.AttachDocument` seeds `ClientDocInfo.Epoch` from a `DocInfo` read
+before that window and `preparePack` compares against one read from the
+poisoned cache, so the two disagree. Housekeeping compaction runs on a 500ms
+interval in the integration config, which is why it collides with a test at
+all. The log confirms compaction firing inside the failing subtest.
+
+Nothing in this change reaches that path: the ticket and node-ID key caches
+hold a derived string, `Epoch` is a MongoDB field, and no production code
+compares either struct structurally (`reflect.DeepEqual` appears only in
+tests). The cache-fill window predates this branch and lives in a file this
+change does not touch, so it is left for a separate fix.
