@@ -100,6 +100,21 @@ func TestTicket(t *testing.T) {
 		wg.Wait()
 	})
 
+	t.Run("warmed key cache keeps deep equality test", func(t *testing.T) {
+		// Tests across the repo compare two tickets that were built
+		// independently, e.g. the removedAt of the same node in two client
+		// documents, with assert.Equal, which falls through to
+		// reflect.DeepEqual. The key cache must not make them differ: a
+		// *string cache would compare by the address of its box.
+		actorID, _ := time.ActorIDFromHex("0123456789abcdef01234567")
+		one := time.NewTicket(7, 3, actorID)
+		other := time.NewTicket(7, 3, actorID)
+
+		assert.Equal(t, one, other)
+		assert.Equal(t, one.Key(), other.Key())
+		assert.Equal(t, one, other)
+	})
+
 	t.Run("ticket comparing test", func(t *testing.T) {
 		beforeActorID, _ := time.ActorIDFromHex("0000000000abcdef01234567")
 		afterActorID, _ := time.ActorIDFromHex("0123456789abcdef01234567")

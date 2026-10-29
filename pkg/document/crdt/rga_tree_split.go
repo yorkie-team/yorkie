@@ -104,8 +104,11 @@ type RGATreeSplitNodeID struct {
 	createdAt *time.Ticket
 	offset    int
 
-	// cachedKey is the cache of the string representation of the ID.
-	cachedKey atomic.Pointer[string]
+	// cachedKey is the cache of the string representation of the ID. It holds
+	// a string rather than a *string so that reflect.DeepEqual keeps
+	// comparing two IDs by their key, not by the address of a box. See the
+	// note on time.Ticket.cachedKey.
+	cachedKey atomic.Value
 }
 
 // NewRGATreeSplitNodeID creates a new instance of RGATreeSplitNodeID.
@@ -173,12 +176,12 @@ func (id *RGATreeSplitNodeID) hasSameCreatedAt(other *RGATreeSplitNodeID) bool {
 // key returns a string representation of the ID. The result is cached in
 // cachedKey, atomically, so the string is built once per ID.
 func (id *RGATreeSplitNodeID) key() string {
-	if key := id.cachedKey.Load(); key != nil {
-		return *key
+	if key, ok := id.cachedKey.Load().(string); ok {
+		return key
 	}
 
 	key := id.createdAt.Key() + ":" + strconv.FormatUint(uint64(id.offset), 10)
-	id.cachedKey.Store(&key)
+	id.cachedKey.Store(key)
 	return key
 }
 

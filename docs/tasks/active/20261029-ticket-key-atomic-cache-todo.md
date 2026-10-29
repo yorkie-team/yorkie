@@ -36,7 +36,8 @@ document is built, so those keys are already warm.
 | Warm only the shared singletons (#2301) | Leaves the snapshot-cache path above racing |
 | Compute keys eagerly in the constructors (#2301 first draft) | Race-free, but +21–149% allocs/op on Document/text, RemoteApply, ChangeReplay, Array/random_delete: most IDs are never keyed |
 | `sync.Once` per cache | 12 bytes plus a mutex per ticket; heavier than needed |
-| **`atomic.Pointer[string]`, lazy** | Chosen. Allocates only when read. A concurrent miss computes the same string twice and the last store wins, which is harmless |
+| `atomic.Pointer[string]`, lazy | Race-free and lazy, but holds a `*string`: `reflect.DeepEqual` compares the box by address, so two logically identical tickets stop comparing equal once both are warm |
+| **`atomic.Value` holding a string, lazy** | Chosen. Same laziness, and `DeepEqual` compares an interface by its dynamic value, so equality matches main's plain `string` field. A concurrent miss computes the same string twice and the last store wins, which is harmless |
 
 ## Tasks
 
@@ -48,12 +49,14 @@ document is built, so those keys are already warm.
 - [x] Unit race tests on fresh, non-singleton `Ticket` and
       `RGATreeSplitNodeID`; Red on main
 - [x] `Ticket.cachedKey` and `RGATreeSplitNodeID.cachedKey` →
-      `atomic.Pointer[string]`
+      `atomic.Value` holding a string
 - [x] Drop the `cachedActorIDBase64` cache: `ActorIDBase64` has no
       production callers, so it returns `actorID.StringBase64()` directly
 - [x] Drop the `init()` warm-ups and the "not safe until warmed" doc comments
-- [x] Confirm no value copies: `atomic.Pointer` carries `noCopy`, so
-      `go vet` copylocks flags any; `make lint` and `go vet ./...` are clean
+- [x] Confirm no value copies: both structs are shared by pointer only;
+      `make lint` and `go vet ./...` are clean
+- [x] Deep-equality guards for the warmed cache in `ticket_test.go` and
+      `rga_tree_split_test.go`; Red against the `atomic.Pointer` draft
 - [x] `go test -race ./pkg/... ./api/...` green
 - [x] Benchmarks against main (benchstat, n=8, interleaved)
 

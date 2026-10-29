@@ -68,7 +68,13 @@ type Ticket struct {
 	actorID   ActorID
 
 	// cachedKey is the cache of the string representation of the ticket.
-	cachedKey atomic.Pointer[string]
+	//
+	// NOTE(hackerwins): This is an atomic.Value holding a string rather than
+	// an atomic.Pointer[string]. A Ticket is compared with reflect.DeepEqual
+	// in tests, which compares an interface by its dynamic value but a
+	// pointer field by address: a *string box would make two logically
+	// identical tickets unequal once both had built their key.
+	cachedKey atomic.Value
 }
 
 // NewTicket creates an instance of Ticket.
@@ -94,8 +100,8 @@ func (t *Ticket) ToTestString() string {
 
 // Key returns the key string for this Ticket.
 func (t *Ticket) Key() string {
-	if key := t.cachedKey.Load(); key != nil {
-		return *key
+	if key, ok := t.cachedKey.Load().(string); ok {
+		return key
 	}
 
 	// NOTE(hackerwins): Goroutines that miss at the same time each build
@@ -106,7 +112,7 @@ func (t *Ticket) Key() string {
 		strconv.FormatInt(int64(t.delimiter), 10) +
 		":" +
 		t.actorID.StringBase64()
-	t.cachedKey.Store(&key)
+	t.cachedKey.Store(key)
 	return key
 }
 

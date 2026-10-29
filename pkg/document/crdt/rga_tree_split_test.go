@@ -65,4 +65,22 @@ func TestRGATreeSplit(t *testing.T) {
 		}
 		wg.Wait()
 	})
+
+	t.Run("warmed key cache keeps deep equality test", func(t *testing.T) {
+		// Node IDs built independently are compared with assert.Equal, which
+		// falls through to reflect.DeepEqual. Reading the key must not make
+		// two logically identical IDs differ.
+		actorID, _ := time.ActorIDFromHex("0123456789abcdef01234567")
+		newNode := func() *crdt.RGATreeSplitNode[*crdt.TextValue] {
+			return crdt.NewRGATreeSplitNode(
+				crdt.NewRGATreeSplitNodeID(time.NewTicket(7, 3, actorID), 2),
+				crdt.NewTextValue("abc", crdt.NewRHT()),
+			)
+		}
+		one, other := newNode(), newNode()
+
+		assert.Equal(t, one.ID(), other.ID())
+		assert.Equal(t, one.IDString(), other.IDString())
+		assert.Equal(t, one.ID(), other.ID())
+	})
 }
