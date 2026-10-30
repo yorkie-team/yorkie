@@ -30,6 +30,7 @@ SDK is covered by [undo-redo-go-port.md](undo-redo-go-port.md).
 
 - Server-side undo/redo or global history browsing.
 - Undo/redo for `TreeStyleOperation` with multi-client reconciliation (single-client undo/redo is now supported via PR #1221).
+- Convergence between replicas that run different Text removal-ledger rules. The ledger lands in this repository and in yorkie-js-sdk on the same release train (yorkie#2310, yorkie-js-sdk#1494), so a Go change without its JS counterpart in the same pull request is expected, and there is no capability negotiation for a mixed-version document. An older SDK keeps disagreeing with an upgraded one whenever an undo meets a concurrent deletion, as it does without the ledger; see "Removal Ledger" for the server-first upgrade order.
 
 > **Resolved, 2026-08-09 (`fa6cc513`):** this document originally listed
 > "overlapping range reconciliation for Tree (Cases 3–6)" as a non-goal
