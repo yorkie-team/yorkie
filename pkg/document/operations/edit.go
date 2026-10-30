@@ -136,7 +136,23 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 			return ExecutionResult{}, err
 		}
 
-		if len(e.restoreSpans) > 0 || len(e.retombstoneSpans) > 0 {
+		// The identity-preserving path is selected by the mode, not by the
+		// spans being non-empty: a reverse whose span sets both came out empty
+		// (nothing was left to re-remove, nothing to revive) is still an
+		// identity op and must run as a no-op here. Falling through to the
+		// positional path below would read its from/to as an ordinary edit
+		// range and delete it.
+		if e.restoreMode != crdt.RestoreModeNone {
+			// executedAt decides which removal an undo cancels (its actor) and
+			// how long GC must hold the tombstone and the ledger entry (its
+			// lamport), so it is held to the same causality bound as the span
+			// identities above: a change cannot act under a clock it has not
+			// seen.
+			if err := validateRestoreTickets(
+				[]*time.Ticket{e.executedAt}, versionVector); err != nil {
+				return ExecutionResult{}, err
+			}
+
 			// Identity-preserving reverse op. restoreMode selects the
 			// direction: an undo (RestoreModeRestore) revives restoreSpans and
 			// re-removes retombstoneSpans; the redo (RestoreModeRetombstone)
@@ -240,7 +256,10 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 				root.Acc(diff)
 			}
 
-			return ExecutionResult{Reverse: identityReverse(reverseOp), Observable: observable}, nil
+			return ExecutionResult{
+				Reverse:    e.identityReverse(reverseOp),
+				Observable: observable,
+			}, nil
 		}
 
 		// A reverse's positions were recorded against the chain as it stood
@@ -535,14 +554,28 @@ func attributesOf(piece *crdt.RGATreeSplitNode[*crdt.TextValue]) map[string]stri
 	return attrs.Elements()
 }
 
-// identityReverse returns reverse, or nil when both of its span sets are
-// empty: there is nothing to reverse, and an Edit without spans would run as
-// a positional edit.
-func identityReverse(reverse *Edit) Operation {
-	if len(reverse.restoreSpans) == 0 && len(reverse.retombstoneSpans) == 0 {
-		return nil
+// identityReverse returns reverse, or -- when both of its span sets came out
+// empty -- an ordinary no-op edit anchored at this op's start.
+//
+// A reverse with no spans has nothing to revive and nothing to re-remove, but
+// it still has to exist: dropping it would leave the undo stack one entry
+// short of the redo stack, so a later redo would replay the wrong entry. It
+// cannot be kept in identity form either -- a restore mode without spans is
+// rejected on the wire (converter.ErrInvalidRestoreSpan) -- so it degrades to
+// the same shape an edit that removed and inserted nothing reverses to: an
+// empty edit over an empty range, which runs as a no-op and reverses to
+// another one.
+func (e *Edit) identityReverse(reverse *Edit) Operation {
+	if len(reverse.restoreSpans) > 0 || len(reverse.retombstoneSpans) > 0 {
+		return reverse
 	}
-	return reverse
+	return &Edit{
+		parentCreatedAt: e.parentCreatedAt,
+		from:            e.from,
+		to:              e.from,
+		isUndoOp:        true,
+		restoreMode:     crdt.RestoreModeNone,
+	}
 }
 
 // reRemove re-removes the characters in spans by identity and points the
@@ -557,7 +590,7 @@ func (e *Edit) reRemove(
 	versionVector time.VersionVector,
 	reverse *Edit,
 ) (bool, error) {
-	pairs, diff, recorded, err := text.Retombstone(spans, e.executedAt, versionVector)
+	pairs, tombstoned, diff, recorded, err := text.Retombstone(spans, e.executedAt, versionVector)
 	if err != nil {
 		return false, err
 	}
@@ -570,7 +603,7 @@ func (e *Edit) reRemove(
 		root.RegisterGCPair(pair)
 	}
 	root.Acc(diff)
-	return len(pairs) > 0, nil
+	return tombstoned, nil
 }
 
 // flipRestoreMode returns the direction that undoes the given one: undoing a

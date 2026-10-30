@@ -496,14 +496,15 @@ func (t *Text) Restore(
 }
 
 // Retombstone re-removes a previously restored range under its original
-// identities. Returns GC pairs for the newly tombstoned nodes, the net
-// docSize diff from splitting live pieces, and the spans the removal was
-// recorded on, named as the removal a reverse would cancel.
+// identities. Returns GC pairs for the newly tombstoned nodes and for the
+// born-dead remainders its splits left behind, whether any live piece was
+// tombstoned, the net docSize diff from splitting live pieces, and the spans
+// the removal was recorded on, named as the removal a reverse would cancel.
 func (t *Text) Retombstone(
 	spans []*RestoreSpan,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, []*RestoreSpan, error) {
+) ([]GCPair, bool, resource.DataSize, []*RestoreSpan, error) {
 	internal := make([]restoreSpanValue[*TextValue], 0, len(spans))
 	for _, s := range spans {
 		internal = append(internal, restoreSpanValue[*TextValue]{
@@ -513,9 +514,9 @@ func (t *Text) Retombstone(
 			value:     NewTextValue(s.Content, NewRHT()),
 		})
 	}
-	pairs, diff, recorded, err := t.rgaTreeSplit.retombstone(internal, executedAt, versionVector)
+	pairs, tombstoned, diff, recorded, err := t.rgaTreeSplit.retombstone(internal, executedAt, versionVector)
 	if err != nil {
-		return nil, diff, nil, err
+		return nil, false, diff, nil, err
 	}
 
 	out := make([]*RestoreSpan, 0, len(recorded))
@@ -535,7 +536,7 @@ func (t *Text) Retombstone(
 			Attributes: attrs,
 		})
 	}
-	return pairs, diff, out, nil
+	return pairs, tombstoned, diff, out, nil
 }
 
 // NormalizePos converts the given position into a single absolute offset

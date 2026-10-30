@@ -72,7 +72,7 @@ func restoreSpans(t *testing.T, text *crdt.Text, spans []*crdt.RestoreSpan, at *
 // retombstoneSpans re-removes spans and asserts no error.
 func retombstoneSpans(t *testing.T, text *crdt.Text, spans []*crdt.RestoreSpan, at *time.Ticket) {
 	t.Helper()
-	_, _, _, err := text.Retombstone(spans, at, nil)
+	_, _, _, _, err := text.Retombstone(spans, at, nil)
 	assert.NoError(t, err)
 }
 

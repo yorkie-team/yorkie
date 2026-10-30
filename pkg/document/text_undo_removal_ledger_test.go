@@ -512,4 +512,63 @@ func TestTextUndoRemovalLedger(t *testing.T) {
 		assert.Zero(t, events())
 		assert.Equal(t, "abcdefgh", ledgerText(t, a))
 	})
+
+	t.Run("carries a cancelled removal through a snapshot", func(t *testing.T) {
+		a, b := ledgerReplicas(t, "abcdefgh")
+		// a deletes `d` and undoes it; the pair stays in the ledger while b
+		// has not seen the cancel, so the snapshot has to carry both halves.
+		ledgerEdit(t, a, 3, 4, "")
+		require.NoError(t, a.Undo())
+		cancelled := 0
+		for _, node := range textOf(t, a, "t").Nodes() {
+			if len(node.RemovalEvents()) > 0 {
+				cancelled++
+			}
+		}
+		require.Positive(t, cancelled, "the ledger must hold the cancelled pair")
+
+		c := ledgerFromSnapshot(t, a)
+		restored := 0
+		for _, node := range textOf(t, c, "t").Nodes() {
+			restored += len(node.RemovalEvents())
+		}
+		assert.Positive(t, restored, "the snapshot must carry the cancel")
+		assert.Equal(t, "abcdefgh", ledgerText(t, c))
+
+		// The replica loaded from that snapshot answers a later concurrent
+		// deletion as the one that wrote it does: b never saw the undo, so
+		// its deletion of `d` holds the piece removed on both.
+		ledgerEdit(t, b, 3, 4, "")
+		ledgerSend(t, a, b)
+		ledgerSend(t, b, a, c)
+		assert.Equal(t, "abcefgh", ledgerText(t, a))
+		assert.Equal(t, ledgerText(t, a), ledgerText(t, c))
+	})
+
+	t.Run("reverses an undo that found nothing left to undo", func(t *testing.T) {
+		a, b := ledgerReplicas(t, "ab")
+		// b inserts `X`, then deletes `a` and undoes that deletion, leaving
+		// one entry on each stack.
+		ledgerEdit(t, b, 2, 2, "X")
+		ledgerEdit(t, b, 0, 1, "")
+		require.NoError(t, b.Undo())
+		ledgerExchange(t, a, b)
+		assert.Equal(t, "abX", ledgerText(t, b))
+
+		// a removes `X`; b's undo of its own insertion then finds nothing
+		// live to re-remove, so its reverse names no span.
+		ledgerEdit(t, a, 2, 3, "")
+		ledgerExchange(t, a, b)
+		require.NoError(t, b.Undo())
+		ledgerExchange(t, a, b)
+		assert.Equal(t, "ab", ledgerText(t, b))
+
+		// That reverse still has to be pushed: dropping it would leave the
+		// redo stack one entry short, and this redo would re-run the deletion
+		// of `a` instead of doing nothing.
+		require.NoError(t, b.Redo())
+		ledgerExchange(t, a, b)
+		assert.Equal(t, "ab", ledgerText(t, b))
+		assert.Equal(t, "ab", ledgerText(t, a))
+	})
 }

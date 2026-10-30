@@ -1369,13 +1369,16 @@ func (s *RGATreeSplit[V]) restore(
 // retombstone re-removes the characters in spans under their original
 // identities. Only live pieces are affected; already-removed or purged
 // regions are skipped (idempotent). Returns GC pairs for the newly
-// tombstoned nodes, the net docSize diff from splitting live pieces (which
-// the caller accounts to Live), and the pieces the removal was recorded on.
+// tombstoned nodes followed by the born-dead remainders its splits left
+// behind, whether any live piece was tombstoned (the rest of the pairs are
+// bookkeeping, not an observable change), the net docSize diff from
+// splitting live pieces (which the caller accounts to Live), and the pieces
+// the removal was recorded on.
 func (s *RGATreeSplit[V]) retombstone(
 	spans []restoreSpanValue[V],
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, []restoreSpanValue[V], error) {
+) ([]GCPair, bool, resource.DataSize, []restoreSpanValue[V], error) {
 	var pairs []GCPair
 	var diff resource.DataSize
 	var recorded []restoreSpanValue[V]
@@ -1402,7 +1405,7 @@ func (s *RGATreeSplit[V]) retombstone(
 					target, _, err := s.isolateRange(
 						piece, max(pieceStart, span.start), min(pieceEnd, span.end))
 					if err != nil {
-						return nil, diff, nil, err
+						return nil, false, diff, nil, err
 					}
 					target.recordRemoval(executedAt)
 					record(span, target)
@@ -1421,7 +1424,7 @@ func (s *RGATreeSplit[V]) retombstone(
 			target, splitDiff, err := s.isolateRange(
 				piece, max(pieceStart, span.start), min(pieceEnd, span.end))
 			if err != nil {
-				return nil, diff, nil, err
+				return nil, false, diff, nil, err
 			}
 			diff.Add(splitDiff)
 			target.recordRemoval(executedAt)
@@ -1430,7 +1433,14 @@ func (s *RGATreeSplit[V]) retombstone(
 			pairs = append(pairs, GCPair{Parent: s, Child: target})
 		}
 	}
-	return pairs, diff, recorded, nil
+
+	// Isolating a range inside an already-tombstoned piece (and splitting the
+	// removed attributes of a live one) buffers born-dead remainders into
+	// pendingGCPairs. Hand them to the caller with the rest: unregistered,
+	// they would never be purged and their size would stay uncharged.
+	tombstoned := len(pairs) > 0
+	pairs = append(pairs, s.drainPendingGCPairs()...)
+	return pairs, tombstoned, diff, recorded, nil
 }
 
 // findPiecesOverlapping collects existing nodes (live or tombstoned) of
