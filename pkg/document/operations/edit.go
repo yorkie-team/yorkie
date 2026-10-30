@@ -262,18 +262,10 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 			}, nil
 		}
 
-		// A reverse's positions were recorded against the chain as it stood
-		// when the reverse was built; splits since then have moved them.
 		if e.isUndoOp {
-			from, err := obj.RefinePos(e.from)
-			if err != nil {
-				return ExecutionResult{}, err
+			if res, done, err := e.prepareUndo(obj, source); done {
+				return res, err
 			}
-			to, err := obj.RefinePos(e.to)
-			if err != nil {
-				return ExecutionResult{}, err
-			}
-			e.from, e.to = from, to
 		}
 
 		_, pairs, diff, removedValues, removedSpans, err := obj.Edit(
@@ -335,6 +327,37 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 	default:
 		return ExecutionResult{}, ErrNotApplicableDataType
 	}
+}
+
+// prepareUndo readies an undo edit's positions for the positional path. It
+// reports done, with the result to return, when nothing is left to run.
+func (e *Edit) prepareUndo(obj *crdt.Text, source OpSource) (ExecutionResult, bool, error) {
+	// An undo edit that inserts nothing changes nothing wherever it sits, but
+	// its position can name an offset the text no longer has: stacked entries
+	// are reconciled against remote positional edits, not against remote
+	// undos and redos, which change the text by identity. Run it as the no-op
+	// it is, moved to the head so the copy that goes out to other replicas
+	// resolves on every one of them.
+	if len(e.content) == 0 {
+		e.from, e.to = headPos(), headPos()
+		if !source.NeedsReverse() {
+			return ExecutionResult{}, true, nil
+		}
+		return ExecutionResult{Reverse: e.emptyReverse()}, true, nil
+	}
+
+	// A reverse's positions were recorded against the chain as it stood when
+	// the reverse was built; splits since then have moved them.
+	from, err := obj.RefinePos(e.from)
+	if err != nil {
+		return ExecutionResult{}, true, err
+	}
+	to, err := obj.RefinePos(e.to)
+	if err != nil {
+		return ExecutionResult{}, true, err
+	}
+	e.from, e.to = from, to
+	return ExecutionResult{}, false, nil
 }
 
 // toReverseOperation builds the operation that undoes this edit from what the
@@ -555,7 +578,7 @@ func attributesOf(piece *crdt.RGATreeSplitNode[*crdt.TextValue]) map[string]stri
 }
 
 // identityReverse returns reverse, or -- when both of its span sets came out
-// empty -- an ordinary no-op edit anchored at this op's start.
+// empty -- an ordinary no-op edit anchored at the text's head.
 //
 // A reverse with no spans has nothing to revive and nothing to re-remove, but
 // it still has to exist: dropping it would leave the undo stack one entry
@@ -569,13 +592,25 @@ func (e *Edit) identityReverse(reverse *Edit) Operation {
 	if len(reverse.restoreSpans) > 0 || len(reverse.retombstoneSpans) > 0 {
 		return reverse
 	}
+	return e.emptyReverse()
+}
+
+// emptyReverse returns an empty undo edit at the head of this op's text: the
+// reverse of an edit that changes nothing.
+func (e *Edit) emptyReverse() *Edit {
 	return &Edit{
 		parentCreatedAt: e.parentCreatedAt,
-		from:            e.from,
-		to:              e.from,
+		from:            headPos(),
+		to:              headPos(),
 		isUndoOp:        true,
 		restoreMode:     crdt.RestoreModeNone,
 	}
+}
+
+// headPos returns the position at the start of the head node, the one node
+// of a text GC never purges.
+func headPos() *crdt.RGATreeSplitNodePos {
+	return crdt.NewRGATreeSplitNodePos(crdt.InitialTextNode().ID(), 0)
 }
 
 // reRemove re-removes the characters in spans by identity and points the

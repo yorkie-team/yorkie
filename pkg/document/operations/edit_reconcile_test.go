@@ -232,3 +232,34 @@ func TestEditReconcileOperationRealistic(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "01Q456789", text.String())
 }
+
+// TestEditEmptyUndoRunsAnywhere pins that an empty undo edit runs as a no-op
+// even at an offset the text no longer has. Stacked entries are not
+// reconciled against remote undos and redos, so a degraded identity reverse
+// once ran past the end of a text other replicas had emptied and failed
+// (seed 152 of TestTextUndoFuzz, GC on, deletes only).
+func TestEditEmptyUndoRunsAnywhere(t *testing.T) {
+	actor := time.InitialActorID
+	root, text := newReconcileTestRoot(t, &actor)
+	head := crdt.InitialTextNode().ID()
+	stale := crdt.NewRGATreeSplitNodePos(head, 50)
+	undo := &Edit{
+		parentCreatedAt: text.CreatedAt(),
+		from:            stale,
+		to:              stale,
+		executedAt:      time.NewTicket(2, 0, actor),
+		isUndoOp:        true,
+	}
+
+	res, err := undo.Execute(root, OpSourceUndoRedo, time.NewVersionVector())
+	assert.NoError(t, err)
+	assert.False(t, res.Observable)
+	assert.Equal(t, "0123456789", text.String())
+	for _, pos := range []*crdt.RGATreeSplitNodePos{undo.From(), undo.To()} {
+		assert.Equal(t, head.ToTestString(), pos.ID().ToTestString())
+		assert.Zero(t, pos.RelativeOffset())
+	}
+	reverse, ok := res.Reverse.(*Edit)
+	assert.True(t, ok)
+	assert.Zero(t, reverse.From().RelativeOffset())
+}

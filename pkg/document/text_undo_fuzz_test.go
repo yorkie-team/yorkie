@@ -187,6 +187,24 @@ func undoFuzzSeed(t *testing.T, seed int64, gc bool, insertPct, clients, steps i
 	return ""
 }
 
+// TestTextUndoFuzzRegressions replays seeds that once failed a required
+// setting, so a sweep that only reports counts cannot hide them again.
+func TestTextUndoFuzzRegressions(t *testing.T) {
+	for _, tc := range []struct {
+		seed      int64
+		gc        bool
+		insertPct int
+		clients   int
+	}{
+		// An empty identity reverse anchored inside a piece GC purged.
+		{seed: 152, gc: true, insertPct: 0, clients: 3},
+	} {
+		if why := undoFuzzSeed(t, tc.seed, tc.gc, tc.insertPct, tc.clients, 40); why != "" {
+			t.Errorf("seed %d: %s", tc.seed, why)
+		}
+	}
+}
+
 func TestTextUndoFuzz(t *testing.T) {
 	const seeds = 1000
 	for _, tc := range []struct {
