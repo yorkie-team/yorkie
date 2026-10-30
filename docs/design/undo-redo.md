@@ -322,8 +322,13 @@ the ledger is materialized only when a second deletion or a cancel needs it.
   after GC records a stand-in removal by the undoing actor at lamport 0 and
   its cancel: the purged removal was known to every replica, so any vector a
   later change carries covers the stand-in too. A reader that finds events
-  breaking these rules keeps `removed_at` alone rather than failing the
-  snapshot.
+  breaking these rules refuses the bytes: a node left with `removed_at` alone
+  answers `isRemovedInView` and `uncancelledRemovalBy` differently from every
+  replica holding the full ledger, so dropping the ledger buys a document
+  that loads and then diverges. The same decoder reads the element payload of
+  a client-pushed `Set`/`Add`/`ArraySet`, so the event count is bounded
+  (`maxTextRemovalEvents`) and every walk of a ledger is linear in its
+  length, not quadratic -- the length is whatever the sender wrote.
 - GC also shrinks ledgers. A removal whose cancel every replica knows is
   dropped with that cancel: any change that arrives later knows both, so the
   pair never decides anything again. Without this, a text revived by undo
@@ -358,7 +363,15 @@ between the gap and that piece, so a replica that collected and one that did
 not can order the recreated piece differently. A tombstone held by two
 concurrent deletions that are never undone is never collected, whether or
 not anyone uses undo: either could still be undone, and only the tombstone
-can say that the other holds it.
+can say that the other holds it. Such a tombstone stays registered, so it
+keeps counting toward `GarbageLen` and `docSize.GC` for the life of the
+document; releasing it needs a restore that can answer without the piece,
+which is a change to what the operation carries rather than to the ledger.
+Ledger tickets are also outside `DataSize`, so they do not count against
+`MaxSizePerDocument`: the size a node reports is charged once at
+registration and subtracted once at purge, while `recordRemoval` and
+`pruneStable` change a registered node's ledger in between, so charging it
+there would leave `docSize.GC` short or over by the difference.
 
 ### Tree.Edit Undo/Redo
 

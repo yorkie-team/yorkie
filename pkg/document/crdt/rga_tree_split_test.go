@@ -108,7 +108,16 @@ func TestRGATreeSplitNodeRemovalEvents(t *testing.T) {
 		assert.Equal(t, 0, cancels[0].Deletion.Compare(b(4)))
 		assert.Equal(t, 0, cancels[0].CancelledAt.Compare(b(6)))
 		assert.Equal(t, 0, n.RemovedAt().Compare(a(5)))
-		assert.Equal(t, []*time.Ticket{b(4), b(6)}, n.RemovalEvents())
+		// Compared by key, not by value: a ticket caches its key lazily, so
+		// two equal tickets differ structurally once one has been keyed.
+		keys := func(tickets []*time.Ticket) []string {
+			out := make([]string, 0, len(tickets))
+			for _, t := range tickets {
+				out = append(out, t.Key())
+			}
+			return out
+		}
+		assert.Equal(t, keys([]*time.Ticket{b(4), b(6)}), keys(n.RemovalEvents()))
 	})
 
 	t.Run("rejects malformed events test", func(t *testing.T) {

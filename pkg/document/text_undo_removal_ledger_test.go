@@ -27,7 +27,6 @@ import (
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
-	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -481,14 +480,42 @@ func TestTextUndoRemovalLedger(t *testing.T) {
 		bytes, err = proto.Marshal(pbSnapshot)
 		require.NoError(t, err)
 
-		// The document still loads, with removed_at alone.
-		obj, _, err := converter.BytesToSnapshot(bytes)
+		// The bytes are refused rather than read as removed_at alone: a
+		// replica that kept only removed_at would answer a later concurrent
+		// deletion, or an undo, differently from every replica holding the
+		// full ledger, and diverge from then on without a word.
+		_, _, err = converter.BytesToSnapshot(bytes)
+		assert.ErrorContains(t, err, "removal_events")
+	})
+
+	t.Run("refuses a text node carrying too many removal events", func(t *testing.T) {
+		a, _ := ledgerReplicas(t, "abc")
+		ledgerEdit(t, a, 1, 2, "")
+		bytes, err := converter.SnapshotToBytes(a.RootObject(), nil)
 		require.NoError(t, err)
-		text := obj.Get("t").(*crdt.Text)
-		assert.Equal(t, "ac", text.String())
-		for _, node := range text.Nodes() {
-			assert.Empty(t, node.RemovalEvents())
+
+		// The same decoder reads a client-pushed element payload, so the
+		// event count is the sender's to choose: it has to be bounded.
+		pbSnapshot := &api.Snapshot{}
+		require.NoError(t, proto.Unmarshal(bytes, pbSnapshot))
+		stuffed := false
+		for _, node := range pbSnapshot.Root.GetJsonObject().Nodes[0].Element.GetText().Nodes {
+			if node.RemovedAt == nil {
+				continue
+			}
+			for i := range 1 << 13 {
+				node.RemovalEvents = append(node.RemovalEvents, &api.TimeTicket{
+					Lamport: int64(i) + 1, ActorId: node.RemovedAt.ActorId,
+				})
+			}
+			stuffed = true
 		}
+		require.True(t, stuffed)
+		bytes, err = proto.Marshal(pbSnapshot)
+		require.NoError(t, err)
+
+		_, _, err = converter.BytesToSnapshot(bytes)
+		assert.ErrorContains(t, err, "removal events")
 	})
 
 	t.Run("drops cancelled removals every replica knows", func(t *testing.T) {

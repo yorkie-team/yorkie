@@ -31,6 +31,12 @@ import (
 // ErrUnmarshallFailed is returned when unmarshalling fails.
 var ErrUnmarshallFailed = errors.Internal("unmarshal failed")
 
+// maxTextRemovalEvents bounds how many removal events one text node may carry.
+// A piece's ledger holds a removal and its cancel per actor concurrently
+// editing it, and GC prunes the pairs every replica knows, so a real one is
+// orders of magnitude under this.
+const maxTextRemovalEvents = 1 << 12
+
 // BytesToSnapshot creates a Snapshot from the given byte array.
 func BytesToSnapshot(snapshot []byte) (*crdt.Object, *presence.Map, error) {
 	if len(snapshot) == 0 {
@@ -442,6 +448,18 @@ func fromTextNode(
 		textNode.SetRemovedAt(removedAt)
 	}
 	if len(pbNode.RemovalEvents) > 0 {
+		// These bytes are not always a server-built snapshot (see the note in
+		// fromJSONObject), so the list length is whatever the sender wrote.
+		// A ledger reaches this many events only if that many distinct
+		// removals and undos of one piece are in flight at once, which no
+		// honest editing session produces; refusing beyond it keeps one push
+		// from making the decoder allocate a ticket per byte it sent.
+		if len(pbNode.RemovalEvents) > maxTextRemovalEvents {
+			return nil, fmt.Errorf(
+				"%d removal events on a text node exceeds %d: %w",
+				len(pbNode.RemovalEvents), maxTextRemovalEvents, ErrUnsupportedElement,
+			)
+		}
 		events := make([]*time.Ticket, 0, len(pbNode.RemovalEvents))
 		for _, e := range pbNode.RemovalEvents {
 			ticket, err := fromRequiredTimeTicket(e, "text_node.removal_events")
@@ -450,10 +468,13 @@ func fromTextNode(
 			}
 			events = append(events, ticket)
 		}
-		// Events that break the ledger's rules leave the node with removed_at
-		// alone, as an older reader sees it: losing what an undo would ask
-		// of the ledger is better than a document that no longer loads.
-		_ = textNode.SetRemovalEvents(events)
+		// A ledger that breaks the rules is refused rather than dropped: a
+		// node left with removed_at alone answers isRemovedInView and
+		// uncancelledRemovalBy differently from every replica that holds the
+		// full ledger, which is a text that silently diverges from then on.
+		if err := textNode.SetRemovalEvents(events); err != nil {
+			return nil, fmt.Errorf("text_node.removal_events: %w", err)
+		}
 	}
 	return textNode, nil
 }

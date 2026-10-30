@@ -423,10 +423,31 @@ func (s *RGATreeSplitNode[V]) isCancelled(d *time.Ticket) bool {
 	return false
 }
 
+// cancelsByDeletion indexes the ledger's cancels by the deletion each one
+// cancels. Ticket.Key is lamport:delimiter:actor, so two tickets share a key
+// exactly when Compare says they are equal, and a deletion is cancelled at
+// most once (cancelRemoval and setRemovalEvents both pair one to one).
+//
+// Every walk of the ledger takes this index rather than scanning the cancels
+// per deletion: the ledger of a decoded node is as long as whoever sent it
+// made it, and a scan per deletion would make reading one quadratic in that
+// length.
+func (s *RGATreeSplitNode[V]) cancelsByDeletion() map[string]*time.Ticket {
+	if len(s.cancels) == 0 {
+		return nil
+	}
+	index := make(map[string]*time.Ticket, len(s.cancels))
+	for _, c := range s.cancels {
+		index[c.Deletion.Key()] = c.CancelledAt
+	}
+	return index
+}
+
 func (s *RGATreeSplitNode[V]) recompute() {
+	cancels := s.cancelsByDeletion()
 	var latest *time.Ticket
 	for _, d := range s.ledger() {
-		if s.isCancelled(d) {
+		if _, ok := cancels[d.Key()]; ok {
 			continue
 		}
 		if latest == nil || d.After(latest) {
@@ -445,6 +466,7 @@ func (s *RGATreeSplitNode[V]) recordRemoval(removedAt *time.Ticket) {
 		return
 	}
 	found := false
+	cancels := s.cancelsByDeletion()
 	for _, d := range s.ledger() {
 		if d.Compare(removedAt) == 0 {
 			found = true
@@ -454,7 +476,7 @@ func (s *RGATreeSplitNode[V]) recordRemoval(removedAt *time.Ticket) {
 		// never holds two uncancelled removals; a change whose vector leaves
 		// out its own earlier removal is not honest, and recording it would
 		// break the pairing removal_events relies on and grow the ledger.
-		if d.ActorID() == removedAt.ActorID() && !s.isCancelled(d) {
+		if _, cancelled := cancels[d.Key()]; d.ActorID() == removedAt.ActorID() && !cancelled {
 			return
 		}
 	}
@@ -483,15 +505,22 @@ func (s *RGATreeSplitNode[V]) cancelRemoval(deletion, at *time.Ticket) bool {
 // left is the default ledger once removedAt alone says it.
 func (s *RGATreeSplitNode[V]) pruneStable(vector time.VersionVector) {
 	var cancels []LedgerCancel
-	dels := s.dels
+	var dropped map[string]struct{}
 	for _, c := range s.cancels {
 		if !vector.EqualToOrAfter(c.CancelledAt) {
 			cancels = append(cancels, c)
 			continue
 		}
+		if dropped == nil {
+			dropped = make(map[string]struct{}, len(s.cancels))
+		}
+		dropped[c.Deletion.Key()] = struct{}{}
+	}
+	dels := s.dels
+	if len(dropped) > 0 {
 		kept := dels[:0:0]
 		for _, d := range dels {
-			if d.Compare(c.Deletion) != 0 {
+			if _, ok := dropped[d.Key()]; !ok {
 				kept = append(kept, d)
 			}
 		}
@@ -506,8 +535,9 @@ func (s *RGATreeSplitNode[V]) pruneStable(vector time.VersionVector) {
 
 // uncancelledRemovalBy returns the removal by actor no undo cancelled, if any.
 func (s *RGATreeSplitNode[V]) uncancelledRemovalBy(actor time.ActorID) *time.Ticket {
+	cancels := s.cancelsByDeletion()
 	for _, d := range s.removals() {
-		if d.ActorID() == actor && !s.isCancelled(d) {
+		if _, cancelled := cancels[d.Key()]; d.ActorID() == actor && !cancelled {
 			return d
 		}
 	}
@@ -532,8 +562,9 @@ func (s *RGATreeSplitNode[V]) HeldFromPurge(vector time.VersionVector) bool {
 	// stable cancel makes it stable too; an uncancelled one is removedAt,
 	// which GC checks first, or one of two that keep the node anyway.
 	n := 0
+	cancels := s.cancelsByDeletion()
 	for _, d := range s.dels {
-		if !s.isCancelled(d) {
+		if _, cancelled := cancels[d.Key()]; !cancelled {
 			n++
 		}
 	}
@@ -548,20 +579,15 @@ func (s *RGATreeSplitNode[V]) HeldFromPurge(vector time.VersionVector) bool {
 // isRemovedInView tells whether the node was removed in the view of the
 // given version vector: a deletion it knew that no undo it knew cancelled.
 func (s *RGATreeSplitNode[V]) isRemovedInView(vector time.VersionVector) bool {
+	cancels := s.cancelsByDeletion()
 	for _, d := range s.removals() {
 		if !time.TicketKnown(vector, d) {
 			continue
 		}
-		cancelled := false
-		for _, c := range s.cancels {
-			if c.Deletion.Compare(d) == 0 && time.TicketKnown(vector, c.CancelledAt) {
-				cancelled = true
-				break
-			}
+		if at, ok := cancels[d.Key()]; ok && time.TicketKnown(vector, at) {
+			continue
 		}
-		if !cancelled {
-			return true
-		}
+		return true
 	}
 	return false
 }
