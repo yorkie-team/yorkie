@@ -651,3 +651,32 @@ func TestTextRemovalKeepsOneUncancelledRemovalPerActor(t *testing.T) {
 		}
 	}
 }
+
+// TestRetombstoneReportsNothingTombstoned pins the second return value of
+// Retombstone, which Edit.Execute feeds to ExecutionResult.Observable (and
+// so to the redo-stack clear). A redo that re-removes a span another actor
+// already tombstoned -- by a deletion the redo never saw -- splits that
+// tombstone and hands back the born-dead remainders as GC pairs, but
+// nothing went live->dead. Reading `len(pairs) > 0` instead would report
+// those bookkeeping remainders as an observable change.
+func TestRetombstoneReportsNothingTombstoned(t *testing.T) {
+	other, err := time.ActorIDFromHex("000000000000000000000001")
+	assert.NoError(t, err)
+
+	seed := tick(1)
+	text := seededText(t, seed)
+	// A deletion by `other` that the redo below has not seen.
+	deleteRange(t, text, 2, 8, time.NewTicket(2, 0, other))
+	assert.Equal(t, "0189", text.String())
+
+	// The redo's view knows the insertion, not `other`'s deletion.
+	vector := time.NewVersionVector()
+	vector.Set(restoreActor, 3)
+	spans := []*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}}
+	pairs, tombstoned, _, recorded, err := text.Retombstone(spans, tick(3), vector)
+	assert.NoError(t, err)
+
+	assert.False(t, tombstoned, "no live piece went live->dead")
+	assert.NotEmpty(t, pairs, "the split's born-dead remainders are still returned")
+	assert.Len(t, recorded, 1)
+}
