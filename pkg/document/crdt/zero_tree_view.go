@@ -58,6 +58,7 @@ type ZeroSchema struct {
 	Grid         *ZeroSchemaGrid
 	RootType     string
 	Atomic       []string
+	ObjectData   []string             // atoms whose data is an object (none reads as {})
 	DefaultChild []ZeroSchemaChildren // one child each
 	Allowed      []ZeroSchemaChildren
 
@@ -66,6 +67,7 @@ type ZeroSchema struct {
 
 type compiledSchema struct {
 	textTypes, atomic map[string]bool
+	objectData        map[string]bool
 	single            map[string]map[string]bool
 	defaultChild      map[string]string
 	allowed           map[string][]string
@@ -117,6 +119,7 @@ func (s *ZeroSchema) c() *compiledSchema {
 	c := &compiledSchema{
 		textTypes:    setOf(s.TextTypes),
 		atomic:       setOf(s.Atomic),
+		objectData:   setOf(s.ObjectData),
 		single:       map[string]map[string]bool{},
 		defaultChild: map[string]string{},
 		allowed:      map[string][]string{},
@@ -991,6 +994,9 @@ func nodeJSON(node *zNode, schema *ZeroSchema) map[string]any {
 		out["data"] = node.text.String()
 	} else if hasData {
 		out["data"] = data
+	} else if schema.c().objectData[node.typ] {
+		// An empty object writes no key (see `flattenProps`).
+		out["data"] = map[string]any{}
 	}
 	if schema.isContainer(node.typ) {
 		children := make([]any, 0, len(node.children))

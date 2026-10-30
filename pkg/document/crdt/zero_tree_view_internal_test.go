@@ -281,3 +281,30 @@ func TestZeroTreeFoldWithTextBetween(t *testing.T) {
 			modelOf(entries, listSchema()))
 	})
 }
+
+func TestZeroTreeEmptyObjectData(t *testing.T) {
+	// Zero gives a soft break (and other `empty-data` nodes) `data: {}`, and
+	// rejects such a node without data. The schema names those types; other
+	// atoms with no data (a ProseMirror `hard_break`) stay without it.
+	content := map[string]any{"type": "content", "children": []any{
+		map[string]any{"type": "paragraph", "children": []any{
+			map[string]any{"type": "inline-text", "data": "a"},
+			map[string]any{"type": "inline-image", "data": map[string]any{}},
+			map[string]any{"type": "inline-text", "data": "b"},
+		}},
+	}}
+	line := func(atom string) string {
+		return `{"children":[{"children":[{"data":"a","type":"inline-text"},` + atom +
+			`,{"data":"b","type":"inline-text"}],"type":"paragraph"}],"type":"content"}`
+	}
+
+	schema := DefaultZeroSchema()
+	schema.ObjectData = []string{"inline-image"}
+	tree, err := NewZeroTreeFromContent(time.InitialTicket, content, schema)
+	assert.NoError(t, err)
+	assert.Equal(t, line(`{"data":{},"type":"inline-image"}`), tree.Marshal())
+
+	plain, err := NewZeroTreeFromContent(time.InitialTicket, content, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, line(`{"type":"inline-image"}`), plain.Marshal())
+}

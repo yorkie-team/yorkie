@@ -425,6 +425,9 @@ message ZeroSchema {
   repeated string atomic = 7;
   repeated ZeroSchemaChildren default_child = 8; // one child each
   repeated ZeroSchemaChildren allowed = 9;
+  // atomic types whose data is an object; one with no data (an empty object
+  // writes no key) reads as `{}`.
+  repeated string object_data = 10;
 }
 
 message ZeroSchemaChildren {

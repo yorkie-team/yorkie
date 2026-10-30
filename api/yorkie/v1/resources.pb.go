@@ -1998,16 +1998,19 @@ func (x *ZeroNodeID) GetOffset() int32 {
 // ZeroSchema is the part of the editor schema the Zero Tree model needs.
 // Lists keep their order: it decides which child fills a gap.
 type ZeroSchema struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TextType      string                 `protobuf:"bytes,1,opt,name=text_type,json=textType,proto3" json:"text_type,omitempty"`
-	TextTypes     []string               `protobuf:"bytes,2,rep,name=text_types,json=textTypes,proto3" json:"text_types,omitempty"`
-	Scoped        []string               `protobuf:"bytes,3,rep,name=scoped,proto3" json:"scoped,omitempty"`
-	Single        []*ZeroSchemaChildren  `protobuf:"bytes,4,rep,name=single,proto3" json:"single,omitempty"`
-	Grid          *ZeroSchemaGrid        `protobuf:"bytes,5,opt,name=grid,proto3" json:"grid,omitempty"`
-	RootType      string                 `protobuf:"bytes,6,opt,name=root_type,json=rootType,proto3" json:"root_type,omitempty"`
-	Atomic        []string               `protobuf:"bytes,7,rep,name=atomic,proto3" json:"atomic,omitempty"`
-	DefaultChild  []*ZeroSchemaChildren  `protobuf:"bytes,8,rep,name=default_child,json=defaultChild,proto3" json:"default_child,omitempty"` // one child each
-	Allowed       []*ZeroSchemaChildren  `protobuf:"bytes,9,rep,name=allowed,proto3" json:"allowed,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	TextType     string                 `protobuf:"bytes,1,opt,name=text_type,json=textType,proto3" json:"text_type,omitempty"`
+	TextTypes    []string               `protobuf:"bytes,2,rep,name=text_types,json=textTypes,proto3" json:"text_types,omitempty"`
+	Scoped       []string               `protobuf:"bytes,3,rep,name=scoped,proto3" json:"scoped,omitempty"`
+	Single       []*ZeroSchemaChildren  `protobuf:"bytes,4,rep,name=single,proto3" json:"single,omitempty"`
+	Grid         *ZeroSchemaGrid        `protobuf:"bytes,5,opt,name=grid,proto3" json:"grid,omitempty"`
+	RootType     string                 `protobuf:"bytes,6,opt,name=root_type,json=rootType,proto3" json:"root_type,omitempty"`
+	Atomic       []string               `protobuf:"bytes,7,rep,name=atomic,proto3" json:"atomic,omitempty"`
+	DefaultChild []*ZeroSchemaChildren  `protobuf:"bytes,8,rep,name=default_child,json=defaultChild,proto3" json:"default_child,omitempty"` // one child each
+	Allowed      []*ZeroSchemaChildren  `protobuf:"bytes,9,rep,name=allowed,proto3" json:"allowed,omitempty"`
+	// atomic types whose data is an object; one with no data (an empty object
+	// writes no key) reads as `{}`.
+	ObjectData    []string `protobuf:"bytes,10,rep,name=object_data,json=objectData,proto3" json:"object_data,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2101,6 +2104,13 @@ func (x *ZeroSchema) GetDefaultChild() []*ZeroSchemaChildren {
 func (x *ZeroSchema) GetAllowed() []*ZeroSchemaChildren {
 	if x != nil {
 		return x.Allowed
+	}
+	return nil
+}
+
+func (x *ZeroSchema) GetObjectData() []string {
+	if x != nil {
+		return x.ObjectData
 	}
 	return nil
 }
@@ -7228,7 +7238,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"ZeroNodeID\x124\n" +
 	"\n" +
 	"created_at\x18\x01 \x01(\v2\x15.yorkie.v1.ZeroTicketR\tcreatedAt\x12\x16\n" +
-	"\x06offset\x18\x02 \x01(\x05R\x06offset\"\xf8\x02\n" +
+	"\x06offset\x18\x02 \x01(\x05R\x06offset\"\x99\x03\n" +
 	"\n" +
 	"ZeroSchema\x12\x1b\n" +
 	"\ttext_type\x18\x01 \x01(\tR\btextType\x12\x1d\n" +
@@ -7240,7 +7250,10 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\troot_type\x18\x06 \x01(\tR\brootType\x12\x16\n" +
 	"\x06atomic\x18\a \x03(\tR\x06atomic\x12B\n" +
 	"\rdefault_child\x18\b \x03(\v2\x1d.yorkie.v1.ZeroSchemaChildrenR\fdefaultChild\x127\n" +
-	"\aallowed\x18\t \x03(\v2\x1d.yorkie.v1.ZeroSchemaChildrenR\aallowed\"D\n" +
+	"\aallowed\x18\t \x03(\v2\x1d.yorkie.v1.ZeroSchemaChildrenR\aallowed\x12\x1f\n" +
+	"\vobject_data\x18\n" +
+	" \x03(\tR\n" +
+	"objectData\"D\n" +
 	"\x12ZeroSchemaChildren\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1a\n" +
 	"\bchildren\x18\x02 \x03(\tR\bchildren\"L\n" +

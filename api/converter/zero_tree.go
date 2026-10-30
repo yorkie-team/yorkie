@@ -710,6 +710,7 @@ func toZeroSchema(s *crdt.ZeroSchema) *api.ZeroSchema {
 		Single:       toSchemaChildren(s.Single),
 		RootType:     s.RootType,
 		Atomic:       s.Atomic,
+		ObjectData:   s.ObjectData,
 		DefaultChild: toSchemaChildren(s.DefaultChild),
 		Allowed:      toSchemaChildren(s.Allowed),
 	}
@@ -730,6 +731,7 @@ func fromZeroSchema(pb *api.ZeroSchema) *crdt.ZeroSchema {
 		Single:       fromSchemaChildren(pb.Single),
 		RootType:     pb.RootType,
 		Atomic:       pb.Atomic,
+		ObjectData:   pb.ObjectData,
 		DefaultChild: fromSchemaChildren(pb.DefaultChild),
 		Allowed:      fromSchemaChildren(pb.Allowed),
 	}

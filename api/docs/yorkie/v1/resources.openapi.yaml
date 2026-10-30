@@ -3252,6 +3252,15 @@ components:
           description: ""
           title: grid
           type: object
+        objectData:
+          additionalProperties: false
+          description: |-
+            atomic types whose data is an object; one with no data (an empty object
+             writes no key) reads as `{}`.
+          items:
+            type: string
+          title: object_data
+          type: array
         rootType:
           additionalProperties: false
           description: ""

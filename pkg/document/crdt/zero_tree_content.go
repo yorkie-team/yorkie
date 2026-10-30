@@ -327,6 +327,9 @@ func (s *ZeroSchema) SchemaJSON() map[string]any {
 	if s.Grid != nil {
 		out["grid"] = map[string]any{"table": s.Grid.Table, "row": s.Grid.Row, "cell": s.Grid.Cell}
 	}
+	if len(s.ObjectData) > 0 {
+		out["objectData"] = toAnyList(s.ObjectData)
+	}
 	return out
 }
 
@@ -396,6 +399,9 @@ func ZeroSchemaFromJSON(v any) (*ZeroSchema, error) {
 		return nil, err
 	}
 	if s.Atomic, err = stringList(m["atomic"]); err != nil {
+		return nil, err
+	}
+	if s.ObjectData, err = stringList(m["objectData"]); err != nil {
 		return nil, err
 	}
 	if s.Single, err = pairsOf(m["single"], false); err != nil {
