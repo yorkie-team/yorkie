@@ -371,6 +371,10 @@ func fromOperation(pbOp *api.Operation) (operations.Operation, error) {
 		return fromTreeStyle(decoded.TreeStyle)
 	case *api.Operation_ArraySet_:
 		return fromArraySet(decoded.ArraySet)
+	case *api.Operation_ZeroTreeEdit_:
+		return fromZeroTreeEdit(decoded.ZeroTreeEdit)
+	case *api.Operation_ZeroTreeStyle_:
+		return fromZeroTreeStyle(decoded.ZeroTreeStyle)
 	default:
 		return nil, ErrUnsupportedOperation
 	}
@@ -1485,6 +1489,8 @@ func fromElement(pbElement *api.JSONElementSimple) (crdt.Element, error) {
 		return counter, nil
 	case api.ValueType_VALUE_TYPE_TREE:
 		return sanitizeElement(BytesToTree(pbElement.Value))
+	case api.ValueType_VALUE_TYPE_ZERO_TREE:
+		return bytesToZeroTree(pbElement.Value)
 	}
 
 	return nil, fmt.Errorf("%d, %w", pbElement.Type, ErrUnsupportedElement)

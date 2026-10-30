@@ -86,6 +86,7 @@ func gcParentsAreComparable() {
 	comparableGCParent[*TextValue](nil)
 	comparableGCParent[*RGATreeList](nil)
 	comparableGCParent[*RGATreeSplit[*TextValue]](nil)
+	comparableGCParent[*ZeroTree](nil)
 }
 
 var _ = gcParentsAreComparable
@@ -224,6 +225,10 @@ func (r *Root) registerInternalGCPairs(element Element) {
 				r.RegisterGCPair(pair)
 			}
 		case *Tree:
+			for _, pair := range e.GCPairs() {
+				r.RegisterGCPair(pair)
+			}
+		case *ZeroTree:
 			for _, pair := range e.GCPairs() {
 				r.RegisterGCPair(pair)
 			}

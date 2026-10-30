@@ -331,6 +331,10 @@ func ToOperations(ops []operations.Operation) ([]*api.Operation, error) {
 			pbOperation.Body, err = toTreeStyle(op)
 		case *operations.ArraySet:
 			pbOperation.Body, err = toArraySet(op)
+		case *operations.ZeroTreeEdit:
+			pbOperation.Body = toZeroTreeEdit(op)
+		case *operations.ZeroTreeStyle:
+			pbOperation.Body = toZeroTreeStyle(op)
 		default:
 			return nil, ErrUnsupportedOperation
 		}
@@ -640,6 +644,16 @@ func toJSONElementSimple(elem crdt.Element) (*api.JSONElementSimple, error) {
 		}
 		return &api.JSONElementSimple{
 			Type:      api.ValueType_VALUE_TYPE_TREE,
+			CreatedAt: ToTimeTicket(elem.CreatedAt()),
+			Value:     bytes,
+		}, nil
+	case *crdt.ZeroTree:
+		bytes, err := zeroTreeToBytes(elem)
+		if err != nil {
+			return nil, err
+		}
+		return &api.JSONElementSimple{
+			Type:      api.ValueType_VALUE_TYPE_ZERO_TREE,
 			CreatedAt: ToTimeTicket(elem.CreatedAt()),
 			Value:     bytes,
 		}, nil
