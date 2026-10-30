@@ -175,7 +175,14 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 			// exactly the characters it revived, still under their original
 			// identities. Copying their content into a fresh insertion here
 			// would defeat the whole point of the restore path. Built before
-			// the mutation, from state the mutation does not touch.
+			// the mutation, from state the mutation does not touch. The spans
+			// this execution removes again are restored by the reverse, which
+			// has to cancel THIS removal, not the original one.
+			if e.restoreMode == crdt.RestoreModeRetombstone {
+				reverseRestore = withRemovedBy(reverseRestore, e.executedAt)
+			} else {
+				reverseRetombstone = withRemovedBy(reverseRetombstone, e.executedAt)
+			}
 			reverseOp := &Edit{
 				parentCreatedAt:  e.parentCreatedAt,
 				from:             e.from,
@@ -198,7 +205,7 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 
 			// 1. Re-remove the content the reversed edit inserted (by identity).
 			if len(toRetombstone) > 0 {
-				pairs, diff, err := obj.Retombstone(toRetombstone, e.executedAt)
+				pairs, diff, err := obj.Retombstone(toRetombstone, e.executedAt, versionVector)
 				if err != nil {
 					return ExecutionResult{}, err
 				}
@@ -415,6 +422,21 @@ func (e *Edit) toReverseOperation(
 		isUndoOp:    true,
 		restoreMode: crdt.RestoreModeNone,
 	}
+}
+
+// withRemovedBy returns copies of the spans naming removedBy as the removal
+// they undo.
+func withRemovedBy(spans []*crdt.RestoreSpan, removedBy *time.Ticket) []*crdt.RestoreSpan {
+	if len(spans) == 0 {
+		return spans
+	}
+	out := make([]*crdt.RestoreSpan, len(spans))
+	for i, span := range spans {
+		cp := *span
+		cp.RemovedBy = removedBy
+		out[i] = &cp
+	}
+	return out
 }
 
 // refreshSpanAttributes returns spans addressing the same characters as the

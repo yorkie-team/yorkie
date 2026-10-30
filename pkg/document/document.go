@@ -615,12 +615,14 @@ func (d *Document) executeUndoRedo(isUndo bool) (err error) {
 		}
 	}
 
-	// NOTE(chacha912): An undo or redo that changed nothing observable and
-	// carries no presence change is not propagated. JS gates this on opInfos
-	// rather than on the operations that ran (document.ts:2145), so reversing
-	// an edit that inserted and removed nothing costs neither a clientSeq nor
-	// a change-log row on either SDK.
-	if !result.Observable && c.PresenceChange() == nil {
+	// NOTE(chacha912): An undo or redo with no operation that ran and no
+	// presence change is not propagated. The test is whether an operation
+	// ran, not whether it was observable, as in JS (document.ts, since
+	// yorkie-js-sdk#1368): an undo can change CRDT state without anything an
+	// editor shows -- it cancels its own removal of text another client's
+	// deletion still holds -- and the other replicas need that cancel, or the
+	// text stays removed there once that other deletion is undone.
+	if len(result.Executed) == 0 && c.PresenceChange() == nil {
 		return nil
 	}
 
