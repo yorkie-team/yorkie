@@ -1,0 +1,27 @@
+{
+  "v": 2,
+  "id": "i2191-shape2-style-on-split-product-dropped",
+  "issues": ["yorkie#2191"],
+  "status": { "go": "known-diverge", "js": "known-diverge" },
+  "note": "As shape1, but d2 then styles its split product bold. d1 drops the style and d2 keeps it: the style's anchor was merged away on d1.",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p",
+        "children": [
+          { "type": "span", "children": [{ "type": "text", "value": "ab" }] },
+          { "type": "span", "children": [{ "type": "text", "value": "cd" }] }
+        ]
+      }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "edit", "from": 4, "to": 6 },
+    { "r": 1, "op": "edit", "from": 7, "to": 7, "split": 1 },
+    { "r": 1, "op": "style", "from": 8, "to": 11, "attrs": { "bold": "true" } },
+    { "op": "exchange" }
+  ]
+}

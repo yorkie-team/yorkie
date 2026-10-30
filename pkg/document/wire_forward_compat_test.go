@@ -158,6 +158,34 @@ func TestForwardOperationsCarryNoRestoreMode(t *testing.T) {
 		"a client must not advertise capabilities it has not been taught to honour")
 }
 
+// TestPresenceChangeOfAnUnspecifiedTypeWipesPresence pins the hazard that
+// CapPresencePatch exists to describe, end to end. A server that predates the
+// capability does not reject a patch: it decodes the type it has no case for
+// into a change with an empty change type, stores that, and its encoder maps
+// the empty type back to CHANGE_TYPE_UNSPECIFIED when it serves the change.
+//
+// The JS SDK throws on that value and stops its sync loop. This side does not
+// throw -- it decodes an empty change, and executing one replaces the sender's
+// stored presence with nil. That silent wipe is why servers are upgraded
+// before clients, and why a client must stop patching as soon as it receives a
+// pack without the capability.
+func TestPresenceChangeOfAnUnspecifiedTypeWipesPresence(t *testing.T) {
+	pbChange := converter.ToPresenceChange(&presence.Change{Presence: presence.Data{"cursor": "1"}})
+	assert.Equal(t, api.PresenceChange_CHANGE_TYPE_UNSPECIFIED, pbChange.Type)
+
+	decoded, err := converter.FromPresenceChange(pbChange)
+	require.NoError(t, err, "the read path also loads stored rows, so it must not refuse a defined type")
+	assert.Equal(t, &presence.Change{}, decoded)
+
+	actorID := time.InitialActorID
+	presences := presence.NewMap()
+	presences.Store(actorID.String(), presence.Data{"cursor": "1"})
+
+	decoded.Execute(actorID, presences)
+	assert.Nil(t, presences.Load(actorID.String()),
+		"an empty change type stores a nil presence, wiping what the actor had")
+}
+
 // TestServerCapabilities pins what the server advertises and the handshake's
 // default-deny direction: absence has to read as unsupported, because a server
 // that predates a capability cannot report that it lacks it.

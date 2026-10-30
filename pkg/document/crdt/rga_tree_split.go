@@ -21,6 +21,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
@@ -118,13 +119,17 @@ type RGATreeSplitValue interface {
 	DataSize() resource.DataSize
 }
 
-// RGATreeSplitNodeID is an ID of RGATreeSplitNode.
+// RGATreeSplitNodeID is an ID of RGATreeSplitNode. It is immutable and safe
+// for concurrent use: key caches its string atomically on the first call.
 type RGATreeSplitNodeID struct {
 	createdAt *time.Ticket
 	offset    int
 
-	// cachedKey is the cache of the string representation of the ID.
-	cachedKey string
+	// cachedKey is the cache of the string representation of the ID. It holds
+	// a string rather than a *string so that reflect.DeepEqual keeps
+	// comparing two IDs by their key, not by the address of a box. See the
+	// note on time.Ticket.cachedKey.
+	cachedKey atomic.Value
 }
 
 // NewRGATreeSplitNodeID creates a new instance of RGATreeSplitNodeID.
@@ -189,14 +194,16 @@ func (id *RGATreeSplitNodeID) hasSameCreatedAt(other *RGATreeSplitNodeID) bool {
 	return id.createdAt.Compare(other.createdAt) == 0
 }
 
-// key returns a string representation of the ID. The result will be
-// cached in the key field to prevent instantiation of a new string.
+// key returns a string representation of the ID. The result is cached in
+// cachedKey, atomically, so the string is built once per ID.
 func (id *RGATreeSplitNodeID) key() string {
-	if id.cachedKey == "" {
-		id.cachedKey = id.createdAt.Key() + ":" + strconv.FormatUint(uint64(id.offset), 10)
+	if key, ok := id.cachedKey.Load().(string); ok {
+		return key
 	}
 
-	return id.cachedKey
+	key := id.createdAt.Key() + ":" + strconv.FormatUint(uint64(id.offset), 10)
+	id.cachedKey.Store(key)
+	return key
 }
 
 // RGATreeSplitNodePos is the position of the text inside the node.

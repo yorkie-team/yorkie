@@ -17,6 +17,7 @@
 package crdt_test
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -29,5 +30,57 @@ func TestRGATreeSplit(t *testing.T) {
 	t.Run("compare nil id panic test", func(t *testing.T) {
 		id := crdt.NewRGATreeSplitNodeID(time.InitialTicket, 0)
 		assert.Panics(t, func() { id.Compare(nil) }, "ID cannot be null")
+	})
+
+	t.Run("concurrent read of the shared initial node ID test", func(t *testing.T) {
+		// The head of every Text shares one node ID: `go test -race` fails
+		// here if reading it is not race-free.
+		key := time.InitialTicket.Key() + ":0"
+
+		var wg sync.WaitGroup
+		for range 10 {
+			wg.Go(func() {
+				assert.Equal(t, key, crdt.InitialTextNode().IDString())
+			})
+		}
+		wg.Wait()
+	})
+
+	t.Run("concurrent read of a fresh node ID test", func(t *testing.T) {
+		// DeepCopy of a split node shares its ID, so the first read of a cold
+		// ID must be race-free: `go test -race` fails here if key fills its
+		// cache with a plain write.
+		actorID, _ := time.ActorIDFromHex("0123456789abcdef01234567")
+		createdAt := time.NewTicket(7, 3, actorID)
+		node := crdt.NewRGATreeSplitNode(
+			crdt.NewRGATreeSplitNodeID(createdAt, 2),
+			crdt.NewTextValue("abc", crdt.NewRHT()),
+		)
+
+		var wg sync.WaitGroup
+		for range 10 {
+			wg.Go(func() {
+				assert.Equal(t, "7:3:"+actorID.StringBase64()+":2", node.IDString())
+			})
+		}
+		wg.Wait()
+	})
+
+	t.Run("warmed key cache keeps deep equality test", func(t *testing.T) {
+		// Node IDs built independently are compared with assert.Equal, which
+		// falls through to reflect.DeepEqual. Reading the key must not make
+		// two logically identical IDs differ.
+		actorID, _ := time.ActorIDFromHex("0123456789abcdef01234567")
+		newNode := func() *crdt.RGATreeSplitNode[*crdt.TextValue] {
+			return crdt.NewRGATreeSplitNode(
+				crdt.NewRGATreeSplitNodeID(time.NewTicket(7, 3, actorID), 2),
+				crdt.NewTextValue("abc", crdt.NewRHT()),
+			)
+		}
+		one, other := newNode(), newNode()
+
+		assert.Equal(t, one.ID(), other.ID())
+		assert.Equal(t, one.IDString(), other.IDString())
+		assert.Equal(t, one.ID(), other.ID())
 	})
 }

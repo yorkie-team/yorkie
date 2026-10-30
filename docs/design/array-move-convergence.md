@@ -123,7 +123,7 @@ Two layers of timestamps exist, each tracking a different lifecycle:
 ```text
 Element (logical value)          Position (physical slot)
 ├── created_at: value created    ├── position_created_at: slot created
-├── moved_at: (deprecated)       ├── position_moved_at: element placed here (LWW)
+├── moved_at: re-placed at key   ├── position_moved_at: element placed here (LWW)
 └── removed_at: value deleted    └── position_removed_at: slot abandoned
 ```
 
@@ -133,20 +133,22 @@ Element (logical value)          Position (physical slot)
 
 The two lifecycles are independent: a value can move between slots (position changes, element stays), and a slot can become dead when its element leaves (element moves, position dies).
 
-#### Element.MovedAt deprecation
+#### Element.MovedAt: deprecated for Array, load-bearing for Object
 
-`Element.MovedAt` / `SetMovedAt` is legacy. It was originally used to track "when this element was repositioned within its parent container." After the position-identity separation, this role is entirely handled by `ElementEntry.posMovedAt` (the LWW register).
+`Element.MovedAt` / `SetMovedAt` was originally a single mechanism tracking "when this element was repositioned within its parent container." It has since split in two, and only the Array half is dead.
 
 Current state across the codebase:
-- **Array**: `posMovedAt` is the source of truth. `Element.SetMovedAt` is still called for snapshot serialization backward compatibility, but `Element.MovedAt()` is never read by any logic.
-- **Object (ElementRHT)**: `SetMovedAt(v.CreatedAt())` is called on LWW winners in `ElementRHT.Set`, but `MovedAt()` is never read by any logic either.
-- **All types**: `MovedAt()` is only read by `to_bytes.go` for snapshot serialization (`JSONElementSimple.moved_at`).
+- **Array**: `ElementEntry.posMovedAt` is the source of truth, and `RGANode.position_moved_at` carries it on the wire. `Element.SetMovedAt` is still called on array members for snapshot serialization, but for an array member `Element.MovedAt()` is read by nothing.
+- **Object (ElementRHT)**: `MovedAt()` **is read, and it decides convergence.** `ElementRHT.Set` calls `SetMovedAt(v.CreatedAt())` on the LWW winner, and `crdt.PositionedAt` (`pkg/document/crdt/element_rht.go`) then reads it back as the tie-break anchor for the key: once a node has been re-placed at a key with a ticket newer than its own `createdAt` — which is exactly what undo/redo does when it restores an element under its original, older `createdAt` — every later comparison must use that newer ticket. Snapshot rebuild depends on the same value: `fromObject` in `api/converter/from_bytes.go` replays `PositionedAt`, not `createdAt`, so the ticket has to survive the round trip.
+- **Serialization**: `MovedAt()` is read by `to_bytes.go` and written to `JSONElement.moved_at`, the *snapshot* element. `JSONElementSimple.moved_at`, on the operation-carried element, was never written and is now marked `[deprecated = true]`.
 
-Plan: gradually remove `Element.MovedAt` in a follow-up.
-1. Stop writing `JSONElementSimple.moved_at` for Array elements (use `RGANode.position_moved_at` instead)
-2. Stop calling `SetMovedAt` in `ElementRHT.Set` (no reader exists)
-3. Remove `MovedAt` / `SetMovedAt` from the `Element` interface
-4. Remove `movedAt` field from all Element implementations
+So the old plan to stop calling `SetMovedAt` in `ElementRHT.Set` **must not be followed**. Dropping it would leave `PositionedAt` falling back to `createdAt` for a restored key, and a later write with a ticket between the two would win on a replica that had seen the restore and lose on one that had not — a silent divergence, not a cleanup.
+
+What can still be removed is the Array half, and only it:
+1. Stop calling `SetMovedAt` on **array members** — `RGANode.position_moved_at` already carries that role, and no reader consults an array member's `MovedAt()`.
+2. Leave `ElementRHT.Set`, `PositionedAt`, `Element.MovedAt`, `SetMovedAt` and `JSONElement.moved_at` in place. They are the Object key's LWW register, not legacy.
+
+Any future attempt to retire the Object half needs a replacement register for the key's last-placed ticket first, plus a snapshot field to carry it — it is a schema change, not a deletion. `CRDTElement.getPositionedAt` in the JS SDK (`element.ts`) mirrors this and would have to move in lockstep.
 
 ### Protobuf
 
@@ -156,7 +158,7 @@ Plan: gradually remove `Element.MovedAt` in a follow-up.
 
 ```protobuf
 message RGANode {
-  RGANode next = 1;
+  RGANode next = 1 [deprecated = true]; // leftover linked list, never written
   JSONElement element = 2;
   TimeTicket position_created_at = 3;
   TimeTicket position_moved_at = 4;

@@ -1,5 +1,5 @@
 ---
-updated: 2026-10-21
+updated: 2026-10-29
 ---
 
 # Tasks Index
@@ -20,6 +20,17 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Make the lazy ticket and node-ID key caches race-free (2026-10-29) | [20261029-ticket-key-atomic-cache-todo.md](./active/20261029-ticket-key-atomic-cache-todo.md) | [20261029-ticket-key-atomic-cache-lessons.md](./active/20261029-ticket-key-atomic-cache-lessons.md) |
+| `version --output json` mixes the server-fetch error into stdout (2026-10-25) | [20261025-version-server-error-to-stderr-todo.md](./active/20261025-version-server-error-to-stderr-todo.md) | [20261025-version-server-error-to-stderr-lessons.md](./active/20261025-version-server-error-to-stderr-lessons.md) |
+| Ticket.Key caches its key without synchronization (2026-10-25) | [20261025-ticket-key-data-race-todo.md](./active/20261025-ticket-key-data-race-todo.md) | [20261025-ticket-key-data-race-lessons.md](./active/20261025-ticket-key-data-race-lessons.md) |
+| Pin how a reader decodes CHANGE_TYPE_UNSPECIFIED presence (2026-10-25) | [20261025-presence-unspecified-decode-test-todo.md](./active/20261025-presence-unspecified-decode-test-todo.md) | [20261025-presence-unspecified-decode-test-lessons.md](./active/20261025-presence-unspecified-decode-test-lessons.md) |
+| The node GC worklist has no guard for a child whose removal was cleared (2026-10-25) | [20261025-gc-node-worklist-live-guard-todo.md](./active/20261025-gc-node-worklist-live-guard-todo.md) | [20261025-gc-node-worklist-live-guard-lessons.md](./active/20261025-gc-node-worklist-live-guard-lessons.md) |
+| Read the sessions summary through rl_session_daily by name (2026-10-24) | [20261024-session-summary-rollup-hint-todo.md](./active/20261024-session-summary-rollup-hint-todo.md) | [20261024-session-summary-rollup-hint-lessons.md](./active/20261024-session-summary-rollup-hint-lessons.md) |
+| Deprecate dead proto fields and correct the MovedAt deprecation plan (2026-10-22) | [20261022-reserve-dead-proto-fields-todo.md](./active/20261022-reserve-dead-proto-fields-todo.md) | [20261022-reserve-dead-proto-fields-lessons.md](./active/20261022-reserve-dead-proto-fields-lessons.md) |
+| Remove the MCP server (2026-10-22) | [20261022-remove-mcp-server-todo.md](./active/20261022-remove-mcp-server-todo.md) | [20261022-remove-mcp-server-lessons.md](./active/20261022-remove-mcp-server-lessons.md) |
+| Redo after GC drops the attributes of re-inserted text (2026-10-22) | [20261022-redo-drops-reinserted-text-attributes-todo.md](./active/20261022-redo-drops-reinserted-text-attributes-todo.md) | [20261022-redo-drops-reinserted-text-attributes-lessons.md](./active/20261022-redo-drops-reinserted-text-attributes-lessons.md) |
+| Go presence values are not JSON-encoded, so JS peers fail to decode them (2026-10-22) | [20261022-presence-json-value-encoding-todo.md](./active/20261022-presence-json-value-encoding-todo.md) | [20261022-presence-json-value-encoding-lessons.md](./active/20261022-presence-json-value-encoding-lessons.md) |
+| Dedup counter HLL: bound restored registers, pin the hash across SDKs (2026-10-22) | [20261022-hll-register-bound-and-hash-vectors-todo.md](./active/20261022-hll-register-bound-and-hash-vectors-todo.md) | [20261022-hll-register-bound-and-hash-vectors-lessons.md](./active/20261022-hll-register-bound-and-hash-vectors-lessons.md) |
 | Keep a Text removal the undo never saw (2026-10-21) | [20261021-text-undo-removal-ledger-todo.md](./active/20261021-text-undo-removal-ledger-todo.md) | [20261021-text-undo-removal-ledger-lessons.md](./active/20261021-text-undo-removal-ledger-lessons.md) |
 | A peer's Tree undo leaves pending undo entries on stale indices (2026-10-13) | [20261013-remote-identity-undo-reconcile-todo.md](./active/20261013-remote-identity-undo-reconcile-todo.md) | [20261013-remote-identity-undo-reconcile-lessons.md](./active/20261013-remote-identity-undo-reconcile-lessons.md) |
 | Merge-moved children sit in arrival order (2026-09-24) | [20260924-merge-moved-child-order-todo.md](./active/20260924-merge-moved-child-order-todo.md) | - |
@@ -35,5 +46,5 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 ## Archive
 
-- Archived task count: 99
+- Archived task count: 100
 - Archive index: [archive/README.md](./archive/README.md)

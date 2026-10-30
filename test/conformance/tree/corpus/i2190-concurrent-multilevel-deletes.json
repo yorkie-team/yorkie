@@ -1,0 +1,39 @@
+{
+  "v": 2,
+  "id": "i2190-concurrent-multilevel-deletes",
+  "issues": ["yorkie#2190"],
+  "status": { "go": "known-diverge", "js": "known-diverge" },
+  "note": "Concurrent deletes that each span several levels of nested divs. d2 ends empty and d1 keeps <div><p>ef</p><div><p>d</p></div></div>: multi-level merges move subtrees across levels.",
+  "replicas": 2,
+  "delivery": "exchange",
+  "init": {
+    "type": "r",
+    "children": [
+      {
+        "type": "div",
+        "children": [
+          { "type": "p", "children": [{ "type": "text", "value": "ab" }] },
+          { "type": "p", "children": [{ "type": "text", "value": "cd" }] }
+        ]
+      },
+      {
+        "type": "div",
+        "children": [
+          { "type": "p", "children": [{ "type": "text", "value": "ef" }] },
+          {
+            "type": "div",
+            "children": [{ "type": "p", "children": [{ "type": "text", "value": "gh" }] }]
+          }
+        ]
+      },
+      { "type": "p", "children": [{ "type": "text", "value": "ij" }] }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "edit", "from": 0, "to": 5 },
+    { "r": 0, "op": "edit", "from": 13, "to": 18 },
+    { "r": 1, "op": "edit", "from": 17, "to": 24 },
+    { "r": 1, "op": "edit", "from": 8, "to": 20 },
+    { "op": "exchange" }
+  ]
+}

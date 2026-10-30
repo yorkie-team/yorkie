@@ -37,7 +37,9 @@ func TestInitializeWithItsOwnData(t *testing.T) {
 
 	p.Initialize(data)
 
-	expected := presence.Data{"color": "red", "shape": "circle"}
+	// Initialize stores JSON-encoded values, as Set does, so what the map
+	// holds afterwards is the wire form of what it held before.
+	expected := presence.Data{"color": `"red"`, "shape": `"circle"`}
 	assert.Equal(t, expected, data)
 	pc := ctx.ToChange().PresenceChange()
 	require.NotNil(t, pc)

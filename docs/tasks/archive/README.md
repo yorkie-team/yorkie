@@ -1,5 +1,5 @@
 ---
-updated: 2026-10-21
+updated: 2026-10-23
 ---
 
 # Tasks Archive
@@ -8,12 +8,13 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 99
+Total archived tasks: 100
 
-## 2026/10 (38 tasks)
+## 2026/10 (39 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Server-side detach must clear a stable-actor client's presence (2026-10-22) | [20261022-detach-clears-stable-actor-presence-todo.md](./2026/10/20261022-detach-clears-stable-actor-presence-todo.md) | [20261022-detach-clears-stable-actor-presence-lessons.md](./2026/10/20261022-detach-clears-stable-actor-presence-lessons.md) |
 | Watch heartbeat opt-in via WatchRequest (2026-10-12) | [20261012-watch-heartbeat-opt-in-todo.md](./2026/10/20261012-watch-heartbeat-opt-in-todo.md) | [20261012-watch-heartbeat-opt-in-lessons.md](./2026/10/20261012-watch-heartbeat-opt-in-lessons.md) |
 | Resolve the index before a text that follows an element (2026-10-12) | [20261012-tree-findpos-element-text-boundary-todo.md](./2026/10/20261012-tree-findpos-element-text-boundary-todo.md) | [20261012-tree-findpos-element-text-boundary-lessons.md](./2026/10/20261012-tree-findpos-element-text-boundary-lessons.md) |
 | Leave a restore span with a text parent unplaced (2026-10-12) | [20261012-restore-span-text-parent-todo.md](./2026/10/20261012-restore-span-text-parent-todo.md) | [20261012-restore-span-text-parent-lessons.md](./2026/10/20261012-restore-span-text-parent-lessons.md) |

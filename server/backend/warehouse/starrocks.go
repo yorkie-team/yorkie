@@ -19,10 +19,12 @@ package warehouse
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
@@ -444,7 +446,13 @@ func (r *StarRocks) GetSessions(
 		if err != nil {
 			return nil, fmt.Errorf("get sessions: %w", err)
 		}
-		query = descSession.seriesQuery(id, from, to, cov)
+		metrics, err := readSummary(descSession, func(d metricDesc) ([]types.MetricPoint, error) {
+			return r.queryMetrics(ctx, d.seriesQuery(id, from, to, cov))
+		})
+		if err != nil {
+			return nil, fmt.Errorf("get sessions: %w", err)
+		}
+		return metrics, nil
 	}
 
 	metrics, err := r.queryMetrics(ctx, query)
@@ -483,7 +491,13 @@ func (r *StarRocks) GetSessionsCount(
 		if err != nil {
 			return 0, fmt.Errorf("get sessions count: %w", err)
 		}
-		query = descSession.totalQuery(id, from, to, cov)
+		count, err := readSummary(descSession, func(d metricDesc) (int, error) {
+			return r.queryCount(ctx, d.totalQuery(id, from, to, cov))
+		})
+		if err != nil {
+			return 0, fmt.Errorf("get sessions count: %w", err)
+		}
+		return count, nil
 	}
 
 	count, err := r.queryCount(ctx, query)
@@ -573,6 +587,34 @@ func closeRows(rows *sql.Rows) {
 	if err := rows.Close(); err != nil {
 		logging.DefaultLogger().Errorf("close rows: %v", err)
 	}
+}
+
+// readSummary runs read with d and, when StarRocks rejects it because d's
+// rollup does not resolve, once more with d reading its summary table. That is
+// a cluster whose summary table predates the rollup, or whose build has not
+// reached FINISHED: the hint names an index the optimizer would otherwise have
+// skipped for it, so the retry is the plan the read had before the hint, and
+// returns the same numbers more slowly. Any other error is the read's answer.
+func readSummary[T any](d metricDesc, read func(metricDesc) (T, error)) (T, error) {
+	v, err := read(d)
+	if d.summaryRollup == "" || !isUnknownTable(err) {
+		return v, err
+	}
+
+	logging.DefaultLogger().Warnf(
+		"read %s instead of %s, which is not queryable yet: %v", d.summaryTable, d.summaryRollup, err,
+	)
+	d.summaryRollup = ""
+	return read(d)
+}
+
+// isUnknownTable reports whether StarRocks rejected a query for naming a table
+// or index it does not have. StarRocks reports every analysis error as 5502, so
+// the message is what tells this one apart. Re-run the TestE2E rehearsal with
+// the rollup dropped when the StarRocks version moves, in case it is reworded.
+func isUnknownTable(err error) bool {
+	var serverErr *mysql.MySQLError
+	return errors.As(err, &serverErr) && strings.Contains(serverErr.Message, "Unknown table")
 }
 
 // queryMetrics queries the metrics from the StarRocks.

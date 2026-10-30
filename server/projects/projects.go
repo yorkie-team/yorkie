@@ -346,8 +346,7 @@ func GetProjectFromAPIKey(ctx context.Context, be *backend.Backend, apiKey strin
 // interceptor checks it against the per-method table at that rank. A copy
 // outlives the role it was read under, so demoting or removing an admin does
 // not revoke it; RotateProjectKeys does. Rotation is left to the owner because
-// the same key also signs the event webhook and authenticates the MCP
-// endpoint, and replacing it cuts those off.
+// the same key also signs the event webhook, and replacing it cuts that off.
 func ProjectFromSecretKey(ctx context.Context, be *backend.Backend, secretKey string) (*types.Project, error) {
 	if strings.TrimSpace(secretKey) == "" {
 		return nil, ErrSecretKeyNotProvided

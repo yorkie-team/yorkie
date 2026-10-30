@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "id": "gen-merge-95-min",
+  "status": { "go": "known-diverge", "js": "known-diverge" },
+  "note": "Minimised from gen-merge-n2-s24-95. Both replicas split at offset 0 concurrently, then d1 merges its two paragraphs. The empty paragraph ends up first on d1 and last on d2. Likely cause: the merge resolves its destination by position and crosses the concurrent split product.",
+  "replicas": 2,
+  "init": "abcd",
+  "steps": [
+    { "r": 1, "op": "edit", "from": 1, "to": 1, "split": 1 },
+    { "r": 0, "op": "edit", "from": 1, "to": 1, "split": 1 },
+    { "r": 0, "op": "edit", "from": 1, "to": 3 }
+  ]
+}

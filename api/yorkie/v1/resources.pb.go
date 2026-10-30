@@ -409,15 +409,21 @@ func (x *Snapshot) GetPresences() map[string]*Presence {
 // ChangePack is a message that contains all changes that occurred in a document.
 // It is used to synchronize changes between clients and servers.
 type ChangePack struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	DocumentKey     string                 `protobuf:"bytes,1,opt,name=document_key,json=documentKey,proto3" json:"document_key,omitempty"`
-	Checkpoint      *Checkpoint            `protobuf:"bytes,2,opt,name=checkpoint,proto3" json:"checkpoint,omitempty"`
-	Snapshot        []byte                 `protobuf:"bytes,3,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
-	Changes         []*Change              `protobuf:"bytes,4,rep,name=changes,proto3" json:"changes,omitempty"`
-	MinSyncedTicket *TimeTicket            `protobuf:"bytes,5,opt,name=min_synced_ticket,json=minSyncedTicket,proto3" json:"min_synced_ticket,omitempty"` // deprecated
-	IsRemoved       bool                   `protobuf:"varint,6,opt,name=is_removed,json=isRemoved,proto3" json:"is_removed,omitempty"`
-	VersionVector   *VersionVector         `protobuf:"bytes,7,opt,name=version_vector,json=versionVector,proto3" json:"version_vector,omitempty"`
-	Epoch           int64                  `protobuf:"varint,8,opt,name=epoch,proto3" json:"epoch,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	DocumentKey string                 `protobuf:"bytes,1,opt,name=document_key,json=documentKey,proto3" json:"document_key,omitempty"`
+	Checkpoint  *Checkpoint            `protobuf:"bytes,2,opt,name=checkpoint,proto3" json:"checkpoint,omitempty"`
+	Snapshot    []byte                 `protobuf:"bytes,3,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
+	Changes     []*Change              `protobuf:"bytes,4,rep,name=changes,proto3" json:"changes,omitempty"`
+	// min_synced_ticket is superseded by version_vector and is written by no
+	// SDK and read by no server. It stays declared rather than `reserved`
+	// because the repository gates proto changes on buf's FILE category, whose
+	// FIELD_NO_DELETE fires on a removed number even when it is reserved.
+	//
+	// Deprecated: Marked as deprecated in yorkie/v1/resources.proto.
+	MinSyncedTicket *TimeTicket    `protobuf:"bytes,5,opt,name=min_synced_ticket,json=minSyncedTicket,proto3" json:"min_synced_ticket,omitempty"`
+	IsRemoved       bool           `protobuf:"varint,6,opt,name=is_removed,json=isRemoved,proto3" json:"is_removed,omitempty"`
+	VersionVector   *VersionVector `protobuf:"bytes,7,opt,name=version_vector,json=versionVector,proto3" json:"version_vector,omitempty"`
+	Epoch           int64          `protobuf:"varint,8,opt,name=epoch,proto3" json:"epoch,omitempty"`
 	// capabilities is the negotiation channel for wire features a peer may not
 	// understand. A server sets it on the pack it returns to advertise what it
 	// supports; a client must treat absence as "unsupported" rather than as
@@ -491,6 +497,7 @@ func (x *ChangePack) GetChanges() []*Change {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in yorkie/v1/resources.proto.
 func (x *ChangePack) GetMinSyncedTicket() *TimeTicket {
 	if x != nil {
 		return x.MinSyncedTicket
@@ -924,13 +931,23 @@ func (*Operation_TreeStyle_) isOperation_Body() {}
 
 func (*Operation_ArraySet_) isOperation_Body() {}
 
+// JSONElementSimple is the value an operation carries: the element's identity
+// plus its encoded contents. Its moved_at and removed_at carry no lifecycle
+// state -- nothing ever wrote them, because an element reaching a replica
+// inside an operation has neither moved nor been removed yet. The snapshot
+// form, JSONElement, is where both are actually populated.
 type JSONElementSimple struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CreatedAt     *TimeTicket            `protobuf:"bytes,1,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	MovedAt       *TimeTicket            `protobuf:"bytes,2,opt,name=moved_at,json=movedAt,proto3" json:"moved_at,omitempty"`
-	RemovedAt     *TimeTicket            `protobuf:"bytes,3,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
-	Type          ValueType              `protobuf:"varint,4,opt,name=type,proto3,enum=yorkie.v1.ValueType" json:"type,omitempty"`
-	Value         []byte                 `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	CreatedAt *TimeTicket            `protobuf:"bytes,1,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// Never written. See the message comment; deprecated rather than reserved
+	// for the reason given on ChangePack.min_synced_ticket.
+	//
+	// Deprecated: Marked as deprecated in yorkie/v1/resources.proto.
+	MovedAt *TimeTicket `protobuf:"bytes,2,opt,name=moved_at,json=movedAt,proto3" json:"moved_at,omitempty"`
+	// Deprecated: Marked as deprecated in yorkie/v1/resources.proto.
+	RemovedAt     *TimeTicket `protobuf:"bytes,3,opt,name=removed_at,json=removedAt,proto3" json:"removed_at,omitempty"`
+	Type          ValueType   `protobuf:"varint,4,opt,name=type,proto3,enum=yorkie.v1.ValueType" json:"type,omitempty"`
+	Value         []byte      `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -972,6 +989,7 @@ func (x *JSONElementSimple) GetCreatedAt() *TimeTicket {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in yorkie/v1/resources.proto.
 func (x *JSONElementSimple) GetMovedAt() *TimeTicket {
 	if x != nil {
 		return x.MovedAt
@@ -979,6 +997,7 @@ func (x *JSONElementSimple) GetMovedAt() *TimeTicket {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in yorkie/v1/resources.proto.
 func (x *JSONElementSimple) GetRemovedAt() *TimeTicket {
 	if x != nil {
 		return x.RemovedAt
@@ -1198,13 +1217,23 @@ func (x *RHTNode) GetElement() *JSONElement {
 	return nil
 }
 
+// RGANode is one position slot of an array, serialized as a flat repeated
+// field by its container rather than as a linked list. The recursive `next`
+// is a leftover of the linked-list form: nothing writes it, and because it
+// stays declared, a server unmarshalling element bytes is still obliged to be
+// ready to parse a chain as deep as the array is long.
 type RGANode struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Next              *RGANode               `protobuf:"bytes,1,opt,name=next,proto3" json:"next,omitempty"`
-	Element           *JSONElement           `protobuf:"bytes,2,opt,name=element,proto3" json:"element,omitempty"`
-	PositionCreatedAt *TimeTicket            `protobuf:"bytes,3,opt,name=position_created_at,json=positionCreatedAt,proto3" json:"position_created_at,omitempty"`
-	PositionMovedAt   *TimeTicket            `protobuf:"bytes,4,opt,name=position_moved_at,json=positionMovedAt,proto3" json:"position_moved_at,omitempty"`
-	PositionRemovedAt *TimeTicket            `protobuf:"bytes,5,opt,name=position_removed_at,json=positionRemovedAt,proto3" json:"position_removed_at,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Never written; the container's flat `nodes` carries the order instead.
+	// Deprecated rather than reserved for the reason given on
+	// ChangePack.min_synced_ticket.
+	//
+	// Deprecated: Marked as deprecated in yorkie/v1/resources.proto.
+	Next              *RGANode     `protobuf:"bytes,1,opt,name=next,proto3" json:"next,omitempty"`
+	Element           *JSONElement `protobuf:"bytes,2,opt,name=element,proto3" json:"element,omitempty"`
+	PositionCreatedAt *TimeTicket  `protobuf:"bytes,3,opt,name=position_created_at,json=positionCreatedAt,proto3" json:"position_created_at,omitempty"`
+	PositionMovedAt   *TimeTicket  `protobuf:"bytes,4,opt,name=position_moved_at,json=positionMovedAt,proto3" json:"position_moved_at,omitempty"`
+	PositionRemovedAt *TimeTicket  `protobuf:"bytes,5,opt,name=position_removed_at,json=positionRemovedAt,proto3" json:"position_removed_at,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -1239,6 +1268,7 @@ func (*RGANode) Descriptor() ([]byte, []int) {
 	return file_yorkie_v1_resources_proto_rawDescGZIP(), []int{9}
 }
 
+// Deprecated: Marked as deprecated in yorkie/v1/resources.proto.
 func (x *RGANode) GetNext() *RGANode {
 	if x != nil {
 		return x.Next
@@ -4090,11 +4120,16 @@ func (x *Operation_Remove) GetExecutedAt() *TimeTicket {
 }
 
 type Operation_Edit struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	ParentCreatedAt     *TimeTicket            `protobuf:"bytes,1,opt,name=parent_created_at,json=parentCreatedAt,proto3" json:"parent_created_at,omitempty"`
-	From                *TextNodePos           `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
-	To                  *TextNodePos           `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
-	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,4,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // deprecated
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ParentCreatedAt *TimeTicket            `protobuf:"bytes,1,opt,name=parent_created_at,json=parentCreatedAt,proto3" json:"parent_created_at,omitempty"`
+	From            *TextNodePos           `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To              *TextNodePos           `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	// created_at_map_by_actor is superseded by the change's version vector and
+	// is written by no SDK. See ChangePack.min_synced_ticket for why it is
+	// deprecated rather than reserved.
+	//
+	// Deprecated: Marked as deprecated in yorkie/v1/resources.proto.
+	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,4,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Content             string                 `protobuf:"bytes,5,opt,name=content,proto3" json:"content,omitempty"`
 	ExecutedAt          *TimeTicket            `protobuf:"bytes,6,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
 	Attributes          map[string]string      `protobuf:"bytes,7,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
@@ -4161,6 +4196,7 @@ func (x *Operation_Edit) GetTo() *TextNodePos {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in yorkie/v1/resources.proto.
 func (x *Operation_Edit) GetCreatedAtMapByActor() map[string]*TimeTicket {
 	if x != nil {
 		return x.CreatedAtMapByActor
@@ -4211,13 +4247,16 @@ func (x *Operation_Edit) GetRetombstoneSpans() []*RestoreSpan {
 }
 
 type Operation_Style struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	ParentCreatedAt     *TimeTicket            `protobuf:"bytes,1,opt,name=parent_created_at,json=parentCreatedAt,proto3" json:"parent_created_at,omitempty"`
-	From                *TextNodePos           `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
-	To                  *TextNodePos           `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
-	Attributes          map[string]string      `protobuf:"bytes,4,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	ExecutedAt          *TimeTicket            `protobuf:"bytes,5,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
-	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,6,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // deprecated
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ParentCreatedAt *TimeTicket            `protobuf:"bytes,1,opt,name=parent_created_at,json=parentCreatedAt,proto3" json:"parent_created_at,omitempty"`
+	From            *TextNodePos           `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To              *TextNodePos           `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	Attributes      map[string]string      `protobuf:"bytes,4,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ExecutedAt      *TimeTicket            `protobuf:"bytes,5,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
+	// Deprecated for the same reason as Edit.created_at_map_by_actor.
+	//
+	// Deprecated: Marked as deprecated in yorkie/v1/resources.proto.
+	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,6,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	AttributesToRemove  []string               `protobuf:"bytes,7,rep,name=attributes_to_remove,json=attributesToRemove,proto3" json:"attributes_to_remove,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
@@ -4288,6 +4327,7 @@ func (x *Operation_Style) GetExecutedAt() *TimeTicket {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in yorkie/v1/resources.proto.
 func (x *Operation_Style) GetCreatedAtMapByActor() map[string]*TimeTicket {
 	if x != nil {
 		return x.CreatedAtMapByActor
@@ -4371,11 +4411,14 @@ func (x *Operation_Increase) GetActor() string {
 }
 
 type Operation_TreeEdit struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	ParentCreatedAt     *TimeTicket            `protobuf:"bytes,1,opt,name=parent_created_at,json=parentCreatedAt,proto3" json:"parent_created_at,omitempty"`
-	From                *TreePos               `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
-	To                  *TreePos               `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
-	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,4,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // deprecated
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ParentCreatedAt *TimeTicket            `protobuf:"bytes,1,opt,name=parent_created_at,json=parentCreatedAt,proto3" json:"parent_created_at,omitempty"`
+	From            *TreePos               `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To              *TreePos               `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	// Deprecated for the same reason as Edit.created_at_map_by_actor.
+	//
+	// Deprecated: Marked as deprecated in yorkie/v1/resources.proto.
+	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,4,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Contents            []*TreeNodes           `protobuf:"bytes,5,rep,name=contents,proto3" json:"contents,omitempty"`
 	SplitLevel          int32                  `protobuf:"varint,7,opt,name=split_level,json=splitLevel,proto3" json:"split_level,omitempty"`
 	ExecutedAt          *TimeTicket            `protobuf:"bytes,6,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
@@ -4442,6 +4485,7 @@ func (x *Operation_TreeEdit) GetTo() *TreePos {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in yorkie/v1/resources.proto.
 func (x *Operation_TreeEdit) GetCreatedAtMapByActor() map[string]*TimeTicket {
 	if x != nil {
 		return x.CreatedAtMapByActor
@@ -4499,14 +4543,17 @@ func (x *Operation_TreeEdit) GetSplitTickets() []*TimeTicket {
 }
 
 type Operation_TreeStyle struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	ParentCreatedAt     *TimeTicket            `protobuf:"bytes,1,opt,name=parent_created_at,json=parentCreatedAt,proto3" json:"parent_created_at,omitempty"`
-	From                *TreePos               `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
-	To                  *TreePos               `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
-	Attributes          map[string]string      `protobuf:"bytes,4,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	ExecutedAt          *TimeTicket            `protobuf:"bytes,5,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
-	AttributesToRemove  []string               `protobuf:"bytes,6,rep,name=attributes_to_remove,json=attributesToRemove,proto3" json:"attributes_to_remove,omitempty"`
-	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,7,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // deprecated
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	ParentCreatedAt    *TimeTicket            `protobuf:"bytes,1,opt,name=parent_created_at,json=parentCreatedAt,proto3" json:"parent_created_at,omitempty"`
+	From               *TreePos               `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To                 *TreePos               `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	Attributes         map[string]string      `protobuf:"bytes,4,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ExecutedAt         *TimeTicket            `protobuf:"bytes,5,opt,name=executed_at,json=executedAt,proto3" json:"executed_at,omitempty"`
+	AttributesToRemove []string               `protobuf:"bytes,6,rep,name=attributes_to_remove,json=attributesToRemove,proto3" json:"attributes_to_remove,omitempty"`
+	// Deprecated for the same reason as Edit.created_at_map_by_actor.
+	//
+	// Deprecated: Marked as deprecated in yorkie/v1/resources.proto.
+	CreatedAtMapByActor map[string]*TimeTicket `protobuf:"bytes,7,rep,name=created_at_map_by_actor,json=createdAtMapByActor,proto3" json:"created_at_map_by_actor,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -4583,6 +4630,7 @@ func (x *Operation_TreeStyle) GetAttributesToRemove() []string {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in yorkie/v1/resources.proto.
 func (x *Operation_TreeStyle) GetCreatedAtMapByActor() map[string]*TimeTicket {
 	if x != nil {
 		return x.CreatedAtMapByActor
@@ -5300,7 +5348,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\tpresences\x18\x02 \x03(\v2\".yorkie.v1.Snapshot.PresencesEntryR\tpresences\x1aQ\n" +
 	"\x0ePresencesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12)\n" +
-	"\x05value\x18\x02 \x01(\v2\x13.yorkie.v1.PresenceR\x05value:\x028\x01\"\x8c\x03\n" +
+	"\x05value\x18\x02 \x01(\v2\x13.yorkie.v1.PresenceR\x05value:\x028\x01\"\x90\x03\n" +
 	"\n" +
 	"ChangePack\x12!\n" +
 	"\fdocument_key\x18\x01 \x01(\tR\vdocumentKey\x125\n" +
@@ -5308,8 +5356,8 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"checkpoint\x18\x02 \x01(\v2\x15.yorkie.v1.CheckpointR\n" +
 	"checkpoint\x12\x1a\n" +
 	"\bsnapshot\x18\x03 \x01(\fR\bsnapshot\x12+\n" +
-	"\achanges\x18\x04 \x03(\v2\x11.yorkie.v1.ChangeR\achanges\x12A\n" +
-	"\x11min_synced_ticket\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\x0fminSyncedTicket\x12\x1d\n" +
+	"\achanges\x18\x04 \x03(\v2\x11.yorkie.v1.ChangeR\achanges\x12E\n" +
+	"\x11min_synced_ticket\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketB\x02\x18\x01R\x0fminSyncedTicket\x12\x1d\n" +
 	"\n" +
 	"is_removed\x18\x06 \x01(\bR\tisRemoved\x12?\n" +
 	"\x0eversion_vector\x18\a \x01(\v2\x18.yorkie.v1.VersionVectorR\rversionVector\x12\x14\n" +
@@ -5334,7 +5382,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x06vector\x18\x01 \x03(\v2$.yorkie.v1.VersionVector.VectorEntryR\x06vector\x1a9\n" +
 	"\vVectorEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xda%\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xea%\n" +
 	"\tOperation\x12,\n" +
 	"\x03set\x18\x01 \x01(\v2\x18.yorkie.v1.Operation.SetH\x00R\x03set\x12,\n" +
 	"\x03add\x18\x02 \x01(\v2\x18.yorkie.v1.Operation.AddH\x00R\x03add\x12/\n" +
@@ -5374,12 +5422,12 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x126\n" +
 	"\vexecuted_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\n" +
-	"executedAt\x1a\xff\x05\n" +
+	"executedAt\x1a\x83\x06\n" +
 	"\x04Edit\x12A\n" +
 	"\x11parent_created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\x0fparentCreatedAt\x12*\n" +
 	"\x04from\x18\x02 \x01(\v2\x16.yorkie.v1.TextNodePosR\x04from\x12&\n" +
-	"\x02to\x18\x03 \x01(\v2\x16.yorkie.v1.TextNodePosR\x02to\x12h\n" +
-	"\x17created_at_map_by_actor\x18\x04 \x03(\v22.yorkie.v1.Operation.Edit.CreatedAtMapByActorEntryR\x13createdAtMapByActor\x12\x18\n" +
+	"\x02to\x18\x03 \x01(\v2\x16.yorkie.v1.TextNodePosR\x02to\x12l\n" +
+	"\x17created_at_map_by_actor\x18\x04 \x03(\v22.yorkie.v1.Operation.Edit.CreatedAtMapByActorEntryB\x02\x18\x01R\x13createdAtMapByActor\x12\x18\n" +
 	"\acontent\x18\x05 \x01(\tR\acontent\x126\n" +
 	"\vexecuted_at\x18\x06 \x01(\v2\x15.yorkie.v1.TimeTicketR\n" +
 	"executedAt\x12I\n" +
@@ -5395,7 +5443,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\x05value:\x028\x01\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a\xdd\x04\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a\xe1\x04\n" +
 	"\x05Style\x12A\n" +
 	"\x11parent_created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\x0fparentCreatedAt\x12*\n" +
 	"\x04from\x18\x02 \x01(\v2\x16.yorkie.v1.TextNodePosR\x04from\x12&\n" +
@@ -5404,8 +5452,8 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"attributes\x18\x04 \x03(\v2*.yorkie.v1.Operation.Style.AttributesEntryR\n" +
 	"attributes\x126\n" +
 	"\vexecuted_at\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\n" +
-	"executedAt\x12i\n" +
-	"\x17created_at_map_by_actor\x18\x06 \x03(\v23.yorkie.v1.Operation.Style.CreatedAtMapByActorEntryR\x13createdAtMapByActor\x120\n" +
+	"executedAt\x12m\n" +
+	"\x17created_at_map_by_actor\x18\x06 \x03(\v23.yorkie.v1.Operation.Style.CreatedAtMapByActorEntryB\x02\x18\x01R\x13createdAtMapByActor\x120\n" +
 	"\x14attributes_to_remove\x18\a \x03(\tR\x12attributesToRemove\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -5418,12 +5466,12 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x1c.yorkie.v1.JSONElementSimpleR\x05value\x126\n" +
 	"\vexecuted_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\n" +
 	"executedAt\x12\x14\n" +
-	"\x05actor\x18\x04 \x01(\tR\x05actor\x1a\xf2\x05\n" +
+	"\x05actor\x18\x04 \x01(\tR\x05actor\x1a\xf6\x05\n" +
 	"\bTreeEdit\x12A\n" +
 	"\x11parent_created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\x0fparentCreatedAt\x12&\n" +
 	"\x04from\x18\x02 \x01(\v2\x12.yorkie.v1.TreePosR\x04from\x12\"\n" +
-	"\x02to\x18\x03 \x01(\v2\x12.yorkie.v1.TreePosR\x02to\x12l\n" +
-	"\x17created_at_map_by_actor\x18\x04 \x03(\v26.yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntryR\x13createdAtMapByActor\x120\n" +
+	"\x02to\x18\x03 \x01(\v2\x12.yorkie.v1.TreePosR\x02to\x12p\n" +
+	"\x17created_at_map_by_actor\x18\x04 \x03(\v26.yorkie.v1.Operation.TreeEdit.CreatedAtMapByActorEntryB\x02\x18\x01R\x13createdAtMapByActor\x120\n" +
 	"\bcontents\x18\x05 \x03(\v2\x14.yorkie.v1.TreeNodesR\bcontents\x12\x1f\n" +
 	"\vsplit_level\x18\a \x01(\x05R\n" +
 	"splitLevel\x126\n" +
@@ -5436,7 +5484,7 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\rsplit_tickets\x18\v \x03(\v2\x15.yorkie.v1.TimeTicketR\fsplitTickets\x1a]\n" +
 	"\x18CreatedAtMapByActorEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12+\n" +
-	"\x05value\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\x05value:\x028\x01\x1a\xe1\x04\n" +
+	"\x05value\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\x05value:\x028\x01\x1a\xe5\x04\n" +
 	"\tTreeStyle\x12A\n" +
 	"\x11parent_created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\x0fparentCreatedAt\x12&\n" +
 	"\x04from\x18\x02 \x01(\v2\x12.yorkie.v1.TreePosR\x04from\x12\"\n" +
@@ -5446,8 +5494,8 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"attributes\x126\n" +
 	"\vexecuted_at\x18\x05 \x01(\v2\x15.yorkie.v1.TimeTicketR\n" +
 	"executedAt\x120\n" +
-	"\x14attributes_to_remove\x18\x06 \x03(\tR\x12attributesToRemove\x12m\n" +
-	"\x17created_at_map_by_actor\x18\a \x03(\v27.yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntryR\x13createdAtMapByActor\x1a=\n" +
+	"\x14attributes_to_remove\x18\x06 \x03(\tR\x12attributesToRemove\x12q\n" +
+	"\x17created_at_map_by_actor\x18\a \x03(\v27.yorkie.v1.Operation.TreeStyle.CreatedAtMapByActorEntryB\x02\x18\x01R\x13createdAtMapByActor\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a]\n" +
@@ -5462,13 +5510,13 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\vexecuted_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\n" +
 	"executedAt\x129\n" +
 	"\frestore_mode\x18\x05 \x01(\x0e2\x16.yorkie.v1.RestoreModeR\vrestoreModeB\x06\n" +
-	"\x04body\"\xf1\x01\n" +
+	"\x04body\"\xf9\x01\n" +
 	"\x11JSONElementSimple\x124\n" +
 	"\n" +
-	"created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x120\n" +
-	"\bmoved_at\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketR\amovedAt\x124\n" +
+	"created_at\x18\x01 \x01(\v2\x15.yorkie.v1.TimeTicketR\tcreatedAt\x124\n" +
+	"\bmoved_at\x18\x02 \x01(\v2\x15.yorkie.v1.TimeTicketB\x02\x18\x01R\amovedAt\x128\n" +
 	"\n" +
-	"removed_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\tremovedAt\x12(\n" +
+	"removed_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketB\x02\x18\x01R\tremovedAt\x12(\n" +
 	"\x04type\x18\x04 \x01(\x0e2\x14.yorkie.v1.ValueTypeR\x04type\x12\x14\n" +
 	"\x05value\x18\x05 \x01(\fR\x05value\"\xdc\x10\n" +
 	"\vJSONElement\x12D\n" +
@@ -5542,9 +5590,9 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x04body\"M\n" +
 	"\aRHTNode\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\aelement\x18\x02 \x01(\v2\x16.yorkie.v1.JSONElementR\aelement\"\xb4\x02\n" +
-	"\aRGANode\x12&\n" +
-	"\x04next\x18\x01 \x01(\v2\x12.yorkie.v1.RGANodeR\x04next\x120\n" +
+	"\aelement\x18\x02 \x01(\v2\x16.yorkie.v1.JSONElementR\aelement\"\xb8\x02\n" +
+	"\aRGANode\x12*\n" +
+	"\x04next\x18\x01 \x01(\v2\x12.yorkie.v1.RGANodeB\x02\x18\x01R\x04next\x120\n" +
 	"\aelement\x18\x02 \x01(\v2\x16.yorkie.v1.JSONElementR\aelement\x12E\n" +
 	"\x13position_created_at\x18\x03 \x01(\v2\x15.yorkie.v1.TimeTicketR\x11positionCreatedAt\x12A\n" +
 	"\x11position_moved_at\x18\x04 \x01(\v2\x15.yorkie.v1.TimeTicketR\x0fpositionMovedAt\x12E\n" +

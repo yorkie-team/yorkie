@@ -610,12 +610,15 @@ func (d *InternalDocument) ReconcilePresence(
 	hasPresence := d.presences.Has(clientID)
 	_, isOnline := d.onlineClients[clientID]
 
+	// The presences carried by an event are decoded, as the ones returned by
+	// Document's accessors are: an event is read by the application, not put
+	// back on the wire. See presence.EncodeValue for the contract.
 	if !hasPresence || !isOnline {
 		if hadPresence && wasOnline {
 			return &DocEvent{
 				Type: UnwatchedEvent,
 				Presences: map[string]presence.Data{
-					clientID: prevPresence,
+					clientID: presence.DecodeData(prevPresence),
 				},
 			}
 		}
@@ -626,7 +629,7 @@ func (d *InternalDocument) ReconcilePresence(
 		return &DocEvent{
 			Type: WatchedEvent,
 			Presences: map[string]presence.Data{
-				clientID: d.Presence(clientID),
+				clientID: presence.DecodeData(d.Presence(clientID)),
 			},
 		}
 	}
@@ -634,7 +637,7 @@ func (d *InternalDocument) ReconcilePresence(
 	return &DocEvent{
 		Type: PresenceChangedEvent,
 		Presences: map[string]presence.Data{
-			clientID: d.Presence(clientID),
+			clientID: presence.DecodeData(d.Presence(clientID)),
 		},
 	}
 }

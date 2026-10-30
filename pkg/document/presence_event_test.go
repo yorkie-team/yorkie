@@ -133,3 +133,84 @@ func TestPresenceEventSinglePath(t *testing.T) {
 		assert.Equal(t, document.UnwatchedEvent, e.Type)
 	})
 }
+
+// clearChange builds a presence-clear change the way the server's
+// DetachDocument does on a client's behalf.
+func clearChange(clientSeq uint32, actorID time.ActorID) *change.Change {
+	ctx := change.NewContext(
+		change.NewID(clientSeq, 0, time.InitialLamport, actorID, nil),
+		"",
+		nil,
+	)
+	presence.New(ctx, presence.NewData()).Clear()
+	return ctx.ToChange()
+}
+
+// TestRedundantPresenceClear pins the premise of the server-side detach
+// (yorkie#2290): the server cannot tell which of a client's two identities it
+// stamped, so it writes one clear per identity, and the one stamped with the
+// identity that holds no presence must delete nothing and publish no event.
+// The session-ID clear goes first; it is the redundant one for a JS SDK
+// client, the stable-actor clear is for a Go SDK client.
+func TestRedundantPresenceClear(t *testing.T) {
+	otherActor, err := time.ActorIDFromHex("000000000000000000000003")
+	assert.NoError(t, err)
+
+	for _, tc := range []struct {
+		name           string
+		redundantFirst bool
+	}{
+		{"redundant clear first", true},
+		{"redundant clear second", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			observerActor, err := time.ActorIDFromHex("000000000000000000000001")
+			assert.NoError(t, err)
+			peerActor, err := time.ActorIDFromHex("000000000000000000000002")
+			assert.NoError(t, err)
+
+			observer := document.New("redundant-clear")
+			observer.SetActor(observerActor)
+			peer := document.New("redundant-clear")
+			peer.SetActor(peerActor)
+			assert.NoError(t, peer.Update(func(root *json.Object, p *presence.Presence) error {
+				p.Set("name", "peer")
+				return nil
+			}))
+
+			// 01. The peer is watched with its presence.
+			assert.NoError(t, observer.ApplyChangePack(presencePack(t, peer, observer)))
+			observer.AddOnlineClientAndReconcile(peerActor.String())
+			assert.Equal(t, document.WatchedEvent, receiveEvent(t, observer).Type)
+
+			// 02. The server detaches the peer: one clear per identity.
+			changes := []*change.Change{clearChange(1, peerActor), clearChange(2, otherActor)}
+			if tc.redundantFirst {
+				changes = []*change.Change{clearChange(1, otherActor), clearChange(2, peerActor)}
+			}
+			vv := time.NewVersionVector()
+			vv.Set(observerActor, observer.VersionVector().VersionOf(observerActor))
+			pack := change.NewPack(observer.Key(), change.InitialCheckpoint, changes, vv, nil)
+
+			// The event channel has capacity one, so a second event would
+			// block ApplyChangePack; run it aside to fail instead of hang.
+			done := make(chan error, 1)
+			go func() { done <- observer.ApplyChangePack(pack) }()
+
+			// 03. Exactly one unwatched event, for the peer's own identity.
+			e := receiveEvent(t, observer)
+			assert.Equal(t, document.UnwatchedEvent, e.Type)
+			assert.Contains(t, e.Presences, peerActor.String())
+			select {
+			case err := <-done:
+				assert.NoError(t, err)
+			case <-gotime.After(gotime.Second):
+				t.Fatal("the redundant clear published a second event")
+			}
+			assertNoEvent(t, observer)
+
+			assert.NotContains(t, observer.AllPresences(), peerActor.String())
+			assert.NotContains(t, observer.AllPresences(), otherActor.String())
+		})
+	}
+}

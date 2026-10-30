@@ -40,10 +40,11 @@ const (
 	// into a full put before storing it, so a client may send only the
 	// presence keys that changed. A server without it does not reject a patch
 	// but stores it with an empty change type and serves it back as
-	// CHANGE_TYPE_UNSPECIFIED, which readers fail to decode. So servers must
-	// be upgraded first, and a client that gets a pack without this capability
-	// must stop patching and resend its full presence. See
-	// docs/design/presence-patch.md.
+	// CHANGE_TYPE_UNSPECIFIED. The JS SDK throws on that value and stops its
+	// sync loop; this side decodes it as an empty change, which wipes the
+	// sender's presence instead. So servers must be upgraded first, and a
+	// client that gets a pack without this capability must stop patching and
+	// resend its full presence. See docs/design/presence-patch.md.
 	CapPresencePatch = "presence-patch"
 
 	// CapRestoreRemovedBy means the server keeps RestoreSpan.removed_by when

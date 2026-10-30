@@ -1,0 +1,33 @@
+{
+  "v": 2,
+  "id": "oracle-local-enter-twice-same-place",
+  "issues": ["yorkie#2187"],
+  "status": { "go": "known-fail", "js": "known-fail" },
+  "note": "One replica, no concurrency. Enter after 'ab' twice (level-2 splits at the end of the 'ab' span). The middle paragraph should hold an empty span; it comes out as an empty <p></p> and the empty span lands in front of 'cd' instead. Same placement as oracle-local-split-end-of-span-after-enter.",
+  "replicas": 1,
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p",
+        "children": [{ "type": "span", "children": [{ "type": "text", "value": "abcd" }] }]
+      }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "edit", "from": 4, "to": 4, "split": 2 },
+    {
+      "op": "expect",
+      "label": "after first enter",
+      "xml": ["<doc><p><span>ab</span></p><p><span>cd</span></p></doc>"]
+    },
+    { "r": 0, "op": "edit", "from": 4, "to": 4, "split": 2 },
+    {
+      "op": "expect",
+      "label": "after second enter",
+      "xml": [
+        "<doc><p><span>ab</span></p><p><span></span></p><p><span>cd</span></p></doc>"
+      ]
+    }
+  ]
+}
