@@ -326,9 +326,13 @@ the ledger is materialized only when a second deletion or a cancel needs it.
   answers `isRemovedInView` and `uncancelledRemovalBy` differently from every
   replica holding the full ledger, so dropping the ledger buys a document
   that loads and then diverges. The same decoder reads the element payload of
-  a client-pushed `Set`/`Add`/`ArraySet`, so the event count is bounded
-  (`maxTextRemovalEvents`) and every walk of a ledger is linear in its
-  length, not quadratic -- the length is whatever the sender wrote.
+  a client-pushed `Set`/`Add`/`ArraySet`, where the length is whatever the
+  sender wrote, so every walk of a ledger is linear in its length, not
+  quadratic, and such a payload is refused past `maxTextRemovalEvents` per
+  node. A snapshot has no such bound: one replica that deletes and undoes the
+  same character while a peer lags behind GC grows a ledger past any fixed
+  count, and a snapshot the server cannot read back leaves the document
+  unloadable.
 - GC also shrinks ledgers. A removal whose cancel every replica knows is
   dropped with that cancel: any change that arrives later knows both, so the
   pair never decides anything again. Without this, a text revived by undo

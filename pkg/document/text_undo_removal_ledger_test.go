@@ -135,6 +135,23 @@ func ledgerText(t *testing.T, doc *document.Document) string {
 	return textOf(t, doc, "t").String()
 }
 
+// ledgerChurn deletes the character at 1 and undoes it n times on doc alone,
+// so no peer sees the pairs and GC can prune none of them. It returns the
+// most removal events any node of the Text under "t" then carries.
+func ledgerChurn(t *testing.T, doc *document.Document, n int) int {
+	t.Helper()
+
+	for range n {
+		ledgerEdit(t, doc, 1, 2, "")
+		require.NoError(t, doc.Undo())
+	}
+	events := 0
+	for _, node := range textOf(t, doc, "t").Nodes() {
+		events = max(events, len(node.RemovalEvents()))
+	}
+	return events
+}
+
 // ledgerTombstones counts the removed nodes still in the Text under "t".
 func ledgerTombstones(t *testing.T, doc *document.Document) int {
 	t.Helper()
@@ -488,34 +505,44 @@ func TestTextUndoRemovalLedger(t *testing.T) {
 		assert.ErrorContains(t, err, "removal_events")
 	})
 
-	t.Run("refuses a text node carrying too many removal events", func(t *testing.T) {
+	t.Run("reads back a snapshot whose ledger it grew itself", func(t *testing.T) {
 		a, _ := ledgerReplicas(t, "abc")
-		ledgerEdit(t, a, 1, 2, "")
+
+		// A server holding this document writes the ledger into every
+		// snapshot it builds, and has to be able to load that snapshot again.
+		require.Greater(t, ledgerChurn(t, a, 1<<11+8), 1<<12)
+		b := ledgerFromSnapshot(t, a)
+		assert.Equal(t, "abc", ledgerText(t, b))
+	})
+
+	t.Run("refuses a pushed element carrying too many removal events", func(t *testing.T) {
+		a, _ := ledgerReplicas(t, "abc")
+		require.Greater(t, ledgerChurn(t, a, 1<<11+8), 1<<12)
 		bytes, err := converter.SnapshotToBytes(a.RootObject(), nil)
 		require.NoError(t, err)
 
-		// The same decoder reads a client-pushed element payload, so the
-		// event count is the sender's to choose: it has to be bounded.
+		// A client-pushed element payload is decoded with the same code as a
+		// snapshot, so its event count is the sender's to choose: it has to
+		// be bounded there, even for a ledger that follows the rules.
 		pbSnapshot := &api.Snapshot{}
 		require.NoError(t, proto.Unmarshal(bytes, pbSnapshot))
-		stuffed := false
-		for _, node := range pbSnapshot.Root.GetJsonObject().Nodes[0].Element.GetText().Nodes {
-			if node.RemovedAt == nil {
-				continue
-			}
-			for i := range 1 << 13 {
-				node.RemovalEvents = append(node.RemovalEvents, &api.TimeTicket{
-					Lamport: int64(i) + 1, ActorId: node.RemovedAt.ActorId,
-				})
-			}
-			stuffed = true
-		}
-		require.True(t, stuffed)
-		bytes, err = proto.Marshal(pbSnapshot)
+		payload, err := proto.Marshal(pbSnapshot.Root)
 		require.NoError(t, err)
 
-		_, _, err = converter.BytesToSnapshot(bytes)
-		assert.ErrorContains(t, err, "removal events")
+		ticket := converter.ToTimeTicket(time.InitialTicket)
+		_, err = converter.FromOperations([]*api.Operation{{
+			Body: &api.Operation_Set_{Set: &api.Operation_Set{
+				ParentCreatedAt: ticket,
+				Key:             "pushed",
+				Value: &api.JSONElementSimple{
+					Type:      api.ValueType_VALUE_TYPE_JSON_OBJECT,
+					CreatedAt: pbSnapshot.Root.GetJsonObject().CreatedAt,
+					Value:     payload,
+				},
+				ExecutedAt: ticket,
+			}},
+		}})
+		assert.ErrorContains(t, err, "removal events on a text node exceeds")
 	})
 
 	t.Run("drops cancelled removals every replica knows", func(t *testing.T) {
