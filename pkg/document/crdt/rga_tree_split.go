@@ -673,29 +673,6 @@ func (s *RGATreeSplitNode[V]) toTestString() string {
 	return fmt.Sprintf("%s %s", s.id.ToTestString(), s.value.toTestString())
 }
 
-// Remove removes this node if it created before the time of deletion are
-// deleted. It only marks the deleted time (tombstone).
-func (s *RGATreeSplitNode[V]) Remove(removedAt *time.Ticket, creationKnown bool, tombstoneKnown bool) bool {
-	// NOTE(hackerwins): Skip if the node's creation was not visible to this
-	// operation.
-	if !creationKnown {
-		return false
-	}
-
-	if s.removedAt == nil {
-		s.recordRemoval(removedAt)
-		return true
-	}
-
-	// NOTE(hackerwins): Overwrite only if prior tombstone was not known
-	// (concurrent or unseen) and newer. The ledger keeps the latest
-	// uncancelled deletion as removedAt, which is this rule.
-	if !tombstoneKnown && removedAt.After(s.removedAt) {
-		s.recordRemoval(removedAt)
-	}
-	return false
-}
-
 // canStyle checks if node is able to set style.
 //
 // The only question is whether the styling change knew this node existed. It
