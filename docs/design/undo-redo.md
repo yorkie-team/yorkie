@@ -378,6 +378,34 @@ registration and subtracted once at purge, while `recordRemoval` and
 `pruneStable` change a registered node's ledger in between, so charging it
 there would leave `docSize.GC` short or over by the difference.
 
+The held tombstone is a regression against `main`, which collects it, and
+is accepted here: it costs memory per overlapping deletion, where the ledger
+fixes text that diverges. Three ways to release it were tried and none
+does without a new signal:
+
+- Purging the content but keeping the node and its ledger converges and
+  needs no operation change, since a restore span carries the content. It
+  frees only the content bytes; the node, its ledger and `GarbageLen` stay,
+  and a snapshot needs a field for a node without content.
+- Refusing to cancel a removal every replica knows depends on each
+  replica's own GC vector, so replicas disagree on whether an undo did
+  anything. Making it deterministic needs the vector the undoer had seen on
+  the wire, and then undoing a deletion stops working a few syncs later.
+- Treating a detached actor's removals as final fails because detaching is
+  not final: an actor comes back under the same ID with its undo stack, and
+  an undo made offline is pushed after the detach.
+
+Releasing it needs a signal every replica receives in order with the
+changes, saying that a removal can no longer be undone.
+
+A run recreated after GC takes its attributes from the restore span, which
+is a snapshot from when the deletion ran. A style that reached the run
+concurrently with that deletion is missing from the span, so the replica
+that recreates the run revives it unstyled while one that held the
+tombstone keeps the style. `main` has the same gap with the undos in the
+other order; the ledger changes when a tombstone is collected, not how a
+run is recreated.
+
 ### Tree.Edit Undo/Redo
 
 Tree uses a CRDT tree structure (`CRDTTree`) with identity-based positions
