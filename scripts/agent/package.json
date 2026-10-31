@@ -9,11 +9,11 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.217",
-    "zod": "4.4.3"
+    "zod": "4.6.7"
   },
   "comment": "This project has its own npm lockfile and is the only Node package in the repository; nothing in the Go build reaches it. See docs/design/agent-command-verbs.md. Transitive security pins are duplicated here on purpose.",
   "overrides": {
-    "fast-uri": "^3.1.6",
-    "qs": "^6.16.0"
+    "fast-uri": "^3.1.9",
+    "qs": "^6.16.1"
   }
 }
