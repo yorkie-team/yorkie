@@ -16,8 +16,9 @@
 
 // This harness drives Text undo and redo against concurrent deletions over
 // the push/pull model of adv_sync_test.go, every change through protobuf.
-// Every test pass runs it with undoFuzzSeeds seeds per setting; the rgafuzz
-// tag raises that to 1000:
+// Every test pass runs the required settings with a few seeds each, which CI
+// can afford next to the rest of this package; the rgafuzz tag runs every
+// setting with 1000:
 //
 //	go test -tags rgafuzz ./pkg/document/ -run TestTextUndoFuzz -v
 //
@@ -205,8 +206,12 @@ func TestTextUndoFuzzRegressions(t *testing.T) {
 	}
 }
 
-// undoFuzzSeeds is how many seeds TestTextUndoFuzz runs per setting.
-var undoFuzzSeeds = 100
+// undoFuzzSeeds is how many seeds TestTextUndoFuzz runs per setting, and
+// undoFuzzFull whether it also runs the settings that are only reported.
+var (
+	undoFuzzSeeds = 10
+	undoFuzzFull  = false
+)
 
 func TestTextUndoFuzz(t *testing.T) {
 	seeds := undoFuzzSeeds
@@ -222,6 +227,9 @@ func TestTextUndoFuzz(t *testing.T) {
 		{gc: true, insertPct: 0, clients: 3, required: true},
 		{gc: true, insertPct: 100, clients: 3, required: false},
 	} {
+		if !tc.required && !undoFuzzFull {
+			continue
+		}
 		name := fmt.Sprintf("gc=%v insert=%d%% clients=%d", tc.gc, tc.insertPct, tc.clients)
 		t.Run(name, func(t *testing.T) {
 			failed := 0

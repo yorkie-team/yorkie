@@ -21,4 +21,5 @@ package document_test
 // The rgafuzz tag runs the full sweep of text_undo_fuzz_test.go.
 func init() {
 	undoFuzzSeeds = 1000
+	undoFuzzFull = true
 }
