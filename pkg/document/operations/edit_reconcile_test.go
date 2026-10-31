@@ -263,3 +263,25 @@ func TestEditEmptyUndoRunsAnywhere(t *testing.T) {
 	assert.True(t, ok)
 	assert.Zero(t, reverse.From().RelativeOffset())
 }
+
+// TestEditIdentityOpRefusesUnseenClock pins the causality bound on an
+// identity op's own ticket: its actor picks the removal an undo cancels and
+// its lamport how long GC holds the ledger, so a change may not act under a
+// clock its version vector has not reached.
+func TestEditIdentityOpRefusesUnseenClock(t *testing.T) {
+	actor := time.InitialActorID
+	root, text := newReconcileTestRoot(t, &actor)
+	head := crdt.NewRGATreeSplitNodePos(crdt.InitialTextNode().ID(), 0)
+	undo := func(lamport int64) *Edit {
+		return NewRestoreEdit(text.CreatedAt(), head, head,
+			time.NewTicket(lamport, 0, actor), nil, crdt.RestoreModeRestore, nil)
+	}
+	vector := time.NewVersionVector()
+	vector.Set(actor, 5)
+
+	_, err := undo(10).Execute(root, OpSourceRemote, vector)
+	assert.ErrorIs(t, err, ErrUnknownRestoreIdentity)
+
+	_, err = undo(5).Execute(root, OpSourceRemote, vector)
+	assert.NoError(t, err)
+}
