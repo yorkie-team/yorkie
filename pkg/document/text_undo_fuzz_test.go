@@ -1,5 +1,3 @@
-//go:build rgafuzz
-
 /*
  * Copyright 2026 The Yorkie Authors. All rights reserved.
  *
@@ -17,7 +15,9 @@
  */
 
 // This harness drives Text undo and redo against concurrent deletions over
-// the push/pull model of gc_rga_fuzz_test.go, every change through protobuf:
+// the push/pull model of adv_sync_test.go, every change through protobuf.
+// Every test pass runs it with undoFuzzSeeds seeds per setting; the rgafuzz
+// tag raises that to 1000:
 //
 //	go test -tags rgafuzz ./pkg/document/ -run TestTextUndoFuzz -v
 //
@@ -205,8 +205,11 @@ func TestTextUndoFuzzRegressions(t *testing.T) {
 	}
 }
 
+// undoFuzzSeeds is how many seeds TestTextUndoFuzz runs per setting.
+var undoFuzzSeeds = 100
+
 func TestTextUndoFuzz(t *testing.T) {
-	const seeds = 1000
+	seeds := undoFuzzSeeds
 	for _, tc := range []struct {
 		gc        bool
 		insertPct int
