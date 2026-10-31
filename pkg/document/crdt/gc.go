@@ -91,3 +91,29 @@ type GCBarrier[C any] interface {
 	// and unlinking it cannot move anything.
 	PurgeBarrierAt(child C) *time.Ticket
 }
+
+// GCHold is an optional capability of a GC child that has to outlive the
+// point where removedAt alone would release it.
+//
+// A Text node keeps a removal ledger: the deletions that removed it and the
+// undos that cancelled some of them. Once purged, the ledger is gone, so the
+// node may go only when a restore that later finds it missing can answer as
+// the ledger would. Until then Root.GarbageCollect skips it without counting
+// it as deferred: unlike a barrier, holding it back frees nothing else, and
+// a node held by two deletions nobody undoes stays registered, and counted by
+// GarbageLen, for good.
+type GCHold interface {
+	// HeldFromPurge reports whether the child must stay under the given
+	// vector, the versions every replica has seen.
+	HeldFromPurge(vector time.VersionVector) bool
+}
+
+// LedgerHolder is an element whose nodes keep removal ledgers that a vector
+// every replica has seen can shrink (Text). Root.GarbageCollect prunes each
+// registered holder before collecting, and drops it once nothing is left to
+// prune.
+type LedgerHolder interface {
+	Element
+	HasCancelledRemovals() bool
+	PruneLedgers(vector time.VersionVector) int
+}

@@ -64,11 +64,12 @@ func TestHistoryStack(t *testing.T) {
 		assert.True(t, doc.CanRedo())
 	})
 
-	t.Run("undoing a no-op edit queues no change test", func(t *testing.T) {
-		// The reverse of a no-op edit is itself a no-op, so undoing it
-		// changes nothing any peer could observe. JS returns early before
-		// localChanges.push (document.ts:2145); Go must not spend a clientSeq
-		// and a change-log row on it either.
+	t.Run("undoing a no-op edit queues its change test", func(t *testing.T) {
+		// The reverse of a no-op edit is itself a no-op, but it ran, and a
+		// change that ran is queued whether or not it showed anything, as in
+		// JS (document.ts, since yorkie-js-sdk#1368). Telling "showed nothing"
+		// from "changed nothing" would drop an undo that only cancels its own
+		// removal of text another client's deletion still holds.
 		doc := document.New("d1")
 		assert.NoError(t, doc.Update(func(root *json.Object, p *presence.Presence) error {
 			root.SetNewText("t")
@@ -82,7 +83,7 @@ func TestHistoryStack(t *testing.T) {
 		before := len(doc.CreateChangePack().Changes)
 		assert.True(t, doc.CanUndo())
 		assert.NoError(t, doc.Undo())
-		assert.Equal(t, before, len(doc.CreateChangePack().Changes))
+		assert.Equal(t, before+1, len(doc.CreateChangePack().Changes))
 	})
 
 	t.Run("undo inside an updater is refused test", func(t *testing.T) {

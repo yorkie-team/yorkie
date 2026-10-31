@@ -79,6 +79,27 @@ func checkFloor(t *testing.T, tree *llrb.Tree[*intKey, *intValue], arr []*intKey
 	}
 }
 
+func checkCeiling(t *testing.T, tree *llrb.Tree[*intKey, *intValue], arr []*intKey, loop int) {
+	for ceilingKey := range loop {
+		Key := newIntKey(ceilingKey)
+		var expectedKey *intKey
+		for _, v := range arr {
+			if v.key >= Key.key {
+				if expectedKey == nil || expectedKey.key >= v.key {
+					expectedKey = v
+				}
+			}
+		}
+		resultKey, _ := tree.Ceiling(Key)
+
+		if expectedKey == nil {
+			assert.Nil(t, resultKey)
+		} else {
+			assert.Equal(t, expectedKey.key, resultKey.key)
+		}
+	}
+}
+
 func TestTree(t *testing.T) {
 	arrays := [][]int{
 		{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
@@ -117,6 +138,19 @@ func TestTree(t *testing.T) {
 				tree.Put(newIntKey(value), newIntValue(value))
 				testArr = append(testArr, newIntKey(value))
 				checkFloor(t, tree, testArr, 10)
+			}
+		}
+	})
+
+	t.Run("ceiling test", func(t *testing.T) {
+		for _, array := range arrays {
+			testArr := []*intKey{}
+			tree := llrb.NewTree[*intKey, *intValue]()
+			for _, value := range array {
+				checkCeiling(t, tree, testArr, 10)
+				tree.Put(newIntKey(value), newIntValue(value))
+				testArr = append(testArr, newIntKey(value))
+				checkCeiling(t, tree, testArr, 10)
 			}
 		}
 	})

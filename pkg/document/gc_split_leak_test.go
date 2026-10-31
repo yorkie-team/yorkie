@@ -159,10 +159,13 @@ func TestTextTombstoneSplitGC(t *testing.T) {
 		purged2 := d2.GarbageCollect(helper.MaxVersionVector(a1, a2))
 		assert.Equal(t, purged1, purged2, "asymmetric purge: d1=%d d2=%d", purged1, purged2)
 
-		assert.Equal(t, 0, d1.GarbageLen())
-		assert.Equal(t, 0, d2.GarbageLen())
+		// `cd` is removed by both deletions, so it stays until an undo
+		// leaves one of them (see RGATreeSplitNode.HeldFromPurge); every
+		// other piece, including the born-dead split remainder, is purged.
+		assert.Equal(t, 1, d1.GarbageLen())
+		assert.Equal(t, 1, d2.GarbageLen())
 
 		assert.Equal(t, d1.DocSize(), d2.DocSize())
-		assert.Equal(t, resource.DataSize{}, d1.DocSize().GC)
+		assert.Equal(t, resource.DataSize{Data: 4, Meta: 48}, d1.DocSize().GC)
 	})
 }

@@ -1371,10 +1371,53 @@ func sanitizeElement[T crdt.Element](elem T, err error) (crdt.Element, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := checkRemovalEvents(elem); err != nil {
+		return nil, err
+	}
 
 	crdt.DropSplitLinksInElement(elem)
 
 	return elem, nil
+}
+
+// maxTextRemovalEvents bounds how many removal events one text node may carry
+// in an element payload a client pushes. A piece's ledger holds a removal and
+// its cancel per actor concurrently editing it, and GC prunes the pairs every
+// replica knows, so a payload that reaches this was written to be refused.
+//
+// Only operation payloads are bounded. A snapshot is decoded without one: its
+// ledgers are the ones its writer's rules grew, which can pass this while a
+// peer lags behind GC, and a snapshot the server cannot read back makes the
+// document unloadable.
+const maxTextRemovalEvents = 1 << 12
+
+// checkRemovalEvents refuses an element payload holding a text node whose
+// removal ledger exceeds maxTextRemovalEvents.
+func checkRemovalEvents(elem crdt.Element) error {
+	switch e := elem.(type) {
+	case *crdt.Text:
+		for _, node := range e.Nodes() {
+			if n := len(node.RemovalEvents()); n > maxTextRemovalEvents {
+				return fmt.Errorf(
+					"%d removal events on a text node exceeds %d: %w",
+					n, maxTextRemovalEvents, ErrUnsupportedElement,
+				)
+			}
+		}
+	case *crdt.Object:
+		for _, node := range e.RHTNodes() {
+			if err := checkRemovalEvents(node.Element()); err != nil {
+				return err
+			}
+		}
+	case *crdt.Array:
+		for _, node := range e.AllRGANodes() {
+			if err := checkRemovalEvents(node.Element()); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // fromElement decodes the element an operation carries as its payload.

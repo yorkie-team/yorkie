@@ -30,6 +30,7 @@ SDK is covered by [undo-redo-go-port.md](undo-redo-go-port.md).
 
 - Server-side undo/redo or global history browsing.
 - Undo/redo for `TreeStyleOperation` with multi-client reconciliation (single-client undo/redo is now supported via PR #1221).
+- Convergence between replicas that run different Text removal-ledger rules. The ledger lands in this repository and in yorkie-js-sdk on the same release train (yorkie#2310, yorkie-js-sdk#1494), so a Go change without its JS counterpart in the same pull request is expected, and there is no capability negotiation for a mixed-version document. An older SDK keeps disagreeing with an upgraded one whenever an undo meets a concurrent deletion, as it does without the ledger; see "Removal Ledger" for the server-first upgrade order.
 
 > **Resolved, 2026-08-09 (`fa6cc513`):** this document originally listed
 > "overlapping range reconciliation for Tree (Cases 3–6)" as a non-goal
@@ -268,6 +269,142 @@ Case 5 (overlap_start): [---remote---]         → adjust start
 Case 6 (overlap_end):       [---remote---]     → adjust end
                         [---undo---]
 ```
+
+#### Removal Ledger
+
+An identity-preserving restore used to clear a node's tombstone outright.
+Two things went wrong once a concurrent deletion was involved:
+
+- The undo revived text a deletion it never saw had removed. From
+  `abcdefgh`, B deletes `d` and undoes it while A deletes `defgh`; A ended
+  with `abcd` and B with `abc`, depending on delivery order.
+- A remote deletion removed every node whose creation it knew, including a
+  node the deleter saw removed and an undo revived on this replica
+  (#2237: d1 `efh`, d2 `eh`).
+
+Each `RGATreeSplitNode` keeps a removal ledger: the deletions that removed it
+while it was live in the deleter's view (`dels`), and the undos that cancelled
+some of them (`cancels`, deletion and cancel ticket). `removedAt` is the
+latest uncancelled deletion, so a node no undo touched looks as before, and
+the ledger is materialized only when a second deletion or a cancel needs it.
+
+- A restore cancels one deletion: the uncancelled one by the actor that runs
+  the undo. An undo reverses its own actor's change, and an actor removes a
+  piece only while it is live in its view, so a piece holds at most one
+  uncancelled deletion by that actor, and the restore needs no field to name
+  it. The node stays removed while another deletion holds it. A redo records
+  a new deletion by the same actor, so the next undo cancels the redo rather
+  than the original.
+- A remote deletion removes a node only if it was live in the deleter's view:
+  its creation is known and every deletion known to the deleter was cancelled
+  by an undo known to it. A node it saw live but someone else removed records
+  the deletion anyway, so a later undo of the other deletion keeps it removed
+  in every order. A redo (`Retombstone`) applies the same rule with the
+  change's version vector.
+- A redo, and the undo of an insertion, return a reverse that names only the
+  pieces they actually recorded a removal on. A restore therefore never
+  reaches a piece that holds no removal by its actor, so a replica that
+  purged the piece can answer it without the piece's ledger.
+- GC keeps a tombstone whose ledger still matters: one held by two or more
+  uncancelled deletions, or one whose deletions and cancels are not all known
+  to every replica (`HeldFromPurge`). Once that ledger is stable, every change
+  that arrives later already knew it, and the one remaining deletion is the
+  only one a restore can cancel; a restore that finds the piece gone
+  recreates it, which is what the ledger would have said. Nothing is kept for a purged
+  piece.
+- Snapshots carry the ledger beyond `removed_at` in one field,
+  `TextNode.removal_events`: every deletion and every cancel ticket except
+  `removed_at` itself. For each actor these alternate in ticket order -- a
+  deletion, then the cancel of it -- for the reason above, so the reader
+  tells them apart by place. A node whose `removed_at` says it all writes
+  nothing: a text whose characters were each removed by one deletion encodes
+  to the same bytes as before, and only a character removed by concurrent
+  deletions or touched by an undo writes its tickets. A piece recreated
+  after GC records a stand-in removal by the undoing actor at lamport 0 and
+  its cancel: the purged removal was known to every replica, so any vector a
+  later change carries covers the stand-in too. A reader that finds events
+  breaking these rules refuses the bytes: a node left with `removed_at` alone
+  answers `isRemovedInView` and `uncancelledRemovalBy` differently from every
+  replica holding the full ledger, so dropping the ledger buys a document
+  that loads and then diverges. The same decoder reads the element payload of
+  a client-pushed `Set`/`Add`/`ArraySet`, where the length is whatever the
+  sender wrote, so every walk of a ledger is linear in its length, not
+  quadratic, and such a payload is refused past `maxTextRemovalEvents` per
+  node. A snapshot has no such bound: one replica that deletes and undoes the
+  same character while a peer lags behind GC grows a ledger past any fixed
+  count, and a snapshot the server cannot read back leaves the document
+  unloadable.
+- GC also shrinks ledgers. A removal whose cancel every replica knows is
+  dropped with that cancel: any change that arrives later knows both, so the
+  pair never decides anything again. Without this, a text revived by undo
+  kept every removal it ever had in each piece and each snapshot.
+- An undo or redo is propagated whenever an operation ran, as in JS: a cancel
+  that leaves a character removed changes the ledger but shows nothing.
+
+The server does not check an operation's own tickets against the change's
+actor (#2114), so a client that forges `executed_at` can cancel another
+actor's removal; main lets any restore clear any tombstone, so this is no
+looser. The pairing rule above is therefore enforced when a removal is
+recorded, not only assumed of honest clients.
+
+Operations do not change on the wire, so there is no capability to
+negotiate, but every replica has to run these rules to converge. An older
+SDK clears a tombstone outright on undo, removes whatever it knew the
+creation of, and collects regardless of the ledger, so it can disagree with
+an upgraded replica whenever undo meets a concurrent deletion, as it does
+today. The server builds snapshots with its own copy of these rules, so it
+is upgraded first and not rolled back once clients write ledgers: an older
+server drops `removal_events` when it re-encodes a document. An older
+reader of a snapshot ignores `removal_events` and sees `removed_at` as
+before.
+
+A recreated piece is anchored before the nearest surviving piece of its
+insertion after the gap. Anchoring before a later piece put the gap after the
+pieces in between, and a deletion that then spanned from the gap to one of
+them ran from its start to the end of the text.
+
+Not covered: that anchor can still land after text another insertion placed
+between the gap and that piece, so a replica that collected and one that did
+not can order the recreated piece differently. A tombstone held by two
+concurrent deletions that are never undone is never collected, whether or
+not anyone uses undo: either could still be undone, and only the tombstone
+can say that the other holds it. Such a tombstone stays registered, so it
+keeps counting toward `GarbageLen` and `docSize.GC` for the life of the
+document; releasing it needs a restore that can answer without the piece,
+which is a change to what the operation carries rather than to the ledger.
+Ledger tickets are also outside `DataSize`, so they do not count against
+`MaxSizePerDocument`: the size a node reports is charged once at
+registration and subtracted once at purge, while `recordRemoval` and
+`pruneStable` change a registered node's ledger in between, so charging it
+there would leave `docSize.GC` short or over by the difference.
+
+The held tombstone is a regression against `main`, which collects it, and
+is accepted here: it costs memory per overlapping deletion, where the ledger
+fixes text that diverges. Three ways to release it were tried and none
+does without a new signal:
+
+- Purging the content but keeping the node and its ledger converges and
+  needs no operation change, since a restore span carries the content. It
+  frees only the content bytes; the node, its ledger and `GarbageLen` stay,
+  and a snapshot needs a field for a node without content.
+- Refusing to cancel a removal every replica knows depends on each
+  replica's own GC vector, so replicas disagree on whether an undo did
+  anything. Making it deterministic needs the vector the undoer had seen on
+  the wire, and then undoing a deletion stops working a few syncs later.
+- Treating a detached actor's removals as final fails because detaching is
+  not final: an actor comes back under the same ID with its undo stack, and
+  an undo made offline is pushed after the detach.
+
+Releasing it needs a signal every replica receives in order with the
+changes, saying that a removal can no longer be undone.
+
+A run recreated after GC takes its attributes from the restore span, which
+is a snapshot from when the deletion ran. A style that reached the run
+concurrently with that deletion is missing from the span, so the replica
+that recreates the run revives it unstyled while one that held the
+tombstone keeps the style. `main` has the same gap with the undos in the
+other order; the ledger changes when a tombstone is collected, not how a
+run is recreated.
 
 ### Tree.Edit Undo/Redo
 

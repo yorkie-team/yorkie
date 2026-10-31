@@ -308,6 +308,15 @@ message TextNode {
   TimeTicket removed_at = 3;
   TextNodeID ins_prev_id = 4;
   map<string, NodeAttr> attributes = 5;
+  // removal_events is the removal ledger beyond removed_at: every removal of
+  // this node and every undo that cancelled one, except removed_at itself.
+  // An actor's events alternate in ticket order, a removal then the undo
+  // cancelling it, so each is told apart by its place. Empty when removed_at
+  // says it all. A piece recreated after GC records a stand-in removal by the
+  // undoing actor at lamport 0, then its cancel. The pairing relies on an
+  // undo cancelling only its own actor's removal; a change to that rule needs
+  // a new field, not a new reading of this one.
+  repeated TimeTicket removal_events = 6;
 }
 
 message TextNodeID {

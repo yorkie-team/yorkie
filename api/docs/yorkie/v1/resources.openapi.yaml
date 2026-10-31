@@ -2159,6 +2159,22 @@ components:
           description: ""
           title: ins_prev_id
           type: object
+        removalEvents:
+          additionalProperties: false
+          description: |-
+            removal_events is the removal ledger beyond removed_at: every removal of
+             this node and every undo that cancelled one, except removed_at itself.
+             An actor's events alternate in ticket order, a removal then the undo
+             cancelling it, so each is told apart by its place. Empty when removed_at
+             says it all. A piece recreated after GC records a stand-in removal by the
+             undoing actor at lamport 0, then its cancel. The pairing relies on an
+             undo cancelling only its own actor's removal; a change to that rule needs
+             a new field, not a new reading of this one.
+          items:
+            $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+            type: object
+          title: removal_events
+          type: array
         removedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false

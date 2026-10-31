@@ -17,6 +17,8 @@
 package crdt_test
 
 import (
+	"strings"
+
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -70,7 +72,7 @@ func restoreSpans(t *testing.T, text *crdt.Text, spans []*crdt.RestoreSpan, at *
 // retombstoneSpans re-removes spans and asserts no error.
 func retombstoneSpans(t *testing.T, text *crdt.Text, spans []*crdt.RestoreSpan, at *time.Ticket) {
 	t.Helper()
-	_, _, err := text.Retombstone(spans, at)
+	_, _, _, _, err := text.Retombstone(spans, at, nil)
 	assert.NoError(t, err)
 }
 
@@ -596,4 +598,85 @@ func TestTextRestoreDocSizeReversibleAcrossUndoRedoCycle(t *testing.T) {
 	assert.Equal(t, "0123456789", text.String())
 	assert.Equal(t, revived, root.DocSize(),
 		"the revived docSize is bit-identical across cycles, including meta")
+}
+
+// TestTextEditRemovedSpansInDocumentOrder pins the order of the spans a
+// removal returns: restore anchors each recreated fragment after the one
+// before it, so the reverse of an edit has to list them left to right.
+func TestTextEditRemovedSpansInDocumentOrder(t *testing.T) {
+	text := seededText(t, tick(1))
+	for i, pos := range []int{8, 6, 4, 2} {
+		from, to, err := text.CreateRange(pos, pos)
+		assert.NoError(t, err)
+		_, _, _, _, _, err = text.Edit(from, to, "x", nil, tick(int64(2+i)), nil)
+		assert.NoError(t, err)
+	}
+	assert.Equal(t, "01x23x45x67x89", text.String())
+
+	from, to, err := text.CreateRange(0, 14)
+	assert.NoError(t, err)
+	_, _, _, _, spans, err := text.Edit(from, to, "", nil, tick(10), nil)
+	assert.NoError(t, err)
+
+	var removed strings.Builder
+	for _, span := range spans {
+		removed.WriteString(span.Content)
+	}
+	assert.Equal(t, "01x23x45x67x89", removed.String())
+}
+
+// TestTextRemovalKeepsOneUncancelledRemovalPerActor pins that a removal by
+// an actor that already holds an uncancelled one is not recorded: only a
+// change that leaves its own earlier removal out of its vector can send it.
+func TestTextRemovalKeepsOneUncancelledRemovalPerActor(t *testing.T) {
+	text := seededText(t, tick(1))
+	from, to, err := text.CreateRange(2, 4)
+	assert.NoError(t, err)
+	_, _, _, _, _, err = text.Edit(from, to, "", nil, tick(2), nil)
+	assert.NoError(t, err)
+
+	// The same actor removes [1,3) of "01456789" again, with a vector that
+	// knows the insertion but not its own removal of "23".
+	from, to, err = text.CreateRange(1, 3)
+	assert.NoError(t, err)
+	vector := time.NewVersionVector()
+	vector.Set(restoreActor, 1)
+	_, _, _, _, _, err = text.Edit(from, to, "", nil, tick(5), vector)
+	assert.NoError(t, err)
+
+	for _, node := range text.Nodes() {
+		if node.ID().Offset() == 2 {
+			assert.Equal(t, 0, node.RemovedAt().Compare(tick(2)))
+			assert.Empty(t, node.RemovalEvents())
+		}
+	}
+}
+
+// TestRetombstoneReportsNothingTombstoned pins the second return value of
+// Retombstone, which Edit.Execute feeds to ExecutionResult.Observable (and
+// so to the redo-stack clear). A redo that re-removes a span another actor
+// already tombstoned -- by a deletion the redo never saw -- splits that
+// tombstone and hands back the born-dead remainders as GC pairs, but
+// nothing went live->dead. Reading `len(pairs) > 0` instead would report
+// those bookkeeping remainders as an observable change.
+func TestRetombstoneReportsNothingTombstoned(t *testing.T) {
+	other, err := time.ActorIDFromHex("000000000000000000000001")
+	assert.NoError(t, err)
+
+	seed := tick(1)
+	text := seededText(t, seed)
+	// A deletion by `other` that the redo below has not seen.
+	deleteRange(t, text, 2, 8, time.NewTicket(2, 0, other))
+	assert.Equal(t, "0189", text.String())
+
+	// The redo's view knows the insertion, not `other`'s deletion.
+	vector := time.NewVersionVector()
+	vector.Set(restoreActor, 3)
+	spans := []*crdt.RestoreSpan{{CreatedAt: seed, Start: 4, End: 6, Content: "45"}}
+	pairs, tombstoned, _, recorded, err := text.Retombstone(spans, tick(3), vector)
+	assert.NoError(t, err)
+
+	assert.False(t, tombstoned, "no live piece went live->dead")
+	assert.NotEmpty(t, pairs, "the split's born-dead remainders are still returned")
+	assert.Len(t, recorded, 1)
 }

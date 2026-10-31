@@ -274,6 +274,7 @@ func toTextNodes(textNodes []*crdt.RGATreeSplitNode[*crdt.TextValue]) []*api.Tex
 			Value:      value.Value(),
 			RemovedAt:  ToTimeTicket(textNode.RemovedAt()),
 		}
+		writeRemovalLedger(pbTextNode, textNode)
 
 		if textNode.InsPrevID() != nil {
 			pbTextNode.InsPrevId = toTextNodeID(textNode.InsPrevID())
@@ -282,6 +283,15 @@ func toTextNodes(textNodes []*crdt.RGATreeSplitNode[*crdt.TextValue]) []*api.Tex
 		pbTextNodes = append(pbTextNodes, pbTextNode)
 	}
 	return pbTextNodes
+}
+
+// writeRemovalLedger writes the removal ledger of a node beyond removed_at.
+// A node whose removed_at says it all writes nothing, so a character removed
+// by one deletion and never restored encodes to the same bytes as before.
+func writeRemovalLedger(pbNode *api.TextNode, node *crdt.RGATreeSplitNode[*crdt.TextValue]) {
+	for _, t := range node.RemovalEvents() {
+		pbNode.RemovalEvents = append(pbNode.RemovalEvents, ToTimeTicket(t))
+	}
 }
 
 func toTextNodeID(id *crdt.RGATreeSplitNodeID) *api.TextNodeID {

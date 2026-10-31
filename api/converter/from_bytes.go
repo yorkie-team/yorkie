@@ -441,6 +441,26 @@ func fromTextNode(
 		}
 		textNode.SetRemovedAt(removedAt)
 	}
+	if len(pbNode.RemovalEvents) > 0 {
+		// No bound here: a snapshot carries the ledgers its writer's own
+		// rules grew, and refusing one would leave the document unloadable.
+		// Client-pushed element payloads are bounded in sanitizeElement.
+		events := make([]*time.Ticket, 0, len(pbNode.RemovalEvents))
+		for _, e := range pbNode.RemovalEvents {
+			ticket, err := fromRequiredTimeTicket(e, "text_node.removal_events")
+			if err != nil {
+				return nil, err
+			}
+			events = append(events, ticket)
+		}
+		// A ledger that breaks the rules is refused rather than dropped: a
+		// node left with removed_at alone answers isRemovedInView and
+		// uncancelledRemovalBy differently from every replica that holds the
+		// full ledger, which is a text that silently diverges from then on.
+		if err := textNode.SetRemovalEvents(events); err != nil {
+			return nil, fmt.Errorf("text_node.removal_events: %w", err)
+		}
+	}
 	return textNode, nil
 }
 
