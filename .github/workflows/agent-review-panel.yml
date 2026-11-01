@@ -2324,7 +2324,7 @@ jobs:
         if: steps.guard.outputs.proceed == 'true' && steps.cred.outputs.available != 'false'
         # Pinned to the v1 release commit (immutable). github_token is the App
         # token so the fix push re-triggers CI (and a fresh review panel).
-        uses: anthropics/claude-code-action@af0559ee4f514d1ef21826982bed13f7edc3c35e # v1
+        uses: anthropics/claude-code-action@d70510b174a1244958df0b03166a54912811f3e6 # v1
         with:
           # The slot the picker named, falling back to the unsuffixed secret. The
           # TOKEN never passes through a step output — only the slot NUMBER does, and
