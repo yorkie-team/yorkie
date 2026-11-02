@@ -88,9 +88,22 @@ type entry struct {
 	changes []*change.Change
 }
 
+// Options tune a run beyond the script.
+type Options struct {
+	// LaggingMinVV runs the minvv mode with the server race of
+	// yorkie#2110: a pack also carries minVV when the one entry the
+	// replica still lacks is the newest of the log, as if that push had
+	// landed between the server reading the reply's changes and taking
+	// the min. The changes a pack carries then lag the minVV it carries,
+	// which the protocol contract forbids and the race produces. Off mode
+	// and every check are unchanged.
+	LaggingMinVV bool
+}
+
 // run is one replay of a script in one GC mode.
 type run struct {
 	minVVMode    bool
+	lagging      bool
 	exchangeMode bool
 	actors       []time.ActorID
 	docs         []*document.Document
@@ -121,6 +134,11 @@ type run struct {
 
 // Run replays the script in off and minvv modes and checks I1-I4 and E.
 func Run(s *Script) Record {
+	return RunWith(s, Options{})
+}
+
+// RunWith is Run with options.
+func RunWith(s *Script, opts Options) Record {
 	rec := Record{ID: s.ID, N: s.Replicas}
 	off, offErr := replay(s, false)
 	rec.Steps = off.lines
@@ -155,7 +173,7 @@ func Run(s *Script) Record {
 		}
 	}
 
-	mv, mvErr := replay(s, true)
+	mv, mvErr := replayWith(s, true, opts)
 	if mvErr != nil {
 		rec.Err = mvErr.Error()
 		return finish(rec, Checks{I1: i1, I3: i3, E: e})
@@ -203,7 +221,12 @@ func digest(s string) string {
 // panic or error aborts the run; the lines of the steps completed so far are
 // kept.
 func replay(s *Script, minVVMode bool) (rn *run, err error) {
-	rn = &run{minVVMode: minVVMode, snapshotOK: true}
+	return replayWith(s, minVVMode, Options{})
+}
+
+// replayWith is replay with options.
+func replayWith(s *Script, minVVMode bool, opts Options) (rn *run, err error) {
+	rn = &run{minVVMode: minVVMode, lagging: minVVMode && opts.LaggingMinVV, snapshotOK: true}
 	defer func() {
 		if p := recover(); p != nil {
 			err = fmt.Errorf("panic: %v", p)
@@ -289,12 +312,29 @@ func (rn *run) setup(n int, init Init) {
 // author: the real server answers a pull with all pending changes before it
 // lets the client collect, so a tombstone is never collected while a
 // concurrent change that refers to it is still on its way. A pack that
-// leaves r behind the log carries the initial vector and collects nothing.
+// leaves r behind the log carries the initial vector and collects nothing,
+// unless the run models the lagging minVV of yorkie#2110.
 func (rn *run) packVV(r int) time.VersionVector {
-	if !rn.minVVMode || rn.pending(r) {
+	if !rn.minVVMode || (rn.pending(r) && !rn.raced(r)) {
 		return time.InitialVersionVector
 	}
 	return rn.minVV()
+}
+
+// raced reports whether, in a run with a lagging minVV, the only entry
+// replica r has not seen is the newest of the log: the one push that can
+// slip in between the server reading a reply's changes and taking the min.
+func (rn *run) raced(r int) bool {
+	if !rn.lagging {
+		return false
+	}
+	last := len(rn.log) - 1
+	for i := rn.cursor[r]; i < last; i++ {
+		if rn.log[i].author != r {
+			return false
+		}
+	}
+	return rn.log[last].author != r
 }
 
 // pending reports whether the log holds an entry replica r has not seen.

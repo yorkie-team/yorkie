@@ -118,6 +118,27 @@ func (t *Tree[K, V]) Floor(key K) (K, V) {
 	return resultK, resultV
 }
 
+// Ceiling returns the least key greater than or equal to the given key.
+func (t *Tree[K, V]) Ceiling(key K) (K, V) {
+	node := t.root
+	var resultK K
+	var resultV V
+
+	for node != nil {
+		switch key.Compare(node.key) {
+		case 0:
+			return node.key, node.value
+		case -1:
+			resultK, resultV = node.key, node.value
+			node = node.left
+		case 1:
+			node = node.right
+		}
+	}
+
+	return resultK, resultV
+}
+
 // Len returns the length of the tree.
 func (t *Tree[K, V]) Len() int {
 	return t.size

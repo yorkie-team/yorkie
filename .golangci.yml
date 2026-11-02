@@ -63,6 +63,17 @@ linters:
           - staticcheck
         path: server/rpc/yorkie_server.go
         text: "SA1019: api\\.(WatchDocument|WatchChannel)"
+      # x/net v0.60 deprecated its HTTP/2 server, transport and h2c in favor
+      # of net/http's Protocols. Moving the RPC server and the clients onto
+      # net/http changes connection behavior, so it is kept out of the
+      # security bump that pulled in v0.60+ and done on its own. Until then,
+      # note that from Go 1.27 x/net builds these types as wrappers over
+      # net/http (unless the http2legacy tag is set), so a toolchain bump to
+      # 1.27 changes the RPC server's HTTP/2 behavior too.
+      - linters:
+          - staticcheck
+        path: ^((admin|client|cluster)/client|server/rpc/server)\.go$
+        text: "SA1019: (http2\\.(Transport|Server)|\"golang.org/x/net/http2/h2c\"|h2c\\.NewHandler) is deprecated"
     paths:
       - third_party$
       - builtin$

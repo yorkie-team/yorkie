@@ -200,7 +200,15 @@ func TestRESTAPI(t *testing.T) {
 						assert.Len(t, docSummary.Presences, clientsPerDoc)
 						// The value, not just the key: a decode that fails
 						// after filling in keys passed the key check alone.
-						assert.Equal(t, presence.Data{"key": cli.Key()}, docSummary.Presences[cli.ID().String()])
+						//
+						// The admin API serves what the server stores, which
+						// is the wire form: presence values are JSON-encoded
+						// (see presence.EncodeValue). A JS client's presence
+						// has always reached this API that way; a Go client's
+						// now does too.
+						assert.Equal(t,
+							presence.Data{"key": presence.EncodeValue(cli.Key())},
+							docSummary.Presences[cli.ID().String()])
 					} else {
 						assert.Nil(t, docSummary.Presences)
 					}

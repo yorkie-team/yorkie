@@ -51,13 +51,8 @@ func zeroActorsOf(tree *crdt.ZeroTree) *zeroActors {
 	for _, node := range tree.Nodes() {
 		add(node.ID().CreatedAt())
 		add(node.RemovedAt())
-		_, dels, cancels := node.Ledger()
-		for _, d := range dels {
-			add(d)
-		}
-		for _, c := range cancels {
-			add(c.Deletion)
-			add(c.CancelledAt)
+		for _, t := range node.RemovalEvents() {
+			add(t)
 		}
 		for _, tok := range node.Value().Tokens {
 			if tok.Marker != nil {
@@ -269,7 +264,6 @@ func toZeroRestoreSpans(spans []*crdt.ZeroRestoreSpan) []*api.ZeroRestoreSpan {
 			Start:     int32(span.Start),
 			End:       int32(span.End),
 			Value:     toZeroTokens(span.Value),
-			RemovedBy: ToTimeTicket(span.RemovedBy),
 		})
 	}
 	return pbSpans
@@ -292,16 +286,11 @@ func fromZeroRestoreSpans(pbSpans []*api.ZeroRestoreSpan) ([]*crdt.ZeroRestoreSp
 		if value.Len() != int(pbSpan.End-pbSpan.Start) {
 			return nil, ErrInvalidRestoreSpan
 		}
-		removedBy, err := fromTimeTicket(pbSpan.RemovedBy)
-		if err != nil {
-			return nil, err
-		}
 		spans = append(spans, &crdt.ZeroRestoreSpan{
 			CreatedAt: createdAt,
 			Start:     int(pbSpan.Start),
 			End:       int(pbSpan.End),
 			Value:     value,
-			RemovedBy: removedBy,
 		})
 	}
 	return spans, nil
@@ -463,29 +452,14 @@ func toZeroTree(tree *crdt.ZeroTree) *api.JSONElement {
 	}
 	emitted := make(map[string]bool)
 	for _, node := range tree.Nodes() {
-		ledgered, dels, cancels := node.Ledger()
-		// A ledger that says only "removed by removedAt" is what a node
-		// without one starts from, so it is not written (same as JS).
-		if ledgered && len(cancels) == 0 {
-			if removedAt := node.RemovedAt(); (removedAt == nil && len(dels) == 0) ||
-				(removedAt != nil && len(dels) == 1 && dels[0].Compare(removedAt) == 0) {
-				ledgered, dels, cancels = false, nil, nil
-			}
-		}
+		// The removal ledger beyond removed_at, as toTextNodes writes it.
 		pbNode := &api.ZeroTreeNode{
 			Id:        actors.nodeID(node.ID()),
 			Value:     toZeroTokens(node.Value(), actors),
 			RemovedAt: actors.ticket(node.RemovedAt()),
-			HasLedger: ledgered,
 		}
-		for _, d := range dels {
-			pbNode.Dels = append(pbNode.Dels, actors.ticket(d))
-		}
-		for _, c := range cancels {
-			pbNode.Cancels = append(pbNode.Cancels, &api.ZeroCancel{
-				Deletion:    actors.ticket(c.Deletion),
-				CancelledAt: actors.ticket(c.CancelledAt),
-			})
+		for _, t := range node.RemovalEvents() {
+			pbNode.RemovalEvents = append(pbNode.RemovalEvents, actors.ticket(t))
 		}
 		// Same rule as the JS encoder: only a link to an emitted node.
 		if insPrevID := node.InsPrevID(); insPrevID != nil && emitted[nodeIDKey(insPrevID)] {
@@ -493,47 +467,6 @@ func toZeroTree(tree *crdt.ZeroTree) *api.JSONElement {
 		}
 		emitted[nodeIDKey(node.ID())] = true
 		pbTree.Nodes = append(pbTree.Nodes, pbNode)
-	}
-	// Purge order depends on GC iteration, so the entries go out sorted (the
-	// JS encoder sorts the same way): one state, one snapshot.
-	type purgedEntry struct {
-		createdAt *time.Ticket
-		entry     *crdt.PurgedLedger
-	}
-	var purged []purgedEntry
-	tree.RGATreeSplit().PurgedLedgers(func(createdAt *time.Ticket, entries []*crdt.PurgedLedger) {
-		for _, e := range entries {
-			purged = append(purged, purgedEntry{createdAt, e})
-		}
-	})
-	sort.SliceStable(purged, func(i, j int) bool {
-		a, b := purged[i], purged[j]
-		if c := a.createdAt.Compare(b.createdAt); c != 0 {
-			return c < 0
-		}
-		if a.entry.Start != b.entry.Start {
-			return a.entry.Start < b.entry.Start
-		}
-		if a.entry.End != b.entry.End {
-			return a.entry.End < b.entry.End
-		}
-		for k := 0; k < min(len(a.entry.Dels), len(b.entry.Dels)); k++ {
-			if c := a.entry.Dels[k].Compare(b.entry.Dels[k]); c != 0 {
-				return c < 0
-			}
-		}
-		return len(a.entry.Dels) < len(b.entry.Dels)
-	})
-	for _, p := range purged {
-		pbEntry := &api.ZeroPurgedLedger{
-			CreatedAt: ToTimeTicket(p.createdAt),
-			Start:     int32(p.entry.Start),
-			End:       int32(p.entry.End),
-		}
-		for _, d := range p.entry.Dels {
-			pbEntry.Dels = append(pbEntry.Dels, ToTimeTicket(d))
-		}
-		pbTree.PurgedLedger = append(pbTree.PurgedLedger, pbEntry)
 	}
 	for _, c := range tree.StyleCancels() {
 		pbTree.StyleCancels = append(pbTree.StyleCancels, &api.ZeroStyleCancel{
@@ -594,34 +527,19 @@ func fromJSONZeroTree(pbTree *api.JSONElement_ZeroTree) (*crdt.ZeroTree, error) 
 			return nil, err
 		}
 		node.SetRemovedAt(nodeRemovedAt)
-		if pbNode.HasLedger {
-			dels := make([]*time.Ticket, 0, len(pbNode.Dels))
-			for _, d := range pbNode.Dels {
-				ticket, err := actors.fromRequired(d, "zero_tree_node.dels")
+		if len(pbNode.RemovalEvents) > 0 {
+			events := make([]*time.Ticket, 0, len(pbNode.RemovalEvents))
+			for _, e := range pbNode.RemovalEvents {
+				ticket, err := actors.fromRequired(e, "zero_tree_node.removal_events")
 				if err != nil {
 					return nil, err
 				}
-				dels = append(dels, ticket)
+				events = append(events, ticket)
 			}
-			cancels := make([]crdt.LedgerCancel, 0, len(pbNode.Cancels))
-			for _, c := range pbNode.Cancels {
-				deletion, err := actors.fromRequired(c.Deletion, "zero_cancel.deletion")
-				if err != nil {
-					return nil, err
-				}
-				at, err := actors.fromRequired(c.CancelledAt, "zero_cancel.cancelled_at")
-				if err != nil {
-					return nil, err
-				}
-				cancels = append(cancels, crdt.LedgerCancel{Deletion: deletion, CancelledAt: at})
+			// Refused rather than dropped, as fromTextNode does.
+			if err := node.SetRemovalEvents(events); err != nil {
+				return nil, fmt.Errorf("zero_tree_node.removal_events: %w", err)
 			}
-			if len(dels) == 0 {
-				dels = nil
-			}
-			if len(cancels) == 0 {
-				cancels = nil
-			}
-			node.SetLedger(dels, cancels)
 		}
 		current = rga.InsertAfter(current, node)
 		if pbNode.InsPrevId != nil {
@@ -637,22 +555,6 @@ func fromJSONZeroTree(pbTree *api.JSONElement_ZeroTree) (*crdt.ZeroTree, error) 
 		}
 		decoded[nodeIDKey(id)] = current
 	}
-	for _, e := range pbTree.PurgedLedger {
-		ticket, err := fromRequiredTimeTicket(e.CreatedAt, "zero_purged_ledger.created_at")
-		if err != nil {
-			return nil, err
-		}
-		entry := &crdt.PurgedLedger{Start: int(e.Start), End: int(e.End)}
-		for _, d := range e.Dels {
-			del, err := fromRequiredTimeTicket(d, "zero_purged_ledger.dels")
-			if err != nil {
-				return nil, err
-			}
-			entry.Dels = append(entry.Dels, del)
-		}
-		rga.AddPurgedLedger(ticket, entry)
-	}
-
 	tree := crdt.NewZeroTree(rga, createdAt)
 	tree.SetSchema(fromZeroSchema(pbTree.Schema))
 	tree.SetMovedAt(movedAt)

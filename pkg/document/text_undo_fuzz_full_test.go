@@ -1,3 +1,5 @@
+//go:build rgafuzz
+
 /*
  * Copyright 2026 The Yorkie Authors. All rights reserved.
  *
@@ -14,14 +16,10 @@
  * limitations under the License.
  */
 
-package mcp
+package document_test
 
-import "errors"
-
-var (
-	// ErrMissingAPIKey is returned when the API key is missing.
-	ErrMissingAPIKey = errors.New("missing API key in Authorization header")
-
-	// ErrInvalidAuthFormat is returned when the authorization header format is invalid.
-	ErrInvalidAuthFormat = errors.New("invalid authorization format, expected 'API-Key <key>'")
-)
+// The rgafuzz tag runs the full sweep of text_undo_fuzz_test.go.
+func init() {
+	undoFuzzSeeds = 1000
+	undoFuzzFull = true
+}

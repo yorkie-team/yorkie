@@ -104,6 +104,10 @@ type Root struct {
 	gcNodePairMap    map[gcPairKey]GCPair
 	docSize          resource.DocSize
 
+	// ledgerHolders are the elements whose removal ledgers hold cancels that
+	// GarbageCollect may prune once every replica knows them.
+	ledgerHolders map[LedgerHolder]struct{}
+
 	// sizeInGC maps every registered element whose size counts toward
 	// docSize.GC rather than docSize.Live to the exact amount charged. Each
 	// element's size belongs to exactly one of the two, and an element reaches
@@ -139,6 +143,7 @@ func NewRoot(root *Object) *Root {
 		elementMap:       make(map[string]Element),
 		gcElementPairMap: make(map[string]ElementPair),
 		gcNodePairMap:    make(map[gcPairKey]GCPair),
+		ledgerHolders:    make(map[LedgerHolder]struct{}),
 		sizeInGC:         make(map[Element]resource.DataSize),
 		docSize: resource.DocSize{
 			Live: resource.DataSize{
@@ -224,6 +229,9 @@ func (r *Root) registerInternalGCPairs(element Element) {
 			for _, pair := range e.GCPairs() {
 				r.RegisterGCPair(pair)
 			}
+			if e.HasCancelledRemovals() {
+				r.RegisterLedgerHolder(e)
+			}
 		case *Tree:
 			for _, pair := range e.GCPairs() {
 				r.RegisterGCPair(pair)
@@ -231,6 +239,9 @@ func (r *Root) registerInternalGCPairs(element Element) {
 		case *ZeroTree:
 			for _, pair := range e.GCPairs() {
 				r.RegisterGCPair(pair)
+			}
+			if e.HasCancelledRemovals() {
+				r.RegisterLedgerHolder(e)
 			}
 		}
 	}
@@ -574,6 +585,10 @@ func (r *Root) DeepCopy() (*Root, error) {
 func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 	count := 0
 
+	// Pruning first can release a tombstone whose last pending cancel the
+	// vector now covers.
+	r.pruneLedgers(vector)
+
 	for {
 		purged, deferred, err := r.collect(vector)
 		if err != nil {
@@ -583,6 +598,23 @@ func (r *Root) GarbageCollect(vector time.VersionVector) (int, error) {
 
 		if purged == 0 || deferred == 0 {
 			return count, nil
+		}
+	}
+}
+
+// RegisterLedgerHolder registers an element whose removal ledgers may be
+// pruned (see LedgerHolder).
+func (r *Root) RegisterLedgerHolder(holder LedgerHolder) {
+	r.ledgerHolders[holder] = struct{}{}
+}
+
+// pruneLedgers prunes every registered holder and drops the ones with nothing
+// left to prune. A removed holder is dropped too: an undo that brings it back
+// registers its copy again.
+func (r *Root) pruneLedgers(vector time.VersionVector) {
+	for holder := range r.ledgerHolders {
+		if holder.RemovedAt() != nil || holder.PruneLedgers(vector) == 0 {
+			delete(r.ledgerHolders, holder)
 		}
 	}
 }
@@ -646,7 +678,29 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 	// is purge-dependent today; using the key already in hand means none has
 	// to stay that way.
 	for key, pair := range r.gcNodePairMap {
+		// As in the element loop above, a registered pair is only a claim that
+		// its child is a tombstone, and EqualToOrAfter below derefs the ticket
+		// without checking it. Here the claim can actually go stale: removedAt
+		// IS cleared in place on Text and Tree nodes, and only the reviver's
+		// own UnregisterGCPair call takes the entry back off this worklist.
+		// Every revive traced today makes that call, so this guard has no
+		// known reachable trigger -- it is what makes a future one that forgets
+		// land as a skipped entry rather than a panic in a snapshot build.
+		//
+		// The entry stays registered rather than being deleted: registration
+		// moved the child's bytes Live->GC, and only UnregisterGCPair, which
+		// also credits back the removedAt ticket a live node no longer carries,
+		// or a real purge may move them out. Dropping it here would leave
+		// docSize.GC holding them for good.
+		if pair.Child.RemovedAt() == nil {
+			continue
+		}
+
 		if !vector.EqualToOrAfter(pair.Child.RemovedAt()) {
+			continue
+		}
+
+		if h, ok := pair.Child.(GCHold); ok && h.HeldFromPurge(vector) {
 			continue
 		}
 

@@ -96,8 +96,10 @@ func clientVersion() *types.VersionDetail {
 	}
 }
 
+// printServerError reports a failure to fetch the server version on stderr, so
+// that stdout carries only the version data the --output format promises.
 func printServerError(cmd *cobra.Command, err error) {
-	cmd.Print("Error fetching server version: ")
+	cmd.PrintErr("Error fetching server version: ")
 
 	// TODO(hyun98): Find cases where different error cases can occur,
 	// and display a user-friendly error message for each case.
@@ -106,11 +108,11 @@ func printServerError(cmd *cobra.Command, err error) {
 	// For more information, see the following link:
 	// https://connectrpc.com/docs/go/errors/
 	if connectErr, ok := errors.AsType[*connect.Error](err); ok && connectErr.Code() == connect.CodeUnimplemented {
-		cmd.Println("The server does not support this operation. You might need to check your server version.")
+		cmd.PrintErrln("The server does not support this operation. You might need to check your server version.")
 		return
 	}
 
-	cmd.Println(err)
+	cmd.PrintErrln(err)
 }
 
 func printVersionInfo(cmd *cobra.Command, output string, versionInfo *types.VersionInfo) error {

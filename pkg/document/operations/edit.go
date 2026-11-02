@@ -17,6 +17,9 @@
 package operations
 
 import (
+	"cmp"
+	"maps"
+	"slices"
 	"strings"
 	"unicode/utf16"
 
@@ -133,7 +136,23 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 			return ExecutionResult{}, err
 		}
 
-		if len(e.restoreSpans) > 0 || len(e.retombstoneSpans) > 0 {
+		// The identity-preserving path is selected by the mode, not by the
+		// spans being non-empty: a reverse whose span sets both came out empty
+		// (nothing was left to re-remove, nothing to revive) is still an
+		// identity op and must run as a no-op here. Falling through to the
+		// positional path below would read its from/to as an ordinary edit
+		// range and delete it.
+		if e.restoreMode != crdt.RestoreModeNone {
+			// executedAt decides which removal an undo cancels (its actor) and
+			// how long GC must hold the tombstone and the ledger entry (its
+			// lamport), so it is held to the same causality bound as the span
+			// identities above: a change cannot act under a clock it has not
+			// seen.
+			if err := validateRestoreTickets(
+				[]*time.Ticket{e.executedAt}, versionVector); err != nil {
+				return ExecutionResult{}, err
+			}
+
 			// Identity-preserving reverse op. restoreMode selects the
 			// direction: an undo (RestoreModeRestore) revives restoreSpans and
 			// re-removes retombstoneSpans; the redo (RestoreModeRetombstone)
@@ -146,18 +165,36 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 				toRestore, toRetombstone = e.retombstoneSpans, e.restoreSpans
 			}
 
+			// The reverse restores whatever this op is about to re-remove, and
+			// a replica that purges the tombstone before that restore arrives
+			// recreates the node from the span alone (Text.Restore). The
+			// span's attributes therefore have to describe the run as it
+			// stands now, not as it stood when the span was first built: a
+			// Style that landed on the run in between lives on the node, not
+			// on the span, so without this the purging replica revives bare
+			// text while one still holding the tombstone un-tombstones the
+			// styled node (#2273). Read before the mutation below, and only
+			// when the reverse is kept -- a replayed remote change discards it
+			// (see OpSource.NeedsReverse).
+			reverseRestore, reverseRetombstone := e.restoreSpans, e.retombstoneSpans
+			// The pieces re-removed below name the reverse's spans, and they
+			// take their attributes from the spans retombstone is given.
+			retombstoneSpans := toRetombstone
+			if source.NeedsReverse() && len(toRetombstone) > 0 {
+				retombstoneSpans = refreshSpanAttributes(obj, toRetombstone)
+				if e.restoreMode == crdt.RestoreModeRetombstone {
+					reverseRestore = retombstoneSpans
+				} else {
+					reverseRetombstone = retombstoneSpans
+				}
+			}
+
 			// The reverse of an identity-preserving edit keeps both span sets
 			// and only flips the direction, so undoing a restore re-removes
 			// exactly the characters it revived, still under their original
 			// identities. Copying their content into a fresh insertion here
 			// would defeat the whole point of the restore path. Built before
-			// the mutation, from state the mutation does not touch. The spans
-			// this execution removes again are restored by the reverse, which
-			// has to cancel THIS removal, not the original one.
-			reverseRestore, reverseRetombstone := e.restoreSpans, withRemovedBy(e.retombstoneSpans, e.executedAt)
-			if e.restoreMode == crdt.RestoreModeRetombstone {
-				reverseRestore, reverseRetombstone = withRemovedBy(e.restoreSpans, e.executedAt), e.retombstoneSpans
-			}
+			// the mutation, from state the mutation does not touch.
 			reverseOp := &Edit{
 				parentCreatedAt:  e.parentCreatedAt,
 				from:             e.from,
@@ -180,15 +217,11 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 
 			// 1. Re-remove the content the reversed edit inserted (by identity).
 			if len(toRetombstone) > 0 {
-				pairs, diff, err := obj.Retombstone(toRetombstone, e.executedAt, versionVector)
+				tombstoned, err := e.reRemove(root, obj, retombstoneSpans, versionVector, reverseOp)
 				if err != nil {
 					return ExecutionResult{}, err
 				}
-				observable = observable || len(pairs) > 0
-				for _, pair := range pairs {
-					root.RegisterGCPair(pair)
-				}
-				root.Acc(diff)
+				observable = observable || tombstoned
 			}
 
 			// 2. Revive the content the reversed edit removed (by identity).
@@ -197,6 +230,9 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 					toRestore, e.executedAt, e.from)
 				if err != nil {
 					return ExecutionResult{}, err
+				}
+				if obj.HasCancelledRemovals() {
+					root.RegisterLedgerHolder(obj)
 				}
 				observable = observable || len(untombstoned) > 0 || len(recreated) > 0
 
@@ -220,21 +256,16 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 				root.Acc(diff)
 			}
 
-			return ExecutionResult{Reverse: reverseOp, Observable: observable}, nil
+			return ExecutionResult{
+				Reverse:    e.identityReverse(reverseOp),
+				Observable: observable,
+			}, nil
 		}
 
-		// A reverse's positions were recorded against the chain as it stood
-		// when the reverse was built; splits since then have moved them.
 		if e.isUndoOp {
-			from, err := obj.RefinePos(e.from)
-			if err != nil {
-				return ExecutionResult{}, err
+			if res, done, err := e.prepareUndo(obj, source); done {
+				return res, err
 			}
-			to, err := obj.RefinePos(e.to)
-			if err != nil {
-				return ExecutionResult{}, err
-			}
-			e.from, e.to = from, to
 		}
 
 		_, pairs, diff, removedValues, removedSpans, err := obj.Edit(
@@ -258,12 +289,11 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 		//
 		// removedSpans is not that list: it is one entry per split node this
 		// edit's RGATreeSplit.deleteNodes call transitions from live to
-		// tombstoned (RGATreeSplitNode.Remove returns true only when the
-		// node had no prior tombstone), not one per contiguous span. A node
-		// already tombstoned before this call never enters it -- Remove
-		// returns false unconditionally once removedAt is set -- so the two
-		// still agree on len() == 0: both are empty exactly when this edit
-		// inserts nothing and tombstones no previously-live node.
+		// tombstoned (only a node with no removedAt yet enters it), not one
+		// per contiguous span. A node already tombstoned before this call
+		// never enters it, even when the deletion is recorded in its ledger,
+		// so the two still agree on len() == 0: both are empty exactly when
+		// this edit inserts nothing and tombstones no previously-live node.
 		observable := len(e.content) > 0 || len(removedSpans) > 0
 
 		// A remote change is replayed, never undone: every caller that runs
@@ -298,6 +328,37 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 	}
 }
 
+// prepareUndo readies an undo edit's positions for the positional path. It
+// reports done, with the result to return, when nothing is left to run.
+func (e *Edit) prepareUndo(obj *crdt.Text, source OpSource) (ExecutionResult, bool, error) {
+	// An undo edit that inserts nothing changes nothing wherever it sits, but
+	// its position can name an offset the text no longer has: stacked entries
+	// are reconciled against remote positional edits, not against remote
+	// undos and redos, which change the text by identity. Run it as the no-op
+	// it is, moved to the head so the copy that goes out to other replicas
+	// resolves on every one of them.
+	if len(e.content) == 0 {
+		e.from, e.to = headPos(), headPos()
+		if !source.NeedsReverse() {
+			return ExecutionResult{}, true, nil
+		}
+		return ExecutionResult{Reverse: e.emptyReverse()}, true, nil
+	}
+
+	// A reverse's positions were recorded against the chain as it stood when
+	// the reverse was built; splits since then have moved them.
+	from, err := obj.RefinePos(e.from)
+	if err != nil {
+		return ExecutionResult{}, true, err
+	}
+	to, err := obj.RefinePos(e.to)
+	if err != nil {
+		return ExecutionResult{}, true, err
+	}
+	e.from, e.to = from, to
+	return ExecutionResult{}, false, nil
+}
+
 // toReverseOperation builds the operation that undoes this edit from what the
 // edit removed (removedValues, removedSpans) and what it inserted (content),
 // anchored at the normalized fromPos.
@@ -325,13 +386,26 @@ func (e *Edit) toReverseOperation(
 		var insertedSpans []*crdt.RestoreSpan
 		if len(e.content) > 0 {
 			// The insertion is one run born under this edit's own ticket, so
-			// it is addressed as [0, len) of that identity. Its attributes
-			// are irrelevant: re-removing a run never reads them.
+			// it is addressed as [0, len) of that identity.
+			//
+			// The attributes travel with it. Re-removing a run never reads
+			// them, but this same span is what the redo restores once the
+			// direction flips, and a replica that collected the tombstone in
+			// between has to recreate the node from the span alone. Without
+			// them that replica revives bare text while one still holding the
+			// tombstone un-tombstones the styled node, and the two diverge
+			// (#2273). Left nil when the edit carried none, matching how
+			// Text.Edit fills removedSpans for a plain-text node.
+			var attrs map[string]string
+			if len(e.attributes) > 0 {
+				attrs = e.attributes
+			}
 			insertedSpans = []*crdt.RestoreSpan{{
-				CreatedAt: e.executedAt,
-				Start:     0,
-				End:       len(utf16.Encode([]rune(e.content))),
-				Content:   e.content,
+				CreatedAt:  e.executedAt,
+				Start:      0,
+				End:        len(utf16.Encode([]rune(e.content))),
+				Content:    e.content,
+				Attributes: attrs,
 			}}
 		}
 
@@ -386,19 +460,184 @@ func (e *Edit) toReverseOperation(
 	}
 }
 
-// withRemovedBy returns copies of the spans naming removedBy as the removal
-// they undo.
-func withRemovedBy(spans []*crdt.RestoreSpan, removedBy *time.Ticket) []*crdt.RestoreSpan {
-	if len(spans) == 0 {
-		return spans
+// refreshSpanAttributes returns spans addressing the same characters as the
+// given ones, but carrying the attributes that content holds right now, read
+// off the split chain.
+//
+// A span's attributes are a snapshot: the span built for an insert carries
+// what the insert applied (toReverseOperation), and the one built for a
+// removal carries what the removed node held (Text.Edit). Either goes stale
+// while the span waits on the undo stack, since a Style lands on the node and
+// not on the span.
+//
+// Each span is split at the boundaries of the pieces covering it, so a style
+// over part of a run is reported on that part alone; neighbouring pieces that
+// agree are merged back, leaving the common unstyled run a single span. A
+// region no piece covers was purged here, so it keeps the span's own
+// attributes -- there is nothing live left to read.
+func refreshSpanAttributes(text *crdt.Text, spans []*crdt.RestoreSpan) []*crdt.RestoreSpan {
+	pieces := piecesByInsertion(text, spans)
+
+	refreshed := make([]*crdt.RestoreSpan, 0, len(spans))
+	for _, span := range spans {
+		content := utf16.Encode([]rune(span.Content))
+		if span.End-span.Start != len(content) {
+			// The content does not measure the range it claims, so it cannot
+			// be sliced per piece. Leave the span exactly as it came.
+			refreshed = append(refreshed, span)
+			continue
+		}
+
+		var parts []*crdt.RestoreSpan
+		add := func(start, end int, attrs map[string]string) {
+			if start >= end {
+				return
+			}
+			if n := len(parts); n > 0 && maps.Equal(parts[n-1].Attributes, attrs) {
+				parts[n-1].End = end
+				parts[n-1].Content = string(utf16.Decode(
+					content[parts[n-1].Start-span.Start : end-span.Start]))
+				return
+			}
+			parts = append(parts, &crdt.RestoreSpan{
+				CreatedAt:  span.CreatedAt,
+				Start:      start,
+				End:        end,
+				Content:    string(utf16.Decode(content[start-span.Start : end-span.Start])),
+				Attributes: attrs,
+			})
+		}
+
+		cursor := span.Start
+		for _, piece := range pieces[span.CreatedAt.Key()] {
+			start := piece.ID().Offset()
+			end := start + piece.Value().Len()
+			if end <= cursor {
+				continue
+			}
+			if start >= span.End {
+				break
+			}
+			add(cursor, min(start, span.End), span.Attributes)
+			cursor = max(cursor, start)
+			add(cursor, min(end, span.End), attributesOf(piece))
+			cursor = min(end, span.End)
+		}
+		add(cursor, span.End, span.Attributes)
+
+		refreshed = append(refreshed, parts...)
 	}
-	out := make([]*crdt.RestoreSpan, len(spans))
-	for i, span := range spans {
-		cp := *span
-		cp.RemovedBy = removedBy
-		out[i] = &cp
+
+	return refreshed
+}
+
+// piecesByInsertion indexes the chain's nodes by the insertion they belong to,
+// ascending by offset, keeping only the insertions the given spans name. The
+// walk is over the whole chain, which is why the caller only runs it for a
+// reverse it actually keeps.
+func piecesByInsertion(
+	text *crdt.Text,
+	spans []*crdt.RestoreSpan,
+) map[string][]*crdt.RGATreeSplitNode[*crdt.TextValue] {
+	wanted := make(map[string]struct{}, len(spans))
+	for _, span := range spans {
+		wanted[span.CreatedAt.Key()] = struct{}{}
 	}
-	return out
+
+	pieces := make(map[string][]*crdt.RGATreeSplitNode[*crdt.TextValue], len(wanted))
+	for _, node := range text.Nodes() {
+		key := node.ID().CreatedAt().Key()
+		if _, ok := wanted[key]; !ok {
+			continue
+		}
+		pieces[key] = append(pieces[key], node)
+	}
+
+	// Pieces of one insertion sit in offset order in the chain today, but
+	// nothing in the restore path guarantees it, and reading them out of order
+	// would mis-attribute a style to its neighbour.
+	for _, nodes := range pieces {
+		slices.SortFunc(nodes, func(a, b *crdt.RGATreeSplitNode[*crdt.TextValue]) int {
+			return cmp.Compare(a.ID().Offset(), b.ID().Offset())
+		})
+	}
+
+	return pieces
+}
+
+// attributesOf returns the style attributes the given piece carries, nil when
+// it carries none -- the convention Text.Edit uses when it fills removedSpans,
+// and what Text.Restore treats as "no attributes".
+func attributesOf(piece *crdt.RGATreeSplitNode[*crdt.TextValue]) map[string]string {
+	attrs := piece.Value().Attrs()
+	if attrs.Len() == 0 {
+		return nil
+	}
+	return attrs.Elements()
+}
+
+// identityReverse returns reverse, or -- when both of its span sets came out
+// empty -- an ordinary no-op edit anchored at the text's head.
+//
+// A reverse with no spans has nothing to revive and nothing to re-remove, but
+// it still has to exist: dropping it would leave the undo stack one entry
+// short of the redo stack, so a later redo would replay the wrong entry. It
+// cannot be kept in identity form either -- a restore mode without spans is
+// rejected on the wire (converter.ErrInvalidRestoreSpan) -- so it degrades to
+// the same shape an edit that removed and inserted nothing reverses to: an
+// empty edit over an empty range, which runs as a no-op and reverses to
+// another one.
+func (e *Edit) identityReverse(reverse *Edit) Operation {
+	if len(reverse.restoreSpans) > 0 || len(reverse.retombstoneSpans) > 0 {
+		return reverse
+	}
+	return e.emptyReverse()
+}
+
+// emptyReverse returns an empty undo edit at the head of this op's text: the
+// reverse of an edit that changes nothing.
+func (e *Edit) emptyReverse() *Edit {
+	return &Edit{
+		parentCreatedAt: e.parentCreatedAt,
+		from:            headPos(),
+		to:              headPos(),
+		isUndoOp:        true,
+		restoreMode:     crdt.RestoreModeNone,
+	}
+}
+
+// headPos returns the position at the start of the head node, the one node
+// of a text GC never purges.
+func headPos() *crdt.RGATreeSplitNodePos {
+	return crdt.NewRGATreeSplitNodePos(crdt.InitialTextNode().ID(), 0)
+}
+
+// reRemove re-removes the characters in spans by identity and points the
+// reverse at the pieces the removal was recorded on: naming it on a piece
+// someone else removed would cancel a removal that piece never had, and a
+// replica that purged the piece could not tell. It reports whether anything
+// was tombstoned.
+func (e *Edit) reRemove(
+	root *crdt.Root,
+	text *crdt.Text,
+	spans []*crdt.RestoreSpan,
+	versionVector time.VersionVector,
+	reverse *Edit,
+) (bool, error) {
+	pairs, tombstoned, diff, recorded, err := text.Retombstone(spans, e.executedAt, versionVector)
+	if err != nil {
+		return false, err
+	}
+	if e.restoreMode == crdt.RestoreModeRetombstone {
+		reverse.restoreSpans = recorded
+	} else {
+		reverse.retombstoneSpans = recorded
+	}
+	for _, pair := range pairs {
+		root.RegisterGCPair(pair)
+	}
+	root.Acc(diff)
+	return tombstoned, nil
 }
 
 // flipRestoreMode returns the direction that undoes the given one: undoing a

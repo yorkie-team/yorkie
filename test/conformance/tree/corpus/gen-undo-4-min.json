@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "id": "gen-undo-4-min",
+  "status": { "go": "known-diverge", "js": "known-diverge" },
+  "note": "Minimised from an undo fuzz. d2 splits at the end, d1 splits after 'b' and undoes it. Same XML; the empty paragraphs and the undone split's tombstone are ordered differently (shape-only).",
+  "replicas": 2,
+  "init": "abcd",
+  "steps": [
+    { "r": 1, "op": "edit", "from": 5, "to": 5, "split": 1 },
+    { "r": 0, "op": "edit", "from": 3, "to": 3, "split": 1 },
+    { "r": 0, "op": "undo" }
+  ]
+}

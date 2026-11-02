@@ -36,9 +36,9 @@ mysql -h starrocks-fe -P 9030 -u root --force < /init-create-mv.sql \
 
 echo -e 'Checking materialized views'
 # The rollup build runs asynchronously and the index only shows up in `desc ...
-# all` once it finishes, so poll rather than checking straight after the CREATE.
-# A view that never shows up is not fatal: the queries fall back to scanning the
-# base table, which is slower but still correct.
+# all` once the build is under way, so poll rather than checking straight after
+# the CREATE. A view that never shows up is not fatal: the queries fall back to
+# scanning the base table, which is slower but still correct.
 mvs=(user_events:mv_user_hll_daily document_events:mv_document_hll_daily channel_events:mv_channel_hll_daily session_events:mv_session_hll_daily_ch client_events:mv_client_hll_daily)
 for mv in "${mvs[@]}"; do
   table=${mv%%:*}
@@ -72,32 +72,6 @@ fi
 # no-op and dual-read history stays empty until events have been ingested. To
 # see historical points, ingest some events and re-run this backfill by hand
 # (mysql ... < init-backfill-summary.sql) — not a missing-data bug.
-echo -e 'Adding the coarse session rollup'
-# CREATE TABLE IF NOT EXISTS carries the ROLLUP clause, but skips it on a
-# cluster whose summary tables already exist -- which is every cluster the flag
-# is being turned on for. ADD ROLLUP covers those; it errors on a table that
-# already has it, hence the tolerant ||.
-mysql -h starrocks-fe -P 9030 -u root \
-  -e "ALTER TABLE yorkie.sum_session_hll_daily_ch ADD ROLLUP rl_session_daily (project_id, dt, session_hll);" \
-  || echo -e 'rl_session_daily may already exist, continuing...'
-
-echo -e 'Checking the coarse session rollup'
-# ADD ROLLUP builds asynchronously, so poll like the materialized views above.
-# Without it the sessions total and series still return the right numbers, they
-# just union every channel-day sketch to get them.
-attempt=0
-until mysql -h starrocks-fe -P 9030 -u root \
-  -e "desc yorkie.sum_session_hll_daily_ch all\G" 2>/dev/null | grep -q "IndexName: rl_session_daily"; do
-  attempt=$((attempt + 1))
-  if [ $attempt -ge 60 ]; then
-    echo -e 'rl_session_daily did not appear; it may still be building, or the ALTER failed'
-    break
-  fi
-  sleep 2s
-done
-[ $attempt -lt 60 ] && echo -e 'rl_session_daily is ready on sum_session_hll_daily_ch'
-
-
 echo -e 'Backfilling summary tables from base history'
 mysql -h starrocks-fe -P 9030 -u root < /init-backfill-summary.sql \
   || echo -e 'Could not run the summary backfill, continuing...'
@@ -126,3 +100,50 @@ done
 
 echo -e 'Final routine load status:'
 mysql -h starrocks-fe -P 9030 -u root -e 'show routine load from yorkie\G'
+
+
+echo -e 'Adding the coarse session rollup'
+# The sessions reads name rl_session_daily (FROM rl_session_daily [_SYNC_MV_]).
+# Without it they fall back to the summary table's channel-day index: correct,
+# but slow enough to miss the dashboard's deadline. Like the views above it is
+# an optimization, so nothing here fails the script; it runs last, after the
+# routine loads, and says what went wrong instead. CREATE TABLE IF NOT EXISTS
+# carries the ROLLUP clause but skips it on a summary table that predates it,
+# so add it there -- unless it is queryable or listed by `desc ... all`, or an
+# earlier run's build is still PENDING, which `desc` does not show yet.
+rollup_ready() {
+  mysql -h starrocks-fe -P 9030 -u root -D yorkie \
+    -e "SELECT 1 FROM rl_session_daily [_SYNC_MV_] LIMIT 1" >/dev/null 2>&1
+}
+if ! rollup_ready && ! mysql -h starrocks-fe -P 9030 -u root \
+  -e "desc yorkie.sum_session_hll_daily_ch all\G" | grep -q "IndexName: rl_session_daily"; then
+  jobs=$(mysql -h starrocks-fe -P 9030 -u root -e "SHOW ALTER TABLE ROLLUP FROM yorkie\G") || jobs=''
+  if ! echo "$jobs" | awk '
+    /^ *TableName:/ { t = $2 }
+    /^ *RollupIndexName:/ { n = $2 }
+    /^ *State:/ && t == "sum_session_hll_daily_ch" && n == "rl_session_daily" &&
+      $2 != "FINISHED" && $2 != "CANCELLED" { found = 1 }
+    END { exit !found }'; then
+    mysql -h starrocks-fe -P 9030 -u root \
+      -e "ALTER TABLE yorkie.sum_session_hll_daily_ch ADD ROLLUP rl_session_daily (project_id, dt, session_hll);" \
+      || echo -e 'Could not add rl_session_daily; see the error above'
+  fi
+fi
+
+echo -e 'Waiting for the coarse session rollup'
+# The hinted read resolves once the build reaches FINISHED, so wait on the read
+# the server sends; `desc ... all` lists the index while it is still RUNNING.
+# A build still running after two minutes is not a failure: it finishes on its
+# own, and until then the server reads the slower index and logs a warning.
+attempt=0
+until rollup_ready; do
+  attempt=$((attempt + 1))
+  if [ $attempt -ge 60 ]; then
+    echo -e 'rl_session_daily is not queryable yet; see SHOW ALTER TABLE ROLLUP FROM yorkie'
+    break
+  fi
+  sleep 2s
+done
+if [ $attempt -lt 60 ]; then
+  echo -e 'rl_session_daily is ready on sum_session_hll_daily_ch'
+fi

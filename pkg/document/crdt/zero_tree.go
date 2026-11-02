@@ -329,13 +329,12 @@ func (z *ZeroTokens) DataSize() resource.DataSize {
 }
 
 // ZeroRestoreSpan is a token run of one insertion [Start, End) for
-// identity-preserving undo/redo. RemovedBy is the deletion it undoes.
+// identity-preserving undo/redo.
 type ZeroRestoreSpan struct {
 	CreatedAt *time.Ticket
 	Start     int
 	End       int
 	Value     *ZeroTokens
-	RemovedBy *time.Ticket
 }
 
 // ZeroAttrWrite is one attribute write of ZeroTreeStyle.
@@ -664,7 +663,7 @@ func (t *ZeroTree) DataSize() resource.DataSize {
 	return size
 }
 
-// DeepCopy copies itself deeply, removal ledgers and purged ledgers included.
+// DeepCopy copies itself deeply, removal ledgers included.
 func (t *ZeroTree) DeepCopy() (Element, error) {
 	rga := NewRGATreeSplit(InitialZeroTreeNode())
 	current := rga.InitialHead()
@@ -678,13 +677,6 @@ func (t *ZeroTree) DeepCopy() (Element, error) {
 			current.SetInsPrev(insPrev)
 		}
 	}
-	t.rgaTreeSplit.PurgedLedgers(func(createdAt *time.Ticket, entries []*PurgedLedger) {
-		for _, e := range entries {
-			rga.AddPurgedLedger(createdAt, &PurgedLedger{
-				Start: e.Start, End: e.End, Dels: append([]*time.Ticket(nil), e.Dels...),
-			})
-		}
-	})
 	tree := NewZeroTree(rga, t.createdAt)
 	tree.schema = t.schema
 	tree.movedAt = t.movedAt
@@ -742,8 +734,7 @@ func (t *ZeroTree) Remove(removedAt *time.Ticket) bool {
 }
 
 // Edit deletes [from, to) and inserts content (if any) at from. The removed
-// spans carry a copy of the removed tokens and the deletion (RemovedBy), so
-// an undo cancels exactly this deletion.
+// spans carry a copy of the removed tokens.
 func (t *ZeroTree) Edit(
 	from, to *RGATreeSplitNodePos,
 	content *ZeroTokens,
@@ -768,7 +759,6 @@ func (t *ZeroTree) Edit(
 			Start:     span.start,
 			End:       span.end,
 			Value:     span.value.DeepCopy().(*ZeroTokens),
-			RemovedBy: executedAt,
 		})
 	}
 	return pairs, diff, spans, nil
@@ -782,7 +772,6 @@ func toRestoreSpanValues(spans []*ZeroRestoreSpan) []restoreSpanValue[*ZeroToken
 			start:     s.Start,
 			end:       s.End,
 			value:     s.Value,
-			removedBy: s.RemovedBy,
 		})
 	}
 	return internal
@@ -850,12 +839,40 @@ func (t *ZeroTree) holders(ticket *time.Ticket) []*ZeroMarker {
 }
 
 // Retombstone re-removes the spans under their original identities (redo).
+// Like Text.Retombstone, it also reports whether a live piece was tombstoned
+// and returns the spans the removal was recorded on, which a reverse names.
 func (t *ZeroTree) Retombstone(
 	spans []*ZeroRestoreSpan,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, error) {
-	return t.rgaTreeSplit.retombstone(toRestoreSpanValues(spans), executedAt, versionVector)
+) ([]GCPair, bool, resource.DataSize, []*ZeroRestoreSpan, error) {
+	pairs, tombstoned, diff, recorded, err := t.rgaTreeSplit.retombstone(
+		toRestoreSpanValues(spans), executedAt, versionVector)
+	if err != nil {
+		return nil, false, diff, nil, err
+	}
+	out := make([]*ZeroRestoreSpan, 0, len(recorded))
+	for _, r := range recorded {
+		out = append(out, &ZeroRestoreSpan{
+			CreatedAt: r.createdAt,
+			Start:     r.start,
+			End:       r.end,
+			Value:     r.value,
+		})
+	}
+	return pairs, tombstoned, diff, out, nil
+}
+
+// HasCancelledRemovals reports whether any piece's removal ledger holds a
+// cancel that PruneLedgers may drop later.
+func (t *ZeroTree) HasCancelledRemovals() bool {
+	return t.rgaTreeSplit.HasCancelledRemovals()
+}
+
+// PruneLedgers drops the removals whose cancels the given vector covers from
+// the pieces' ledgers, and returns how many pieces still hold a cancel.
+func (t *ZeroTree) PruneLedgers(vector time.VersionVector) int {
+	return t.rgaTreeSplit.PruneLedgers(vector)
 }
 
 // NormalizePos converts the position into a single absolute offset.

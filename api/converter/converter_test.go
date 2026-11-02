@@ -346,9 +346,33 @@ func TestConverter(t *testing.T) {
 		}, clone)
 	})
 
-	t.Run("unknown presence change type test", func(t *testing.T) {
+	t.Run("undefined presence change type test", func(t *testing.T) {
 		_, err := converter.FromPresenceChange(&api.PresenceChange{Type: api.PresenceChange_ChangeType(99)})
 		assert.ErrorIs(t, err, converter.ErrUnsupportedPresenceChangeType)
+	})
+
+	// A type this build defines but never produces is not refused, because the
+	// same function reads stored rows: a server that predates presence-patch
+	// stored a patch with an empty change type and serves it back as
+	// CHANGE_TYPE_UNSPECIFIED, and refusing it would make that document
+	// unreadable instead of merely lossy. What it decodes to is an empty
+	// change, which is lossy in its own way -- see
+	// TestPresenceChangeOfAnUnspecifiedTypeWipesPresence.
+	t.Run("defined but unused presence change type test", func(t *testing.T) {
+		for _, tc := range []struct {
+			desc     string
+			pbChange *api.PresenceChange
+		}{
+			{"unspecified", &api.PresenceChange{Type: api.PresenceChange_CHANGE_TYPE_UNSPECIFIED}},
+			{"zero value", &api.PresenceChange{}},
+			{"delete", &api.PresenceChange{Type: api.PresenceChange_CHANGE_TYPE_DELETE}},
+		} {
+			t.Run(tc.desc, func(t *testing.T) {
+				clone, err := converter.FromPresenceChange(tc.pbChange)
+				assert.NoError(t, err)
+				assert.Equal(t, &presence.Change{}, clone)
+			})
+		}
 	})
 
 	t.Run("properly encode and decode tree test", func(t *testing.T) {

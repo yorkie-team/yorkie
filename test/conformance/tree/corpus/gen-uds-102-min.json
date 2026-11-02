@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "gen-uds-102-min",
+  "status": { "go": "known-diverge", "js": "known-diverge" },
+  "note": "Minimised from gen-uds-n2-s24-102. d2 splits at offset 0 and undoes it; d1 receives both and splits at the end. Same XML; the tombstone of the undone split sits on different sides of d1's product (shape-only).",
+  "replicas": 2,
+  "init": "abcd",
+  "steps": [
+    { "r": 1, "op": "edit", "from": 1, "to": 1, "split": 1 },
+    { "r": 1, "op": "undo" },
+    { "r": 0, "op": "pull" },
+    { "r": 0, "op": "edit", "from": 7, "to": 7, "split": 1 }
+  ]
+}

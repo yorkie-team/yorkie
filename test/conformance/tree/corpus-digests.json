@@ -1,4 +1,106 @@
 {
+  "gen-all-132-min.json": {
+    "result": "fail",
+    "checks": "11101",
+    "digest": "ff9d164eed449c90",
+    "xmlDigest": "ad11c9322a618e86"
+  },
+  "gen-all-193-min.json": {
+    "result": "fail",
+    "checks": "11101",
+    "digest": "016fb7f6bc1fc48c",
+    "xmlDigest": "c81262dfe1b6245d"
+  },
+  "gen-all-83-min.json": {
+    "result": "error",
+    "checks": "10101",
+    "digest": "4678caa91d6423bc",
+    "xmlDigest": "4678caa91d6423bc"
+  },
+  "gen-merge-1631-min.json": {
+    "result": "error",
+    "checks": "10101",
+    "digest": "3d98ab4515c98242",
+    "xmlDigest": "3d98ab4515c98242"
+  },
+  "gen-merge-53-min.json": {
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "7ea62b5a1ebacc75",
+    "xmlDigest": "2afb293337552932"
+  },
+  "gen-merge-78-min.json": {
+    "result": "diverged",
+    "checks": "01111",
+    "digest": "788b6ad17ff56b8d",
+    "xmlDigest": "f41bb295e98ede0e"
+  },
+  "gen-merge-95-min.json": {
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "80518afb955bcf7f",
+    "xmlDigest": "261abac252f536cf"
+  },
+  "gen-span-227-min.json": {
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "573bf8adfa41d06a",
+    "xmlDigest": "d7af6250ada99c96"
+  },
+  "gen-span-84-min.json": {
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "a755c90920f7aea1",
+    "xmlDigest": "308ec9336f96205d"
+  },
+  "gen-uds-102-min.json": {
+    "result": "diverged",
+    "checks": "01111",
+    "digest": "65a8ed287ffe0512",
+    "xmlDigest": "5da69ab76c9891f1"
+  },
+  "gen-uds-50-min.json": {
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "9e313af9e30ee7da",
+    "xmlDigest": "83dfd520296664f1"
+  },
+  "gen-undo-4-min.json": {
+    "result": "diverged",
+    "checks": "01111",
+    "digest": "dbaaac1ea7da1d59",
+    "xmlDigest": "0255001f8de8fee1"
+  },
+  "i2169-redo-after-peer-insert-gc.json": {
+    "result": "fail",
+    "checks": "11101",
+    "digest": "28e2f59f05701b1b",
+    "xmlDigest": "f49a9321f5e8b0a9"
+  },
+  "i2189-delete-empty-p-after-undo.json": {
+    "result": "fail",
+    "checks": "11101",
+    "digest": "2f80ef7574bf4c05",
+    "xmlDigest": "d5df3a6b72396302"
+  },
+  "i2190-concurrent-multilevel-deletes.json": {
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "b627032fc629d4ae",
+    "xmlDigest": "a2b186b02128adb6"
+  },
+  "i2191-shape1-split-inherits-merge-target-attrs.json": {
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "3e82130e919c41b0",
+    "xmlDigest": "a805c328e308937a"
+  },
+  "i2191-shape2-style-on-split-product-dropped.json": {
+    "result": "diverged",
+    "checks": "01101",
+    "digest": "df06ca209fb02049",
+    "xmlDigest": "9390984563aaf452"
+  },
   "js1436-min-a.json": {
     "result": "diverged",
     "checks": "01101",
@@ -16,6 +118,24 @@
     "checks": "01101",
     "digest": "fa61db50af029883",
     "xmlDigest": "ffbc9035307a6d0d"
+  },
+  "oracle-concurrent-enter-same-place.json": {
+    "result": "fail",
+    "checks": "11110",
+    "digest": "cb3f03578628c06b",
+    "xmlDigest": "f10fc96ca1a6fac2"
+  },
+  "oracle-local-enter-twice-same-place.json": {
+    "result": "fail",
+    "checks": "11110",
+    "digest": "560e330ba1f4b307",
+    "xmlDigest": "ce8db2967466c370"
+  },
+  "oracle-local-split-end-of-span-after-enter.json": {
+    "result": "fail",
+    "checks": "11110",
+    "digest": "6eb2894bd1b59843",
+    "xmlDigest": "bbd224505c2da44a"
   },
   "remove-style-split-both-split-one-removes.json": {
     "result": "pass",
@@ -328,6 +448,12 @@
     "checks": "11111",
     "digest": "7b4ae79872b8f6e8",
     "xmlDigest": "99b5903e72897f79"
+  },
+  "split-product-walk-past-concurrent-insert.json": {
+    "result": "pass",
+    "checks": "11111",
+    "digest": "d6c820351f05e624",
+    "xmlDigest": "d4884033fb42d557"
   },
   "text-insert-sequential.json": {
     "result": "pass",

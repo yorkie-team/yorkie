@@ -138,13 +138,38 @@ func TestSeriesQueryStraddlingConcatenatesHalves(t *testing.T) {
 func TestSessionTotalUnionsAcrossChannels(t *testing.T) {
 	got := norm(descSession.totalQuery(types.ID("p1"), day("2026-08-01"), day("2026-09-01"), covUntil("2026-08-31")))
 
-	// distinct sessions across the whole window: union every channel-day sketch,
-	// cardinality once. The summary half must NOT filter or group by channel_key.
+	// distinct sessions across the whole window: union one sketch per day from
+	// the rollup, cardinality once. The summary half must NOT filter or group by channel_key.
 	assert.Contains(t, got, "SELECT HLL_UNION_AGG(sketch) FROM")
-	assert.Contains(t, got, "SELECT session_hll AS sketch FROM sum_session_hll_daily_ch "+
+	assert.Contains(t, got, "SELECT session_hll AS sketch FROM rl_session_daily [_SYNC_MV_] "+
 		"WHERE project_id = 'p1' AND dt >= '2026-08-01' AND dt < '2026-08-31'")
 	assert.Contains(t, got, "SELECT HLL_UNION(HLL_HASH(session_id)) AS sketch FROM session_events")
 	assert.NotContains(t, got, "channel_key")
+}
+
+// The sessions summary is read through its coarse rollup by name, in the series
+// as in the total. Left to the optimizer, StarRocks 3.3.22 plans the branch on
+// the channel-day base index whenever the fresh branch beside it rewrites onto
+// a sync MV, so only the explicit index keeps the read at one row per day.
+func TestSessionSummaryReadsRollupByName(t *testing.T) {
+	id, from, to, cov := types.ID("p1"), day("2026-08-01"), day("2026-09-01"), covUntil("2026-08-31")
+
+	series := norm(descSession.seriesQuery(id, from, to, cov))
+	assert.Contains(t, series, "SELECT dt AS event_date, HLL_UNION_AGG(session_hll) AS metric_value "+
+		"FROM rl_session_daily [_SYNC_MV_] WHERE project_id = 'p1' AND dt >= '2026-08-01' AND dt < '2026-08-31' "+
+		"GROUP BY dt")
+	assert.NotContains(t, series, "sum_session_hll_daily_ch")
+
+	total := norm(descSession.totalQuery(id, from, to, cov))
+	assert.Contains(t, total, "FROM rl_session_daily [_SYNC_MV_]")
+	assert.NotContains(t, total, "sum_session_hll_daily_ch")
+
+	// The other metrics have no rollup and keep reading their summary table.
+	for _, d := range []metricDesc{descUser, descDocument, descChannel, descClient} {
+		assert.Contains(t, d.seriesQuery(id, from, to, cov), "FROM "+d.summaryTable+" WHERE")
+		assert.Contains(t, d.totalQuery(id, from, to, cov), "FROM "+d.summaryTable+" WHERE")
+		assert.NotContains(t, d.totalQuery(id, from, to, cov), "_SYNC_MV_")
+	}
 }
 
 func TestTotalQueryEmptyWindowNoUnion(t *testing.T) {
@@ -248,15 +273,18 @@ func TestQueriesEntirelyBelowSummaryFloorAreBaseOnly(t *testing.T) {
 	cov := newDayRange(day("2026-08-25"), day("2026-08-31"))
 	from, to := day("2026-08-01"), day("2026-08-10")
 	queries := map[string]string{
-		"series":      descUser.seriesQuery(types.ID("p1"), from, to, cov),
-		"total":       descUser.totalQuery(types.ID("p1"), from, to, cov),
-		"peak series": descPeak.peakSeriesQuery(types.ID("p1"), from, to, cov),
+		"series":          descUser.seriesQuery(types.ID("p1"), from, to, cov),
+		"total":           descUser.totalQuery(types.ID("p1"), from, to, cov),
+		"sessions series": descSession.seriesQuery(types.ID("p1"), from, to, cov),
+		"sessions total":  descSession.totalQuery(types.ID("p1"), from, to, cov),
+		"peak series":     descPeak.peakSeriesQuery(types.ID("p1"), from, to, cov),
 	}
 	for name, q := range queries {
 		t.Run(name, func(t *testing.T) {
 			got := norm(q)
 			assert.NotContains(t, got, "UNION ALL")
 			assert.NotContains(t, got, "sum_")
+			assert.NotContains(t, got, "_SYNC_MV_")
 			assert.Contains(t, got, "DATE(timestamp) >= '2026-08-01'")
 			assert.Contains(t, got, "DATE(timestamp) < '2026-08-10'")
 		})
@@ -268,15 +296,18 @@ func TestQueriesEntirelyBelowSummaryFloorAreBaseOnly(t *testing.T) {
 func TestQueriesEmptyCoverageAreBaseOnly(t *testing.T) {
 	from, to := day("2026-08-01"), day("2026-09-01")
 	queries := map[string]string{
-		"series":      descUser.seriesQuery(types.ID("p1"), from, to, dayRange{Empty: true}),
-		"total":       descUser.totalQuery(types.ID("p1"), from, to, dayRange{Empty: true}),
-		"peak series": descPeak.peakSeriesQuery(types.ID("p1"), from, to, dayRange{Empty: true}),
+		"series":          descUser.seriesQuery(types.ID("p1"), from, to, dayRange{Empty: true}),
+		"total":           descUser.totalQuery(types.ID("p1"), from, to, dayRange{Empty: true}),
+		"sessions series": descSession.seriesQuery(types.ID("p1"), from, to, dayRange{Empty: true}),
+		"sessions total":  descSession.totalQuery(types.ID("p1"), from, to, dayRange{Empty: true}),
+		"peak series":     descPeak.peakSeriesQuery(types.ID("p1"), from, to, dayRange{Empty: true}),
 	}
 	for name, q := range queries {
 		t.Run(name, func(t *testing.T) {
 			got := norm(q)
 			assert.NotContains(t, got, "UNION ALL")
 			assert.NotContains(t, got, "sum_")
+			assert.NotContains(t, got, "_SYNC_MV_")
 			assert.Contains(t, got, "DATE(timestamp) >= '2026-08-01'")
 			assert.Contains(t, got, "DATE(timestamp) < '2026-09-01'")
 		})
@@ -311,6 +342,15 @@ func TestSteadyStateSQLIsUnchanged(t *testing.T) {
 		"WHERE project_id = 'p1' AND DATE(timestamp) >= '2026-08-31' AND DATE(timestamp) < '2026-09-01' "+
 		"AND event_type = 'client-activated' GROUP BY DATE(timestamp)\n"+
 		") t;", descClient.totalQuery(id, from, to, cov))
+
+	assert.Equal(t, "SELECT HLL_UNION_AGG(sketch) FROM (\n"+
+		"SELECT session_hll AS sketch FROM rl_session_daily [_SYNC_MV_] "+
+		"WHERE project_id = 'p1' AND dt >= '2026-08-01' AND dt < '2026-08-31'\n"+
+		"UNION ALL\n"+
+		"SELECT HLL_UNION(HLL_HASH(session_id)) AS sketch FROM session_events "+
+		"WHERE project_id = 'p1' AND DATE(timestamp) >= '2026-08-31' AND DATE(timestamp) < '2026-09-01' "+
+		"GROUP BY DATE(timestamp)\n"+
+		") t;", descSession.totalQuery(id, from, to, cov))
 
 	assert.Equal(t, "SELECT event_date, metric_value FROM (\n"+
 		"SELECT dt AS event_date, MAX(peak_sessions) AS metric_value FROM sum_session_peak_daily "+

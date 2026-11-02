@@ -40,20 +40,12 @@ const (
 	// into a full put before storing it, so a client may send only the
 	// presence keys that changed. A server without it does not reject a patch
 	// but stores it with an empty change type and serves it back as
-	// CHANGE_TYPE_UNSPECIFIED, which readers fail to decode. So servers must
-	// be upgraded first, and a client that gets a pack without this capability
-	// must stop patching and resend its full presence. See
-	// docs/design/presence-patch.md.
+	// CHANGE_TYPE_UNSPECIFIED. The JS SDK throws on that value and stops its
+	// sync loop; this side decodes it as an empty change, which wipes the
+	// sender's presence instead. So servers must be upgraded first, and a
+	// client that gets a pack without this capability must stop patching and
+	// resend its full presence. See docs/design/presence-patch.md.
 	CapPresencePatch = "presence-patch"
-
-	// CapRestoreRemovedBy means the server keeps RestoreSpan.removed_by when
-	// it stores and relays a Text undo, and applies it with the removal
-	// ledger, so the undo cancels only the deletion it reverses. A server
-	// without it drops the field on re-encoding: the replica that ran the
-	// undo would cancel one deletion while every other replica revived the
-	// span outright. So a client sends removed_by only on a pack that
-	// advertises this. See docs/design/undo-redo.md.
-	CapRestoreRemovedBy = "restore-removed-by"
 )
 
 // ServerCapabilities is what a server advertises on every ChangePack it
@@ -62,7 +54,6 @@ const (
 // CapElementRestore is left out until it does.
 var ServerCapabilities = []string{
 	CapPresencePatch,
-	CapRestoreRemovedBy,
 }
 
 // HasCapability reports whether the given capability list contains name.

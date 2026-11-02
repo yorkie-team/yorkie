@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "id": "gen-all-193-min",
+  "issues": ["yorkie#2099"],
+  "status": { "go": "known-fail", "js": "known-fail" },
+  "note": "Minimised from gen-all-n2-s24-193 (a parity all row). Off mode converges on <doc><p></p></doc>; minvv mode does not (I4 fails). Likely cause: a merge or split rule depends on tombstones GC has collected on one replica only.",
+  "replicas": 2,
+  "init": "abcd",
+  "steps": [
+    { "r": 1, "op": "edit", "from": 4, "to": 5 },
+    { "r": 0, "op": "edit", "from": 4, "to": 4, "split": 1 },
+    { "r": 1, "op": "pull" },
+    { "r": 0, "op": "pull" },
+    { "r": 0, "op": "edit", "from": 3, "to": 6 },
+    { "r": 1, "op": "edit", "from": 3, "to": 4 },
+    { "r": 1, "op": "edit", "from": 1, "to": 5 }
+  ]
+}

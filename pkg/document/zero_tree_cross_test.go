@@ -213,7 +213,7 @@ func TestZeroTreeCrossSDK(t *testing.T) {
 	scanner.Buffer(make([]byte, 64<<20), 64<<20)
 	var cases, ops, reencodeDiff, plainDiff, gcDiff, marksDiff, snapRoundTripDiff int
 	var stats, markStats replayStats
-	var purgedEntries, purgedCancelled, bothFailed, modelCases, modelDiff, ysonDiff int
+	var ledgeredNodes, ledgerEvents, bothFailed, modelCases, modelDiff, ysonDiff int
 	var failed []string
 	for scanner.Scan() {
 		var c zeroCrossCase
@@ -299,14 +299,14 @@ func TestZeroTreeCrossSDK(t *testing.T) {
 			}
 			continue
 		}
-		// Purged ledgers in the server's snapshot, and those a later undo
-		// emptied: the restore-after-purge path ran.
+		// Nodes of the server's snapshot that carry a removal ledger beyond
+		// removed_at, and how many events those ledgers hold.
 		pbZT := &api.JSONElement{}
 		require.NoError(t, proto.Unmarshal(zeroTreeElement(t, goMarks), pbZT))
-		for _, e := range pbZT.GetZeroTree().PurgedLedger {
-			purgedEntries++
-			if len(e.Dels) == 0 {
-				purgedCancelled++
+		for _, n := range pbZT.GetZeroTree().GetNodes() {
+			if len(n.RemovalEvents) > 0 {
+				ledgeredNodes++
+				ledgerEvents += len(n.RemovalEvents)
 			}
 		}
 		if c.JSONMarks != "" && zeroModel(t, goMarks) != c.JSONMarks {
@@ -350,11 +350,11 @@ func TestZeroTreeCrossSDK(t *testing.T) {
 		failed = failed[:10]
 	}
 	t.Logf("cases %d, ops %d, re-encode diff %d, plain diff %d, gc diff %d (gc runs %d, purged %d), "+
-		"server-vv gc diff %d (gc runs %d, purged %d, purged ledgers %d, emptied by undo %d), "+
+		"server-vv gc diff %d (gc runs %d, purged %d, ledgered nodes %d, ledger events %d), "+
 		"JS snapshot round trip diff %d, JS+Go both failed %d, "+
 		"model (Go Marshal vs JS toJSON) cases %d diff %d, YSON round trip diff %d, first failures %v",
 		cases, ops, reencodeDiff, plainDiff, gcDiff, stats.gcRuns, stats.purged,
-		marksDiff, markStats.gcRuns, markStats.purged, purgedEntries, purgedCancelled,
+		marksDiff, markStats.gcRuns, markStats.purged, ledgeredNodes, ledgerEvents,
 		snapRoundTripDiff, bothFailed, modelCases, modelDiff, ysonDiff, failed)
 	require.Zero(t, reencodeDiff+plainDiff+gcDiff+marksDiff+snapRoundTripDiff+modelDiff+ysonDiff)
 }

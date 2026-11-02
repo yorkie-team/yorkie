@@ -1,0 +1,22 @@
+{
+  "v": 2,
+  "id": "gen-span-227-min",
+  "issues": ["yorkie#2187"],
+  "status": { "go": "known-diverge", "js": "known-diverge" },
+  "note": "Minimised from the span family. d2 splits the span at offset 0 and types 'f' into the new left span; d1 concurrently presses Enter (level-2 split) at offset 0. The 'f' span lands in the second paragraph on d1 and stays in the first on d2.",
+  "replicas": 2,
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p",
+        "children": [{ "type": "span", "children": [{ "type": "text", "value": "abcd" }] }]
+      }
+    ]
+  },
+  "steps": [
+    { "r": 1, "op": "edit", "from": 2, "to": 2, "split": 1 },
+    { "r": 1, "op": "edit", "from": 4, "to": 4, "text": "f" },
+    { "r": 0, "op": "edit", "from": 2, "to": 2, "split": 2 }
+  ]
+}

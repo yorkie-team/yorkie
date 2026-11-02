@@ -187,10 +187,10 @@ func (r ticketReissuer) walk(m protoreflect.Message) error {
 	return err
 }
 
-// rekeyMap renames an entry keyed by `from` to the same key form of `to`. No
-// operation encodes an actor-keyed map today -- created_at_map_by_actor is
-// deprecated and never written -- but the walk handles one rather than leave
-// it naming the old actor if one comes back.
+// rekeyMap renames an entry keyed by `from` to the same key form of `to`. The
+// version vector is the only actor-keyed map a change populates today --
+// created_at_map_by_actor is deprecated and never written -- but the walk
+// handles any string-keyed map rather than leave one naming the old actor.
 func (r ticketReissuer) rekeyMap(m protoreflect.Map) {
 	type entry struct {
 		from, to protoreflect.MapKey

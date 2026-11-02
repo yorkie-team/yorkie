@@ -40,7 +40,6 @@ import (
 	"github.com/yorkie-team/yorkie/server/rpc/auth"
 	"github.com/yorkie-team/yorkie/server/rpc/httphealth"
 	"github.com/yorkie-team/yorkie/server/rpc/interceptors"
-	"github.com/yorkie-team/yorkie/server/rpc/mcp"
 )
 
 // maxRequestBytes bounds a single decoded request message. Without it,
@@ -114,7 +113,6 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	mux.Handle(auth.NewAuthHandler(be, tokenManager, conf.Auth))
 	mux.Handle(grpchealth.NewHandler(healthChecker))
 	mux.Handle(httphealth.NewHandler(healthChecker))
-	mux.Handle(mcp.NewHandler(be))
 
 	return &Server{
 		conf: conf,

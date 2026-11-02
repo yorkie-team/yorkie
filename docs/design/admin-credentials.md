@@ -37,9 +37,9 @@ surface.
 
 - Revoking a key already copied. The key is a bearer credential; a copy
   outlives the role it was read under. Only `RotateProjectKeys` revokes it.
-- Splitting the key's other meanings off (event-webhook signing, MCP
-  authentication). Those keep it a shared, project-wide secret, which is why
-  rotation is left to the owner rather than run automatically.
+- Splitting the key's other meaning off (event-webhook signing). That keeps it
+  a shared, project-wide secret, which is why rotation is left to the owner
+  rather than run automatically.
 
 ## Design
 
@@ -117,7 +117,7 @@ allowed through any proxy that filters request headers — the istio
 |------|------------|
 | Non-Go clients break for `member` users the moment the server ships | Documented here and in the changelog as a breaking change; the Go client and the chart ship the fallback in the same change |
 | A key copied before the change keeps full project authority | `RotateProjectKeys`; owners are told to run it after demoting or removing an admin |
-| A demoted admin keeps the key | Same; automatic rotation was dropped because the key also signs the event webhook and authenticates MCP |
+| A demoted admin keeps the key | Same; automatic rotation was dropped because the key also signs the event webhook |
 | A procedure added later reads a scope its scheme never set | `projectScopedMethods` is opt-in; an unlisted procedure is user-scoped |
 
 ### Design Decisions
@@ -133,7 +133,7 @@ allowed through any proxy that filters request headers — the istio
 
 | Alternative | Why not |
 |-------------|---------|
-| Rotate the keys whenever a membership changes | The same key signs the event webhook and authenticates MCP, so rotation silently broke those integrations |
+| Rotate the keys whenever a membership changes | The same key signs the event webhook, so rotation silently broke that integration |
 | Give every member its own project-scoped key | A second credential type to issue, store and revoke, for what the session token already proves |
 | Leave the key visible and gate only the destructive procedures | The key is the credential; anything holding it can call whatever the key is allowed to call, including procedures added later |
 

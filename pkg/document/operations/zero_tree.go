@@ -70,16 +70,6 @@ func validateZeroRestoreIdentities(spans []*crdt.ZeroRestoreSpan, vv time.Versio
 	return validateRestoreTickets(createdAts, vv)
 }
 
-func withZeroRemovedBy(spans []*crdt.ZeroRestoreSpan, removedBy *time.Ticket) []*crdt.ZeroRestoreSpan {
-	out := make([]*crdt.ZeroRestoreSpan, len(spans))
-	for i, s := range spans {
-		cp := *s
-		cp.RemovedBy = removedBy
-		out[i] = &cp
-	}
-	return out
-}
-
 // Execute executes this operation on the given ZeroTree.
 //
 //nolint:gocyclo // PROTOTYPE: mirrors ZeroTreeEditOperation.execute in the JS SDK
@@ -102,13 +92,18 @@ func (e *ZeroTreeEdit) Execute(root *crdt.Root, source OpSource, vv time.Version
 			toRestore, toRetombstone = e.retombstoneSpans, e.restoreSpans
 		}
 
+		// The reverse names only the pieces the removal was recorded on, as
+		// Edit.reRemove does: naming it on a piece someone else removed would
+		// cancel a removal that piece never had.
 		observable := false
+		var recorded []*crdt.ZeroRestoreSpan
 		if len(toRetombstone) > 0 {
-			pairs, diff, err := tree.Retombstone(toRetombstone, e.executedAt, vv)
+			pairs, tombstoned, diff, spans, err := tree.Retombstone(toRetombstone, e.executedAt, vv)
 			if err != nil {
 				return ExecutionResult{}, err
 			}
-			observable = observable || len(pairs) > 0
+			recorded = spans
+			observable = observable || tombstoned
 			root.Acc(diff)
 			for _, pair := range pairs {
 				root.RegisterGCPair(pair)
@@ -118,6 +113,9 @@ func (e *ZeroTreeEdit) Execute(root *crdt.Root, source OpSource, vv time.Version
 			untombstoned, recreated, stillTombstoned, err := tree.Restore(toRestore, e.executedAt, e.from)
 			if err != nil {
 				return ExecutionResult{}, err
+			}
+			if tree.HasCancelledRemovals() {
+				root.RegisterLedgerHolder(tree)
 			}
 			observable = observable || len(untombstoned) > 0 || len(recreated) > 0
 			for _, pair := range stillTombstoned {
@@ -137,13 +135,19 @@ func (e *ZeroTreeEdit) Execute(root *crdt.Root, source OpSource, vv time.Version
 		if !source.NeedsReverse() {
 			return ExecutionResult{Observable: observable}, nil
 		}
-		// The spans this execution removed again are restored by the next
-		// reverse, which has to cancel THIS removal.
-		restoreSpans, retombstoneSpans := e.restoreSpans, withZeroRemovedBy(e.retombstoneSpans, e.executedAt)
+		// The reverse keeps the span sets and flips the direction; the
+		// re-removed set is the pieces the removal was recorded on.
+		restoreSpans, retombstoneSpans := e.restoreSpans, e.retombstoneSpans
 		mode := crdt.RestoreModeRetombstone
 		if isRetombstone {
-			restoreSpans, retombstoneSpans = withZeroRemovedBy(e.restoreSpans, e.executedAt), e.retombstoneSpans
 			mode = crdt.RestoreModeRestore
+		}
+		if len(toRetombstone) > 0 {
+			if isRetombstone {
+				restoreSpans = recorded
+			} else {
+				retombstoneSpans = recorded
+			}
 		}
 		return ExecutionResult{
 			Reverse: NewZeroTreeEdit(e.parentCreatedAt, e.from, e.to, nil, nil,

@@ -7,6 +7,58 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Upgrade Notes
+
+- **Build `rl_session_daily` before the server.** The sessions stats now read
+  the rollup by name. A cluster with `starrocksSummaryEnabled` whose
+  `sum_session_hll_daily_ch` lacks it, or is still building it, falls back to
+  that table's channel-day index and logs `read sum_session_hll_daily_ch
+  instead of rl_session_daily` until it is queryable — correct, but slow
+  enough on a large project to miss the dashboard's deadline. Clusters that
+  followed v0.7.20 already have it. The analytics init job adds it when
+  missing, waits up to two minutes for the build, and logs `rl_session_daily
+  is not queryable yet` instead of failing when it is not done, so a finished
+  job does not mean a finished build. Upgrade `yorkie-analytics` first, and
+  roll out the server once `SELECT 1 FROM rl_session_daily [_SYNC_MV_] LIMIT
+  1` returns rather than erroring. Provisioning kept outside the chart
+  should wait on that read too, not on `desc ... all`, which lists the index
+  while it is still building.
+
+- **Text undo removal ledger (#2310): upgrade the server first, and roll
+  forward only.** Snapshots gain `TextNode.removal_events`, which records the
+  deletions and undos a piece of text has seen. The server builds snapshots
+  with the new rules and starts writing ledgers as soon as it runs, even from
+  changes sent by older clients. An older server drops the field when it
+  re-encodes a document, so finish the server rollout before releasing an
+  SDK that writes ledgers (yorkie-js-sdk#1514), keep the rollout short so
+  no older pod re-writes a snapshot in between, and do not roll the server
+  back once such clients are connected. SDKs without the ledger — earlier
+  JS SDK releases, iOS and Android — can still disagree with the server when
+  an undo meets a concurrent deletion of the same text, as they do today.
+- **Held text tombstones (#2310).** A piece of text removed by two concurrent
+  deletions that nobody undoes is no longer collected: either deletion could
+  still be undone. It stays in `GarbageLen` and the GC size for the life of
+  the document. The server's `MaxSizePerDocument` gate reads only the live
+  size; the JS SDK's local size check counts both.
+- **Go SDK `Presence.Set` encodes its value as JSON (#2280).** Callers that
+  already passed JSON text, such as an object or a number, must switch to
+  `Presence.SetJSON`, or the value is encoded twice.
+
+### Removed
+
+- Remove the MCP server. `/mcp/` is no longer served: a request to it gets
+  404 (a CORS preflight still gets 204), so assistants configured against it
+  must be removed from their client. The Admin API still serves document and
+  schema reads.
+
+### Fixed
+
+- Read the sessions summary through `rl_session_daily` by name, so project
+  stats over long windows stay on one sketch per day on StarRocks 3.3.22.
+- Keep Text undo converging through GC with a removal ledger: an undo no
+  longer revives text a concurrent deletion removed, and a deletion no longer
+  removes text a concurrent undo revived (#2310).
+
 ## [v0.7.25] - 2026-10-13
 
 ### Upgrade Notes

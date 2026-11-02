@@ -143,13 +143,16 @@ actor existed leave it empty, and an empty value must never match.
 | `pushpull.go` `pullChangeInfos` dedup (`clientInfo.ID == pulledChange.ActorID`) | Self-echo dedup — **the single most important switch** | `clientInfo.IsOwnActor(pulledChange.ActorID)` |
 | `pushpull.go` `validateChangeActors` (push) | Refuses a to-be-stored change stamped with an actor the pushing client row does not hold, which dedup would otherwise hide from its owner (#2120); the initial actor is exempt, and an operation's `executedAt` mismatch is logged, not refused. Bound to the unauthenticated `client_id`, so a caller holding a victim's identifier and two sessions of one client key are not separated (#2114) | `clientInfo.IsOwnActor(change ID actor)`, `ErrActorMismatch` on mismatch |
 | `pushpull.go` `DisableGC` VV truncation key | Size-1 VV keyed on the client's own actor so its lamport clock advances | `clientInfo.OwnActorID()` (StableActorID when present, else session id) |
+| `cluster_server.go` `DetachDocument` presence clear | Server-side detach on deactivation writes the clear on the client's behalf; a clear deletes only the entry under the actor it is stamped with (#2290) | One clear per identity: `clientInfo.ID` always, and `clientInfo.OwnActorID()` when it differs, unless another session of the same client key is still attached to the document — sessions of one key share the single presence entry under the stable actor. A sibling still attaching is not seen (#2294) |
 | `pushpull.go` pubsub publisher actor | DocChanged event author for self-echo filtering | **stays** on `clientInfo.ID` (see below) |
 | `client_info.go` `VersionVectorInfo.ClientID`; `memory/database.go`, `mongo/client.go` VV upsert / delete-on-detach / vector cache | VV **row identity** | **stays** on `clientInfo.ID` (see VV keying below) |
 
 Sites that **stay** on the session `_id`: all `IDFromActorID` RPC row lookups;
 `ActivateClient` minting a fresh `_id`; housekeeping row reaping; checkpoint
 ownership in `ClientDocInfo` (scoped per session on purpose — see below);
-analytics counting (Q4). Snapshot authoring uses `InitialActorID`, unaffected.
+the presence-cache prune in `UpdateClientInfoAfterPushPull` (pruning the shared
+stable actor would drop a sibling session's cached changes); analytics counting
+(Q4). Snapshot authoring uses `InitialActorID`, unaffected.
 
 A client that does not supply a stable identity keeps today's behavior: a random
 actor per session. With compare-both, its changes stamp the session id, which is

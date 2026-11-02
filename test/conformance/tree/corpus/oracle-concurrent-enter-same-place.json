@@ -1,0 +1,31 @@
+{
+  "v": 2,
+  "id": "oracle-concurrent-enter-same-place",
+  "issues": ["yorkie#2187"],
+  "status": { "go": "known-fail", "js": "known-fail" },
+  "note": "Both replicas press Enter (level-2 split) after 'ab' concurrently. They converge, but on <p></p> without a span plus an extra empty span before 'cd'; the only result the flat-model oracle allows is a middle paragraph holding an empty span. Every two-op Enter/Enter combination at the same place (either Enter form) does this.",
+  "replicas": 2,
+  "init": {
+    "type": "doc",
+    "children": [
+      {
+        "type": "p",
+        "children": [{ "type": "span", "children": [{ "type": "text", "value": "abcd" }] }]
+      }
+    ]
+  },
+  "steps": [
+    { "r": 0, "op": "edit", "from": 4, "to": 4, "split": 2 },
+    { "r": 1, "op": "edit", "from": 4, "to": 4, "split": 2 },
+    { "r": 0, "op": "sync" },
+    { "r": 1, "op": "sync" },
+    {
+      "op": "expect",
+      "label": "synced",
+      "xml": [
+        "<doc><p><span>ab</span></p><p><span></span></p><p><span>cd</span></p></doc>",
+        "<doc><p><span>ab</span></p><p><span></span></p><p><span>cd</span></p></doc>"
+      ]
+    }
+  ]
+}

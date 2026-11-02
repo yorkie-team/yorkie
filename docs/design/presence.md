@@ -163,6 +163,38 @@ The server exposes dedicated RPC methods for channel operations:
 2. **Watch**: Client → WatchDocument → Server streams presence events (watched/unwatched/changed)
 3. **Update**: Client → Document.Update(presence) → PushPull RPC → Server broadcasts to watchers
 
+### Presence Value Encoding
+
+`Presence.Data` is `map<string, string>` on the wire, and the string is not the
+value: it is the **JSON encoding** of the value. The JS SDK has always worked
+this way — it `JSON.stringify`s each value on encode and `JSON.parse`s it on
+decode (`packages/sdk/src/api/converter.ts`) — so a value that is not valid
+JSON makes a JS peer fail to apply the whole pack that carries it.
+
+The Go SDK joins that contract at its own boundary (`pkg/document/presence`):
+
+| Boundary | Form |
+| --- | --- |
+| `Presence.Set`, `Presence.Initialize` | take the value, encode it (`presence.EncodeValue`) |
+| `Presence.SetJSON` | takes a value that is encoded already |
+| `Document`'s presence accessors and the presence events | decode (`presence.DecodeValue`) |
+| `InternalDocument`'s presence accessors | stay encoded — snapshots and push-pull payloads are built from them |
+| Storage (snapshot, change) | encoded |
+| Admin/cluster `GetDocument(s)` summaries | encoded — built from `InternalDocument` |
+
+Three consequences are worth stating:
+
+- **Decoding is lenient.** A value that is not a JSON string decodes to itself.
+  That covers a peer's object or number, which `map[string]string` has nowhere
+  else to put, and any value a Go client wrote before this encoding existed.
+- **A Go caller that hand-encoded JSON into `Set` must switch to `SetJSON`**,
+  or its value is encoded a second time.
+- **The admin API serves the wire form.** Its summaries come from
+  `InternalDocument`, so a value reads as `"moved"`, not `moved`. That is what
+  a JS client's presence has always looked like there; a Go client's now
+  matches it. Decoding at that boundary would be a separate change, and would
+  have to account for consumers that parse the values themselves.
+
 ### TTL and Heartbeat Mechanism
 
 To handle abnormal disconnections (crashes, network failures), the Channel uses TTL-based expiration:

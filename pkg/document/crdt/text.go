@@ -162,6 +162,18 @@ func (t *TextValue) Purge(child GCChild) error {
 	return t.attrs.Purge(rhtNode)
 }
 
+// HasCancelledRemovals reports whether any piece's removal ledger holds a
+// cancel that PruneLedgers may drop later.
+func (t *Text) HasCancelledRemovals() bool {
+	return t.rgaTreeSplit.HasCancelledRemovals()
+}
+
+// PruneLedgers drops the removals whose cancels the given vector covers from
+// the pieces' ledgers, and returns how many pieces still hold a cancel.
+func (t *Text) PruneLedgers(vector time.VersionVector) int {
+	return t.rgaTreeSplit.PruneLedgers(vector)
+}
+
 // GCPairs returns the pairs of GC.
 func (t *TextValue) GCPairs() []GCPair {
 	if t.attrs == nil {
@@ -294,14 +306,6 @@ func (t *Text) DeepCopy() (Element, error) {
 			current.SetInsPrev(insPrevNode)
 		}
 	}
-
-	t.rgaTreeSplit.PurgedLedgers(func(createdAt *time.Ticket, entries []*PurgedLedger) {
-		for _, e := range entries {
-			rgaTreeSplit.AddPurgedLedger(createdAt, &PurgedLedger{
-				Start: e.Start, End: e.End, Dels: append([]*time.Ticket(nil), e.Dels...),
-			})
-		}
-	})
 
 	text := NewText(rgaTreeSplit, t.createdAt)
 	text.movedAt = t.movedAt
@@ -452,14 +456,12 @@ func (t *Text) Edit(
 		if span.value.Attrs().Len() > 0 {
 			attrs = span.value.Attrs().Elements()
 		}
-		// An undo of this edit cancels exactly this removal.
 		removedSpans = append(removedSpans, RestoreSpan{
 			CreatedAt:  span.createdAt,
 			Start:      span.start,
 			End:        span.end,
 			Content:    content,
 			Attributes: attrs,
-			RemovedBy:  executedAt,
 		})
 	}
 
@@ -485,7 +487,6 @@ func (t *Text) Restore(
 			start:     s.Start,
 			end:       s.End,
 			value:     NewTextValue(s.Content, attrs),
-			removedBy: s.RemovedBy,
 		})
 	}
 	// `from` is the op's left boundary; it anchors a fragment whose whole
@@ -495,13 +496,15 @@ func (t *Text) Restore(
 }
 
 // Retombstone re-removes a previously restored range under its original
-// identities. Returns GC pairs for the newly tombstoned nodes and the net
-// docSize diff from splitting live pieces.
+// identities. Returns GC pairs for the newly tombstoned nodes and for the
+// born-dead remainders its splits left behind, whether any live piece was
+// tombstoned, the net docSize diff from splitting live pieces, and the spans
+// the removal was recorded on, named as the removal a reverse would cancel.
 func (t *Text) Retombstone(
 	spans []*RestoreSpan,
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
-) ([]GCPair, resource.DataSize, error) {
+) ([]GCPair, bool, resource.DataSize, []*RestoreSpan, error) {
 	internal := make([]restoreSpanValue[*TextValue], 0, len(spans))
 	for _, s := range spans {
 		internal = append(internal, restoreSpanValue[*TextValue]{
@@ -511,7 +514,29 @@ func (t *Text) Retombstone(
 			value:     NewTextValue(s.Content, NewRHT()),
 		})
 	}
-	return t.rgaTreeSplit.retombstone(internal, executedAt, versionVector)
+	pairs, tombstoned, diff, recorded, err := t.rgaTreeSplit.retombstone(internal, executedAt, versionVector)
+	if err != nil {
+		return nil, false, diff, nil, err
+	}
+
+	out := make([]*RestoreSpan, 0, len(recorded))
+	for _, r := range recorded {
+		var attrs map[string]string
+		for _, s := range spans {
+			if s.CreatedAt.Compare(r.createdAt) == 0 && s.Start <= r.start && r.end <= s.End {
+				attrs = s.Attributes
+				break
+			}
+		}
+		out = append(out, &RestoreSpan{
+			CreatedAt:  r.createdAt,
+			Start:      r.start,
+			End:        r.end,
+			Content:    r.value.String(),
+			Attributes: attrs,
+		})
+	}
+	return pairs, tombstoned, diff, out, nil
 }
 
 // NormalizePos converts the given position into a single absolute offset

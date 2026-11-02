@@ -766,10 +766,14 @@ func TestDocPresence(t *testing.T) {
 		assert.NoError(t, gojson.Unmarshal(resBody, summaries))
 		assert.Equal(t, 1, len(summaries.Documents))
 
+		// The admin API serves what the server stores, which is the wire form:
+		// presence values are JSON-encoded (see presence.EncodeValue). A JS
+		// client's presence has always reached this API that way; a Go
+		// client's now does too.
 		presences := summaries.Documents[0].Presences
 		assert.Equal(t, 2, len(presences), "should include presences of both WatchDocStreamd clients")
-		assert.Equal(t, presence.Data{"key": c1.Key()}, presences[c1.ID().String()])
-		assert.Equal(t, presence.Data{"key": c2.Key()}, presences[c2.ID().String()])
+		assert.Equal(t, presence.Data{"key": presence.EncodeValue(c1.Key())}, presences[c1.ID().String()])
+		assert.Equal(t, presence.Data{"key": presence.EncodeValue(c2.Key())}, presences[c2.ID().String()])
 
 		// 06. Unsubscribe c2 from the document
 		cancel2()
@@ -790,7 +794,7 @@ func TestDocPresence(t *testing.T) {
 
 		presences = summaries.Documents[0].Presences
 		assert.Equal(t, 1, len(presences), "should only include presence of WatchDocStreamd client")
-		assert.Equal(t, presence.Data{"key": c1.Key()}, presences[c1.ID().String()])
+		assert.Equal(t, presence.Data{"key": presence.EncodeValue(c1.Key())}, presences[c1.ID().String()])
 		assert.NotContains(t, presences, c2.ID().String(), "c2's presence should be filtered out")
 	})
 
