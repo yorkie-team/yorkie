@@ -23,7 +23,6 @@ package operations
 
 import (
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
-	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -60,6 +59,14 @@ func NewZeroTreeEdit(
 		restoreMode:      restoreMode,
 		retombstoneSpans: retombstoneSpans,
 	}
+}
+
+// bookSizeDelta books on the root how much the markers of tree grew in place
+// (see ZeroTree.TakeSizeDelta).
+func bookSizeDelta(root *crdt.Root, tree *crdt.ZeroTree) {
+	delta := tree.TakeSizeDelta()
+	root.Acc(delta.Live)
+	root.AccGC(delta.GC)
 }
 
 func validateZeroRestoreIdentities(spans []*crdt.ZeroRestoreSpan, vv time.VersionVector) error {
@@ -110,7 +117,7 @@ func (e *ZeroTreeEdit) Execute(root *crdt.Root, source OpSource, vv time.Version
 			}
 		}
 		if len(toRestore) > 0 {
-			untombstoned, recreated, stillTombstoned, err := tree.Restore(toRestore, e.executedAt, e.from)
+			untombstoned, recreated, stillTombstoned, ghostDiff, err := tree.Restore(toRestore, e.executedAt, e.from)
 			if err != nil {
 				return ExecutionResult{}, err
 			}
@@ -121,7 +128,7 @@ func (e *ZeroTreeEdit) Execute(root *crdt.Root, source OpSource, vv time.Version
 			for _, pair := range stillTombstoned {
 				root.RegisterGCPair(pair)
 			}
-			var diff resource.DataSize
+			diff := ghostDiff
 			for _, node := range untombstoned {
 				root.UnregisterGCPair(crdt.GCPair{Parent: tree.RGATreeSplit(), Child: node})
 				diff.Add(node.DataSize())
@@ -131,6 +138,7 @@ func (e *ZeroTreeEdit) Execute(root *crdt.Root, source OpSource, vv time.Version
 			}
 			root.Acc(diff)
 		}
+		bookSizeDelta(root, tree)
 
 		if !source.NeedsReverse() {
 			return ExecutionResult{Observable: observable}, nil
@@ -162,6 +170,7 @@ func (e *ZeroTreeEdit) Execute(root *crdt.Root, source OpSource, vv time.Version
 	}
 	pairs, diff, removedSpans, err := tree.Edit(e.from, e.to, content, e.executedAt, vv)
 	root.Acc(diff)
+	bookSizeDelta(root, tree)
 	for _, pair := range pairs {
 		root.RegisterGCPair(pair)
 	}
@@ -271,6 +280,7 @@ func (e *ZeroTreeStyle) Execute(root *crdt.Root, source OpSource, _ time.Version
 	for _, pair := range pairs {
 		root.RegisterGCPair(pair)
 	}
+	bookSizeDelta(root, tree)
 	// a range write may change other markers even when its own kept a newer
 	// value, and so may a cancel
 	observable := len(prev) > 0 || e.rng != nil || cancel != nil

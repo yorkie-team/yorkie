@@ -385,6 +385,29 @@ func (s *RGATreeSplitNode[V]) setRemovalEvents(events []*time.Ticket) error {
 	return nil
 }
 
+// canJoinLedger tells whether this ghost's ledger and other's can be one:
+// each was removed by a single deletion of the same actor, with no cancel.
+// A purged removal is known to every replica, so no change can tell one such
+// deletion from another; what an undo needs is whose it is
+// (uncancelledRemovalBy).
+func (s *RGATreeSplitNode[V]) canJoinLedger(other *RGATreeSplitNode[V]) bool {
+	mine, theirs := s.removals(), other.removals()
+	return len(s.cancels) == 0 && len(other.cancels) == 0 &&
+		len(mine) == 1 && len(theirs) == 1 &&
+		mine[0].ActorID().Compare(theirs[0].ActorID()) == 0
+}
+
+// joinLedger makes this ledger the one of both (see canJoinLedger): the
+// later of the two deletions.
+func (s *RGATreeSplitNode[V]) joinLedger(other *RGATreeSplitNode[V]) {
+	mine, theirs := s.removals()[0], other.removals()[0]
+	s.ledgered, s.dels, s.cancels = false, nil, nil
+	s.removedAt = mine
+	if theirs.After(mine) {
+		s.removedAt = theirs
+	}
+}
+
 func (s *RGATreeSplitNode[V]) copyLedger(other *RGATreeSplitNode[V]) {
 	s.ledgered = other.ledgered
 	s.dels = append([]*time.Ticket(nil), other.dels...)
@@ -742,6 +765,19 @@ func (s *RGATreeSplit[V]) SetGhostPurge(on bool) {
 type ghostable interface {
 	toGhost()
 	refill(from RGATreeSplitValue, offset int)
+	// isGhost tells whether a ghost purge stripped the value. A ghost is not
+	// garbage any more: what it keeps stays until an undo revives it.
+	isGhost() bool
+	// canAbsorb tells whether next, the ghost right after this one, can join
+	// it; absorb appends it.
+	canAbsorb(next RGATreeSplitValue) bool
+	absorb(next RGATreeSplitValue)
+}
+
+// isGhostValue tells whether v is a ghost (see ghostable).
+func isGhostValue(v any) bool {
+	g, ok := v.(ghostable)
+	return ok && g.isGhost()
 }
 
 // trackCancelled records that node's ledger has a cancel.
@@ -996,7 +1032,9 @@ func (s *RGATreeSplit[V]) splitNode(
 	// live, so the net-new size the split created goes straight to
 	// docSize.GC when the pair is registered; return a zero diff to the
 	// caller (which accounts diffs to docSize.Live).
-	if splitNode.removedAt != nil {
+	// A ghost is not garbage: what a split of it adds stays with the ghost,
+	// in live (see purgeToGhost).
+	if splitNode.removedAt != nil && !isGhostValue(splitNode.value) {
 		gcSize := diff
 		s.pendingGCPairs = append(s.pendingGCPairs, GCPair{
 			Parent:     s,
@@ -1274,7 +1312,11 @@ func (s *RGATreeSplit[V]) restore(
 	spans []restoreSpanValue[V],
 	fromPos *RGATreeSplitNodePos,
 	executedAt *time.Ticket,
-) (untombstoned, recreated []*RGATreeSplitNode[V], stillTombstoned []GCPair, err error) {
+) (untombstoned, recreated []*RGATreeSplitNode[V], stillTombstoned []GCPair, ghostDiff resource.DataSize, err error) {
+	// ghostDiff is what reviving ghosts changes live by besides their new
+	// size: a ghost is already counted in live (see purgeToGhost), and a split
+	// of one adds to live.
+	//
 	// chainAnchor is the node last placed at the current cursor (un-tombstoned
 	// or recreated), in document order. When a recreated fragment has no
 	// surviving same-insertion anchor, chaining after this keeps a purged
@@ -1300,10 +1342,13 @@ func (s *RGATreeSplit[V]) restore(
 			if piece != nil && pieceStart <= cursor {
 				overlapEnd := min(pieceEnd, span.end)
 				if piece.removedAt != nil {
-					target, _, isoErr := s.isolateRange(piece, cursor, overlapEnd)
+					target, splitDiff, isoErr := s.isolateRange(piece, cursor, overlapEnd)
 					if isoErr != nil {
-						return nil, nil, nil, isoErr
+						return nil, nil, nil, ghostDiff, isoErr
 					}
+					ghostDiff.Add(splitDiff)
+					wasGhost := isGhostValue(target.value)
+					ghostSize := target.DataSize()
 					// An undo reverses its own actor's change, so the removal it
 					// cancels is the one uncancelled removal by that actor:
 					// one actor cannot remove a piece already removed in its
@@ -1318,6 +1363,9 @@ func (s *RGATreeSplit[V]) restore(
 							g.refill(span.value, target.id.offset-span.start)
 						}
 						s.treeByIndex.Splay(target.indexNode)
+						if wasGhost {
+							ghostDiff.Sub(ghostSize)
+						}
 						untombstoned = append(untombstoned, target)
 					}
 					chainAnchor = target
@@ -1387,7 +1435,7 @@ func (s *RGATreeSplit[V]) restore(
 	// balanced against the original tombstone's accounting (a bare
 	// un-register on a never-registered split piece would leak GC size).
 	stillTombstoned = s.drainPendingGCPairs()
-	return untombstoned, recreated, stillTombstoned, nil
+	return untombstoned, recreated, stillTombstoned, ghostDiff, nil
 }
 
 // retombstone re-removes the characters in spans under their original
@@ -1652,16 +1700,74 @@ func (s *RGATreeSplit[V]) PurgeBarrierAt(child GCChild) *time.Ticket {
 }
 
 func (s *RGATreeSplit[V]) Purge(child GCChild) error {
+	_, err := s.PurgeSized(child)
+	return err
+}
+
+// PurgeSized purges like Purge and reports what a ghost purge leaves behind
+// (see GCSizedParent).
+func (s *RGATreeSplit[V]) PurgeSized(child GCChild) (PurgeResult, error) {
 	node := child.(*RGATreeSplitNode[V])
-
 	if s.ghostPurge {
-		// A ghost keeps its place and its ledger: only the content goes.
-		if g, ok := any(node.value).(ghostable); ok {
-			g.toGhost()
-		}
-		return nil
+		return PurgeResult{Live: s.purgeToGhost(node)}, nil
 	}
+	s.unlink(node)
+	return PurgeResult{}, nil
+}
 
+// purgeToGhost strips node to a ghost: it keeps its place and its ledger,
+// only the content goes. A ghost next to another ghost of the same
+// insertion, removed by the same actor, joins it. Returns the size the
+// ghosts left behind add to the document (live, since GC never takes them).
+func (s *RGATreeSplit[V]) purgeToGhost(node *RGATreeSplitNode[V]) resource.DataSize {
+	var kept resource.DataSize
+	if g, ok := any(node.value).(ghostable); ok {
+		g.toGhost()
+	}
+	kept.Add(node.DataSize())
+
+	ghost := node
+	if prev := node.prev; prev != nil && s.canJoinGhosts(prev, node) {
+		kept.Sub(prev.DataSize())
+		kept.Sub(node.DataSize())
+		s.joinGhosts(prev, node)
+		kept.Add(prev.DataSize())
+		ghost = prev
+	}
+	if next := ghost.next; next != nil && s.canJoinGhosts(ghost, next) {
+		kept.Sub(ghost.DataSize())
+		kept.Sub(next.DataSize())
+		s.joinGhosts(ghost, next)
+		kept.Add(ghost.DataSize())
+	}
+	return kept
+}
+
+// canJoinGhosts tells whether ghost right, right after ghost left, can join
+// it: two pieces of one insertion, adjacent in it, each removed by one
+// deletion of the same actor (see canJoinLedger). Nothing can tell the joined
+// ghost from the two: a lookup by ID finds the left one covering both, and a
+// restore isolates the part it names.
+func (s *RGATreeSplit[V]) canJoinGhosts(left, right *RGATreeSplitNode[V]) bool {
+	g, ok := any(left.value).(ghostable)
+	if !ok || !g.isGhost() || !g.canAbsorb(right.value) {
+		return false
+	}
+	return left.next == right && right.insPrev == left &&
+		left.id.createdAt.Compare(right.id.createdAt) == 0 &&
+		left.id.offset+left.contentLen() == right.id.offset &&
+		left.canJoinLedger(right)
+}
+
+// joinGhosts appends ghost right to ghost left and unlinks it.
+func (s *RGATreeSplit[V]) joinGhosts(left, right *RGATreeSplitNode[V]) {
+	any(left.value).(ghostable).absorb(right.value)
+	left.joinLedger(right)
+	s.unlink(right)
+}
+
+// unlink takes node out of the list, the trees and both chains.
+func (s *RGATreeSplit[V]) unlink(node *RGATreeSplitNode[V]) {
 	if s.cancelled != nil {
 		delete(s.cancelled, node)
 	}
@@ -1682,6 +1788,4 @@ func (s *RGATreeSplit[V]) Purge(child GCChild) error {
 		node.insNext.insPrev = node.insPrev
 	}
 	node.insPrev, node.insNext = nil, nil
-
-	return nil
 }

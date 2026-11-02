@@ -2110,9 +2110,12 @@ func (x *ZeroSchemaGrid) GetCell() string {
 // ZeroTokens is a run of tokens. Consecutive characters travel as one
 // string. scope is the id of the scoped marker the run was inserted in.
 type ZeroTokens struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tokens        []*ZeroToken           `protobuf:"bytes,1,rep,name=tokens,proto3" json:"tokens,omitempty"`
-	Scope         string                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Tokens []*ZeroToken           `protobuf:"bytes,1,rep,name=tokens,proto3" json:"tokens,omitempty"`
+	Scope  string                 `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
+	// ghost: a ghost purge (GC) stripped this run, which kept only markers. A
+	// run with a ghost character is a ghost too. GC leaves a ghost alone.
+	Ghost         bool `protobuf:"varint,3,opt,name=ghost,proto3" json:"ghost,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2159,6 +2162,13 @@ func (x *ZeroTokens) GetScope() string {
 		return x.Scope
 	}
 	return ""
+}
+
+func (x *ZeroTokens) GetGhost() bool {
+	if x != nil {
+		return x.Ghost
+	}
+	return false
 }
 
 // ghost is a run of characters a ghost purge (GC) dropped.
@@ -6980,11 +6990,12 @@ const file_yorkie_v1_resources_proto_rawDesc = "" +
 	"\x0eZeroSchemaGrid\x12\x14\n" +
 	"\x05table\x18\x01 \x01(\tR\x05table\x12\x10\n" +
 	"\x03row\x18\x02 \x01(\tR\x03row\x12\x12\n" +
-	"\x04cell\x18\x03 \x01(\tR\x04cell\"P\n" +
+	"\x04cell\x18\x03 \x01(\tR\x04cell\"f\n" +
 	"\n" +
 	"ZeroTokens\x12,\n" +
 	"\x06tokens\x18\x01 \x03(\v2\x14.yorkie.v1.ZeroTokenR\x06tokens\x12\x14\n" +
-	"\x05scope\x18\x02 \x01(\tR\x05scope\"t\n" +
+	"\x05scope\x18\x02 \x01(\tR\x05scope\x12\x14\n" +
+	"\x05ghost\x18\x03 \x01(\bR\x05ghost\"t\n" +
 	"\tZeroToken\x12\x16\n" +
 	"\x05chars\x18\x01 \x01(\tH\x00R\x05chars\x12/\n" +
 	"\x06marker\x18\x02 \x01(\v2\x15.yorkie.v1.ZeroMarkerH\x00R\x06marker\x12\x16\n" +

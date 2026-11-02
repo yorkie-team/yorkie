@@ -711,11 +711,20 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 			}
 		}
 
-		if err := pair.Parent.Purge(pair.Child); err != nil {
+		size := pair.Child.DataSize()
+		var kept PurgeResult
+		if parent, ok := pair.Parent.(GCSizedParent); ok {
+			var err error
+			if kept, err = parent.PurgeSized(pair.Child); err != nil {
+				return 0, 0, err
+			}
+		} else if err := pair.Parent.Purge(pair.Child); err != nil {
 			return 0, 0, err
 		}
 
-		r.docSize.GC.Sub(pair.Child.DataSize())
+		r.docSize.GC.Sub(size)
+		r.docSize.Live.Add(kept.Live)
+		r.docSize.GC.Add(kept.GC)
 		delete(r.gcNodePairMap, key)
 		count++
 	}

@@ -53,6 +53,21 @@ type GCParent interface {
 	Purge(node GCChild) error
 }
 
+// PurgeResult is how much a purge changed the document by, besides dropping
+// the purged child, in live and in gc.
+type PurgeResult struct {
+	Live resource.DataSize
+	GC   resource.DataSize
+}
+
+// GCSizedParent is a GC parent whose purge changes the rest of the
+// document: what a ghost keeps (RGATreeSplit.purgeToGhost), or a register
+// that drops a write (ZeroTree.Purge). PurgeSized purges like Purge and
+// reports how much.
+type GCSizedParent interface {
+	PurgeSized(node GCChild) (PurgeResult, error)
+}
+
 // GCChild is an interface for the child of the garbage collection target.
 type GCChild interface {
 	IDString() string

@@ -205,9 +205,12 @@ type ZeroToken struct {
 
 // ZeroTokens is the value of an RGATreeSplitNode of a ZeroTree: a run of
 // tokens. Scope is the id of the scoped marker the run was inserted in.
+// Ghost tells that a ghost purge stripped the run (see toGhost): a ghost is
+// not garbage, GC leaves it alone and it counts in live.
 type ZeroTokens struct {
 	Tokens []ZeroToken
 	Scope  string
+	Ghost  bool
 }
 
 // NewZeroTokens creates a run of tokens.
@@ -228,7 +231,7 @@ func copyTokens(tokens []ZeroToken) []ZeroToken {
 
 // Split keeps [0, offset) and returns [offset, len).
 func (z *ZeroTokens) Split(offset int) RGATreeSplitValue {
-	right := &ZeroTokens{Tokens: copyTokens(z.Tokens[offset:]), Scope: z.Scope}
+	right := &ZeroTokens{Tokens: copyTokens(z.Tokens[offset:]), Scope: z.Scope, Ghost: z.Ghost}
 	z.Tokens = z.Tokens[:offset:offset]
 	return right
 }
@@ -241,6 +244,24 @@ func (z *ZeroTokens) toGhost() {
 			z.Tokens[i] = ZeroToken{Ghost: true}
 		}
 	}
+	z.Ghost = true
+}
+
+// isGhost tells whether a ghost purge stripped this run.
+func (z *ZeroTokens) isGhost() bool {
+	return z.Ghost
+}
+
+// canAbsorb tells whether ghost next can join this ghost: both are ghosts
+// in the same scope.
+func (z *ZeroTokens) canAbsorb(next RGATreeSplitValue) bool {
+	other, ok := next.(*ZeroTokens)
+	return ok && z.Ghost && other.Ghost && z.Scope == other.Scope
+}
+
+// absorb appends the tokens of ghost next.
+func (z *ZeroTokens) absorb(next RGATreeSplitValue) {
+	z.Tokens = append(z.Tokens, next.(*ZeroTokens).Tokens...)
 }
 
 // refill puts back the characters of a ghost from a restore span value.
@@ -254,6 +275,7 @@ func (z *ZeroTokens) refill(from RGATreeSplitValue, offset int) {
 			z.Tokens[i] = s
 		}
 	}
+	z.Ghost = false
 }
 
 // Len returns the number of tokens.
@@ -263,7 +285,7 @@ func (z *ZeroTokens) Len() int {
 
 // DeepCopy copies this run.
 func (z *ZeroTokens) DeepCopy() RGATreeSplitValue {
-	return &ZeroTokens{Tokens: copyTokens(z.Tokens), Scope: z.Scope}
+	return &ZeroTokens{Tokens: copyTokens(z.Tokens), Scope: z.Scope, Ghost: z.Ghost}
 }
 
 // String shows markers as <type:depth> between the characters.
@@ -312,17 +334,27 @@ func (z *ZeroTokens) DataSize() resource.DataSize {
 	size := resource.DataSize{}
 	for _, t := range z.Tokens {
 		if t.Marker == nil {
-			size.Data += 2
+			// A ghost keeps no character, only a count of them.
+			if !t.Ghost {
+				size.Data += 2
+			}
 			continue
 		}
-		size.Data += utf16Len(t.Marker.Type)*2 + 4
-		for _, attr := range t.Marker.Attrs {
-			size.Data += (utf16Len(attr.Key) + utf16Len(attr.Value)) * 2
+		size.Add(t.Marker.dataSize())
+	}
+	return size
+}
+
+// dataSize returns the data size of a marker: its type, its attributes and
+// the writes their registers keep.
+func (m *ZeroMarker) dataSize() resource.DataSize {
+	size := resource.DataSize{Data: utf16Len(m.Type)*2 + 4}
+	for _, attr := range m.Attrs {
+		size.Data += (utf16Len(attr.Key) + utf16Len(attr.Value)) * 2
+		size.Meta += time.TicketSize
+		for _, e := range attr.History {
+			size.Data += utf16Len(e.Value) * 2
 			size.Meta += time.TicketSize
-			for _, e := range attr.History {
-				size.Data += utf16Len(e.Value) * 2
-				size.Meta += time.TicketSize
-			}
 		}
 	}
 	return size
@@ -593,6 +625,10 @@ type ZeroTree struct {
 	pending map[string]*ZeroStyleRegion
 	// cancels is the style writes undone or redone (see ZeroStyleCancels).
 	cancels ZeroStyleCancels
+	// sizeDelta is how much the markers grew since TakeSizeDelta, in live and
+	// in gc as their nodes are: a register changes in place, under no
+	// insertion or removal that would count it.
+	sizeDelta PurgeResult
 }
 
 // NewZeroTree creates a new instance of ZeroTree.
@@ -653,7 +689,8 @@ func (t *ZeroTree) MetaSize() int {
 func (t *ZeroTree) DataSize() resource.DataSize {
 	size := resource.DataSize{}
 	for _, node := range t.Nodes() {
-		if node.removedAt == nil {
+		// A ghost stays until an undo revives it, so it counts in live.
+		if node.removedAt == nil || (node.value != nil && node.value.Ghost) {
 			s := node.DataSize()
 			size.Data += s.Data
 			size.Meta += s.Meta
@@ -689,7 +726,8 @@ func (t *ZeroTree) DeepCopy() (Element, error) {
 func (t *ZeroTree) GCPairs() []GCPair {
 	var pairs []GCPair
 	for _, node := range t.Nodes() {
-		if node.removedAt != nil {
+		// A ghost is what GC already left behind, not garbage.
+		if node.removedAt != nil && (node.value == nil || !node.value.Ghost) {
 			gcSize := node.DataSize()
 			pairs = append(pairs, GCPair{Parent: t.rgaTreeSplit, Child: node, GCOnlySize: &gcSize})
 		}
@@ -782,14 +820,20 @@ func (t *ZeroTree) Restore(
 	spans []*ZeroRestoreSpan,
 	executedAt *time.Ticket,
 	from *RGATreeSplitNodePos,
-) (untombstoned, recreated []*RGATreeSplitNode[*ZeroTokens], stillTombstoned []GCPair, err error) {
-	untombstoned, recreated, stillTombstoned, err = t.rgaTreeSplit.restore(toRestoreSpanValues(spans), from, executedAt)
+) (
+	untombstoned, recreated []*RGATreeSplitNode[*ZeroTokens],
+	stillTombstoned []GCPair, ghostDiff resource.DataSize, err error,
+) {
+	untombstoned, recreated, stillTombstoned, ghostDiff, err = t.rgaTreeSplit.restore(
+		toRestoreSpanValues(spans), from, executedAt)
 	// a piece made again from its span: the span's copy of the markers
 	// predates the undos since
 	for _, node := range recreated {
 		t.settleInserted(node)
 	}
-	return untombstoned, recreated, stillTombstoned, err
+	// The caller counts a recreated node at its settled size.
+	t.sizeDelta = PurgeResult{}
+	return untombstoned, recreated, stillTombstoned, ghostDiff, err
 }
 
 // settleInserted makes the markers of an inserted run take their values under
@@ -801,9 +845,31 @@ func (t *ZeroTree) settleInserted(node *RGATreeSplitNode[*ZeroTokens]) {
 	}
 	for _, tok := range node.value.Tokens {
 		if tok.Marker != nil {
-			tok.Marker.repick(&t.cancels)
+			t.resize(node, tok.Marker, func(m *ZeroMarker) { m.repick(&t.cancels) })
 		}
 	}
+}
+
+// resize applies change to marker of node and books how much the marker grew
+// (see sizeDelta). A ghost counts in live.
+func (t *ZeroTree) resize(node *RGATreeSplitNode[*ZeroTokens], marker *ZeroMarker, change func(*ZeroMarker)) {
+	before := marker.dataSize()
+	change(marker)
+	after := marker.dataSize()
+	bucket := &t.sizeDelta.Live
+	if node != nil && node.removedAt != nil && (node.value == nil || !node.value.Ghost) {
+		bucket = &t.sizeDelta.GC
+	}
+	bucket.Add(after)
+	bucket.Sub(before)
+}
+
+// TakeSizeDelta returns how much the markers grew since the last call (see
+// sizeDelta), for the root to book.
+func (t *ZeroTree) TakeSizeDelta() PurgeResult {
+	delta := t.sizeDelta
+	t.sizeDelta = PurgeResult{}
+	return delta
 }
 
 // IsCancelled tells whether an undo cancelled the style write of ticket.
@@ -823,19 +889,25 @@ func (t *ZeroTree) LoadStyleCancel(c *ZeroStyleCancel) {
 
 // holders returns the markers whose registers keep the write of ticket, live
 // or not.
-func (t *ZeroTree) holders(ticket *time.Ticket) []*ZeroMarker {
-	var out []*ZeroMarker
+func (t *ZeroTree) holders(ticket *time.Ticket) []zeroHolder {
+	var out []zeroHolder
 	for _, node := range t.Nodes() {
 		if node.value == nil {
 			continue
 		}
 		for _, tok := range node.value.Tokens {
 			if tok.Marker != nil && tok.Marker.holds(ticket) {
-				out = append(out, tok.Marker)
+				out = append(out, zeroHolder{node: node, marker: tok.Marker})
 			}
 		}
 	}
 	return out
+}
+
+// zeroHolder is a marker whose register keeps a write, with its node.
+type zeroHolder struct {
+	node   *RGATreeSplitNode[*ZeroTokens]
+	marker *ZeroMarker
 }
 
 // Retombstone re-removes the spans under their original identities (redo).
@@ -912,33 +984,40 @@ func (t *ZeroTree) SetAttrs(
 	var reverse *ZeroCancelWrite
 	if marker != nil && len(writes) > 0 {
 		var fallback []ZeroAttrWrite
-		for _, w := range writes {
-			old, applied := marker.Set(w.Key, w.Value, w.Removed, executedAt, &t.cancels, false)
-			if !applied {
-				continue
-			}
-			before := ZeroAttrWrite{Key: w.Key, Removed: true}
-			if old != nil {
-				before = ZeroAttrWrite{Key: w.Key, Value: old.Value, Removed: old.Removed}
-			}
-			if keepsHistory(w.Key) {
-				fallback = append(fallback, before)
-			} else {
-				prev = append(prev, before)
-			}
-		}
-		if len(fallback) > 0 {
-			reverse = &ZeroCancelWrite{Write: executedAt, On: true, Fallback: fallback}
-		}
+		var region *ZeroStyleRegion
 		if rng != nil {
-			region := &ZeroStyleRegion{
+			region = &ZeroStyleRegion{
 				MarkerID: markerID,
 				Type:     marker.Type,
 				Last:     rng.Last,
 				Writes:   writes,
 				Ticket:   executedAt,
 			}
-			marker.setRaw(region.key(), region.encode(), executedAt)
+		}
+		t.resize(t.rgaTreeSplit.FindNode(markerID), marker, func(m *ZeroMarker) {
+			for _, w := range writes {
+				old, applied := m.Set(w.Key, w.Value, w.Removed, executedAt, &t.cancels, false)
+				if !applied {
+					continue
+				}
+				before := ZeroAttrWrite{Key: w.Key, Removed: true}
+				if old != nil {
+					before = ZeroAttrWrite{Key: w.Key, Value: old.Value, Removed: old.Removed}
+				}
+				if keepsHistory(w.Key) {
+					fallback = append(fallback, before)
+				} else {
+					prev = append(prev, before)
+				}
+			}
+			if region != nil {
+				m.setRaw(region.key(), region.encode(), executedAt)
+			}
+		})
+		if len(fallback) > 0 {
+			reverse = &ZeroCancelWrite{Write: executedAt, On: true, Fallback: fallback}
+		}
+		if region != nil {
 			t.pendingRegions()[region.key()] = region
 			t.applyRegion(region, nil)
 			size := region.DataSize()
@@ -947,11 +1026,18 @@ func (t *ZeroTree) SetAttrs(
 	}
 	if cancel != nil {
 		state := &ZeroStyleCancel{Write: cancel.Write, On: cancel.On, At: executedAt, Fallback: cancel.Fallback}
+		replaced := t.cancels.get(cancel.Write)
 		if t.cancels.set(state) {
 			size := state.DataSize()
 			pairs = append(pairs, GCPair{Parent: t, Child: state, GCOnlySize: &size})
-			for _, m := range t.holders(cancel.Write) {
-				m.repick(&t.cancels)
+			// The state it replaces is no longer the tree's: registering it a
+			// second time takes it out (see Root.RegisterGCPair).
+			if replaced != nil {
+				replacedSize := replaced.DataSize()
+				pairs = append(pairs, GCPair{Parent: t, Child: replaced, GCOnlySize: &replacedSize})
+			}
+			for _, h := range t.holders(cancel.Write) {
+				t.resize(h.node, h.marker, func(m *ZeroMarker) { m.repick(&t.cancels) })
 			}
 		}
 		reverse = &ZeroCancelWrite{Write: cancel.Write, On: !cancel.On, Fallback: cancel.Fallback}
@@ -1056,9 +1142,11 @@ func (t *ZeroTree) applyRegion(region *ZeroStyleRegion, target *ZeroMarker) bool
 					continue
 				}
 				if target == nil || m == target {
-					for _, w := range region.Writes {
-						m.Set(w.Key, w.Value, w.Removed, region.Ticket, &t.cancels, true)
-					}
+					t.resize(node, m, func(m *ZeroMarker) {
+						for _, w := range region.Writes {
+							m.Set(w.Key, w.Value, w.Removed, region.Ticket, &t.cancels, true)
+						}
+					})
 					if target != nil {
 						return true
 					}
@@ -1134,26 +1222,35 @@ func (t *ZeroTree) PurgeBarrierAt(child GCChild) *time.Ticket {
 // undone write once every replica knows it and nothing keeps the write (see
 // PurgeBarrierAt).
 func (t *ZeroTree) Purge(child GCChild) error {
+	_, err := t.PurgeSized(child)
+	return err
+}
+
+// PurgeSized purges like Purge and reports how much the marker of a range
+// write shrank (see GCSizedParent).
+func (t *ZeroTree) PurgeSized(child GCChild) (PurgeResult, error) {
 	if cancel, ok := child.(*ZeroStyleCancel); ok {
 		if t.cancels.isCurrent(cancel) {
 			delete(t.cancels.m, cancel.Write.Key())
 		}
-		return nil
+		return PurgeResult{}, nil
 	}
 	region, ok := child.(*ZeroStyleRegion)
 	if !ok {
-		return nil
+		return PurgeResult{}, nil
 	}
 	delete(t.pendingRegions(), region.key())
 	if marker := t.FindMarker(region.MarkerID); marker != nil {
-		for i, attr := range marker.Attrs {
-			if attr.Key == region.key() {
-				marker.Attrs = append(marker.Attrs[:i], marker.Attrs[i+1:]...)
-				break
+		t.resize(t.rgaTreeSplit.FindNode(region.MarkerID), marker, func(m *ZeroMarker) {
+			for i, attr := range m.Attrs {
+				if attr.Key == region.key() {
+					m.Attrs = append(m.Attrs[:i], m.Attrs[i+1:]...)
+					break
+				}
 			}
-		}
+		})
 	}
-	return nil
+	return t.TakeSizeDelta(), nil
 }
 
 // ToTestString shows every node, tombstones included.

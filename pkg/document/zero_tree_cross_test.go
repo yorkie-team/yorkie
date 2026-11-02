@@ -69,8 +69,10 @@ type zeroCrossCase struct {
 
 // ysonRoundTrip does what a compaction checks and a revision restore does:
 // root -> YSON -> a new document from that YSON -> YSON again. It returns
-// whether the two YSONs match and the rebuilt tree's model.
-func ysonRoundTrip(t *testing.T, snapshot []byte) (bool, string) {
+// whether the two YSONs match, the rebuilt tree's model and how many nodes the
+// rebuilt tree keeps removed (a compaction drops every ghost: it is the bound
+// on what ghost GC keeps).
+func ysonRoundTrip(t *testing.T, snapshot []byte) (bool, string, int) {
 	obj, _, err := converter.BytesToSnapshot(snapshot)
 	require.NoError(t, err)
 	root, err := yson.FromCRDT(obj)
@@ -90,7 +92,13 @@ func ysonRoundTrip(t *testing.T, snapshot []byte) (bool, string) {
 	require.NoError(t, err)
 	zt, ok := newDoc.RootObject().Get("zt").(*crdt.ZeroTree)
 	require.True(t, ok)
-	return text == againText, zt.Marshal()
+	removed := 0
+	for _, node := range zt.Nodes() {
+		if node.RemovedAt() != nil {
+			removed++
+		}
+	}
+	return text == againText, zt.Marshal(), removed
 }
 
 // zeroModel decodes a snapshot and returns the server's model of its "zt".
@@ -136,6 +144,9 @@ func minNonZero(vectors []time.VersionVector) time.VersionVector {
 
 type replayStats struct {
 	gcRuns, purged int
+	// sizeDiff counts replays whose document size or garbage differs from a
+	// reload of their snapshot; ghosts counts the ghost nodes they keep.
+	sizeDiff, ghosts int
 }
 
 func replayZeroLog(
@@ -187,6 +198,29 @@ func replayZeroLog(
 	}
 	snapshot, err := converter.SnapshotToBytes(doc.RootObject(), nil)
 	require.NoError(t, err)
+
+	// A reload counts the document as the replay does: ghosts are not garbage
+	// again, and what they keep is in live.
+	obj, _, err := converter.BytesToSnapshot(snapshot)
+	require.NoError(t, err)
+	reloaded := crdt.NewRoot(obj)
+	if reloaded.DocSize() != doc.DocSize() || reloaded.GarbageLen() != doc.GarbageLen() {
+		if os.Getenv("ZT_DEBUG_SIZE") != "" {
+			t.Logf("size: doc %+v garbage %d, reload %+v garbage %d",
+				doc.DocSize(), doc.GarbageLen(), reloaded.DocSize(), reloaded.GarbageLen())
+		}
+		stats.sizeDiff++
+	}
+	doc.RootObject().Descendants(func(elem crdt.Element, _ crdt.Container) bool {
+		if tree, ok := elem.(*crdt.ZeroTree); ok {
+			for _, node := range tree.Nodes() {
+				if node.RemovedAt() != nil && node.Value() != nil && node.Value().Ghost {
+					stats.ghosts++
+				}
+			}
+		}
+		return false
+	})
 	return snapshot, stats, nil
 }
 
@@ -213,7 +247,7 @@ func TestZeroTreeCrossSDK(t *testing.T) {
 	scanner.Buffer(make([]byte, 64<<20), 64<<20)
 	var cases, ops, reencodeDiff, plainDiff, gcDiff, marksDiff, snapRoundTripDiff int
 	var stats, markStats replayStats
-	var ledgeredNodes, ledgerEvents, bothFailed, modelCases, modelDiff, ysonDiff int
+	var ledgeredNodes, ledgerEvents, bothFailed, modelCases, modelDiff, ysonDiff, compactDiff int
 	var failed []string
 	for scanner.Scan() {
 		var c zeroCrossCase
@@ -252,7 +286,7 @@ func TestZeroTreeCrossSDK(t *testing.T) {
 
 		goPlain, _, err := replayZeroLog(t, changes, 0, nil)
 		require.NoError(t, err)
-		if same, model := ysonRoundTrip(t, goPlain); !same || model != c.JSON {
+		if same, model, _ := ysonRoundTrip(t, goPlain); !same || model != c.JSON {
 			ysonDiff++
 			if os.Getenv("ZT_DEBUG") != "" && ysonDiff == 1 {
 				t.Logf("yson diff seed %d same %v\n rebuilt %s\n js      %s", c.Seed, same, model, c.JSON)
@@ -287,6 +321,8 @@ func TestZeroTreeCrossSDK(t *testing.T) {
 		goMarks, ms, goErr := replayZeroLog(t, redecode(), 0, c.GCMarks)
 		markStats.gcRuns += ms.gcRuns
 		markStats.purged += ms.purged
+		markStats.sizeDiff += ms.sizeDiff
+		markStats.ghosts += ms.ghosts
 		if c.SnapshotMarks == "" || goErr != nil {
 			// The JS replay failed on this log (GC then undo, see the report):
 			// the server has to fail on the same change.
@@ -312,6 +348,12 @@ func TestZeroTreeCrossSDK(t *testing.T) {
 		if c.JSONMarks != "" && zeroModel(t, goMarks) != c.JSONMarks {
 			modelDiff++
 		}
+		// A compaction of the collected document keeps the model and no ghost.
+		if same, model, removed := ysonRoundTrip(t, goMarks); !same || removed != 0 ||
+			model != zeroModel(t, goMarks) {
+			compactDiff++
+			failed = append(failed, fmt.Sprintf("%d:compact", c.Seed))
+		}
 		jsMarks, _ := hex.DecodeString(c.SnapshotMarks)
 		if !bytes.Equal(zeroTreeElement(t, goMarks), zeroTreeElement(t, jsMarks)) {
 			marksDiff++
@@ -324,6 +366,8 @@ func TestZeroTreeCrossSDK(t *testing.T) {
 		}
 		stats.gcRuns += s.gcRuns
 		stats.purged += s.purged
+		stats.sizeDiff += s.sizeDiff
+		stats.ghosts += s.ghosts
 		if !bytes.Equal(zeroTreeElement(t, goGC), zeroTreeElement(t, jsGC)) {
 			if os.Getenv("ZT_DEBUG") != "" && gcDiff == 0 {
 				a, b := &api.JSONElement{}, &api.JSONElement{}
@@ -351,10 +395,13 @@ func TestZeroTreeCrossSDK(t *testing.T) {
 	}
 	t.Logf("cases %d, ops %d, re-encode diff %d, plain diff %d, gc diff %d (gc runs %d, purged %d), "+
 		"server-vv gc diff %d (gc runs %d, purged %d, ledgered nodes %d, ledger events %d), "+
+		"size vs reload diff %d (ghosts left %d, server-vv %d), compaction diff %d, "+
 		"JS snapshot round trip diff %d, JS+Go both failed %d, "+
 		"model (Go Marshal vs JS toJSON) cases %d diff %d, YSON round trip diff %d, first failures %v",
 		cases, ops, reencodeDiff, plainDiff, gcDiff, stats.gcRuns, stats.purged,
 		marksDiff, markStats.gcRuns, markStats.purged, ledgeredNodes, ledgerEvents,
+		stats.sizeDiff+markStats.sizeDiff, stats.ghosts, markStats.ghosts, compactDiff,
 		snapRoundTripDiff, bothFailed, modelCases, modelDiff, ysonDiff, failed)
-	require.Zero(t, reencodeDiff+plainDiff+gcDiff+marksDiff+snapRoundTripDiff+modelDiff+ysonDiff)
+	require.Zero(t, reencodeDiff+plainDiff+gcDiff+marksDiff+snapRoundTripDiff+modelDiff+ysonDiff+
+		stats.sizeDiff+markStats.sizeDiff+compactDiff)
 }

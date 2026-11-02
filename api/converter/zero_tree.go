@@ -122,11 +122,23 @@ func (a *zeroActors) fromNodeID(id *api.ZeroNodeID) (*crdt.RGATreeSplitNodeID, e
 	return crdt.NewRGATreeSplitNodeID(createdAt, int(id.Offset)), nil
 }
 
+// hasGhostChars tells whether the run holds a character a ghost purge dropped.
+func hasGhostChars(value *crdt.ZeroTokens) bool {
+	for _, t := range value.Tokens {
+		if t.Ghost {
+			return true
+		}
+	}
+	return false
+}
+
 func toZeroTokens(value *crdt.ZeroTokens, actors ...*zeroActors) *api.ZeroTokens {
 	if value == nil {
 		return nil
 	}
-	pbTokens := &api.ZeroTokens{Scope: value.Scope}
+	// A run of ghost characters tells a ghost by itself: the flag is written
+	// only for a ghost that kept nothing but markers.
+	pbTokens := &api.ZeroTokens{Scope: value.Scope, Ghost: value.Ghost && !hasGhostChars(value)}
 	var chars []rune
 	ghosts := uint32(0)
 	flush := func() {
@@ -253,7 +265,9 @@ func fromZeroTokens(pbTokens *api.ZeroTokens, actors ...*zeroActors) (*crdt.Zero
 			return nil, goerrors.New("zero token body missing")
 		}
 	}
-	return crdt.NewZeroTokens(tokens, pbTokens.Scope), nil
+	value := crdt.NewZeroTokens(tokens, pbTokens.Scope)
+	value.Ghost = pbTokens.Ghost || hasGhostChars(value)
+	return value, nil
 }
 
 func toZeroRestoreSpans(spans []*crdt.ZeroRestoreSpan) []*api.ZeroRestoreSpan {

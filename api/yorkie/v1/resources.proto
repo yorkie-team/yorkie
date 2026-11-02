@@ -452,6 +452,9 @@ message ZeroSchemaGrid {
 message ZeroTokens {
   repeated ZeroToken tokens = 1;
   string scope = 2;
+  // ghost: a ghost purge (GC) stripped this run, which kept only markers. A
+  // run with a ghost character is a ghost too. GC leaves a ghost alone.
+  bool ghost = 3;
 }
 
 // ghost is a run of characters a ghost purge (GC) dropped.
