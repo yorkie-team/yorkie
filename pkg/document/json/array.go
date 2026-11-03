@@ -481,7 +481,11 @@ func (p *Array) Delete(idx int) crdt.Element {
 		deleted.CreatedAt(),
 		ticket,
 	))
-	p.context.RegisterRemovedElementPair(p, deleted)
+	// The CRDT container, not this proxy: Root matches a recorded parent by
+	// identity (UnregisterRemovedElementPair), and every caller that owns such
+	// an entry resolves its container through Root.FindByCreatedAt, which
+	// answers with the *crdt.Array. See json/object.go's Delete.
+	p.context.RegisterRemovedElementPair(p.Array, deleted)
 	return deleted
 }
 
@@ -518,7 +522,7 @@ func (p *Array) insertAfterInternal(
 	if err = p.InsertAfter(prevCreatedAt, value, nil); err != nil {
 		panic(err)
 	}
-	p.context.RegisterElement(value, p)
+	p.context.RegisterElement(value, p.Array)
 
 	return elem
 }
@@ -615,7 +619,7 @@ func (p *Array) setByIndexInternal(
 	if err != nil {
 		panic(err)
 	}
-	p.context.RegisterElement(value, p)
+	p.context.RegisterElement(value, p.Array)
 
 	// NOTE(hackerwins): The displaced element has to be registered here too,
 	// not only in ArraySet.Execute. This path runs against the clone root that
@@ -629,7 +633,7 @@ func (p *Array) setByIndexInternal(
 	// json/object.go's setInternal already registers the value it replaces the
 	// same way.
 	if removed != nil {
-		p.context.RegisterRemovedElementPair(p, removed)
+		p.context.RegisterRemovedElementPair(p.Array, removed)
 	}
 	return elem
 }

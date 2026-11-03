@@ -310,7 +310,16 @@ func (p *Object) Delete(k string) crdt.Element {
 		deleted.CreatedAt(),
 		ticket,
 	))
-	p.context.RegisterRemovedElementPair(p, deleted)
+	// The pair records the CRDT container, not this proxy. Root compares the
+	// recorded parent by identity -- UnregisterRemovedElementPair only retires
+	// an entry whose parent is the very container the Set re-pointed, and that
+	// caller (operations.Set.Execute) resolves its container through
+	// Root.FindByCreatedAt, which answers with the *crdt.Object. A proxy
+	// recorded here matches no such owner, so the local undo path running
+	// against the clone root would silently skip the retire it depends on. A
+	// proxy also outlives nothing: it is rebuilt per accessor call, while the
+	// entry it registers stays in the map until collection.
+	p.context.RegisterRemovedElementPair(p.Object, deleted)
 	return deleted
 }
 
@@ -420,10 +429,35 @@ func (p *Object) setInternal(
 		panic(err)
 	}
 
-	removed := p.Set(k, value)
-	p.context.RegisterElement(value, p)
+	// A value the object refused is in neither of its member maps, so none of
+	// the Root bookkeeping below may run for it -- the same guard
+	// operations.Set.Execute applies to the remote and replay paths.
+	// RegisterElement would charge docSize.Live for an element hanging off no
+	// container and point elementMap at it, over whatever copy already answers
+	// to that createdAt.
+	//
+	// Here it cannot happen: only a value that loses its key is ever refused
+	// (ElementRHT.refusesLoser), and a local Set mints a fresh ticket that
+	// follows every ticket this client has seen, so it always wins. Returning
+	// elem would be worse than failing -- every caller treats the return as a
+	// live child (SetNewObject immediately calls SetYSONElement on it,
+	// SetNewArray AddYSON, SetNewText EditFromYSON), and those nested
+	// operations would name a parentCreatedAt that is in no element map on
+	// any replica, so each one fails the moment it is replayed. Panicking
+	// matches how this function already reports a value it cannot build.
+	removed, indexed := p.Set(k, value)
+	if !indexed {
+		panic(fmt.Errorf(
+			"set %q: object refused %s, which is already taken",
+			k, value.CreatedAt().Key(),
+		))
+	}
+
+	p.context.RegisterElement(value, p.Object)
 	if removed != nil {
-		p.context.RegisterRemovedElementPair(p, removed)
+		// The CRDT container, not this proxy, for the reason Delete records
+		// it that way: Root matches the recorded parent by identity.
+		p.context.RegisterRemovedElementPair(p.Object, removed)
 	}
 
 	p.context.Push(operations.NewSet(
