@@ -7,6 +7,8 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.26] - 2026-11-03
+
 ### Upgrade Notes
 
 - **Build `rl_session_daily` before the server.** The sessions stats now read
@@ -23,7 +25,6 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   1` returns rather than erroring. Provisioning kept outside the chart
   should wait on that read too, not on `desc ... all`, which lists the index
   while it is still building.
-
 - **Text undo removal ledger (#2310): upgrade the server first, and roll
   forward only.** Snapshots gain `TextNode.removal_events`, which records the
   deletions and undos a piece of text has seen. The server builds snapshots
@@ -40,24 +41,66 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   still be undone. It stays in `GarbageLen` and the GC size for the life of
   the document. The server's `MaxSizePerDocument` gate reads only the live
   size; the JS SDK's local size check counts both.
-- **Go SDK `Presence.Set` encodes its value as JSON (#2280).** Callers that
-  already passed JSON text, such as an object or a number, must switch to
-  `Presence.SetJSON`, or the value is encoded twice.
+- **Go SDK presence values are JSON on the boundary (#2280).**
+  `Presence.Set` and the presence given to `WithPresence` on attach now
+  JSON-encode their values, which is the form every other SDK reads. Callers
+  that already passed JSON text, such as an object or a number, must switch
+  to `Presence.SetJSON`, or the value is encoded twice. In the other
+  direction, the `Document` presence getters and presence events now return
+  decoded values, so code that ran `json.Unmarshal` on what it read must drop
+  that step.
+
+### Changed
+
+- Encode presence values as JSON on the Go SDK boundary, and add
+  `Presence.SetJSON` for values that are already encoded by
+  @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2280
+- Mark the proto fields no SDK writes or reads as `deprecated`
+  (`ChangePack.min_synced_ticket`, every `created_at_map_by_actor`,
+  `JSONElementSimple.moved_at`/`removed_at` and `RGANode.next`). Their
+  numbers stay declared, so the wire format is unchanged, by
+  @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2279
+- Bump `golang.org/x/net`, `x/text`, `x/crypto`, `grpc`, `mongo-driver`,
+  `klauspost/compress` and `edwards25519` past their open security advisories
+  by @hackerwins in https://github.com/yorkie-team/yorkie/pull/2314
 
 ### Removed
 
 - Remove the MCP server. `/mcp/` is no longer served: a request to it gets
   404 (a CORS preflight still gets 204), so assistants configured against it
   must be removed from their client. The Admin API still serves document and
-  schema reads.
+  schema reads. By @hackerwins in
+  https://github.com/yorkie-team/yorkie/pull/2272
 
 ### Fixed
 
-- Read the sessions summary through `rl_session_daily` by name, so project
-  stats over long windows stay on one sketch per day on StarRocks 3.3.22.
 - Keep Text undo converging through GC with a removal ledger: an undo no
   longer revives text a concurrent deletion removed, and a deletion no longer
-  removes text a concurrent undo revived (#2310).
+  removes text a concurrent undo revived, by @hackerwins in
+  https://github.com/yorkie-team/yorkie/pull/2310
+- Keep text attributes when redo recreates a collected run by
+  @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2277
+- Reconcile undo stacks against where a peer's Tree undo landed by
+  @hackerwins in https://github.com/yorkie-team/yorkie/pull/2232
+- Clear a server-detached client's presence under both its session ID and
+  its stable actor, so a client that left without detaching no longer stays
+  in its peers' presences by @yorkie-team-agent[bot] in
+  https://github.com/yorkie-team/yorkie/pull/2291
+- Read the sessions summary through `rl_session_daily` by name, so project
+  stats over long windows stay on one sketch per day on StarRocks 3.3.22, by
+  @hackerwins in https://github.com/yorkie-team/yorkie/pull/2296
+- Reject restored HLL registers above what `Add` can write, and pin the
+  dedup hash across SDKs with a conformance fixture by
+  @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2278
+- Make the lazy ticket and node-ID key caches race-free by
+  @yorkie-team-agent[bot] and @hackerwins in
+  https://github.com/yorkie-team/yorkie/pull/2301 and
+  https://github.com/yorkie-team/yorkie/pull/2308
+- Skip node GC worklist entries whose removal was cleared by
+  @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2300
+- Send the `yorkie version` server-fetch error to stderr, so
+  `--output json` stays a well-formed document by @yorkie-team-agent[bot] in
+  https://github.com/yorkie-team/yorkie/pull/2298
 
 ## [v0.7.25] - 2026-10-13
 
