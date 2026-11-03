@@ -20,7 +20,7 @@ dead surface that still authenticates with the project secret key.
       `document-size-limit.md`)
 - [x] Add an Unreleased `Removed` entry to `CHANGELOG.md`
 - [x] `make verify`
-- [ ] Open PR; homepage docs (`docs/tools/mcp.mdx`) removed in a paired PR
+- [x] Open PR (#2272); homepage docs (`docs/tools/mcp.mdx`) removed in a paired PR (yorkie-team.github.io#355)
 
 ## Out of scope
 
