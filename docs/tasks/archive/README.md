@@ -1,5 +1,5 @@
 ---
-updated: 2026-10-23
+updated: 2026-11-03
 ---
 
 # Tasks Archive
@@ -8,13 +8,25 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 100
+Total archived tasks: 112
 
-## 2026/10 (39 tasks)
+## 2026/10 (51 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Make the lazy ticket and node-ID key caches race-free (2026-10-29) | [20261029-ticket-key-atomic-cache-todo.md](./2026/10/20261029-ticket-key-atomic-cache-todo.md) | [20261029-ticket-key-atomic-cache-lessons.md](./2026/10/20261029-ticket-key-atomic-cache-lessons.md) |
+| `version --output json` mixes the server-fetch error into stdout (2026-10-25) | [20261025-version-server-error-to-stderr-todo.md](./2026/10/20261025-version-server-error-to-stderr-todo.md) | [20261025-version-server-error-to-stderr-lessons.md](./2026/10/20261025-version-server-error-to-stderr-lessons.md) |
+| Ticket.Key caches its key without synchronization (2026-10-25) | [20261025-ticket-key-data-race-todo.md](./2026/10/20261025-ticket-key-data-race-todo.md) | [20261025-ticket-key-data-race-lessons.md](./2026/10/20261025-ticket-key-data-race-lessons.md) |
+| Pin how a reader decodes CHANGE_TYPE_UNSPECIFIED presence (2026-10-25) | [20261025-presence-unspecified-decode-test-todo.md](./2026/10/20261025-presence-unspecified-decode-test-todo.md) | [20261025-presence-unspecified-decode-test-lessons.md](./2026/10/20261025-presence-unspecified-decode-test-lessons.md) |
+| The node GC worklist has no guard for a child whose removal was cleared (2026-10-25) | [20261025-gc-node-worklist-live-guard-todo.md](./2026/10/20261025-gc-node-worklist-live-guard-todo.md) | [20261025-gc-node-worklist-live-guard-lessons.md](./2026/10/20261025-gc-node-worklist-live-guard-lessons.md) |
+| Deprecate dead proto fields and correct the MovedAt deprecation plan (2026-10-22) | [20261022-reserve-dead-proto-fields-todo.md](./2026/10/20261022-reserve-dead-proto-fields-todo.md) | [20261022-reserve-dead-proto-fields-lessons.md](./2026/10/20261022-reserve-dead-proto-fields-lessons.md) |
+| Remove the MCP server (2026-10-22) | [20261022-remove-mcp-server-todo.md](./2026/10/20261022-remove-mcp-server-todo.md) | [20261022-remove-mcp-server-lessons.md](./2026/10/20261022-remove-mcp-server-lessons.md) |
+| Redo after GC drops the attributes of re-inserted text (2026-10-22) | [20261022-redo-drops-reinserted-text-attributes-todo.md](./2026/10/20261022-redo-drops-reinserted-text-attributes-todo.md) | [20261022-redo-drops-reinserted-text-attributes-lessons.md](./2026/10/20261022-redo-drops-reinserted-text-attributes-lessons.md) |
+| Go presence values are not JSON-encoded, so JS peers fail to decode them (2026-10-22) | [20261022-presence-json-value-encoding-todo.md](./2026/10/20261022-presence-json-value-encoding-todo.md) | [20261022-presence-json-value-encoding-lessons.md](./2026/10/20261022-presence-json-value-encoding-lessons.md) |
+| Dedup counter HLL: bound restored registers, pin the hash across SDKs (2026-10-22) | [20261022-hll-register-bound-and-hash-vectors-todo.md](./2026/10/20261022-hll-register-bound-and-hash-vectors-todo.md) | [20261022-hll-register-bound-and-hash-vectors-lessons.md](./2026/10/20261022-hll-register-bound-and-hash-vectors-lessons.md) |
 | Server-side detach must clear a stable-actor client's presence (2026-10-22) | [20261022-detach-clears-stable-actor-presence-todo.md](./2026/10/20261022-detach-clears-stable-actor-presence-todo.md) | [20261022-detach-clears-stable-actor-presence-lessons.md](./2026/10/20261022-detach-clears-stable-actor-presence-lessons.md) |
+| Keep a Text removal the undo never saw (2026-10-21) | [20261021-text-undo-removal-ledger-todo.md](./2026/10/20261021-text-undo-removal-ledger-todo.md) | [20261021-text-undo-removal-ledger-lessons.md](./2026/10/20261021-text-undo-removal-ledger-lessons.md) |
+| A peer's Tree undo leaves pending undo entries on stale indices (2026-10-13) | [20261013-remote-identity-undo-reconcile-todo.md](./2026/10/20261013-remote-identity-undo-reconcile-todo.md) | [20261013-remote-identity-undo-reconcile-lessons.md](./2026/10/20261013-remote-identity-undo-reconcile-lessons.md) |
 | Watch heartbeat opt-in via WatchRequest (2026-10-12) | [20261012-watch-heartbeat-opt-in-todo.md](./2026/10/20261012-watch-heartbeat-opt-in-todo.md) | [20261012-watch-heartbeat-opt-in-lessons.md](./2026/10/20261012-watch-heartbeat-opt-in-lessons.md) |
 | Resolve the index before a text that follows an element (2026-10-12) | [20261012-tree-findpos-element-text-boundary-todo.md](./2026/10/20261012-tree-findpos-element-text-boundary-todo.md) | [20261012-tree-findpos-element-text-boundary-lessons.md](./2026/10/20261012-tree-findpos-element-text-boundary-lessons.md) |
 | Leave a restore span with a text parent unplaced (2026-10-12) | [20261012-restore-span-text-parent-todo.md](./2026/10/20261012-restore-span-text-parent-todo.md) | [20261012-restore-span-text-parent-lessons.md](./2026/10/20261012-restore-span-text-parent-lessons.md) |
