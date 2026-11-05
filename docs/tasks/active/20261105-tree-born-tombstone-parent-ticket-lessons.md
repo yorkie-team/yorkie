@@ -39,6 +39,24 @@ consumed and could never be delivered later. The symptom was a third subtest
 that purged nothing for no visible reason. Reading the helper's ack loop,
 rather than trusting its arrival-order argument, was the fix.
 
+## Integration lane failure on this branch is not this branch's
+
+The `test` lane failed once on
+`TestClusterNodes/Concurrent connection leadership election test`
+(`test/integration/clusternodes_test.go`), which starts five servers and
+asserts within 1s that exactly one of them reports `IsLeader()`. With
+`LeaseDuration` 300ms and `RenewalInterval` 100ms, a renewal that loses its
+slot under the race detector on a loaded runner demotes the leader, and the
+window to elect a successor and observe `freq == 1` is three renewal periods
+wide. The same family already needed #1820 ("Fix flaky leadership revocation
+and LRU hit-rate tests"), and `main` is green over the last twelve runs.
+
+Nothing on this branch reaches leadership: the change is confined to the
+`fromParent.IsRemoved()` branch of `crdt.Tree.Edit`, and its test is an
+in-memory `document_test` with no server, no MongoDB and no build tag. The
+timing budget belongs to a file outside this PR's diff, so it is left for a
+separate change.
+
 ## Self review
 
 Not run. The autonomous run that produced this branch has no tool able to
