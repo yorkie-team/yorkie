@@ -79,7 +79,25 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 
+	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, refKey)
+	if err != nil {
+		return nil, err
+	}
+	if docInfo.Key != docKey {
+		return nil, ErrDocumentKeyMismatch
+	}
+
 	// 01. Create request pack with presence clear changes.
+	//
+	// A presenceless document (disable_presence) gets none. It holds no
+	// presence to clear: PushPull strips every presence-only change on the way
+	// in (stripPresenceChanges), so the clears would be dropped before they
+	// reach the changes collection. Skipping them also skips the sibling check
+	// below, which reads every activated client attached to the document — on
+	// a busy presenceless document that read is the whole cost of the detach.
+	// The option is fixed when the document is created, so reading it before
+	// the document locks below is safe.
 	//
 	// Applying a clear runs presences.Delete(change.ID().ActorID()), so it only
 	// removes the entry under the actor the client itself stamped into its
@@ -105,19 +123,21 @@ func (s *clusterServer) DetachDocument(
 	// they share the single presence entry keyed under it. Clearing it while a
 	// sibling session is still attached to this document would delete presence
 	// that session still owns, so that clear is skipped while one remains.
-	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
-	actorIDs := []time.ActorID{actorID}
-	ownActorID, err := clientInfo.OwnActorID()
-	if err != nil {
-		return nil, err
-	}
-	if ownActorID != actorID {
-		shared, err := s.hasAttachedSibling(ctx, refKey, clientInfo)
+	var actorIDs []time.ActorID
+	if !docInfo.DisablePresence {
+		actorIDs = append(actorIDs, actorID)
+		ownActorID, err := clientInfo.OwnActorID()
 		if err != nil {
 			return nil, err
 		}
-		if !shared {
-			actorIDs = append(actorIDs, ownActorID)
+		if ownActorID != actorID {
+			shared, err := s.hasAttachedSibling(ctx, refKey, clientInfo)
+			if err != nil {
+				return nil, err
+			}
+			if !shared {
+				actorIDs = append(actorIDs, ownActorID)
+			}
 		}
 	}
 
@@ -170,14 +190,6 @@ func (s *clusterServer) DetachDocument(
 			pack.IsRemoved = true
 			status = document.StatusRemoved
 		}
-	}
-
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, refKey)
-	if err != nil {
-		return nil, err
-	}
-	if docInfo.Key != docKey {
-		return nil, ErrDocumentKeyMismatch
 	}
 
 	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, refKey, pack, packs.PushPullOptions{

@@ -263,6 +263,20 @@ processing previous changes.
 Together, these checks ensure that snapshots never contain presence
 data.
 
+#### Server-side Detach
+
+When the server detaches a client on its behalf (`clients.Deactivate`,
+also run by housekeeping), it normally writes presence clears so the
+departed client does not linger in the document's presence map. A
+presenceless document has no such entry, and the clears would be
+dropped by the incoming-change strip above, so the server writes none.
+
+This also skips the sibling-session check that decides one of the
+clears. That check reads every activated client attached to the
+document, and a presenceless document with many clients that left
+without deactivating would otherwise pay for that read on every
+detach.
+
 ---
 
 ### Client Behavior

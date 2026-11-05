@@ -50,6 +50,7 @@ var (
 	testAdminAuthInterceptor *admin.AuthInterceptor
 	testAdminClient          v1connect.AdminServiceClient
 	testBackend              *backend.Backend
+	testProbeDB              *attachedClientsProbeDB
 )
 
 func TestMain(m *testing.M) {
@@ -69,6 +70,11 @@ func TestMain(m *testing.M) {
 		log.Fatal(err)
 	}
 
+	// The probe passes every call through. Wrapping be.DB does turn off the
+	// cluster cache invalidation in this package, as clusterServer.InvalidateCache
+	// asserts *mongo.Client; a single node keeps its own caches up to date.
+	testProbeDB = newAttachedClientsProbeDB(be.DB)
+	be.DB = testProbeDB
 	testBackend = be
 
 	project, err := be.DB.FindProjectInfoByID(
