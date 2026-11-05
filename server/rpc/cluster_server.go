@@ -60,7 +60,21 @@ func (s *clusterServer) DetachDocument(
 	ctx context.Context,
 	req *connect.Request[api.ClusterServiceDetachDocumentRequest],
 ) (*connect.Response[api.ClusterServiceDetachDocumentResponse], error) {
-	project := converter.FromProject(req.Msg.Project)
+	// Only the ID of the project the request carries is trusted; every other
+	// field is read back from the database. This handler decides on the
+	// caller's project whether a detach also marks the document removed
+	// (RemoveOnDetach below), and ClusterService is unauthenticated whenever
+	// ClusterSecret is empty — the default, which Yorkie.Start only warns
+	// about. Taking RemoveOnDetach off the wire would let anything that
+	// reaches the port turn a detach into a removal on a project that has the
+	// flag off. FindProjectInfoByID is served from the project cache, so
+	// reading the stored project costs nothing in the steady state.
+	projectInfo, err := s.backend.DB.FindProjectInfoByID(ctx, types.ID(req.Msg.Project.GetId()))
+	if err != nil {
+		return nil, err
+	}
+	project := projectInfo.ToProject()
+
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err

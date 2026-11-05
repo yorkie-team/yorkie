@@ -102,6 +102,26 @@ Stopped after round 1, the first round without blocking findings.
     and the whole of `PushPull`. A lock order that differs per handler is not a
     price worth paying to shorten one read.
 
+### Round 3 (security)
+
+- **Major — `DetachDocument` trusted the whole caller-supplied `Project`.**
+  Valid. `converter.FromProject(req.Msg.Project)` built the project from the
+  wire, and `RemoveOnDetach` off that project decides whether this handler
+  marks the document removed. `ClusterService` shares the public RPC port and
+  its interceptor lets every request through when `ClusterSecret` is empty
+  (interceptors/cluster.go:60) — the default, which `Yorkie.Start` only warns
+  about — so a forged `RemoveOnDetach: true` turned a detach into a removal on
+  a project that has the flag off.
+  - Fixed by trusting only `Project.Id` and reading the stored project back
+    with `FindProjectInfoByID`, the shape `RevalidateAccess` in the same file
+    already uses. The lookup is served from the project cache
+    (mongo/client.go:711), so it costs nothing in the steady state. Using the
+    generated `GetId()` also makes a request with no project fail as
+    `ErrProjectNotFound` instead of panicking.
+  - This does not make an unauthenticated `ClusterService` safe: a caller that
+    reaches the port can still name a real project and force a detach. Closing
+    that needs the interceptor or the config default, both outside this change.
+
 ## Known limitations
 
 - Documents with presence still read every attached client on each
