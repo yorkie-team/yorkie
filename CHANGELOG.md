@@ -7,6 +7,16 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.27-rc] - 2026-11-05
+
+### Fixed
+
+- Skip the presence clears of a server-side detach on a presenceless
+  document, so a detach no longer reads every client attached to it, and
+  load the stored project instead of trusting the one the cluster request
+  carries, so a forged `RemoveOnDetach` cannot turn a detach into a removal,
+  by @chacha912 in https://github.com/yorkie-team/yorkie/pull/2330
+
 ## [v0.7.26] - 2026-11-03
 
 ### Upgrade Notes
