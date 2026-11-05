@@ -68,7 +68,18 @@ func (s *clusterServer) DetachDocument(
 	docID := types.ID(req.Msg.DocumentId)
 	docKey := key.Key(req.Msg.DocumentKey)
 
-	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, key.Key(req.Msg.DocumentKey)))
+	// Take the document's read lock before the client's pull lock, the order
+	// yorkie_server's DetachDocument and PushPullChanges take them in. The
+	// reverse order here would let a compaction writer, which waits on the
+	// document key, sit between a holder of one key and its acquisition of the
+	// other and deadlock the two handlers against each other.
+	//
+	// The read lock is held for the rest of the detach, so the DocInfo read
+	// below — the key-mismatch check and the DisablePresence that PushPull is
+	// given — is observed under the same lock that guards the push.
+	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, docKey))
+	defer docLocker.RUnlock()
+	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, docKey))
 	defer locker.Unlock()
 
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
@@ -80,7 +91,7 @@ func (s *clusterServer) DetachDocument(
 	}
 
 	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
-	docInfo, err := s.findDocInfo(ctx, project.ID, refKey, docKey)
+	docInfo, err := s.findDocInfo(ctx, refKey, docKey)
 	if err != nil {
 		return nil, err
 	}
@@ -164,8 +175,6 @@ func (s *clusterServer) DetachDocument(
 	pack := change.NewPack(docKey, cp, changes, nil, nil)
 
 	// 02. Push the changePack to the document
-	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
-	defer docLocker.RUnlock()
 	if project.HasAttachmentLimit() || project.RemoveOnDetach {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(refKey))
 		defer locker.Unlock()
@@ -210,21 +219,15 @@ func (s *clusterServer) DetachDocument(
 // findDocInfo returns the DocInfo of the document being detached and checks
 // that it is the one the caller named.
 //
-// The read holds the document's read lock and releases it on return. It can
-// fill the document cache, and compaction swaps the epoch under the write lock
-// of the same key, so a read outside it could put pre-compaction metadata back
-// into the cache. The lock is not kept for the rest of the detach: the sibling
-// check that follows can be a long read, and a held read lock with compaction
-// waiting on it would also stall every other reader of the document.
+// The caller must already hold the read lock of packs.DocKey for the document:
+// the read can fill the document cache, and compaction swaps the epoch under
+// the write lock of the same key, so a read outside it could put
+// pre-compaction metadata back into the cache.
 func (s *clusterServer) findDocInfo(
 	ctx context.Context,
-	projectID types.ID,
 	refKey types.DocRefKey,
 	docKey key.Key,
 ) (*database.DocInfo, error) {
-	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(projectID, docKey))
-	defer docLocker.RUnlock()
-
 	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, refKey)
 	if err != nil {
 		return nil, err

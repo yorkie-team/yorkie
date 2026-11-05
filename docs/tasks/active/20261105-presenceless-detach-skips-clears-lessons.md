@@ -75,14 +75,32 @@ Stopped after round 1, the first round without blocking findings.
   under the read lock; moving it out let a cache miss put pre-compaction
   metadata back. The values this PR needs never change, but other readers of
   the cache use the epoch and `ServerSeq`.
-  - Not fixed by moving the whole read lock earlier: `sync.RWMutex` lets a
-    waiting writer block new readers, so holding the read lock across the
-    sibling check (a long read on a busy document with presence) would stall
-    every reader of the document while compaction waits.
-  - Fixed with `findDocInfo`, which takes the read lock for the read only. The
-    lock order (`DocPullKey` → `DocKey` → `DocAttachmentKey`) is unchanged, and
-    the push takes the read lock again as before.
+  - First attempt: `findDocInfo` took the read lock for the read only, so the
+    sibling check that follows (a long read on a busy document with presence)
+    did not hold it while compaction waited. See the round below for why that
+    shape did not survive.
 - **Docstring coverage.** The test helpers had no comments; added.
+
+### Round 2 (correctness)
+
+- **Major — lock order and the lifetime of the DocInfo read.** Valid, and the
+  two are one problem. `DetachDocument` took `DocPullKey` (write) first and
+  `DocKey` (read) second; `yorkie_server`'s `DetachDocument`
+  (yorkie_server.go:1664) and `PushPullChanges` (yorkie_server.go:1775) take
+  them in the opposite order. `sync.RWMutex` lets a waiting writer block new
+  readers, so a compaction request queued on `DocKey` can park between the two
+  acquisitions of either handler and deadlock them against each other. Taking
+  the read lock for the read only (the round-1 shape) also meant the
+  key-mismatch check and `DisablePresence` were observed under a lock released
+  before the push used them.
+  - Fixed by taking `DocKey` (read) before `DocPullKey` and holding it for the
+    whole handler, matching both `yorkie_server` paths. `findDocInfo` no longer
+    locks; its caller does. Lock order is now
+    `DocKey` → `DocPullKey` → `DocAttachmentKey` everywhere.
+  - The cost the round-1 shape avoided is real but is the cost `yorkie_server`
+    already pays: it holds the same read lock across `IsDocumentAttachedOrAttaching`
+    and the whole of `PushPull`. A lock order that differs per handler is not a
+    price worth paying to shorten one read.
 
 ## Known limitations
 
