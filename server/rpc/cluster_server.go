@@ -60,7 +60,21 @@ func (s *clusterServer) DetachDocument(
 	ctx context.Context,
 	req *connect.Request[api.ClusterServiceDetachDocumentRequest],
 ) (*connect.Response[api.ClusterServiceDetachDocumentResponse], error) {
-	project := converter.FromProject(req.Msg.Project)
+	// Only the ID of the project the request carries is trusted; every other
+	// field is read back from the database. This handler decides on the
+	// caller's project whether a detach also marks the document removed
+	// (RemoveOnDetach below), and ClusterService is unauthenticated whenever
+	// ClusterSecret is empty — the default, which Yorkie.Start only warns
+	// about. Taking RemoveOnDetach off the wire would let anything that
+	// reaches the port turn a detach into a removal on a project that has the
+	// flag off. FindProjectInfoByID is served from the project cache, so
+	// reading the stored project costs nothing in the steady state.
+	projectInfo, err := s.backend.DB.FindProjectInfoByID(ctx, types.ID(req.Msg.Project.GetId()))
+	if err != nil {
+		return nil, err
+	}
+	project := projectInfo.ToProject()
+
 	actorID, err := time.ActorIDFromHex(req.Msg.ClientId)
 	if err != nil {
 		return nil, err
@@ -68,7 +82,18 @@ func (s *clusterServer) DetachDocument(
 	docID := types.ID(req.Msg.DocumentId)
 	docKey := key.Key(req.Msg.DocumentKey)
 
-	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, key.Key(req.Msg.DocumentKey)))
+	// Take the document's read lock before the client's pull lock, the order
+	// yorkie_server's DetachDocument and PushPullChanges take them in. The
+	// reverse order here would let a compaction writer, which waits on the
+	// document key, sit between a holder of one key and its acquisition of the
+	// other and deadlock the two handlers against each other.
+	//
+	// The read lock is held for the rest of the detach, so the DocInfo read
+	// below — the key-mismatch check and the DisablePresence that PushPull is
+	// given — is observed under the same lock that guards the push.
+	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, docKey))
+	defer docLocker.RUnlock()
+	locker := s.backend.Lockers.Locker(packs.DocPullKey(actorID, docKey))
 	defer locker.Unlock()
 
 	clientInfo, err := clients.FindActiveClientInfo(ctx, s.backend, types.ClientRefKey{
@@ -79,7 +104,20 @@ func (s *clusterServer) DetachDocument(
 		return nil, err
 	}
 
+	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
+	docInfo, err := s.findDocInfo(ctx, refKey, docKey)
+	if err != nil {
+		return nil, err
+	}
+
 	// 01. Create request pack with presence clear changes.
+	//
+	// A presenceless document (disable_presence) gets none. It holds no
+	// presence to clear: PushPull strips every presence-only change on the way
+	// in (stripPresenceChanges), so the clears would be dropped before they
+	// reach the changes collection. Skipping them also skips the sibling check
+	// below, which reads every activated client attached to the document — on
+	// a busy presenceless document that read is the whole cost of the detach.
 	//
 	// Applying a clear runs presences.Delete(change.ID().ActorID()), so it only
 	// removes the entry under the actor the client itself stamped into its
@@ -105,19 +143,21 @@ func (s *clusterServer) DetachDocument(
 	// they share the single presence entry keyed under it. Clearing it while a
 	// sibling session is still attached to this document would delete presence
 	// that session still owns, so that clear is skipped while one remains.
-	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
-	actorIDs := []time.ActorID{actorID}
-	ownActorID, err := clientInfo.OwnActorID()
-	if err != nil {
-		return nil, err
-	}
-	if ownActorID != actorID {
-		shared, err := s.hasAttachedSibling(ctx, refKey, clientInfo)
+	var actorIDs []time.ActorID
+	if !docInfo.DisablePresence {
+		actorIDs = append(actorIDs, actorID)
+		ownActorID, err := clientInfo.OwnActorID()
 		if err != nil {
 			return nil, err
 		}
-		if !shared {
-			actorIDs = append(actorIDs, ownActorID)
+		if ownActorID != actorID {
+			shared, err := s.hasAttachedSibling(ctx, refKey, clientInfo)
+			if err != nil {
+				return nil, err
+			}
+			if !shared {
+				actorIDs = append(actorIDs, ownActorID)
+			}
 		}
 	}
 
@@ -149,8 +189,6 @@ func (s *clusterServer) DetachDocument(
 	pack := change.NewPack(docKey, cp, changes, nil, nil)
 
 	// 02. Push the changePack to the document
-	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(project.ID, pack.DocumentKey))
-	defer docLocker.RUnlock()
 	if project.HasAttachmentLimit() || project.RemoveOnDetach {
 		locker := s.backend.Lockers.Locker(documents.DocAttachmentKey(refKey))
 		defer locker.Unlock()
@@ -172,14 +210,6 @@ func (s *clusterServer) DetachDocument(
 		}
 	}
 
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, refKey)
-	if err != nil {
-		return nil, err
-	}
-	if docInfo.Key != docKey {
-		return nil, ErrDocumentKeyMismatch
-	}
-
 	if _, err := packs.PushPull(ctx, s.backend, project, clientInfo, refKey, pack, packs.PushPullOptions{
 		Mode:            types.SyncModePushOnly,
 		Status:          status,
@@ -198,6 +228,28 @@ func (s *clusterServer) DetachDocument(
 	// once. A future caller that detaches a single document through this
 	// handler must broadcast the invalidation itself.
 	return connect.NewResponse(&api.ClusterServiceDetachDocumentResponse{}), nil
+}
+
+// findDocInfo returns the DocInfo of the document being detached and checks
+// that it is the one the caller named.
+//
+// The caller must already hold the read lock of packs.DocKey for the document:
+// the read can fill the document cache, and compaction swaps the epoch under
+// the write lock of the same key, so a read outside it could put
+// pre-compaction metadata back into the cache.
+func (s *clusterServer) findDocInfo(
+	ctx context.Context,
+	refKey types.DocRefKey,
+	docKey key.Key,
+) (*database.DocInfo, error) {
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, refKey)
+	if err != nil {
+		return nil, err
+	}
+	if docInfo.Key != docKey {
+		return nil, ErrDocumentKeyMismatch
+	}
+	return docInfo, nil
 }
 
 // hasAttachedSibling reports whether another session of the same client key is
