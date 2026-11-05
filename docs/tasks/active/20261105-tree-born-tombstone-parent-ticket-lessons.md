@@ -64,3 +64,38 @@ dispatch the reviewer subagent `/self-review` requires, and its rules forbid
 substituting a self-read of the diff. This is a skipped round, not a clean
 one — the PR is opened as a draft and still needs CI, `@claude review`, and a
 human.
+
+## The stamp is also what the two tombstone-ticket readers want
+
+Two readers outside the diff ask whether an operation's author already knew a
+node was gone: `tombstoneKnown` in the delete walk
+(`pkg/document/crdt/tree.go:3223`, feeding `canDelete` at 644) and `seenGone`
+in `appendUnknownSplitSiblings` (3302). Both are reached only when the
+operation's vector already knows the node's `createdAt`.
+
+Under the old stamp, a born-tombstoned node carried the insert's ticket, which
+*is* its `createdAt` — so in that branch both readers answered "known gone"
+unconditionally, for every author, including one who had received the insert
+but not the parent removal and therefore saw the node live. That is the wrong
+answer to the question each reader documents itself as asking: 3223 says
+"existing tombstone was already causally known", and the walk's contract
+(3269-3272) says it passes a sibling only if the editor "saw it gone: removed
+by a change the editor knew". The change that removed a born tombstone is the
+parent's removal, not the insert.
+
+With the parent's ticket both readers answer `knows(T_rem)`, which is exactly
+"did this author see the removal". The consequences are benign in both
+directions:
+
+- `canDelete` can now return true where it used to return false, so a
+  concurrent delete LWW-overwrites the stamp. `remove()` overwrites only on
+  `removedAt.After(n.removedAt)` (627), so a stamp can only move forward, and
+  coverage of the new ticket implies every replica — the inserter included —
+  applied the delete that wrote it. The purge can be delayed, never advanced,
+  which is the property this task is about.
+- `seenGone` can now be false, stopping the split-sibling walk at a node the
+  editor saw live. That is the documented rule, not a regression from it.
+
+`TestTreeBornTombstoneConvergesWithAThirdPartyDelete` pins the third-replica
+case end to end: a delete from a replica that knew the insert but not the
+removal converges on all three replicas and leaves nothing stranded in GC.

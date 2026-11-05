@@ -28,6 +28,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/key"
 )
 
 // deliverTo hands src's pending local changes to dst and acks them at src: the
@@ -54,6 +55,37 @@ func deliverTo(t *testing.T, src, dst *document.Document) {
 	}
 	require.NoError(t, src.ApplyChangePack(change.NewPack(
 		pack.DocumentKey, change.NewCheckpoint(0, lastSeq), nil, time.InitialVersionVector, nil,
+	)))
+}
+
+// deliverToAll hands src's pending local changes to every dst and acks them
+// once, at the end. deliverTo cannot simply be called twice: its ack drops the
+// changes from src's next pack, so the second receiver would get nothing.
+func deliverToAll(t *testing.T, src *document.Document, dsts ...*document.Document) {
+	t.Helper()
+
+	pb, err := converter.ToChangePack(src.CreateChangePack())
+	require.NoError(t, err)
+
+	var docKey key.Key
+	var lastSeq uint32
+	for _, dst := range dsts {
+		// Decoded per receiver: whoever applies a change rewrites it in place,
+		// so the receivers cannot share one decoding.
+		pack, err := converter.FromChangePack(pb)
+		require.NoError(t, err)
+		require.NoError(t, dst.ApplyChangePack(change.NewPack(
+			pack.DocumentKey, change.NewCheckpoint(0, 0), pack.Changes, time.InitialVersionVector, nil,
+		)))
+
+		docKey = pack.DocumentKey
+		if n := len(pack.Changes); n > 0 {
+			lastSeq = pack.Changes[n-1].ClientSeq()
+		}
+	}
+
+	require.NoError(t, src.ApplyChangePack(change.NewPack(
+		docKey, change.NewCheckpoint(0, lastSeq), nil, time.InitialVersionVector, nil,
 	)))
 }
 
@@ -140,4 +172,79 @@ func TestTreeBornTombstonedInsertSurvivesUntilTheRemovalIsKnown(t *testing.T) {
 		assert.Equal(t, 0, d2.GarbageLen())
 		assert.Equal(t, d1.Root().GetTree("t").ToXML(), d2.Root().GetTree("t").ToXML())
 	})
+}
+
+// TestTreeBornTombstoneConvergesWithAThirdPartyDelete pins the behaviour of the
+// two readers of a born tombstone's ticket -- canDelete's tombstoneKnown and
+// appendUnknownSplitSiblings' seenGone -- when a third replica deletes the
+// node without having seen the parent removal that born-tombstoned it.
+//
+// That replica saw the node LIVE, so both readers must answer "not known
+// gone", which is what the parent's removal ticket gives them: a stamp of the
+// inserter's own ticket would answer "known gone" for every op that knew the
+// insert, including this one, and leave the receiving replica on a tombstone
+// ticket no one else holds. remove() only ever moves a stamp forward
+// (crdt/tree.go:627), so the resulting LWW overwrite can delay a purge, never
+// advance one.
+func TestTreeBornTombstoneConvergesWithAThirdPartyDelete(t *testing.T) {
+	a1, err := time.ActorIDFromHex("000000000000000000000001")
+	require.NoError(t, err)
+	a2, err := time.ActorIDFromHex("000000000000000000000002")
+	require.NoError(t, err)
+	a3, err := time.ActorIDFromHex("000000000000000000000003")
+	require.NoError(t, err)
+
+	d1, d2, d3 := document.New("test-doc"), document.New("test-doc"), document.New("test-doc")
+	d1.SetActor(a1)
+	d2.SetActor(a2)
+	d3.SetActor(a3)
+
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "r", Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+		}})
+		return nil
+	}))
+	deliverToAll(t, d1, d2, d3)
+
+	// d2 removes the first paragraph; nobody else hears about it yet.
+	require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").EditByPath([]int{0}, []int{1}, nil, 0)
+		return nil
+	}))
+
+	// d1 appends "x" to it. d2 takes it born tombstoned; d3 takes it live.
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").EditByPath([]int{0, 2}, []int{0, 2}, &json.TreeNode{Type: "text", Value: "x"}, 0)
+		return nil
+	}))
+	deliverToAll(t, d1, d2, d3)
+	assert.Equal(t, "<r><p>abx</p><p>cd</p></r>", d3.Root().GetTree("t").ToXML())
+
+	// d3 deletes "bx" -- it knows the insert but not the removal, so for it the
+	// node is live and its delete is the one that tombstones it.
+	require.NoError(t, d3.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").EditByPath([]int{0, 1}, []int{0, 3}, nil, 0)
+		return nil
+	}))
+	deliverToAll(t, d3, d1, d2)
+
+	// Everyone finally learns of the removal.
+	deliverToAll(t, d2, d1, d3)
+
+	xml := d1.Root().GetTree("t").ToXML()
+	assert.Equal(t, xml, d2.Root().GetTree("t").ToXML())
+	assert.Equal(t, xml, d3.Root().GetTree("t").ToXML())
+
+	// And nothing is stranded: the LWW overwrite the third-party delete now
+	// performs on the born tombstone still leaves a node every replica can
+	// purge, rather than one that dropped out of its parent's GC accounting.
+	vv := minVectorOf(d1, d2, d3)
+	d1.GarbageCollect(vv)
+	d2.GarbageCollect(vv)
+	d3.GarbageCollect(vv)
+	assert.Equal(t, 0, d1.GarbageLen())
+	assert.Equal(t, 0, d2.GarbageLen())
+	assert.Equal(t, 0, d3.GarbageLen())
 }
