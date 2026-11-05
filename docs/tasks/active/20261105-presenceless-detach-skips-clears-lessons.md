@@ -51,7 +51,7 @@ No blocking findings. Non-blocking, handled:
   the `server/rpc` integration tests. Harmless on one node; noted in
   `TestMain` so a future invalidation test there does not pass vacuously.
 
-Non-blocking, left as is:
+Non-blocking, left as is at the time (revisited after CodeRabbit, below):
 
 - `FindDocInfoByRefKey` now runs before the document locks. `DisablePresence`
   and `Key` never change after creation, and the same unlocked read already
@@ -66,6 +66,23 @@ Non-blocking, left as is:
   not advance it. Worth a separate fix.
 
 Stopped after round 1, the first round without blocking findings.
+
+### CodeRabbit (PR review)
+
+- **Major — keep the DocInfo read behind the document lock.** Valid. The read
+  can fill the document cache, and compaction removes the entry and swaps the
+  epoch under the write lock of the same `DocKey`. Before this PR the read sat
+  under the read lock; moving it out let a cache miss put pre-compaction
+  metadata back. The values this PR needs never change, but other readers of
+  the cache use the epoch and `ServerSeq`.
+  - Not fixed by moving the whole read lock earlier: `sync.RWMutex` lets a
+    waiting writer block new readers, so holding the read lock across the
+    sibling check (a long read on a busy document with presence) would stall
+    every reader of the document while compaction waits.
+  - Fixed with `findDocInfo`, which takes the read lock for the read only. The
+    lock order (`DocPullKey` → `DocKey` → `DocAttachmentKey`) is unchanged, and
+    the push takes the read lock again as before.
+- **Docstring coverage.** The test helpers had no comments; added.
 
 ## Known limitations
 

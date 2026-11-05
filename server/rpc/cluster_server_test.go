@@ -43,10 +43,13 @@ type attachedClientsProbeDB struct {
 	reads map[types.ID]int
 }
 
+// newAttachedClientsProbeDB wraps db; every call still goes to db.
 func newAttachedClientsProbeDB(db database.Database) *attachedClientsProbeDB {
 	return &attachedClientsProbeDB{Database: db, reads: map[types.ID]int{}}
 }
 
+// FindAttachedClientInfosByRefKey records the read against the document and
+// passes it through.
 func (d *attachedClientsProbeDB) FindAttachedClientInfosByRefKey(
 	ctx context.Context,
 	refKey types.DocRefKey,
@@ -57,6 +60,8 @@ func (d *attachedClientsProbeDB) FindAttachedClientInfosByRefKey(
 	return d.Database.FindAttachedClientInfosByRefKey(ctx, refKey)
 }
 
+// readsOf returns how many reads of the document's attached clients were made
+// so far.
 func (d *attachedClientsProbeDB) readsOf(docID types.ID) int {
 	d.mu.Lock()
 	defer d.mu.Unlock()

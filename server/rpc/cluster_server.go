@@ -80,12 +80,9 @@ func (s *clusterServer) DetachDocument(
 	}
 
 	refKey := types.DocRefKey{ProjectID: project.ID, DocID: docID}
-	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, refKey)
+	docInfo, err := s.findDocInfo(ctx, project.ID, refKey, docKey)
 	if err != nil {
 		return nil, err
-	}
-	if docInfo.Key != docKey {
-		return nil, ErrDocumentKeyMismatch
 	}
 
 	// 01. Create request pack with presence clear changes.
@@ -96,8 +93,6 @@ func (s *clusterServer) DetachDocument(
 	// reach the changes collection. Skipping them also skips the sibling check
 	// below, which reads every activated client attached to the document — on
 	// a busy presenceless document that read is the whole cost of the detach.
-	// The option is fixed when the document is created, so reading it before
-	// the document locks below is safe.
 	//
 	// Applying a clear runs presences.Delete(change.ID().ActorID()), so it only
 	// removes the entry under the actor the client itself stamped into its
@@ -210,6 +205,34 @@ func (s *clusterServer) DetachDocument(
 	// once. A future caller that detaches a single document through this
 	// handler must broadcast the invalidation itself.
 	return connect.NewResponse(&api.ClusterServiceDetachDocumentResponse{}), nil
+}
+
+// findDocInfo returns the DocInfo of the document being detached and checks
+// that it is the one the caller named.
+//
+// The read holds the document's read lock and releases it on return. It can
+// fill the document cache, and compaction swaps the epoch under the write lock
+// of the same key, so a read outside it could put pre-compaction metadata back
+// into the cache. The lock is not kept for the rest of the detach: the sibling
+// check that follows can be a long read, and a held read lock with compaction
+// waiting on it would also stall every other reader of the document.
+func (s *clusterServer) findDocInfo(
+	ctx context.Context,
+	projectID types.ID,
+	refKey types.DocRefKey,
+	docKey key.Key,
+) (*database.DocInfo, error) {
+	docLocker := s.backend.Lockers.LockerWithRLock(packs.DocKey(projectID, docKey))
+	defer docLocker.RUnlock()
+
+	docInfo, err := documents.FindDocInfoByRefKey(ctx, s.backend, refKey)
+	if err != nil {
+		return nil, err
+	}
+	if docInfo.Key != docKey {
+		return nil, ErrDocumentKeyMismatch
+	}
+	return docInfo, nil
 }
 
 // hasAttachedSibling reports whether another session of the same client key is
