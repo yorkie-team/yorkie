@@ -90,6 +90,19 @@ The parent's `removedAt` is the ticket no minimum vector covers until every repl
 
 The stamp only has to be overwritable by the eventual LWW winner, and it is: a later concurrent removal with a higher ticket reaches the tombstoned node and overwrites it.
 
+### What else reads the stamp
+
+`removedAt` is not read by GC alone. Two readers in `Tree`'s delete walk ask "did the editor already see this node gone?" and answer it from the same ticket:
+
+- `tombstoneKnown` in `collectBetween`, which feeds `canDelete` and so decides whether this delete overwrites the existing tombstone;
+- `seenGone` in `appendUnknownSplitSiblings`, which decides whether the split-sibling cascade walks past the node or stops there — a deletion-set decision, not a timing one.
+
+For the two non-plain-delete cases above, both now answer by the parent's removal rather than by the insert. That is the answer that matches what a replica sees — a replica that does not know the parent removal has the node live, so an editor that does not know it has not "seen it gone" — and it also removes a Go-internal disagreement: under the old stamp the inserter's own replica (tombstone absent, `seenGone` false) and every other replica (tombstone present, `seenGone` true) always disagreed, while under the parent's ticket they agree whenever the editor does not know the removal.
+
+A born tombstone is consequently the one node whose `removedAt` precedes its own `createdAt`; code that assumes the two are ordered must not be pointed at it.
+
+The yorkie-js-sdk still stamps the inserter's ticket in its equivalent branch. Until it carries the same stamp, a Go replica and a JS replica can resolve those two reads differently for the same born tombstone and so compute different deletion sets. Changing the stamp there is the follow-up that closes this; the two SDKs agree today only on nodes whose tombstone is a plain delete.
+
 ## An example of garbage collection:
 
 ### State 1

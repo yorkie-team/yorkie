@@ -248,3 +248,48 @@ func TestTreeBornTombstoneConvergesWithAThirdPartyDelete(t *testing.T) {
 	assert.Equal(t, 0, d2.GarbageLen())
 	assert.Equal(t, 0, d3.GarbageLen())
 }
+
+// TestTreeBornTombstoneIsChargedToGCOnly pins the size accounting of a born
+// tombstone on the receiving replica. Its bytes never entered docSize.Live
+// there -- the insert path skips the live accumulation for exactly these nodes
+// -- so the GC pair has to carry GCOnlySize. A plain pair makes registration
+// perform the usual live->gc move and subtract bytes Live never held, which
+// under-reports the document until the next rebuild recomputes it from content.
+func TestTreeBornTombstoneIsChargedToGCOnly(t *testing.T) {
+	d1, d2, _, _ := newReplicas(t)
+
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.SetNewTree("t", json.TreeNode{Type: "r", Children: []json.TreeNode{
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "ab"}}},
+			{Type: "p", Children: []json.TreeNode{{Type: "text", Value: "cd"}}},
+		}})
+		return nil
+	}))
+	deliverTo(t, d1, d2)
+
+	// d2 removes the first paragraph; d1, unaware, types into it.
+	require.NoError(t, d2.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").EditByPath([]int{0}, []int{1}, nil, 0)
+		return nil
+	}))
+	require.NoError(t, d1.Update(func(root *json.Object, p *presence.Presence) error {
+		root.GetTree("t").EditByPath([]int{0, 2}, []int{0, 2}, &json.TreeNode{Type: "text", Value: "x"}, 0)
+		return nil
+	}))
+
+	before := d2.DocSize()
+	deliverTo(t, d1, d2)
+	after := d2.DocSize()
+
+	// The born tombstone was never visible on d2, so Live must not move at all.
+	assert.Equal(t, before.Live, after.Live)
+	// And its bytes must be waiting in GC, to be handed back by Purge.
+	assert.Greater(t, after.GC.Data+after.GC.Meta, before.GC.Data+before.GC.Meta)
+
+	// Once the removal is known everywhere, the whole subtree is purged and
+	// GC telescopes back to what it held before the insert arrived.
+	deliverTo(t, d2, d1)
+	d2.GarbageCollect(minVectorOf(d1, d2))
+	assert.Equal(t, 0, d2.GarbageLen())
+	assert.Equal(t, 0, d2.DocSize().GC.Data+d2.DocSize().GC.Meta)
+}

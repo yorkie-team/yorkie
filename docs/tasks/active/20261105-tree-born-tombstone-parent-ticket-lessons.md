@@ -99,3 +99,36 @@ directions:
 `TestTreeBornTombstoneConvergesWithAThirdPartyDelete` pins the third-replica
 case end to end: a delete from a replica that knew the insert but not the
 removal converges on all three replicas and leaves nothing stranded in GC.
+
+## Panel round: size accounting and the cross-SDK gap
+
+Two further findings on the same branch.
+
+**The born tombstone's GC pair needed `GCOnlySize`.** The insert path adds a
+node's `DataSize()` to the live diff only in the else arm — the one the born
+tombstone skips — so its bytes never entered `docSize.Live` on the receiving
+replica. Registering it with a plain `GCPair` made `Root.RegisterGCPair` run
+the usual live→gc move and subtract bytes Live never held: the document
+under-reported itself by the born node's size (2 data / 24 meta bytes in the
+new test) until something recomputed the size from content. `recreateFromSpan`,
+the path this branch modelled the stamp on, already set `GCOnlySize` for the
+identical shape; the insert path did not. Pre-existing, but the stamp change
+keeps these nodes alive longer, so the drift lasts longer too.
+`TestTreeBornTombstoneIsChargedToGCOnly` asserts Live does not move when the
+insert is delivered, and that GC telescopes back to zero after the purge.
+
+**The JS SDK still stamps the inserter's ticket.** Both readers of the stamp —
+`tombstoneKnown` and `seenGone` — therefore answer differently on a Go replica
+and a JS replica for the same born tombstone, and `seenGone` decides a deletion
+set, not just GC timing. Nothing in this repository can close that; it needs
+the matching change in yorkie-js-sdk's insert branch. The requirement is
+written down in `docs/design/garbage-collection.md` ("What else reads the
+stamp") so the follow-up is not folklore, and the same note records the new
+invariant break: a born tombstone's `removedAt` precedes its own `createdAt`.
+
+**Insert-target validation is still absent.** Nothing on the apply path checks
+that a `TreeEdit`'s resolved position lies under a live parent, so a crafted
+insert into a parent whose removal the minimum vector already covers still
+produces an immediately collectible node. The parent's ticket is strictly
+safer here than the inserter's, but it is not validation. A fix belongs on the
+operation-apply or converter path, outside this branch's files.

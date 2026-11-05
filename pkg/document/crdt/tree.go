@@ -2218,9 +2218,16 @@ func (t *Tree) Edit(
 				// subtree is purged.
 				if fromParent.IsRemoved() {
 					node.Value.remove(fromParent.RemovedAt())
+					// Born tombstoned: the else arm below is what would have
+					// charged these bytes to docSize.Live, and it did not run.
+					// GCOnlySize is how a pair says "add to GC, take nothing
+					// out of Live" -- without it registration subtracts bytes
+					// Live never held. Same shape as recreateFromSpan's attach.
+					gcSize := node.Value.DataSize()
 					pairs = append(pairs, GCPair{
-						Parent: t,
-						Child:  node.Value,
+						Parent:     t,
+						Child:      node.Value,
+						GCOnlySize: &gcSize,
 					})
 				} else {
 					diff.Add(node.Value.DataSize())
@@ -3286,6 +3293,19 @@ func (t *Tree) collectBetween(
 // the read would have answered true anyway. Restore does not: clearing a
 // tombstone in place makes the walk stop where it used to pass. See the
 // limitations in §4.1 of docs/design/concurrent-merge-split.md.
+//
+// A born tombstone -- content inserted here under a parent a concurrent
+// change had already removed -- is the one node whose tombstone ticket is not
+// a delete that swept it, and is EARLIER than its own createdAt: it carries
+// the parent's removedAt (see Edit and "Which ticket a tombstone carries" in
+// docs/design/garbage-collection.md). For it, "saw it gone" asks whether the
+// editor knew the PARENT's removal, which is the question that matches what
+// the editor sees: a replica without that removal has the node live. The same
+// ticket reaches canDelete as tombstoneKnown in collectBetween. Both readers
+// therefore answer by the parent removal, where before #2327 they answered by
+// the insert -- and the JS SDK still stamps the insert, so until it carries
+// the same stamp a Go replica and a JS replica can resolve these two reads
+// differently for the same born tombstone.
 func (t *Tree) appendUnknownSplitSiblings(
 	toBeRemoveds []*TreeNode,
 	node *TreeNode,
