@@ -2201,9 +2201,23 @@ func (t *Tree) Edit(
 			leftInChildren = content
 			index.TraverseNode(content.Index, func(node *index.Node[*TreeNode], depth int) {
 				// if insertion happens during concurrent editing and parent node has been removed,
-				// make new nodes as tombstone immediately
+				// make new nodes as tombstone immediately.
+				//
+				// The stamp is the PARENT's removedAt, not editedAt, for the
+				// same reason recreateFromSpan uses it (#2327): editedAt is the
+				// INSERTER's own ticket, which the minimum version vector
+				// covers the moment the insert is delivered -- before the
+				// inserter has pulled the removal. GC would purge the node
+				// while the inserter is still anchoring its next keystroke to
+				// it, and that next change then fails to apply here forever.
+				// The parent's ticket is the one no vector covers until every
+				// replica, the inserter included, knows the removal, and it is
+				// also what the inserter's own replica waits on: there the node
+				// is never tombstoned at all (canDelete declines, the removal
+				// did not see its creation), so it goes only when the parent
+				// subtree is purged.
 				if fromParent.IsRemoved() {
-					node.Value.remove(editedAt)
+					node.Value.remove(fromParent.RemovedAt())
 					pairs = append(pairs, GCPair{
 						Parent: t,
 						Child:  node.Value,

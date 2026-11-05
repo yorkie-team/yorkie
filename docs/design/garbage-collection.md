@@ -77,6 +77,19 @@ GC responsibility is split between server and client depending on the response t
 
 This means the server must always GC the document before building a snapshot response. Without this, tombstones from applied changes would leak into the snapshot and persist on the client, since the client does not run GC for snapshot responses by design.
 
+## Which ticket a tombstone carries
+
+The algorithm above reads `removedAt`, so choosing the ticket a node is tombstoned with chooses when it may be purged. For a plain delete the choice is forced: the delete's own ticket. Two cases in `Tree` are not plain deletes, and both stamp the ticket of the REMOVAL that logically swept the node, not the ticket of the operation that happened to create it:
+
+- **Born tombstoned** — content inserted into a parent that a concurrent change already removed here (`pkg/document/crdt/tree.go`, the `fromParent.IsRemoved()` branch of `Edit`).
+- **Recreated under a purged parent** — an identity-preserving restore that has to rebuild a node whose parent is a tombstone (`recreateFromSpan`).
+
+Stamping the inserter's own ticket is what caused #2327. That ticket is covered by `minVersionVector` as soon as the insert reaches the server — but the inserter has not pulled the removal yet, and keeps anchoring its next keystrokes to the node it believes is live. The receiving replica purged it and then could not apply the inserter's next change (`node not found`), on every redelivery, which wedges the pair.
+
+The parent's `removedAt` is the ticket no minimum vector covers until every replica, the inserter included, has pulled the removal. It is also what the inserter's own replica waits on: there the node is never tombstoned at all (the removal did not see its creation, so `canDelete` declines), so it goes only when the parent subtree is purged. Stamping it makes both replicas purge the node on the same vector.
+
+The stamp only has to be overwritable by the eventual LWW winner, and it is: a later concurrent removal with a higher ticket reaches the tombstoned node and overwrites it.
+
 ## An example of garbage collection:
 
 ### State 1
