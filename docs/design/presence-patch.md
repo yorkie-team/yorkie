@@ -108,7 +108,15 @@ attached to the document, and neither stores nor uses one at the initial
 checkpoint, which identifies no attachment.
 
 After the pull, `commit` walks the changes `pushPack` actually stored and
-writes the resulting presence back under the client's new checkpoint. Changes
+writes the resulting presence back under the client's new checkpoint, as the
+store holds it. That is not always the reply's checkpoint: the store merges a
+checkpoint with `$max`, so it never moves back, while a push-only reply returns
+the server seq the client sent. A client that leaves a pull unapplied (the JS
+SDK does during IME composition) sends a server seq behind the one that pull
+recorded, and a base keyed to the reply would then never match the checkpoint
+the next push reads. So `commit` keys the base to the client as the store holds
+it, read back only when there is a base to keep; if that read fails, it drops
+the base rather than key it to a checkpoint the store may not hold. Changes
 `pushPack` discarded (a stale epoch, or the size gate on a detach) are not in
 that list, so the base stays what the server holds. A pull without changes
 moves the entry to the new checkpoint without copying the presence. A push

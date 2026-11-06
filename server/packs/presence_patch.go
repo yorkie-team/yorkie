@@ -76,7 +76,7 @@ func presenceSize(data presence.Data) int {
 
 // presenceFold carries the client's presence from before a push, read from
 // the cache in foldPresencePatches, to commit, which writes back the presence
-// after the push once it is stored and the client's checkpoint is final.
+// after the push once it is stored and the client's checkpoint is stored.
 type presenceFold struct {
 	key cache.PresenceBaseKey
 
@@ -174,13 +174,21 @@ func foldPresencePatches(
 }
 
 // commit records the client's presence after the push as the base for its
-// next one, keyed to the client's checkpoint after the pull. It walks pushed,
-// the changes pushPack actually stored, so a push whose changes were
-// discarded (a stale epoch, the size gate on a detach) leaves the base as it
-// was.
+// next one. It walks pushed, the changes pushPack actually stored, so a push
+// whose changes were discarded (a stale epoch, the size gate on a detach)
+// leaves the base as it was.
+//
+// The base is keyed to the checkpoint stored returns, the client as the store
+// holds it after the pull, because that is what the next push reads its
+// checkpoint from. It is not always the reply's: the store never moves a
+// checkpoint back, while a push-only reply returns the server seq the client
+// sent, which can be behind the client's last pull. stored is called only when
+// there is a base to keep; when it fails the base is dropped, so the client's
+// next patch falls back to a full put instead of finding a base under a
+// checkpoint the store does not hold.
 func (f *presenceFold) commit(
 	be *backend.Backend,
-	clientInfo *database.ClientInfo,
+	stored func() (*database.ClientInfo, error),
 	docID types.ID,
 	pushed []*database.ChangeInfo,
 ) {
@@ -206,6 +214,21 @@ func (f *presenceFold) commit(
 		return
 	}
 
+	// Presence is excluded from every document size gate, so the cache is the
+	// only place that bounds it. A presence too large to hold is dropped
+	// rather than stored: the client's next patch is refused and it pushes a
+	// full put, which is what it would have pushed anyway.
+	if presenceSize(base) > maxPresenceBaseSize {
+		be.Cache.PresenceBase.Remove(f.key)
+		return
+	}
+
+	clientInfo, err := stored()
+	if err != nil {
+		be.Cache.PresenceBase.Remove(f.key)
+		return
+	}
+
 	// Hold nothing for a client that is no longer attached. DetachDocument
 	// zeroes the client's checkpoint to the (0, 0) a fresh attach seeds, so a
 	// base kept past a detach would pass the freshness check on the client's
@@ -215,15 +238,6 @@ func (f *presenceFold) commit(
 	cp := clientInfo.Checkpoint(docID)
 	if attached, err := clientInfo.IsAttached(docID); err != nil || !attached ||
 		cp == change.InitialCheckpoint {
-		be.Cache.PresenceBase.Remove(f.key)
-		return
-	}
-
-	// Presence is excluded from every document size gate, so the cache is the
-	// only place that bounds it. A presence too large to hold is dropped
-	// rather than stored: the client's next patch is refused and it pushes a
-	// full put, which is what it would have pushed anyway.
-	if presenceSize(base) > maxPresenceBaseSize {
 		be.Cache.PresenceBase.Remove(f.key)
 		return
 	}

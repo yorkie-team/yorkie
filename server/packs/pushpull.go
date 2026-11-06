@@ -170,8 +170,10 @@ func PushPull(
 	}
 
 	// 03b. Keep the client's presence for folding its next patch, keyed to
-	// the checkpoint the pull just recorded.
-	fold.commit(be, clientInfo, docKey.DocID, pushedChanges)
+	// the checkpoint the store now holds, which is what the next push reads.
+	fold.commit(be, func() (*database.ClientInfo, error) {
+		return storedClientInfo(ctx, be, clientInfo)
+	}, docKey.DocID, pushedChanges)
 
 	if logging.Enabled(zap.DebugLevel) {
 		pullLog := strconv.Itoa(resPack.ChangesLen())
@@ -349,6 +351,24 @@ func validateChangeActors(
 	}
 
 	return nil
+}
+
+// storedClientInfo returns the client as the store holds it after the push
+// and pull. A server-side client is not stored, so it is returned as given.
+func storedClientInfo(
+	ctx context.Context,
+	be *backend.Backend,
+	clientInfo *database.ClientInfo,
+) (*database.ClientInfo, error) {
+	if clientInfo.IsServerClient() {
+		return clientInfo, nil
+	}
+	stored, err := be.DB.FindClientInfoByRefKey(ctx, clientInfo.RefKey())
+	if err != nil {
+		logging.From(ctx).Warnf("read client %s back for its presence base: %v", clientInfo.ID, err)
+		return nil, err
+	}
+	return stored, nil
 }
 
 // pushPack pushes the given ChangePack to the database. maxSize is the
