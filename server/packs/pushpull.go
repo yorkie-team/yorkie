@@ -173,7 +173,7 @@ func PushPull(
 	// the checkpoint the store now holds, which is what the next push reads.
 	fold.commit(be, func() (*database.ClientInfo, error) {
 		return storedClientInfo(ctx, be, clientInfo)
-	}, docKey.DocID, pushedChanges)
+	}, docKey.DocID, cpAfterPush, pushedChanges)
 
 	if logging.Enabled(zap.DebugLevel) {
 		pullLog := strconv.Itoa(resPack.ChangesLen())

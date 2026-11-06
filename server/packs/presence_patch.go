@@ -186,10 +186,20 @@ func foldPresencePatches(
 // there is a base to keep; when it fails the base is dropped, so the client's
 // next patch falls back to a full put instead of finding a base under a
 // checkpoint the store does not hold.
+//
+// pushedCP is the checkpoint this request's own push produced. The stored row
+// is only trusted to describe this request while its client seq still matches:
+// the pull lock is per-process, so a concurrent push by the same client on
+// another server can advance the stored client seq between the pull and the
+// read-back, carrying presence changes this request never saw. Keying this
+// request's older presence to that newer checkpoint would let the client's
+// next patch fold onto presence the store has already moved past, so the base
+// is dropped instead and the client falls back to a full put.
 func (f *presenceFold) commit(
 	be *backend.Backend,
 	stored func() (*database.ClientInfo, error),
 	docID types.ID,
+	pushedCP change.Checkpoint,
 	pushed []*database.ChangeInfo,
 ) {
 	if f == nil {
@@ -237,7 +247,7 @@ func (f *presenceFold) commit(
 	// seeded one: it tells this attachment apart from no other.
 	cp := clientInfo.Checkpoint(docID)
 	if attached, err := clientInfo.IsAttached(docID); err != nil || !attached ||
-		cp == change.InitialCheckpoint {
+		cp == change.InitialCheckpoint || cp.ClientSeq != pushedCP.ClientSeq {
 		be.Cache.PresenceBase.Remove(f.key)
 		return
 	}

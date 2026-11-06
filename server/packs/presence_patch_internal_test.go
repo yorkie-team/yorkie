@@ -110,6 +110,12 @@ func storedAs(clientInfo *database.ClientInfo) func() (*database.ClientInfo, err
 	return func() (*database.ClientInfo, error) { return clientInfo, nil }
 }
 
+// afterPush is the checkpoint this request's own push produced. commit only
+// compares its client seq with the stored one, so that is all it carries.
+func afterPush(clientSeq uint32) change.Checkpoint {
+	return change.NewCheckpoint(0, clientSeq)
+}
+
 // pullTo moves the client's checkpoint the way pullPack does after a push.
 func pullTo(clientInfo *database.ClientInfo, docID types.ID, serverSeq int64, clientSeq uint32) {
 	clientInfo.Documents[docID].ServerSeq = serverSeq
@@ -137,7 +143,7 @@ func TestFoldPresencePatches(t *testing.T) {
 
 		pushed := stored(t, docKey, change.InitialCheckpoint, pack)
 		pullTo(clientInfo, docKey.DocID, 2, 2)
-		fold.commit(be, storedAs(clientInfo), docKey.DocID, pushed)
+		fold.commit(be, storedAs(clientInfo), docKey.DocID, afterPush(2), pushed)
 		got, ok := be.Cache.PresenceBase.Get(baseKey)
 		require.True(t, ok)
 		assert.Equal(t, cached(2, 2, presence.Data{"name": "a", "cursor": "1"}), got)
@@ -240,7 +246,7 @@ func TestFoldPresencePatches(t *testing.T) {
 		fold, err := foldPresencePatches(be, clientInfo, docKey, presencePack(4))
 		require.NoError(t, err)
 		pullTo(clientInfo, docKey.DocID, 12, 3)
-		fold.commit(be, storedAs(clientInfo), docKey.DocID, nil)
+		fold.commit(be, storedAs(clientInfo), docKey.DocID, afterPush(3), nil)
 
 		got, ok := be.Cache.PresenceBase.Get(baseKey)
 		require.True(t, ok)
@@ -260,12 +266,32 @@ func TestFoldPresencePatches(t *testing.T) {
 		require.NoError(t, err)
 		// The push-only reply carried (7, 4); the store kept (12, 4).
 		pullTo(clientInfo, docKey.DocID, 7, 4)
-		fold.commit(be, storedAs(clientAt(docKey, 12, 4)), docKey.DocID,
+		fold.commit(be, storedAs(clientAt(docKey, 12, 4)), docKey.DocID, afterPush(4),
 			stored(t, docKey, change.NewCheckpoint(12, 3), pack))
 
 		got, ok := be.Cache.PresenceBase.Get(baseKey)
 		require.True(t, ok)
 		assert.Equal(t, change.NewCheckpoint(12, 4), got.Checkpoint)
+	})
+
+	// The pull lock is per-process, so a concurrent push by the same client on
+	// another server can advance the stored client seq between the pull and
+	// the read-back. That push carries presence this request never saw, so
+	// keying this request's presence to the newer checkpoint would let the
+	// client's next patch fold onto presence the store has moved past.
+	t.Run("a base is dropped when the stored client seq moved past this push", func(t *testing.T) {
+		be := newCacheBackend(t)
+		be.Cache.PresenceBase.Add(baseKey, cached(7, 1, presence.Data{"name": "a"}))
+		clientInfo := clientAt(docKey, 7, 1)
+		pack := presencePack(2, put(presence.Data{"name": "b"}))
+
+		fold, err := foldPresencePatches(be, clientInfo, docKey, pack)
+		require.NoError(t, err)
+		pushed := stored(t, docKey, change.NewCheckpoint(7, 1), pack)
+		// This request pushed up to client seq 2; the store already holds 3.
+		fold.commit(be, storedAs(clientAt(docKey, 9, 3)), docKey.DocID, afterPush(2), pushed)
+
+		assert.False(t, be.Cache.PresenceBase.Contains(baseKey))
 	})
 
 	// Keying the base to a checkpoint the store may not hold could match a
@@ -280,7 +306,7 @@ func TestFoldPresencePatches(t *testing.T) {
 		require.NoError(t, err)
 		fold.commit(be, func() (*database.ClientInfo, error) {
 			return nil, database.ErrClientNotFound
-		}, docKey.DocID, stored(t, docKey, change.NewCheckpoint(7, 1), pack))
+		}, docKey.DocID, afterPush(2), stored(t, docKey, change.NewCheckpoint(7, 1), pack))
 		assert.False(t, be.Cache.PresenceBase.Contains(baseKey))
 	})
 
@@ -296,7 +322,7 @@ func TestFoldPresencePatches(t *testing.T) {
 		fold.commit(be, func() (*database.ClientInfo, error) {
 			t.Fatal("stored client read for a clear")
 			return nil, nil
-		}, docKey.DocID, stored(t, docKey, change.NewCheckpoint(7, 1), pack))
+		}, docKey.DocID, afterPush(2), stored(t, docKey, change.NewCheckpoint(7, 1), pack))
 		assert.False(t, be.Cache.PresenceBase.Contains(baseKey))
 	})
 
@@ -308,7 +334,8 @@ func TestFoldPresencePatches(t *testing.T) {
 
 		fold, err := foldPresencePatches(be, clientInfo, docKey, pack)
 		require.NoError(t, err)
-		fold.commit(be, storedAs(clientInfo), docKey.DocID, stored(t, docKey, change.NewCheckpoint(7, 1), pack))
+		fold.commit(be, storedAs(clientInfo), docKey.DocID, afterPush(2),
+			stored(t, docKey, change.NewCheckpoint(7, 1), pack))
 		assert.False(t, be.Cache.PresenceBase.Contains(baseKey))
 	})
 
@@ -321,7 +348,8 @@ func TestFoldPresencePatches(t *testing.T) {
 
 		fold, err := foldPresencePatches(be, clientInfo, docKey, presencePack(2, put(presence.Data{"name": "b"})))
 		require.NoError(t, err)
-		fold.commit(be, storedAs(clientInfo), docKey.DocID, nil)
+		// Nothing was stored, so the push did not forward the client seq.
+		fold.commit(be, storedAs(clientInfo), docKey.DocID, afterPush(1), nil)
 
 		got, ok := be.Cache.PresenceBase.Get(baseKey)
 		require.True(t, ok)
@@ -343,7 +371,7 @@ func TestFoldPresencePatches(t *testing.T) {
 
 		// pullPack detaches the client before commit runs.
 		require.NoError(t, clientInfo.DetachDocument(docKey.DocID))
-		fold.commit(be, storedAs(clientInfo), docKey.DocID, pushed)
+		fold.commit(be, storedAs(clientInfo), docKey.DocID, afterPush(2), pushed)
 		assert.False(t, be.Cache.PresenceBase.Contains(baseKey))
 	})
 
@@ -370,7 +398,7 @@ func TestFoldPresencePatches(t *testing.T) {
 		require.NoError(t, err)
 		pushed := stored(t, docKey, change.NewCheckpoint(7, 1), pack)
 		pullTo(clientInfo, docKey.DocID, 8, 2)
-		fold.commit(be, storedAs(clientInfo), docKey.DocID, pushed)
+		fold.commit(be, storedAs(clientInfo), docKey.DocID, afterPush(2), pushed)
 
 		assert.False(t, be.Cache.PresenceBase.Contains(baseKey))
 	})
@@ -385,7 +413,7 @@ func TestFoldPresencePatches(t *testing.T) {
 		require.NoError(t, err)
 		pushed := stored(t, docKey, change.NewCheckpoint(7, 1), pack)
 		pullTo(clientInfo, docKey.DocID, 8, 2)
-		fold.commit(be, storedAs(clientInfo), docKey.DocID, pushed)
+		fold.commit(be, storedAs(clientInfo), docKey.DocID, afterPush(2), pushed)
 
 		got, ok := be.Cache.PresenceBase.Get(baseKey)
 		require.True(t, ok)
@@ -431,7 +459,7 @@ func TestFoldPresencePatches(t *testing.T) {
 		require.NoError(t, err)
 		pushed := stored(t, docKey, change.NewCheckpoint(7, 1), pack)
 		pullTo(clientInfo, docKey.DocID, 8, 2)
-		fold.commit(be, storedAs(clientInfo), docKey.DocID, pushed)
+		fold.commit(be, storedAs(clientInfo), docKey.DocID, afterPush(2), pushed)
 
 		assert.False(t, be.Cache.PresenceBase.Contains(baseKey))
 	})
@@ -446,7 +474,7 @@ func TestFoldPresencePatches(t *testing.T) {
 		require.NoError(t, err)
 		pushed := stored(t, docKey, change.InitialCheckpoint, pack)
 		pullTo(clientInfo, docKey.DocID, 1, 1)
-		fold.commit(be, storedAs(clientInfo), docKey.DocID, pushed)
+		fold.commit(be, storedAs(clientInfo), docKey.DocID, afterPush(1), pushed)
 
 		data["name"] = "changed"
 		got, ok := be.Cache.PresenceBase.Get(baseKey)

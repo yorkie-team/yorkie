@@ -52,3 +52,17 @@ Not taken:
 Known limitations: the memory database path and the server-client branch of
 `storedClientInfo` are covered only by the existing tests, not by a push-only
 scenario.
+
+## Review panel, round 1 (correctness)
+
+- Fixed: `commit` trusted the read-back checkpoint unconditionally. The pull
+  lock is per-process, so a concurrent push by the same client on another
+  server can advance the stored client seq between the pull and the read-back,
+  and this request's older presence would then be cached under the newer
+  checkpoint — which the client's next patch would fold onto. `commit` now
+  takes the checkpoint this request's own push produced and drops the base
+  when the stored client seq no longer matches it.
+- The server seq is deliberately not compared. It can move under a concurrent
+  pull without the presence going stale, and an entry keyed behind it only
+  misses, which costs a full put rather than correctness. Comparing it would
+  also undo the push-only case this task exists for.
