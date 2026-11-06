@@ -274,6 +274,114 @@ func TestPresencePatch(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
+	// A push-only reply carries the checkpoint the client sent, so its server
+	// seq can be behind the one the client's previous pull recorded: the SDK
+	// leaves a pull it received mid-composition unapplied and keeps its old
+	// checkpoint (yorkie-js-sdk#1453). The database keeps the larger server
+	// seq, so the base has to stay findable from that checkpoint too, or the
+	// client's next patch is refused although the server holds its presence.
+	t.Run("a patch after a push-only reply behind the last pull is folded", func(t *testing.T) {
+		docKey := helper.TestKey(t).String()
+		clientID, actorID := activate(t, "-h")
+
+		attachResp, err := testClient.AttachDocument(ctx, connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId: clientID,
+			ChangePack: &api.ChangePack{
+				DocumentKey: docKey,
+				Checkpoint:  &api.Checkpoint{ClientSeq: 1},
+				Changes: []*api.Change{presenceChange(actorID, 1, &api.PresenceChange{
+					Type:     api.PresenceChange_CHANGE_TYPE_PUT,
+					Presence: &api.Presence{Data: map[string]string{"name": "a"}},
+				})},
+			},
+		}))
+		require.NoError(t, err)
+		docID := attachResp.Msg.DocumentId
+		appliedSeq := attachResp.Msg.ChangePack.Checkpoint.ServerSeq
+
+		// A peer writes, so the document moves past the client.
+		peerID, peerActorID := activate(t, "-i")
+		_, err = testClient.AttachDocument(ctx, connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId: peerID,
+			ChangePack: &api.ChangePack{
+				DocumentKey: docKey,
+				Checkpoint:  &api.Checkpoint{ClientSeq: 1},
+				Changes: []*api.Change{presenceChange(peerActorID, 1, &api.PresenceChange{
+					Type:     api.PresenceChange_CHANGE_TYPE_PUT,
+					Presence: &api.Presence{Data: map[string]string{"name": "b"}},
+				})},
+			},
+		}))
+		require.NoError(t, err)
+
+		pushPull := func(clientSeq uint32, pushOnly bool, changes ...*api.Change) (*api.ChangePack, error) {
+			resp, err := testClient.PushPullChanges(ctx, connect.NewRequest(&api.PushPullChangesRequest{
+				ClientId:   clientID,
+				DocumentId: docID,
+				PushOnly:   pushOnly,
+				ChangePack: &api.ChangePack{
+					DocumentKey: docKey,
+					Checkpoint:  &api.Checkpoint{ServerSeq: appliedSeq, ClientSeq: clientSeq},
+					Changes:     changes,
+				},
+			}))
+			if err != nil {
+				return nil, err
+			}
+			return resp.Msg.ChangePack, nil
+		}
+
+		// 01. A pull brings the peer's change. The client does not apply it
+		// (composition started), so it keeps appliedSeq as its checkpoint.
+		pulled, err := pushPull(1, false)
+		require.NoError(t, err)
+		require.Greater(t, pulled.Checkpoint.ServerSeq, appliedSeq)
+
+		// 02. A push-only patch during the composition folds. Its reply
+		// carries appliedSeq, behind the server seq the pull stored.
+		reply, err := pushPull(2, true, presenceChange(actorID, 2, &api.PresenceChange{
+			Type:     api.PresenceChange_CHANGE_TYPE_PATCH,
+			Presence: &api.Presence{Data: map[string]string{"cursor": "1"}},
+		}))
+		require.NoError(t, err)
+		require.Equal(t, appliedSeq, reply.Checkpoint.ServerSeq)
+
+		// 03. The next patch folds too: the base is keyed to the checkpoint
+		// the store holds, which kept the pull's server seq, not to the
+		// push-only reply's (appliedSeq, 2).
+		_, err = pushPull(3, false, presenceChange(actorID, 3, &api.PresenceChange{
+			Type:     api.PresenceChange_CHANGE_TYPE_PATCH,
+			Presence: &api.Presence{Data: map[string]string{"cursor": "2"}},
+		}))
+		require.NoError(t, err, "error code: %s", converter.ErrorCodeOf(err))
+
+		// The fold went onto the client's own presence: "name" survives from
+		// the put and "cursor" carries the last patch.
+		lateID, lateActorID := activate(t, "-j")
+		lateResp, err := testClient.AttachDocument(ctx, connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId: lateID,
+			ChangePack: &api.ChangePack{
+				DocumentKey: docKey,
+				Checkpoint:  &api.Checkpoint{ClientSeq: 1},
+				Changes: []*api.Change{presenceChange(lateActorID, 1, &api.PresenceChange{
+					Type:     api.PresenceChange_CHANGE_TYPE_PUT,
+					Presence: &api.Presence{Data: map[string]string{"name": "c"}},
+				})},
+			},
+		}))
+		require.NoError(t, err)
+
+		var last *api.PresenceChange
+		for _, c := range lateResp.Msg.ChangePack.Changes {
+			if hex.EncodeToString(c.Id.ActorId) == clientID && c.PresenceChange != nil {
+				last = c.PresenceChange
+			}
+		}
+		require.NotNil(t, last)
+		assert.Equal(t, api.PresenceChange_CHANGE_TYPE_PUT, last.Type)
+		assert.Equal(t, map[string]string{"name": "a", "cursor": "2"}, last.Presence.Data)
+	})
+
 	t.Run("a patch without a base is refused", func(t *testing.T) {
 		docKey := helper.TestKey(t).String()
 		clientID, actorID := activate(t, "-c")

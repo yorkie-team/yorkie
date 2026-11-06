@@ -108,7 +108,26 @@ attached to the document, and neither stores nor uses one at the initial
 checkpoint, which identifies no attachment.
 
 After the pull, `commit` walks the changes `pushPack` actually stored and
-writes the resulting presence back under the client's new checkpoint. Changes
+writes the resulting presence back under the client's new checkpoint, as the
+store holds it. That is not always the reply's checkpoint: the store merges a
+checkpoint with `$max`, so it never moves back, while a push-only reply returns
+the server seq the client sent. A client that leaves a pull unapplied (the JS
+SDK does during IME composition) sends a server seq behind the one that pull
+recorded, and a base keyed to the reply would then never match the checkpoint
+the next push reads. So `commit` keys the base to the client as the store holds
+it, read back only when there is a base to keep; if that read fails, it drops
+the base rather than key it to a checkpoint the store may not hold.
+
+The read-back row is only trusted to describe this request while its client
+seq still matches the one this push produced. The pull lock is per-process, so
+a concurrent push by the same client on another server can advance the stored
+client seq between the pull and the read-back, and that push carries presence
+this request never saw. Keying this request's older presence to the newer
+checkpoint would let the client's next patch fold onto presence the store has
+already moved past, so a client seq that moved drops the base instead and the
+client falls back to a full put. The server seq is not compared: it can
+legitimately move under a concurrent pull, and an entry keyed behind it simply
+misses, which costs a full put rather than correctness. Changes
 `pushPack` discarded (a stale epoch, or the size gate on a detach) are not in
 that list, so the base stays what the server holds. A pull without changes
 moves the entry to the new checkpoint without copying the presence. A push
