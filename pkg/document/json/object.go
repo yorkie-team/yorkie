@@ -148,6 +148,19 @@ func (p *Object) SetNewTree(k string, initialRoot ...TreeNode) *Tree {
 	return v.(*Tree)
 }
 
+// SetNewZeroTree sets a new Zero Tree holding the given Zero content, built
+// with the given schema (PROTOTYPE).
+func (p *Object) SetNewZeroTree(k string, content any, schema *crdt.ZeroSchema) *crdt.ZeroTree {
+	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
+		tree, err := crdt.NewZeroTreeFromContent(ticket, content, schema)
+		if err != nil {
+			panic(err)
+		}
+		return tree
+	})
+	return v.(*crdt.ZeroTree)
+}
+
 // SetNull sets the null for the given key.
 func (p *Object) SetNull(k string) *Object {
 	p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
@@ -272,6 +285,12 @@ func (p *Object) SetYSONElement(k string, v any) *Object {
 		text.EditFromYSON(y)
 	case yson.Tree:
 		p.SetNewTree(k, y.Root)
+	case yson.ZeroTree:
+		schema, err := crdt.ZeroSchemaFromJSON(y.Schema)
+		if err != nil {
+			panic(err)
+		}
+		p.SetNewZeroTree(k, y.Content, schema)
 	default:
 		switch v := v.(type) {
 		case nil:

@@ -76,6 +76,10 @@ const (
 	// argument and may therefore be written with no argument at all.
 	ctorText = "Text"
 	ctorTree = "Tree"
+
+	// ctorZeroTree is the constructor of a Zero Tree (PROTOTYPE):
+	// ZeroTree({"content":<Zero content>,"schema":<schema>}).
+	ctorZeroTree = "ZeroTree"
 )
 
 var (
@@ -124,6 +128,13 @@ type TreeNode struct {
 	Attributes map[string]string
 }
 
+// ZeroTree represents a Zero Tree value (PROTOTYPE): its Zero content (the
+// model) and the schema it is built with, both as decoded JSON.
+type ZeroTree struct {
+	Content any
+	Schema  any
+}
+
 // Tree represents a tree CRDT value.
 type Tree struct {
 	Root TreeNode
@@ -143,11 +154,18 @@ type Text struct {
 	Nodes []TextNode
 }
 
-func (y Object) isElement()  {}
-func (y Array) isElement()   {}
-func (y Counter) isElement() {}
-func (y Text) isElement()    {}
-func (y Tree) isElement()    {}
+func (y Object) isElement()   {}
+func (y Array) isElement()    {}
+func (y Counter) isElement()  {}
+func (y Text) isElement()     {}
+func (y Tree) isElement()     {}
+func (y ZeroTree) isElement() {}
+
+// Marshal returns the YSON of this Zero Tree.
+func (y ZeroTree) Marshal() (string, error) {
+	return fmt.Sprintf(`ZeroTree({"content":%s,"schema":%s})`,
+		crdt.ZeroJSON(y.Content), crdt.ZeroJSON(y.Schema)), nil
+}
 
 // marshalElement marshals any element type
 func marshalElement(elem any) (string, error) {
@@ -515,6 +533,12 @@ func parseTypedValue(raw map[string]any) (any, error) {
 			return parseText(value)
 		}
 		return nil, fmt.Errorf("parse text: %w", ErrInvalidYSON)
+	case ctorZeroTree:
+		value, ok := raw["value"].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("parse zero tree: %w", ErrInvalidYSON)
+		}
+		return ZeroTree{Content: value["content"], Schema: value["schema"]}, nil
 	}
 
 	return nil, ErrUnsupported
@@ -784,6 +808,7 @@ type ysonConstructor struct {
 // longer name (e.g. DedupCounter before Counter). Names are matched only at a
 // token boundary, so this ordering is defensive rather than strictly required.
 var ysonConstructors = []ysonConstructor{
+	{ctorZeroTree, ctorZeroTree},
 	{"Counter", "Counter"},
 	{ctorText, ctorText},
 	{ctorTree, ctorTree},

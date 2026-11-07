@@ -38,6 +38,12 @@ func FromCRDT(elem crdt.Element) (any, error) {
 		return toText(elem), nil
 	case *crdt.Tree:
 		return toTree(elem), nil
+	case *crdt.ZeroTree:
+		content, err := crdt.ParseZeroJSON(elem.ContentJSON())
+		if err != nil {
+			return nil, err
+		}
+		return ZeroTree{Content: content, Schema: elem.Schema().SchemaJSON()}, nil
 	default:
 		return nil, fmt.Errorf("%v: %w", reflect.TypeOf(elem), ErrUnsupported)
 	}

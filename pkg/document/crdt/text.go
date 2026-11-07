@@ -491,8 +491,10 @@ func (t *Text) Restore(
 	}
 	// `from` is the op's left boundary; it anchors a fragment whose whole
 	// insertion was purged (fallback rung in findRestoreAnchor). Identity
-	// (createdAt+offset) still addresses every surviving piece first.
-	return t.rgaTreeSplit.restore(internal, from, executedAt)
+	// (createdAt+offset) still addresses every surviving piece first. Text
+	// has no ghosts, so the ghost diff is always zero.
+	untombstoned, recreated, stillTombstoned, _, err = t.rgaTreeSplit.restore(internal, from, executedAt)
+	return untombstoned, recreated, stillTombstoned, err
 }
 
 // Retombstone re-removes a previously restored range under its original
