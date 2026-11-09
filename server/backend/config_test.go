@@ -68,6 +68,27 @@ func TestConfig(t *testing.T) {
 		}
 	})
 
+	t.Run("validate ChannelBatchWindow test", func(t *testing.T) {
+		for _, w := range []string{"soon", "-1ms", "1001ms", "2s"} {
+			conf := newValidBackendConf()
+			conf.ChannelBatchWindow = w
+			assert.ErrorContains(t, conf.Validate(), "--channel-batch-window", w)
+		}
+
+		for w, want := range map[string]string{
+			"":      "100ms",
+			"0s":    "0s",
+			"10ms":  "10ms",
+			"1s":    "1s",
+			"100ms": "100ms",
+		} {
+			conf := newValidBackendConf()
+			conf.ChannelBatchWindow = w
+			assert.NoError(t, conf.Validate(), w)
+			assert.Equal(t, want, conf.ParseChannelBatchWindow().String(), w)
+		}
+	})
+
 	t.Run("validate MaxConcurrentClusterRPCs test", func(t *testing.T) {
 		conf := newValidBackendConf()
 		conf.MaxConcurrentClusterRPCs = 0

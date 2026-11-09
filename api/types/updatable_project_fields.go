@@ -80,6 +80,11 @@ type UpdatableProjectFields struct {
 	// within [1s, 5m].
 	ChannelSessionTTL *string `bson:"channel_session_ttl,omitempty" validate:"omitempty,channel_session_ttl"`
 
+	// ChannelBatchWindow is the per-project batch window for channel events.
+	// Must parse as a Go duration and fall within [0s, 1s]; empty clears it
+	// back to the server default.
+	ChannelBatchWindow *string `bson:"channel_batch_window,omitempty" validate:"omitempty,channel_batch_window"`
+
 	// SnapshotThreshold is the threshold that determines if changes should be
 	// sent with snapshot when the number of changes is greater than this value.
 	SnapshotThreshold *int64 `bson:"snapshot_threshold,omitempty" validate:"omitempty,min=0"`
@@ -167,7 +172,8 @@ func (i *UpdatableProjectFields) Validate() error {
 		i.RemoveOnDetach == nil &&
 		i.AutoRevisionEnabled == nil &&
 		i.AllowedOrigins == nil &&
-		i.ChannelSessionTTL == nil {
+		i.ChannelSessionTTL == nil &&
+		i.ChannelBatchWindow == nil {
 		return ErrEmptyProjectFields
 	}
 
@@ -271,6 +277,31 @@ func init() {
 	if err := validation.RegisterTranslation(
 		"channel_session_ttl",
 		"given {0} must be a duration between 1s and 5m",
+	); err != nil {
+		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
+		os.Exit(1)
+	}
+
+	if err := validation.RegisterValidation(
+		"channel_batch_window",
+		func(level validation.FieldLevel) bool {
+			if level.Field().String() == "" {
+				return true // back to the server default
+			}
+			d, err := time.ParseDuration(level.Field().String())
+			if err != nil {
+				return false
+			}
+			return d >= 0 && d <= MaxChannelBatchWindow
+		},
+	); err != nil {
+		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
+		os.Exit(1)
+	}
+
+	if err := validation.RegisterTranslation(
+		"channel_batch_window",
+		"given {0} must be empty or a duration between 0s and "+MaxChannelBatchWindow.String(),
 	); err != nil {
 		fmt.Fprintln(os.Stderr, "updatable project fields: ", err)
 		os.Exit(1)

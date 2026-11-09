@@ -107,6 +107,7 @@ func printProjects(cmd *cobra.Command, output string, projects []*types.Project,
 				"EVENT WEBHOOK REQUEST TIMEOUT",
 				"CLIENT DEACTIVATE THRESHOLD",
 				"CHANNEL SESSION TTL",
+				"CHANNEL BATCH WINDOW",
 				"SNAPSHOT THRESHOLD",
 				"SNAPSHOT INTERVAL",
 				"MAX SUBSCRIBERS PER DOCUMENT",
@@ -133,6 +134,7 @@ func printProjects(cmd *cobra.Command, output string, projects []*types.Project,
 					project.EventWebhookRequestTimeout,
 					project.ClientDeactivateThreshold,
 					project.ChannelSessionTTL,
+					channelBatchWindowOrDefault(project.ChannelBatchWindow),
 					project.SnapshotThreshold,
 					project.SnapshotInterval,
 					project.MaxSubscribersPerDocument,
@@ -180,4 +182,12 @@ func printProjects(cmd *cobra.Command, output string, projects []*types.Project,
 
 func init() {
 	SubCmd.AddCommand(newListCommand())
+}
+
+// channelBatchWindowOrDefault shows an unset window as the server default.
+func channelBatchWindowOrDefault(window string) string {
+	if window == "" {
+		return "default"
+	}
+	return window
 }

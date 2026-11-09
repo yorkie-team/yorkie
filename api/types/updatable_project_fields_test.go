@@ -55,6 +55,34 @@ func TestChannelSessionTTLValidation(t *testing.T) {
 	}
 }
 
+func TestChannelBatchWindowValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid 0s min", "0s", false},
+		{"valid 10ms", "10ms", false},
+		{"valid 1s max", "1s", false},
+		{"negative", "-1ms", true},
+		{"above 1s", "1001ms", true},
+		{"unparseable", "soon", true},
+		{"empty clears to the server default", "", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			v := tc.value
+			f := &types.UpdatableProjectFields{ChannelBatchWindow: &v}
+			err := f.Validate()
+			if tc.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestUpdatableProjectFields(t *testing.T) {
 	var formErr *validation.FormError
 	t.Run("validation test", func(t *testing.T) {

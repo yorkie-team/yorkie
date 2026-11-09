@@ -139,6 +139,15 @@ func (bp *BatchPublisher) Publish(event events.DocEvent) {
 
 ```
 
+The document publisher delivers its batch on a fixed ticker (100ms), which
+gives the `DocChanged` folding above a window to work in. Channel events
+(broadcasts and session counts) fold nothing, so the channel publisher runs
+in throttle mode instead: an event on an idle channel goes out at once, a
+busy channel delivers at most once per window, and an idle channel does not
+wake up. The window is the server's `--channel-batch-window` (default 100ms)
+or the project's `ChannelBatchWindow`; see
+[channel-batch-window](channel-batch-window.md).
+
 #### 4. Send watchDocument response to stream
 
 When the event channel of `Subscription` receives an event, the event is sent to the `WatchDocumentResponse` of the rpc stream. [(code🔍)](https://github.com/yorkie-team/yorkie/blob/5911fc160186f8dac59bd2c57146632342fcf4a3/server/rpc/yorkie_server.go#L530-L556)

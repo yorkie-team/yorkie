@@ -34,6 +34,16 @@ var (
 	ErrInvalidTimeDurationString = errors.InvalidArgument("invalid time duration string format")
 )
 
+const (
+	// DefaultChannelBatchWindow is the batch window for channel events when
+	// neither the server flag nor the project sets one.
+	DefaultChannelBatchWindow = 100 * time.Millisecond
+
+	// MaxChannelBatchWindow is the largest batch window a channel may use. A
+	// longer window only delays events: channel batching folds none of them.
+	MaxChannelBatchWindow = time.Second
+)
+
 // Project is a project that consists of multiple documents and clients.
 type Project struct {
 	// ID is the unique ID of the project.
@@ -88,6 +98,10 @@ type Project struct {
 	// ChannelSessionTTL controls how long a presence-channel
 	// session is retained after its last refresh, per project.
 	ChannelSessionTTL string `bson:"channel_session_ttl"`
+
+	// ChannelBatchWindow is the project's batch window for channel events.
+	// Empty means the server default.
+	ChannelBatchWindow string `bson:"channel_batch_window"`
 
 	// SnapshotThreshold is the threshold that determines if changes should be
 	// sent with snapshot when the number of changes is greater than this value.
@@ -229,6 +243,17 @@ func (p *Project) ClientDeactivateThresholdAsTimeDuration() (time.Duration, erro
 func (p *Project) ChannelSessionTTLAsTimeDuration() (time.Duration, error) {
 	d, err := time.ParseDuration(p.ChannelSessionTTL)
 	if err != nil {
+		return 0, ErrInvalidTimeDurationString
+	}
+	return d, nil
+}
+
+// ChannelBatchWindowAsTimeDuration converts ChannelBatchWindow to
+// time.Duration. It fails for an empty value (the server default applies) and
+// for one outside [0s, MaxChannelBatchWindow].
+func (p *Project) ChannelBatchWindowAsTimeDuration() (time.Duration, error) {
+	d, err := time.ParseDuration(p.ChannelBatchWindow)
+	if err != nil || d < 0 || d > MaxChannelBatchWindow {
 		return 0, ErrInvalidTimeDurationString
 	}
 	return d, nil

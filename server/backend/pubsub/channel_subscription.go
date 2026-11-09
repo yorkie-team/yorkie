@@ -35,16 +35,23 @@ func NewChannelSubscription(subscriber time.ActorID) *ChannelSubscription {
 	return NewSubscription[events.ChannelEvent](subscriber, 10)
 }
 
-// newChannelSubscriptions creates a new ChannelSubscriptions for the given channel key.
-func newChannelSubscriptions(refKey types.ChannelRefKey) *ChannelSubscriptions {
+// newChannelSubscriptions creates a new ChannelSubscriptions for the given
+// channel key. Its events are throttled to at most one batch per window: the
+// batching folds nothing for channels, so an event on an idle channel goes out
+// at once rather than waiting for a tick.
+func newChannelSubscriptions(
+	refKey types.ChannelRefKey,
+	window gotime.Duration,
+) *ChannelSubscriptions {
 	return NewSubscriptions[events.ChannelEvent](
 		refKey.String(),
 		func(subs *Subscriptions[events.ChannelEvent]) *BatchPublisher[events.ChannelEvent] {
-			return NewBatchPublisher(subs, 100*gotime.Millisecond, BatchPublisherConfig[events.ChannelEvent]{
+			return NewBatchPublisher(subs, window, BatchPublisherConfig[events.ChannelEvent]{
 				Filter: func(subscriber time.ActorID, event events.ChannelEvent) bool {
 					// Skip sending broadcast events to the publisher themselves
 					return event.Type == events.ChannelBroadcast && event.Publisher == subscriber
 				},
+				Throttle: true,
 			})
 		},
 	)

@@ -1034,7 +1034,11 @@ func (s *yorkieServer) subscribeChannel(
 		ProjectID:  project.ID,
 		ChannelKey: channelKey,
 	}
-	sub, _, err := s.backend.PubSub.SubscribeChannel(ctx, clientID, refKey)
+	window, err := project.ChannelBatchWindowAsTimeDuration()
+	if err != nil {
+		window = s.backend.ChannelBatchWindow
+	}
+	sub, _, err := s.backend.PubSub.SubscribeChannel(ctx, clientID, refKey, window)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -73,6 +73,7 @@ var (
 	authGitHubDeviceAuthURL       string
 
 	channelSessionTTL             time.Duration
+	channelBatchWindow            time.Duration
 	channelSessionCleanupInterval time.Duration
 	channelSessionCountCacheTTL   time.Duration
 	channelSessionCountCacheSize  int
@@ -172,6 +173,7 @@ func newServerCmd() *cobra.Command {
 			conf.Backend.AuthWebhookCacheTTL = authWebhookCacheTTL.String()
 			conf.Backend.ChannelSessionTTL = channelSessionTTL.String()
 			conf.Backend.ChannelSessionCleanupInterval = channelSessionCleanupInterval.String()
+			conf.Backend.ChannelBatchWindow = channelBatchWindow.String()
 			conf.Backend.ChannelSessionCountCacheTTL = channelSessionCountCacheTTL.String()
 			conf.Backend.ChannelSessionCountCacheSize = channelSessionCountCacheSize
 
@@ -682,6 +684,14 @@ func init() {
 		"channel-session-cleanup-interval",
 		server.DefaultChannelSessionCleanupInterval,
 		"The interval for running cleanup of expired channel sessions.",
+	)
+	cmd.Flags().DurationVar(
+		&channelBatchWindow,
+		"channel-batch-window",
+		server.DefaultChannelBatchWindow,
+		"The default batch window for channel events, within [0s, 1s]: an event on "+
+			"an idle channel goes out at once, a busy channel at most once per window. "+
+			"A project may set its own.",
 	)
 	cmd.Flags().DurationVar(
 		&watchHeartbeatIntervalMin,

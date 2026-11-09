@@ -36,6 +36,19 @@ func TestChannelSessionTTLAsTimeDuration(t *testing.T) {
 	assert.ErrorIs(t, err, types.ErrInvalidTimeDurationString)
 }
 
+func TestChannelBatchWindowAsTimeDuration(t *testing.T) {
+	p := &types.Project{ChannelBatchWindow: "10ms"}
+	d, err := p.ChannelBatchWindowAsTimeDuration()
+	assert.NoError(t, err)
+	assert.Equal(t, 10*time.Millisecond, d)
+
+	for _, v := range []string{"", "garbage", "-1ms", "2s"} {
+		p.ChannelBatchWindow = v
+		_, err = p.ChannelBatchWindowAsTimeDuration()
+		assert.ErrorIs(t, err, types.ErrInvalidTimeDurationString, v)
+	}
+}
+
 func TestProjectInfo(t *testing.T) {
 	t.Run("require auth test", func(t *testing.T) {
 		// 1. Specify which methods to allow

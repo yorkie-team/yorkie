@@ -37,6 +37,17 @@ func TestUpdateFieldsAppliesChannelSessionTTL(t *testing.T) {
 	assert.Equal(t, "1m", info.ChannelSessionTTL)
 }
 
+func TestChannelBatchWindowDefaultsToServer(t *testing.T) {
+	info := database.NewProjectInfo("p", types.ID("000000000000000000000000"))
+	assert.Empty(t, info.ChannelBatchWindow)
+
+	v := "10ms"
+	info.UpdateFields(&types.UpdatableProjectFields{ChannelBatchWindow: &v})
+	assert.Equal(t, "10ms", info.ChannelBatchWindow)
+	assert.Equal(t, "10ms", info.DeepCopy().ChannelBatchWindow)
+	assert.Equal(t, "10ms", info.ToProject().ChannelBatchWindow)
+}
+
 func TestProjectInfo(t *testing.T) {
 	t.Run("update fields test", func(t *testing.T) {
 		dummyOwnerID := types.ID("000000000000000000000000")

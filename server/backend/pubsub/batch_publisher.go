@@ -52,12 +52,16 @@ type BatchPublisher[E any] struct {
 	logger    *zap.SugaredLogger
 	mutex     gosync.Mutex
 	events    []E
-	window    gotime.Duration
+	window    atomic.Int64 // gotime.Duration
 	closeChan chan struct{}
 	subs      *Subscriptions[E]
 	filter    EventFilter[E] // nil = no filtering
 	onEnqueue EnqueueFunc[E] // nil = always enqueue
 	onPublish func()         // nil = no-op; called after each publish batch
+
+	// throttle selects throttleLoop over tickLoop; pending wakes it.
+	throttle bool
+	pending  chan struct{}
 }
 
 // BatchPublisherConfig holds optional configuration for BatchPublisher.
@@ -65,6 +69,11 @@ type BatchPublisherConfig[E any] struct {
 	Filter    EventFilter[E]
 	OnEnqueue EnqueueFunc[E]
 	OnPublish func()
+
+	// Throttle publishes an event that arrives on an idle publisher at once
+	// and then at most one batch per window, instead of one batch every
+	// window on a ticker. An idle throttled publisher does not wake up.
+	Throttle bool
 }
 
 // NewBatchPublisher creates a new instance of BatchPublisher.
@@ -75,34 +84,94 @@ func NewBatchPublisher[E any](
 ) *BatchPublisher[E] {
 	bp := &BatchPublisher[E]{
 		logger:    logging.New(publisherID.next()),
-		window:    window,
 		closeChan: make(chan struct{}),
 		subs:      subs,
 		filter:    config.Filter,
 		onEnqueue: config.OnEnqueue,
 		onPublish: config.OnPublish,
+		throttle:  config.Throttle,
 	}
+	bp.window.Store(int64(window))
 
-	go bp.processLoop()
+	if bp.throttle {
+		bp.pending = make(chan struct{}, 1)
+		go bp.throttleLoop()
+	} else {
+		go bp.tickLoop()
+	}
 	return bp
+}
+
+// Window returns the current batch window.
+func (bp *BatchPublisher[E]) Window() gotime.Duration {
+	return gotime.Duration(bp.window.Load())
+}
+
+// SetWindow changes the batch window of a throttled publisher. It times the
+// windows that start after the call; one already running ends as it was set.
+// A ticking publisher keeps the period it started with.
+func (bp *BatchPublisher[E]) SetWindow(window gotime.Duration) {
+	bp.window.Store(int64(window))
 }
 
 // Publish adds the given event to the batch.
 func (bp *BatchPublisher[E]) Publish(event E) {
 	bp.mutex.Lock()
-	defer bp.mutex.Unlock()
-
 	if bp.onEnqueue != nil {
 		// Whether the event was kept or folded into another, the returned
 		// slice is the batch; nothing else here depends on which.
 		bp.events, _ = bp.onEnqueue(bp.events, event)
-		return
+	} else {
+		bp.events = append(bp.events, event)
 	}
-	bp.events = append(bp.events, event)
+	bp.mutex.Unlock()
+
+	if bp.throttle {
+		// A wake-up already pending covers this event too.
+		select {
+		case bp.pending <- struct{}{}:
+		default:
+		}
+	}
 }
 
-func (bp *BatchPublisher[E]) processLoop() {
-	ticker := gotime.NewTicker(bp.window)
+// throttleLoop publishes when an event arrives, unless the last publish was
+// less than a window ago; then a timer publishes everything that arrived in
+// the meantime once the window has passed. With no events it only waits.
+func (bp *BatchPublisher[E]) throttleLoop() {
+	var timer *gotime.Timer
+	var fire <-chan gotime.Time // non-nil while the timer is armed
+	var last gotime.Time
+
+	for {
+		select {
+		case <-bp.pending:
+			if fire != nil {
+				continue // the armed timer publishes this event with the rest
+			}
+			if wait := bp.Window() - gotime.Since(last); wait > 0 {
+				timer = gotime.NewTimer(wait)
+				fire = timer.C
+				continue
+			}
+		case <-fire:
+			fire = nil
+		case <-bp.closeChan:
+			if timer != nil {
+				timer.Stop()
+			}
+			bp.publish()
+			return
+		}
+
+		last = gotime.Now()
+		bp.publish()
+	}
+}
+
+// tickLoop publishes whatever arrived every window.
+func (bp *BatchPublisher[E]) tickLoop() {
+	ticker := gotime.NewTicker(bp.Window())
 	defer ticker.Stop()
 
 	for {
