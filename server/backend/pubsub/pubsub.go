@@ -19,6 +19,7 @@ package pubsub
 import (
 	"context"
 	"fmt"
+	gotime "time"
 
 	"go.uber.org/zap"
 
@@ -186,10 +187,14 @@ func (m *PubSub) ClientIDs(docKey types.DocRefKey) []time.ActorID {
 }
 
 // SubscribeChannel subscribes to the given channel key.
+//
+// window is the channel's batch window. It applies to a channel created here
+// and replaces the window of one that is already open.
 func (m *PubSub) SubscribeChannel(
 	ctx context.Context,
 	subscriber time.ActorID,
 	refKey types.ChannelRefKey,
+	window gotime.Duration,
 ) (*ChannelSubscription, int64, error) {
 	if logging.Enabled(zap.DebugLevel) {
 		logging.From(ctx).Debugf(
@@ -203,7 +208,9 @@ func (m *PubSub) SubscribeChannel(
 
 	_ = m.channelSubsMap.Upsert(refKey, func(subs *ChannelSubscriptions, exists bool) *ChannelSubscriptions {
 		if !exists {
-			subs = newChannelSubscriptions(refKey)
+			subs = newChannelSubscriptions(refKey, window)
+		} else {
+			subs.publisher.SetWindow(window)
 		}
 
 		newSub = NewChannelSubscription(subscriber)

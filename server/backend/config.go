@@ -21,6 +21,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cache"
 )
 
@@ -92,6 +93,12 @@ type Config struct {
 	// ChannelSessionCleanupInterval is the interval for running cleanup of expired channel sessions.
 	// Default is "10s".
 	ChannelSessionCleanupInterval string `yaml:"ChannelSessionCleanupInterval"`
+
+	// ChannelBatchWindow is the default batch window for channel events: an
+	// event on an idle channel goes out at once, and a busy channel delivers
+	// at most once per window. A project may set its own. Default is "100ms";
+	// it must be within [0s, 1s].
+	ChannelBatchWindow string `yaml:"ChannelBatchWindow"`
 
 	// WatchHeartbeatIntervalMin is the shortest heartbeat interval the server
 	// will serve on an idle Watch stream. A client asking for less is clamped
@@ -211,6 +218,23 @@ func (c *Config) Validate() error {
 			)
 		}
 	}
+	if c.ChannelBatchWindow != "" {
+		d, err := time.ParseDuration(c.ChannelBatchWindow)
+		if err != nil {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--channel-batch-window" flag: %w`,
+				c.ChannelBatchWindow,
+				err,
+			)
+		}
+		if d < 0 || d > types.MaxChannelBatchWindow {
+			return fmt.Errorf(
+				`invalid argument "%s" for "--channel-batch-window" flag: must be within [0s, %s]`,
+				c.ChannelBatchWindow,
+				types.MaxChannelBatchWindow,
+			)
+		}
+	}
 	var heartbeatMin, heartbeatMax time.Duration
 	if c.WatchHeartbeatIntervalMin != "" {
 		parsed, err := time.ParseDuration(c.WatchHeartbeatIntervalMin)
@@ -321,6 +345,22 @@ func (c *Config) ParseChannelSessionTTL() time.Duration {
 	result, err := time.ParseDuration(c.ChannelSessionTTL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse channel session ttl: %v\n", err)
+		os.Exit(1)
+	}
+
+	return result
+}
+
+// ParseChannelBatchWindow returns the default batch window for channel events,
+// types.DefaultChannelBatchWindow when unset (a Config built without the
+// server's defaults, as in tests).
+func (c *Config) ParseChannelBatchWindow() time.Duration {
+	if c.ChannelBatchWindow == "" {
+		return types.DefaultChannelBatchWindow
+	}
+	result, err := time.ParseDuration(c.ChannelBatchWindow)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse channel batch window: %v\n", err)
 		os.Exit(1)
 	}
 

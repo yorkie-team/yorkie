@@ -55,6 +55,7 @@ var (
 	flagName                        string
 	flagClientDeactivateThreshold   time.Duration
 	flagChannelSessionTTL           time.Duration
+	flagChannelBatchWindow          time.Duration
 	flagSnapshotThreshold           int64
 	flagSnapshotInterval            int64
 	flagMaxSubscribersPerDocument   int
@@ -233,6 +234,9 @@ func updatableFieldsFromFlags(
 	)
 	fields.ChannelSessionTTL = changedDuration(
 		flags, "channel-session-ttl", flagChannelSessionTTL,
+	)
+	fields.ChannelBatchWindow = changedDuration(
+		flags, "channel-batch-window", flagChannelBatchWindow,
 	)
 
 	if flags.Changed("snapshot-threshold") {
@@ -434,6 +438,14 @@ func newUpdateCommandWithFlags() *cobra.Command {
 		"channel-session-ttl",
 		database.DefaultChannelSessionTTL,
 		"Channel session TTL (must be between 1s and 5m)",
+	)
+	cmd.Flags().DurationVar(
+		&flagChannelBatchWindow,
+		"channel-batch-window",
+		0, // sent only when passed; a project without one uses the server's
+		"Batch window for channel events (must be between 0s and 1s); "+
+			"unset uses the server's --channel-batch-window. An open channel "+
+			"picks up a change when its next subscriber joins",
 	)
 	cmd.Flags().Int64Var(
 		&flagSnapshotThreshold,

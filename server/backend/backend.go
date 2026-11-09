@@ -26,6 +26,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	gotime "time"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/cluster"
@@ -60,6 +61,9 @@ type Backend struct {
 	Lockers *sync.LockerManager
 	// Channel is used to manage real-time channels.
 	Channel *channel.Manager
+	// ChannelBatchWindow is the server's default batch window for channel
+	// events; a project may set its own.
+	ChannelBatchWindow gotime.Duration
 
 	// background is used to manage background tasks.
 	background *background.Background
@@ -221,6 +225,8 @@ func New(
 		Lockers: lockers,
 		PubSub:  pubsub,
 		Channel: channelManager,
+
+		ChannelBatchWindow: conf.ParseChannelBatchWindow(),
 
 		background:   bg,
 		fanOut:       newFanOut(int64(conf.MaxConcurrentClusterRPCs)),

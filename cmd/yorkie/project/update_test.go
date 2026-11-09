@@ -57,11 +57,13 @@ func TestUpdatableFieldsFromFlags(t *testing.T) {
 		cmd := parseUpdateFlags(t,
 			"--auth-webhook-request-timeout", "5s",
 			"--channel-session-ttl", "30s",
+			"--channel-batch-window", "10ms",
 		)
 
 		fields := updatableFieldsFromFlags(cmd, &types.Project{})
 		assert.Equal(t, new("5s"), fields.AuthWebhookRequestTimeout)
 		assert.Equal(t, new("30s"), fields.ChannelSessionTTL)
+		assert.Equal(t, new("10ms"), fields.ChannelBatchWindow)
 		assert.Nil(t, fields.AuthWebhookMinWaitInterval)
 		assert.Nil(t, fields.AuthWebhookMaxWaitInterval)
 		assert.Nil(t, fields.ClientDeactivateThreshold)

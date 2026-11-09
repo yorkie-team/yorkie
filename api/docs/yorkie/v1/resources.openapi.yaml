@@ -1752,6 +1752,13 @@ components:
           description: ""
           title: auto_revision_enabled
           type: boolean
+        channelBatchWindow:
+          additionalProperties: false
+          description: |-
+            channel_batch_window is the project's batch window for channel events
+             (a Go duration within [0s, 1s]); empty means the server default.
+          title: channel_batch_window
+          type: string
         channelSessionTtl:
           additionalProperties: false
           description: ""
@@ -2561,6 +2568,12 @@ components:
           additionalProperties: false
           description: ""
           title: auto_revision_enabled
+          type: object
+        channelBatchWindow:
+          $ref: '#/components/schemas/google.protobuf.StringValue'
+          additionalProperties: false
+          description: ""
+          title: channel_batch_window
           type: object
         channelSessionTtl:
           $ref: '#/components/schemas/google.protobuf.StringValue'

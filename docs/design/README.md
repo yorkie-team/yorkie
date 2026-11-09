@@ -61,6 +61,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Project Stats Warehouse Materialized Views](project-stats-warehouse-mv.md): Daily HLL rollups that make the warehouse-backed `GetProjectStats` metrics independent of event volume
 - [Project Stats Long-Retention Windows](project-stats-long-retention.md): Decoupled daily HLL summary tables and a dual read that serve up-to-12-month windows after raw-event TTL is enabled
 - [Per-Project Channel Session TTL](per-project-channel-session-ttl.md): Per-project override for `ChannelSessionTTL` to tune the presence-count "feels occupied" effect
+- [Channel Batch Window](channel-batch-window.md): Deliver channel events on a leading-edge throttle with a configurable, per-project window instead of a fixed 100ms ticker
 
 ### Development
 

@@ -24,6 +24,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 	"github.com/yorkie-team/yorkie/server/backend/database/mongo"
@@ -71,6 +72,7 @@ const (
 
 	DefaultChannelSessionTTL             = database.DefaultChannelSessionTTL
 	DefaultChannelSessionCleanupInterval = 10 * time.Second
+	DefaultChannelBatchWindow            = types.DefaultChannelBatchWindow
 	DefaultChannelSessionCountCacheTTL   = 30 * time.Second
 	DefaultChannelSessionCountCacheSize  = 10000
 
@@ -325,6 +327,9 @@ func (c *Config) ensureBackendDefaultValue() {
 	}
 	if c.Backend.ChannelSessionCleanupInterval == "" {
 		c.Backend.ChannelSessionCleanupInterval = DefaultChannelSessionCleanupInterval.String()
+	}
+	if c.Backend.ChannelBatchWindow == "" {
+		c.Backend.ChannelBatchWindow = DefaultChannelBatchWindow.String()
 	}
 	if c.Backend.WatchHeartbeatIntervalMin == "" {
 		c.Backend.WatchHeartbeatIntervalMin = DefaultWatchHeartbeatIntervalMin.String()

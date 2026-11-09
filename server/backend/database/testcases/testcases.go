@@ -1404,6 +1404,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		newEventWebhookRequestTimeout := "5s"
 		newClientDeactivateThreshold := "1h"
 		newChannelSessionTTL := "1m"
+		newChannelBatchWindow := "20ms"
 		newSnapshotThreshold := int64(50)
 		newSnapshotInterval := int64(100)
 
@@ -1454,6 +1455,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 			EventWebhookRequestTimeout:  &newEventWebhookRequestTimeout,
 			ClientDeactivateThreshold:   &newClientDeactivateThreshold,
 			ChannelSessionTTL:           &newChannelSessionTTL,
+			ChannelBatchWindow:          &newChannelBatchWindow,
 			SnapshotThreshold:           &newSnapshotThreshold,
 			SnapshotInterval:            &newSnapshotInterval,
 		}
@@ -1478,6 +1480,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, newEventWebhookRequestTimeout, updateInfo.EventWebhookRequestTimeout)
 		assert.Equal(t, newClientDeactivateThreshold, updateInfo.ClientDeactivateThreshold)
 		assert.Equal(t, newChannelSessionTTL, updateInfo.ChannelSessionTTL)
+		assert.Equal(t, newChannelBatchWindow, updateInfo.ChannelBatchWindow)
 		assert.Equal(t, newSnapshotThreshold, updateInfo.SnapshotThreshold)
 		assert.Equal(t, newSnapshotInterval, updateInfo.SnapshotInterval)
 

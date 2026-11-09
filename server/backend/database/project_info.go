@@ -117,6 +117,12 @@ type ProjectInfo struct {
 	// Falls back to the server-wide ChannelSessionTTL when empty or invalid.
 	ChannelSessionTTL string `bson:"channel_session_ttl"`
 
+	// ChannelBatchWindow is the project's batch window for channel events.
+	// Empty (the default for new projects too) means the server-wide
+	// ChannelBatchWindow, so an operator's default reaches every project that
+	// has not chosen its own.
+	ChannelBatchWindow string `bson:"channel_batch_window"`
+
 	// SnapshotThreshold is the threshold that determines if changes should be
 	// sent with snapshot when the number of changes is greater than this value.
 	SnapshotThreshold int64 `bson:"snapshot_threshold"`
@@ -219,6 +225,7 @@ func (i *ProjectInfo) DeepCopy() *ProjectInfo {
 		EventWebhookRequestTimeout:  i.EventWebhookRequestTimeout,
 		ClientDeactivateThreshold:   i.ClientDeactivateThreshold,
 		ChannelSessionTTL:           i.ChannelSessionTTL,
+		ChannelBatchWindow:          i.ChannelBatchWindow,
 		SnapshotThreshold:           i.SnapshotThreshold,
 		SnapshotInterval:            i.SnapshotInterval,
 		MaxSubscribersPerDocument:   i.MaxSubscribersPerDocument,
@@ -282,6 +289,9 @@ func (i *ProjectInfo) UpdateFields(fields *types.UpdatableProjectFields) {
 	if fields.ChannelSessionTTL != nil {
 		i.ChannelSessionTTL = *fields.ChannelSessionTTL
 	}
+	if fields.ChannelBatchWindow != nil {
+		i.ChannelBatchWindow = *fields.ChannelBatchWindow
+	}
 	if fields.SnapshotThreshold != nil {
 		i.SnapshotThreshold = *fields.SnapshotThreshold
 	}
@@ -328,6 +338,7 @@ func (i *ProjectInfo) ToProject() *types.Project {
 		EventWebhookRequestTimeout:  i.EventWebhookRequestTimeout,
 		ClientDeactivateThreshold:   i.ClientDeactivateThreshold,
 		ChannelSessionTTL:           i.ChannelSessionTTL,
+		ChannelBatchWindow:          i.ChannelBatchWindow,
 		SnapshotThreshold:           i.SnapshotThreshold,
 		SnapshotInterval:            i.SnapshotInterval,
 		MaxSubscribersPerDocument:   i.MaxSubscribersPerDocument,
