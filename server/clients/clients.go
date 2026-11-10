@@ -89,11 +89,6 @@ func Deactivate(
 		return nil, err
 	}
 
-	if len(docInfos) != len(docIDs) {
-		return nil, fmt.Errorf("find documents for detachment, expected: %d, actual: %d",
-			len(docIDs), len(docInfos))
-	}
-
 	actorID, err := info.ID.ToActorID()
 	if err != nil {
 		return nil, err
@@ -111,6 +106,12 @@ func Deactivate(
 	// when a later step fails — the row MongoDB holds has moved on either way,
 	// and the peers' copies must not outlive it.
 	defer InvalidateCachedClient(ctx, be, refKey)
+
+	if len(docInfos) != len(docIDs) {
+		if err := detachMissingDocuments(ctx, be, info, docIDs, docInfos); err != nil {
+			return nil, err
+		}
+	}
 
 	for _, info := range docInfos {
 		if err := clusterClient.DetachDocument(
@@ -130,6 +131,50 @@ func Deactivate(
 	}
 
 	return deactivated, nil
+}
+
+// detachMissingDocuments marks detached, in the client row, every document in
+// docIDs whose row is not among found.
+//
+// Such a row was purged or deleted out of band while the client still held
+// the document. The document cannot be detached through the cluster any more,
+// and an entry left attached or attaching makes DeactivateClient refuse the
+// client, on every housekeeping cycle, for good (#2343). The write is the one
+// a detach makes to the client row.
+func detachMissingDocuments(
+	ctx context.Context,
+	be *backend.Backend,
+	info *database.ClientInfo,
+	docIDs []types.ID,
+	found []*database.DocInfo,
+) error {
+	exists := make(map[types.ID]bool, len(found))
+	for _, docInfo := range found {
+		exists[docInfo.ID] = true
+	}
+
+	for _, docID := range docIDs {
+		if exists[docID] {
+			continue
+		}
+
+		if err := info.DetachDocument(docID); err != nil {
+			return err
+		}
+		if err := be.DB.UpdateClientInfoAfterPushPull(ctx, info, &database.DocInfo{
+			ID:        docID,
+			ProjectID: info.ProjectID,
+		}); err != nil {
+			return fmt.Errorf("detach missing document %s: %w", docID, err)
+		}
+
+		logging.From(ctx).Warnf(
+			"detached document %s from client %s: the document no longer exists",
+			docID, info.ID,
+		)
+	}
+
+	return nil
 }
 
 // InvalidateCachedClient asks every cluster node to drop its cached copy of
