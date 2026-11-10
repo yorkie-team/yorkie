@@ -19,7 +19,6 @@ package clients
 
 import (
 	"context"
-	stderrors "errors"
 	"fmt"
 	"time"
 
@@ -148,12 +147,18 @@ func Deactivate(
 // client, on every housekeeping cycle, for good (#2343). The write is the one
 // a detach makes to the client row.
 //
-// Absence from FindDocInfosByIDs is not taken as proof on its own. That read
-// is one batch query, and taking a document it happened to leave out for a
-// deleted one would cost the document the work only the cluster detach does:
-// the presence-Clear change for the departing actor and the RemoveOnDetach
-// flip. So each candidate is confirmed gone with a point read, and one the
-// point read finds goes back to the normal detach path untouched.
+// Absence from the batch read is not taken as proof on its own. Taking a
+// document it happened to leave out for a deleted one would cost the document
+// the work only the cluster detach does: the presence-Clear change for the
+// departing actor and the RemoveOnDetach flip. So each candidate is confirmed
+// gone with a point read, and one the point read finds goes back to the normal
+// detach path untouched.
+//
+// Both reads are FindDocInfosByIDs, which queries the documents collection.
+// FindDocInfoByRefKey must not be used here: it answers from the document
+// cache, and a purge leaves that cache holding the deleted row, so a document
+// that is really gone reads as present and goes to a cluster detach that
+// cannot work — the detach fails and the deactivation is stuck again (#2343).
 func detachMissingDocuments(
 	ctx context.Context,
 	be *backend.Backend,
@@ -173,16 +178,13 @@ func detachMissingDocuments(
 			continue
 		}
 
-		docInfo, err := be.DB.FindDocInfoByRefKey(ctx, types.DocRefKey{
-			ProjectID: info.ProjectID,
-			DocID:     docID,
-		})
-		if err == nil {
-			present = append(present, docInfo)
-			continue
-		}
-		if !stderrors.Is(err, database.ErrDocumentNotFound) {
+		docInfos, err := be.DB.FindDocInfosByIDs(ctx, info.ProjectID, []types.ID{docID})
+		if err != nil {
 			return nil, err
+		}
+		if len(docInfos) > 0 {
+			present = append(present, docInfos[0])
+			continue
 		}
 
 		missing = append(missing, docID)

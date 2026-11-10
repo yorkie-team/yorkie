@@ -42,3 +42,15 @@ assumes of collaborators it reuses.
   detach and leave the stored row attached. The cached copies are dropped
   before the writes and the row is read back after them, so a swallowed write
   fails loudly instead of looking like a detach that landed.
+
+## CI
+
+The integration lane caught the point read reading a cache rather than
+storage. `FindDocInfoByRefKey` answers from `docCache`, and `PurgeDocument`
+evicts the change, presence and vector caches but not that one, so a purged
+document still reads as present; the deactivation then sent it to a cluster
+detach that failed with `conflict on update` and left the client activated —
+the very state the change set out to fix. `FindDocInfosByIDs` queries the
+documents collection in both backends, so the confirmation read uses it with a
+single ID. The tests now warm the document cache before purging, so the
+stale-cache state is pinned rather than incidental.

@@ -63,7 +63,12 @@ func TestDeactivateWithMissingDocument(t *testing.T) {
 		require.NoError(t, err)
 
 		// Delete the document row out of band, the way an operator purging a
-		// document by hand does, without touching the client row.
+		// document by hand does, without touching the client row. The read
+		// before it leaves the document cache holding the row the purge
+		// deletes, which is the state the server is really left in: a purge
+		// does not evict that entry.
+		_, err = be.DB.FindDocInfoByRefKey(ctx, goneInfo.RefKey())
+		require.NoError(t, err)
 		_, err = be.DB.PurgeDocument(ctx, goneInfo.RefKey())
 		require.NoError(t, err)
 
@@ -106,6 +111,8 @@ func TestDeactivateWithMissingDocument(t *testing.T) {
 		_, err = be.DB.TryAttaching(ctx, refKey, docInfo.ID)
 		require.NoError(t, err)
 
+		_, err = be.DB.FindDocInfoByRefKey(ctx, docInfo.RefKey())
+		require.NoError(t, err)
 		_, err = be.DB.PurgeDocument(ctx, docInfo.RefKey())
 		require.NoError(t, err)
 
