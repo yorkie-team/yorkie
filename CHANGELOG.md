@@ -7,10 +7,26 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-## [v0.7.27-rc] - 2026-11-05
+## [v0.7.27] - 2026-11-10
+
+### Added
+
+- Throttle channel events with a configurable window by @hackerwins in
+  https://github.com/yorkie-team/yorkie/pull/2341. An event on an idle
+  channel now goes out at once instead of waiting for the next 100ms tick,
+  and a busy channel delivers at most once per window. The window is the
+  new `--channel-batch-window` server flag (default `100ms`, within
+  `[0s, 1s]`) or a project's `ChannelBatchWindow`, set through the admin API
+  or `yorkie project update --channel-batch-window`; empty means the server
+  default. An open channel picks up a project change when its next
+  subscriber joins. Document events keep their ticker.
 
 ### Fixed
 
+- Key the presence base to the stored checkpoint, so a client that leaves a
+  pull unapplied, as the JS SDK does during IME composition, no longer has
+  its next presence patch refused with `ErrPresenceBaseUnavailable`, by
+  @chacha912 in https://github.com/yorkie-team/yorkie/pull/2339
 - Skip the presence clears of a server-side detach on a presenceless
   document, so a detach no longer reads every client attached to it, and
   load the stored project instead of trusting the one the cluster request
