@@ -41,7 +41,7 @@ owner node and one shard.
 - [x] Measure before/after with a presenceless document carrying ~88k
       attached clients
 - [x] Self review (round 1, no blocking findings; see lessons)
-- [ ] PR, then archive the task pair before merge
+- [x] PR, then archive the task pair before merge
 
 ## Out of scope
 

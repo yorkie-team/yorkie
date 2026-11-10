@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-03
+updated: 2026-11-10
 ---
 
 # Tasks Archive
@@ -8,7 +8,15 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 112
+Total archived tasks: 115
+
+## 2026/11 (3 tasks)
+
+| Task | Todo | Lessons |
+|---|---|---|
+| Channel Batch Window (2026-11-10) | [20261110-channel-batch-window-todo.md](./2026/11/20261110-channel-batch-window-todo.md) | [20261110-channel-batch-window-lessons.md](./2026/11/20261110-channel-batch-window-lessons.md) |
+| Presence base keyed behind the stored checkpoint after a push-only reply (2026-11-06) | [20261106-presence-base-pushonly-checkpoint-todo.md](./2026/11/20261106-presence-base-pushonly-checkpoint-todo.md) | [20261106-presence-base-pushonly-checkpoint-lessons.md](./2026/11/20261106-presence-base-pushonly-checkpoint-lessons.md) |
+| Skip the presence clears of a server-side detach on presenceless documents (2026-11-05) | [20261105-presenceless-detach-skips-clears-todo.md](./2026/11/20261105-presenceless-detach-skips-clears-todo.md) | [20261105-presenceless-detach-skips-clears-lessons.md](./2026/11/20261105-presenceless-detach-skips-clears-lessons.md) |
 
 ## 2026/10 (51 tasks)
 
