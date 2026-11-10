@@ -89,11 +89,6 @@ func Deactivate(
 		return nil, err
 	}
 
-	if len(docInfos) != len(docIDs) {
-		return nil, fmt.Errorf("find documents for detachment, expected: %d, actual: %d",
-			len(docIDs), len(docInfos))
-	}
-
 	actorID, err := info.ID.ToActorID()
 	if err != nil {
 		return nil, err
@@ -111,6 +106,14 @@ func Deactivate(
 	// when a later step fails — the row MongoDB holds has moved on either way,
 	// and the peers' copies must not outlive it.
 	defer InvalidateCachedClient(ctx, be, refKey)
+
+	if len(docInfos) != len(docIDs) {
+		present, err := detachMissingDocuments(ctx, be, info, docIDs, docInfos)
+		if err != nil {
+			return nil, err
+		}
+		docInfos = append(docInfos, present...)
+	}
 
 	for _, info := range docInfos {
 		if err := clusterClient.DetachDocument(
@@ -130,6 +133,112 @@ func Deactivate(
 	}
 
 	return deactivated, nil
+}
+
+// detachMissingDocuments marks detached, in the client row, every document in
+// docIDs whose row is really gone, and returns the ones the batch read left
+// out that a point read does find, for the caller to detach through the
+// cluster with the rest.
+//
+// A row that is gone was purged or deleted out of band while the client still
+// held the document. It cannot be detached through the cluster any more —
+// clusterServer.DetachDocument reads the DocInfo first and fails without it —
+// and an entry left attached or attaching makes DeactivateClient refuse the
+// client, on every housekeeping cycle, for good (#2343). The write is the one
+// a detach makes to the client row.
+//
+// Absence from the batch read is not taken as proof on its own. Taking a
+// document it happened to leave out for a deleted one would cost the document
+// the work only the cluster detach does: the presence-Clear change for the
+// departing actor and the RemoveOnDetach flip. So each candidate is confirmed
+// gone with a point read, and one the point read finds goes back to the normal
+// detach path untouched.
+//
+// Both reads are FindDocInfosByIDs, which queries the documents collection.
+// FindDocInfoByRefKey must not be used here: it answers from the document
+// cache, and a purge leaves that cache holding the deleted row, so a document
+// that is really gone reads as present and goes to a cluster detach that
+// cannot work — the detach fails and the deactivation is stuck again (#2343).
+func detachMissingDocuments(
+	ctx context.Context,
+	be *backend.Backend,
+	info *database.ClientInfo,
+	docIDs []types.ID,
+	found []*database.DocInfo,
+) ([]*database.DocInfo, error) {
+	exists := make(map[types.ID]bool, len(found))
+	for _, docInfo := range found {
+		exists[docInfo.ID] = true
+	}
+
+	var missing []types.ID
+	var present []*database.DocInfo
+	for _, docID := range docIDs {
+		if exists[docID] {
+			continue
+		}
+
+		docInfos, err := be.DB.FindDocInfosByIDs(ctx, info.ProjectID, []types.ID{docID})
+		if err != nil {
+			return nil, err
+		}
+		if len(docInfos) > 0 {
+			present = append(present, docInfos[0])
+			continue
+		}
+
+		missing = append(missing, docID)
+	}
+
+	if len(missing) == 0 {
+		return present, nil
+	}
+
+	// Drop every node's cached copy of the client row, this node's included,
+	// before the writes below. UpdateClientInfoAfterPushPull skips its write
+	// when the cached row already carries the entry it would write, and a copy
+	// cached before the client attached this document again says exactly that:
+	// detached. The deactivation would then look to have marked the entry while
+	// the stored row still held it attached, and DeactivateClient would refuse
+	// the client all the same.
+	InvalidateCachedClient(ctx, be, info.RefKey())
+
+	for _, docID := range missing {
+		if err := info.DetachDocument(docID); err != nil {
+			return nil, err
+		}
+		if err := be.DB.UpdateClientInfoAfterPushPull(ctx, info, &database.DocInfo{
+			ID:        docID,
+			ProjectID: info.ProjectID,
+		}); err != nil {
+			return nil, fmt.Errorf("detach missing document %s: %w", docID, err)
+		}
+
+		logging.From(ctx).Warnf(
+			"detached document %s from client %s: the document no longer exists",
+			docID, info.ID,
+		)
+	}
+
+	// Read the row back from the database. The invalidation above is best
+	// effort — it travels over the cluster and its failure is only logged — so
+	// a skipped write is still possible, and it has to be loud here rather than
+	// read as a detach that landed: the deactivation that follows would fail on
+	// the entry it left behind, with nothing naming why.
+	stored, err := be.DB.FindClientInfoByRefKey(ctx, info.RefKey(), true)
+	if err != nil {
+		return nil, err
+	}
+	for _, docID := range missing {
+		if err := stored.EnsureDocumentAttachedOrAttaching(docID); err == nil {
+			return nil, fmt.Errorf(
+				"detach missing document %s: the stored client row still holds it",
+				docID,
+			)
+		}
+	}
+
+	return present, nil
 }
 
 // InvalidateCachedClient asks every cluster node to drop its cached copy of
