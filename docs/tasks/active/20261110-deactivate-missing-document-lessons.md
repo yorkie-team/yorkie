@@ -24,8 +24,21 @@ Round 1 (correctness and tests): no blocking findings.
   the seqs on the detach path.
 - Added: the missing document's index arrays are asserted empty, and an
   entry left `attaching` is covered.
-- Known limitations, not changed: with a secondary read preference in the
-  connection URI, a lagging secondary could make an existing document look
-  missing; it would then be marked detached without a cluster detach (no
-  presence clear). The default is primary. The memory backend path has no
-  test of its own, since `Deactivate` needs a cluster client.
+- Known limitation, not changed: the memory backend path has no test of its
+  own, since `Deactivate` needs a cluster client.
+
+Round 2 (design fit): two blocking findings, both about what the new caller
+assumes of collaborators it reuses.
+
+- Absence from one `FindDocInfosByIDs` batch is not proof the row is gone, and
+  marking an entry detached locally skips the only writer of the
+  presence-Clear change and of `RemoveOnDetach`
+  (`clusterServer.DetachDocument`). Each candidate is now confirmed with a
+  point read, and one the point read finds goes back to the ordinary detach
+  path — which also closes the lagging-secondary gap noted in round 1.
+- `UpdateClientInfoAfterPushPull` returns without writing when this node's
+  cached client row already carries the entry it would write, so a cached copy
+  from before a re-attach — status detached, same epoch — would swallow the
+  detach and leave the stored row attached. The cached copies are dropped
+  before the writes and the row is read back after them, so a swallowed write
+  fails loudly instead of looking like a detach that landed.
