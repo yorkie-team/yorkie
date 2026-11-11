@@ -445,19 +445,33 @@ func toEdit(e *operations.Edit) (*api.Operation_Edit_, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &api.Operation_Edit_{
-		Edit: &api.Operation_Edit{
-			ParentCreatedAt:  ToTimeTicket(e.ParentCreatedAt()),
-			From:             toTextNodePos(e.From()),
-			To:               toTextNodePos(e.To()),
-			Content:          e.Content(),
-			Attributes:       e.Attributes(),
-			ExecutedAt:       ToTimeTicket(e.ExecutedAt()),
-			RestoreSpans:     restoreSpans,
-			RestoreMode:      toRestoreMode(e.RestoreMode()),
-			RetombstoneSpans: retombstoneSpans,
-		},
-	}, nil
+	pbEdit := &api.Operation_Edit{
+		ParentCreatedAt:  ToTimeTicket(e.ParentCreatedAt()),
+		From:             toTextNodePos(e.From()),
+		To:               toTextNodePos(e.To()),
+		Content:          e.Content(),
+		Attributes:       e.Attributes(),
+		ExecutedAt:       ToTimeTicket(e.ExecutedAt()),
+		RestoreSpans:     restoreSpans,
+		RestoreMode:      toRestoreMode(e.RestoreMode()),
+		RetombstoneSpans: retombstoneSpans,
+	}
+	if o := e.Origin(); o.Left != nil {
+		pbEdit.HasOrigin = true
+		from := e.From()
+		fromAbs := crdt.NewRGATreeSplitNodeID(from.ID().CreatedAt(), from.ID().Offset()+from.RelativeOffset())
+		if !o.Left.Equal(fromAbs) {
+			pbEdit.OriginLeft = toTextNodeID(o.Left)
+		}
+		if o.Right != nil {
+			if o.Right.Equal(fromAbs) {
+				pbEdit.OriginRightAtFrom = true
+			} else {
+				pbEdit.OriginRight = toTextNodeID(o.Right)
+			}
+		}
+	}
+	return &api.Operation_Edit_{Edit: pbEdit}, nil
 }
 
 func toRestoreSpans(spans []*crdt.RestoreSpan) ([]*api.RestoreSpan, error) {
@@ -548,6 +562,12 @@ func toTreeEdit(e *operations.TreeEdit) (*api.Operation_TreeEdit_, error) {
 	}
 	for _, ticket := range e.SplitTickets() {
 		pbTreeEdit.SplitTickets = append(pbTreeEdit.SplitTickets, ToTimeTicket(ticket))
+	}
+	if o := e.TreeOrigin(); o != nil {
+		pbTreeEdit.HasOrigin = true
+		if o.Right != nil {
+			pbTreeEdit.OriginRight = toTreeNodeID(o.Right)
+		}
 	}
 	return &api.Operation_TreeEdit_{TreeEdit: pbTreeEdit}, nil
 }

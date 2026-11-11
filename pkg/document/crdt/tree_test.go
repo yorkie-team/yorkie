@@ -757,6 +757,7 @@ func TestTreeEdit(t *testing.T) {
 	})
 
 	t.Run("length update after GC test", func(t *testing.T) {
+
 		root := helper.TestRoot()
 		ctx := helper.TextChangeContext(root)
 		//       0
@@ -807,9 +808,12 @@ func TestTreeEdit(t *testing.T) {
 		assert.Equal(t, 2, n)
 		assert.Equal(t, 0, root.GarbageLen())
 
+		// GC keeps the collected <i> as an empty skeleton in its parent's
+		// child list, so its two tag positions stay in TotalLength; its
+		// text child is dropped.
 		assert.Equal(t, "<r><b>ab</b><a>ef</a></r>", tree.ToXML())
 		assert.Equal(t, tree.Root().Index.VisibleLength, 8)
-		assert.Equal(t, tree.Root().Index.TotalLength, 8)
+		assert.Equal(t, tree.Root().Index.TotalLength, 10)
 
 		gcpairs, _, err = tree.EditT(5, 7, nil, 0, helper.TimeT(ctx), issueTicket(ctx))
 		assert.NoError(t, err)
@@ -818,7 +822,7 @@ func TestTreeEdit(t *testing.T) {
 		assert.Equal(t, 1, root.GarbageLen())
 		assert.Equal(t, "<r><b>ab</b><a></a></r>", tree.ToXML())
 		assert.Equal(t, tree.Root().Index.VisibleLength, 6)
-		assert.Equal(t, tree.Root().Index.TotalLength, 8)
+		assert.Equal(t, tree.Root().Index.TotalLength, 10)
 	})
 
 	t.Run("marshal test", func(t *testing.T) {

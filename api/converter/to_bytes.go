@@ -256,7 +256,7 @@ func toRGANodes(rgaNodes []*crdt.RGATreeListNode) ([]*api.RGANode, error) {
 
 func toTextNodes(textNodes []*crdt.RGATreeSplitNode[*crdt.TextValue]) []*api.TextNode {
 	var pbTextNodes []*api.TextNode
-	for _, textNode := range textNodes {
+	for i, textNode := range textNodes {
 		value := textNode.Value()
 
 		attrs := make(map[string]*api.NodeAttr)
@@ -276,8 +276,33 @@ func toTextNodes(textNodes []*crdt.RGATreeSplitNode[*crdt.TextValue]) []*api.Tex
 		}
 		writeRemovalLedger(pbTextNode, textNode)
 
+		if textNode.IsSkeleton() {
+			// A skeleton's removal time is a shared stand-in; see Purge.
+			pbTextNode.SkeletonLen = uint32(textNode.SkeletonLen())
+			pbTextNode.RemovedAt = nil
+		}
 		if textNode.InsPrevID() != nil {
 			pbTextNode.InsPrevId = toTextNodeID(textNode.InsPrevID())
+		}
+		if o := textNode.Origin(); o != nil {
+			pbTextNode.HasOrigin = true
+			switch {
+			case o.Left.Equal(textNode.ID()):
+				pbTextNode.OriginFlags |= originLeftSelf
+			case i > 0 && o.Left.Equal(endOf(textNodes[i-1])):
+				pbTextNode.OriginFlags |= originLeftPrev
+			default:
+				pbTextNode.OriginLeft = toTextNodeID(o.Left)
+			}
+			if o.Right != nil {
+				if i+1 < len(textNodes) && o.Right.Equal(textNodes[i+1].ID()) {
+					pbTextNode.OriginFlags |= originRightNext
+				} else if po := prevOrigin(textNodes, i); po != nil && po.Right != nil && o.Right.Equal(po.Right) {
+					pbTextNode.OriginFlags |= originRightPrev
+				} else {
+					pbTextNode.OriginRight = toTextNodeID(o.Right)
+				}
+			}
 		}
 
 		pbTextNodes = append(pbTextNodes, pbTextNode)
@@ -292,6 +317,28 @@ func writeRemovalLedger(pbNode *api.TextNode, node *crdt.RGATreeSplitNode[*crdt.
 	for _, t := range node.RemovalEvents() {
 		pbNode.RemovalEvents = append(pbNode.RemovalEvents, ToTimeTicket(t))
 	}
+}
+
+// Origin flags of a snapshot TextNode, for origins that are its neighbours.
+const (
+	originLeftPrev  uint32 = 1
+	originLeftSelf  uint32 = 2
+	originRightNext uint32 = 4
+	originRightPrev uint32 = 8
+)
+
+func prevOrigin(nodes []*crdt.RGATreeSplitNode[*crdt.TextValue], i int) *crdt.InsertOrigin {
+	if i == 0 {
+		return nil
+	}
+	return nodes[i-1].Origin()
+}
+
+// endOf is the boundary after the last character of node, in the absolute
+// form an insertion's left origin uses.
+func endOf(node *crdt.RGATreeSplitNode[*crdt.TextValue]) *crdt.RGATreeSplitNodeID {
+	id := node.ID()
+	return crdt.NewRGATreeSplitNodeID(id.CreatedAt(), id.Offset()+node.ContentLen())
 }
 
 func toTextNodeID(id *crdt.RGATreeSplitNodeID) *api.TextNodeID {
@@ -374,6 +421,22 @@ func toTreeNode(treeNode *crdt.TreeNode, depth int) *api.TreeNode {
 
 	if treeNode.MergedAt != nil {
 		pbNode.MergedAt = ToTimeTicket(treeNode.MergedAt)
+	}
+
+	if o := treeNode.Origin; o != nil {
+		pbNode.HasOrigin = true
+		if o.Left != nil {
+			pbNode.OriginLeft = toTreeNodeID(o.Left)
+		}
+		if o.Right != nil {
+			pbNode.OriginRight = toTreeNodeID(o.Right)
+		}
+	}
+	if treeNode.IsSkeleton() {
+		pbNode.SkeletonLen = 1
+		if treeNode.IsText() {
+			pbNode.SkeletonLen = uint32(treeNode.SkeletonLen())
+		}
 	}
 
 	return pbNode

@@ -524,10 +524,10 @@ func TestParity(t *testing.T) {
 	}
 }
 
-// TestLaggingMinVV pins the lagging minVV option: a script that converges
-// under the protocol's GC throws once the one push still on its way to d1
-// is covered by the minVV d1 collects with (yorkie#2110). Off mode is the
-// same in both runs.
+// TestLaggingMinVV pins the lagging minVV option: the minVV d1 collects with
+// also covers the one push still on its way to it (yorkie#2110). That used to
+// make this script throw; with skeleton GC it converges. Off mode is the same
+// in both runs.
 func TestLaggingMinVV(t *testing.T) {
 	s, err := ParseScript([]byte(`{"v":1,"id":"lagging","replicas":2,"init":"abcd","steps":[` +
 		`{"r":1,"op":"edit","from":2,"to":2,"split":1},` +
@@ -539,8 +539,12 @@ func TestLaggingMinVV(t *testing.T) {
 	rec := Run(s)
 	require.Equal(t, ResultPass, rec.Result, "checks %s, err %q", rec.Checks, rec.Err)
 	lag := RunWith(s, Options{LaggingMinVV: true})
-	assert.Equal(t, ResultError, lag.Result, "checks %s", lag.Checks)
-	assert.Equal(t, "10101", lag.Checks.String())
+	// Before skeleton GC this run threw: the lagging minVV let d1 unlink a
+	// tombstone the in-flight push still named. A collected Tree tombstone now
+	// stays in its parent as a skeleton, so the push resolves against it and
+	// the run converges like the protocol one.
+	assert.Equal(t, ResultPass, lag.Result, "checks %s, err %q", lag.Checks, lag.Err)
+	assert.Equal(t, "11111", lag.Checks.String())
 	assert.Equal(t, rec.Steps, lag.Steps)
 }
 
