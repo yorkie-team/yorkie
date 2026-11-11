@@ -1550,7 +1550,7 @@ func TestGarbageCollection(t *testing.T) {
 		err = c3.Sync(ctx)
 		assert.NoError(t, err)
 		assertVectorEquality(t, d3.VersionVector(), versionOf(time.InitialActorID, 26), versionOf(d1.ActorID(), 22), versionOf(d2.ActorID(), 24), versionOf(d3.ActorID(), 27))
-		assert.Equal(t, `{"text":[{"val":"5"},{"val":"5"},{"val":"4"},{"val":"4"},{"val":"3"},{"val":"3"},{"val":"2"},{"val":"2"},{"val":"1"},{"val":"1"},{"val":"0"},{"val":"c"},{"val":"0"},{"val":"a"}]}`, d3.Marshal())
+		assert.Equal(t, `{"text":[{"val":"5"},{"val":"5"},{"val":"4"},{"val":"4"},{"val":"3"},{"val":"3"},{"val":"2"},{"val":"2"},{"val":"1"},{"val":"1"},{"val":"0"},{"val":"0"},{"val":"c"},{"val":"a"}]}`, d3.Marshal())
 
 		// 03. Delete text after receiving the snapshot.
 		err = d3.Update(func(root *json.Object, p *presence.Presence) error {
@@ -1558,7 +1558,7 @@ func TestGarbageCollection(t *testing.T) {
 			return nil
 		})
 		assert.NoError(t, err)
-		assert.Equal(t, `{"text":[{"val":"5"},{"val":"4"},{"val":"3"},{"val":"3"},{"val":"2"},{"val":"2"},{"val":"1"},{"val":"1"},{"val":"0"},{"val":"c"},{"val":"0"},{"val":"a"}]}`, d3.Marshal())
+		assert.Equal(t, `{"text":[{"val":"5"},{"val":"4"},{"val":"3"},{"val":"3"},{"val":"2"},{"val":"2"},{"val":"1"},{"val":"1"},{"val":"0"},{"val":"0"},{"val":"c"},{"val":"a"}]}`, d3.Marshal())
 
 		err = c3.Sync(ctx)
 		assert.NoError(t, err)
@@ -1566,8 +1566,8 @@ func TestGarbageCollection(t *testing.T) {
 		assert.NoError(t, err)
 		err = c1.Sync(ctx)
 		assert.NoError(t, err)
-		assert.Equal(t, `{"text":[{"val":"5"},{"val":"4"},{"val":"3"},{"val":"3"},{"val":"2"},{"val":"2"},{"val":"1"},{"val":"1"},{"val":"0"},{"val":"c"},{"val":"0"},{"val":"a"}]}`, d2.Marshal())
-		assert.Equal(t, `{"text":[{"val":"5"},{"val":"4"},{"val":"3"},{"val":"3"},{"val":"2"},{"val":"2"},{"val":"1"},{"val":"1"},{"val":"0"},{"val":"c"},{"val":"0"},{"val":"a"}]}`, d1.Marshal())
+		assert.Equal(t, `{"text":[{"val":"5"},{"val":"4"},{"val":"3"},{"val":"3"},{"val":"2"},{"val":"2"},{"val":"1"},{"val":"1"},{"val":"0"},{"val":"0"},{"val":"c"},{"val":"a"}]}`, d2.Marshal())
+		assert.Equal(t, `{"text":[{"val":"5"},{"val":"4"},{"val":"3"},{"val":"3"},{"val":"2"},{"val":"2"},{"val":"1"},{"val":"1"},{"val":"0"},{"val":"0"},{"val":"c"},{"val":"a"}]}`, d1.Marshal())
 	})
 }
 

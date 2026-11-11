@@ -2246,7 +2246,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><i></i><p></p></root>", d2.Root().GetTree("t").ToXML())
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		assert.Equal(t, "<root><i></i><b></b><p></p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><b></b><i></i><p></p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
 	t.Run("concurrently insert side by side elements (middle) test", func(t *testing.T) {
@@ -2282,7 +2282,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p><i></i></p></root>", d2.Root().GetTree("t").ToXML())
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		assert.Equal(t, "<root><p><i></i><b></b></p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p><b></b><i></i></p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
 	t.Run("concurrently insert side by side elements (right) test", func(t *testing.T) {
@@ -2318,7 +2318,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p></p><i></i></root>", d2.Root().GetTree("t").ToXML())
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		assert.Equal(t, "<root><p></p><i></i><b></b></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p></p><b></b><i></i></root>", d1.Root().GetTree("t").ToXML())
 	})
 
 	t.Run("concurrently insert and delete side by side elements test", func(t *testing.T) {
@@ -2474,7 +2474,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>B12</p></root>", d2.Root().GetTree("t").ToXML())
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		assert.Equal(t, "<root><p>BA12</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>AB12</p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
 	t.Run("insert text to the same position(middle) concurrently test", func(t *testing.T) {
@@ -2510,7 +2510,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>1B2</p></root>", d2.Root().GetTree("t").ToXML())
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		assert.Equal(t, "<root><p>1BA2</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>1AB2</p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
 	t.Run("insert text content to the same position(right) concurrently test", func(t *testing.T) {
@@ -2546,7 +2546,7 @@ func TestTree(t *testing.T) {
 		assert.Equal(t, "<root><p>12B</p></root>", d2.Root().GetTree("t").ToXML())
 
 		syncClientsThenAssertEqual(t, []clientAndDocPair{{c1, d1}, {c2, d2}})
-		assert.Equal(t, "<root><p>12BA</p></root>", d1.Root().GetTree("t").ToXML())
+		assert.Equal(t, "<root><p>12AB</p></root>", d1.Root().GetTree("t").ToXML())
 	})
 
 	t.Run("concurrently insert and delete side by side text test", func(t *testing.T) {
