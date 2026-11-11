@@ -643,6 +643,15 @@ func (n *TreeNode) SplitElement(
 					remaining = append(remaining, child)
 					continue
 				}
+				// An insert placed by origin right after the element this
+				// split cut at the level below meant "after that element",
+				// whose end is now its last piece in the right partition.
+				// A replica that saw the insert first placed it there.
+				if offset > 0 && originFollowsSplitSource(child.Value, allChildren[offset-1].Value) {
+					boundaryReached = true
+					remaining = append(remaining, child)
+					continue
+				}
 				actorID := child.Value.id.CreatedAt.ActorID()
 				if l, ok := versionVector.Get(actorID); !ok || l < child.Value.id.CreatedAt.Lamport() {
 					movedToLeft = append(movedToLeft, child)
@@ -676,6 +685,15 @@ func (n *TreeNode) SplitElement(
 	diff.Sub(prvSize)
 
 	return split, diff, nil
+}
+
+// originFollowsSplitSource reports whether child was inserted by origin
+// right after source, an element that a split has cut into pieces. Its left
+// origin then names the boundary after the whole of source.
+func originFollowsSplitSource(child, source *TreeNode) bool {
+	o := child.Origin
+	return o != nil && o.Left != nil && !source.IsText() &&
+		source.InsNextID != nil && o.Left.Equal(source.id)
 }
 
 // recalcLength recomputes VisibleLength and TotalLength of the given

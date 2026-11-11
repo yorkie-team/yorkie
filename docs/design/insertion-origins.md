@@ -104,13 +104,37 @@ one: every replica recomputes it from `from`. In a snapshot, `origin_flags`
 omits origins that are a node's neighbours, which keeps snapshots of typed runs
 close to their previous size.
 
+### Compatibility with older clients
+
+An older client ignores the new fields: protobuf skips unknown fields, so it
+places every insert by `createdAt`. A newer client places an insert by origin
+only when the insert carries one. These cases were checked by exchanging
+change packs and snapshots between an engine built from `main` and one built
+from this change:
+
+| Case | Result |
+|------|--------|
+| One new and one old client type concurrently | Both converge to the old, interleaved order: the old client's insert has no origin, so the new client falls back to `createdAt` for it. |
+| Two new clients type concurrently; an old client receives both | **Diverges.** The new clients converge to `X가나다abcY`, while the old client builds `X가나abc다Y` (forward) or `Xa가b나c다Y` (held caret). The divergence is permanent. |
+| An old client loads a snapshot holding a skeleton | It loads, and the text matches. The skeleton becomes a live, empty node, and the old client's GC never collects it. |
+
+So a document that newer clients edit must not be opened by older ones. The
+server sees each client's SDK version (`x-yorkie-user-agent`) but enforces no
+minimum. Two ways to close this, neither of them implemented here:
+
+- **Per-document switch.** A document records whether it uses origins. Clients
+  record origins only in such documents, and the server refuses to attach
+  clients older than the version that understands them.
+- **Project-level minimum SDK version.** A project setting the server enforces
+  on attach. It is simpler, but every document in the project moves at once.
+
 ### Risks and Mitigation
 
 | Risk | Mitigation |
 |------|------------|
 | Skeletons keep metadata that GC used to free | Only the content goes; adjacent skeletons merge. Skeleton compaction is follow-up work. |
-| Mixed documents with origin-less operations from older clients | `createdAt` placement is kept for nodes without origins, and tests play an older client (`RecordInsertOrigins`, `TreeOrigins`). The full analysis is follow-up work. |
-| Tree divergence under concurrent merge/split | Origins reduce it (fuzz: 312 to 281 of 20,000 runs with GC) but do not remove it. |
+| Older clients diverge from newer ones in the same document | See [Compatibility with older clients](#compatibility-with-older-clients). It needs a gate before release. Tests play an older client's operations with `RecordInsertOrigins` and `TreeOrigins`. |
+| Tree divergence under concurrent merge/split | Origins reduce it (fuzz: 312 to 281 of 20,000 runs with GC) but do not remove it. A split boundary keeps an insert placed by origin after the element it cuts on the right of the cut, where a replica that saw the insert first put it. |
 
 ### Design Decisions
 
