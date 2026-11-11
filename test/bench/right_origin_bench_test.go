@@ -1,3 +1,5 @@
+//go:build bench
+
 /*
  * Copyright 2026 The Yorkie Authors. All rights reserved.
  *
@@ -13,8 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-//go:build bench
 
 package bench
 
