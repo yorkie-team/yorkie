@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/yorkie-team/yorkie/pkg/document/crdt"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 )
@@ -175,8 +176,15 @@ func TestTreeElementTextBoundaryUnderConcurrentEdit(t *testing.T) {
 			feed(t, editor, others)
 			feed(t, other, edits)
 
-			assert.Equal(t, tc.want, editor.Root().GetTree("t").ToXML())
-			assert.Equal(t, tc.want, other.Root().GetTree("t").ToXML())
+			want := tc.want
+			if tc.name == "another insert at the same boundary" && crdt.TreeOrigins {
+				// Both inserts carry the same left and right origin, so the
+				// two-origin rule orders them by actor (the lower one first)
+				// instead of by the createdAt-only tie-break.
+				want = "<r><p><b>hello</b>|x world</p></r>"
+			}
+			assert.Equal(t, want, editor.Root().GetTree("t").ToXML())
+			assert.Equal(t, want, other.Root().GetTree("t").ToXML())
 		})
 	}
 }

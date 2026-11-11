@@ -102,7 +102,15 @@ func TestRoot(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 3, n)
 		assert.Equal(t, 0, root.GarbageLen())
-		nodeLen = len(text.Nodes())
+		// Collected tombstones stay as content-less skeletons so insertion
+		// origins resolve the same everywhere: count the nodes that hold
+		// content.
+		nodeLen = 0
+		for _, n := range text.Nodes() {
+			if !n.IsSkeleton() {
+				nodeLen++
+			}
+		}
 		assert.Equal(t, 1, nodeLen)
 	})
 
@@ -207,7 +215,15 @@ func TestRoot(t *testing.T) {
 		assert.Equal(t, 2, garbageLen)
 		assert.Equal(t, 0, root.GarbageLen())
 
-		nodeLen = len(text.Nodes())
+		// Collected tombstones stay as content-less skeletons so insertion
+		// origins resolve the same everywhere: count the nodes that hold
+		// content.
+		nodeLen = 0
+		for _, n := range text.Nodes() {
+			if !n.IsSkeleton() {
+				nodeLen++
+			}
+		}
 		assert.Equal(t, 1, nodeLen)
 	})
 

@@ -250,6 +250,33 @@ type RGATreeSplitNode[V RGATreeSplitValue] struct {
 	next    *RGATreeSplitNode[V]
 	insPrev *RGATreeSplitNode[V]
 	insNext *RGATreeSplitNode[V]
+
+	// origin is the insertion context recorded when this node was inserted:
+	// the boundary it was inserted after (left) and the character that was to
+	// its right (right). origin.Left is nil for nodes created without one
+	// (legacy edits, restores, snapshots), which fall back to the
+	// createdAt-only RGA rule. Stored inline to avoid an allocation per
+	// insert. The IDs it points at are shared, not copied (DeepCopy shares
+	// them too), so an origin is never mutated after it is set.
+	origin InsertOrigin
+
+	// skelLen > 0 marks a skeleton: a tombstone whose garbage collection has
+	// run. Instead of being unlinked, the node drops its content and
+	// attributes and keeps only what placement reads -- its ID range
+	// [id.offset, id.offset+skelLen), removedAt, origin and its place in the
+	// list -- so insertion origins that name it, and the windows integrate
+	// scans, resolve the same on replicas that collected it and on replicas
+	// that did not (the Yjs GC-struct approach).
+	skelLen int
+}
+
+// InsertOrigin is the context an insertion was made in. Left is the
+// position boundary the content was inserted after, in the same absolute form
+// findFloorNodePreferToLeft resolves. Right is the ID of the character that
+// was immediately to the right of the caret, or nil at the end of the text.
+type InsertOrigin struct {
+	Left  *RGATreeSplitNodeID
+	Right *RGATreeSplitNodeID
 }
 
 // NewRGATreeSplitNode creates a new instance of RGATreeSplit.
@@ -273,6 +300,20 @@ func (s *RGATreeSplitNode[V]) IDString() string {
 	return s.id.key()
 }
 
+// Origin returns the insertion context of this node, or nil.
+func (s *RGATreeSplitNode[V]) Origin() *InsertOrigin {
+	if s.origin.Left == nil {
+		return nil
+	}
+	return &s.origin
+}
+
+// RawOrigin returns the insertion context as stored, possibly incomplete.
+func (s *RGATreeSplitNode[V]) RawOrigin() InsertOrigin { return s.origin }
+
+// SetOrigin sets the insertion context of this node.
+func (s *RGATreeSplitNode[V]) SetOrigin(origin InsertOrigin) { s.origin = origin }
+
 // InsPrevID returns previous node ID at the time of this node insertion.
 func (s *RGATreeSplitNode[V]) InsPrevID() *RGATreeSplitNodeID {
 	if s.insPrev == nil {
@@ -283,7 +324,49 @@ func (s *RGATreeSplitNode[V]) InsPrevID() *RGATreeSplitNodeID {
 }
 
 func (s *RGATreeSplitNode[V]) contentLen() int {
+	if s.skelLen > 0 {
+		return s.skelLen
+	}
 	return s.value.Len()
+}
+
+// ContentLen returns the length of the ID range this node covers, whether it
+// is live, a tombstone or a skeleton.
+func (s *RGATreeSplitNode[V]) ContentLen() int {
+	return s.contentLen()
+}
+
+// keptAsSkeleton reports that a purge keeps this node as a skeleton, so the
+// GC ledger has to read its size before the purge empties it.
+func (s *RGATreeSplitNode[V]) keptAsSkeleton() bool { return true }
+
+// IsSkeleton reports whether this node is a garbage-collected tombstone kept
+// only for its position.
+func (s *RGATreeSplitNode[V]) IsSkeleton() bool {
+	return s.skelLen > 0
+}
+
+// SkeletonLen returns the length of the ID range a skeleton covers, or 0.
+func (s *RGATreeSplitNode[V]) SkeletonLen() int {
+	return s.skelLen
+}
+
+// SetSkeleton turns this node into a skeleton covering length positions.
+// Used when decoding a snapshot.
+func (s *RGATreeSplitNode[V]) SetSkeleton(length int) {
+	s.skelLen = length
+}
+
+// contentLenGreaterThan reports whether contentLen() > n, without a full
+// count when the value can answer from its size.
+func (s *RGATreeSplitNode[V]) contentLenGreaterThan(n int) bool {
+	if s.skelLen > 0 {
+		return s.skelLen > n
+	}
+	if v, ok := any(s.value).(interface{ LenGreaterThan(int) bool }); ok {
+		return v.LenGreaterThan(n)
+	}
+	return s.value.Len() > n
 }
 
 // Len returns the length of this node.
@@ -579,6 +662,11 @@ func (s *RGATreeSplitNode[V]) HeldFromPurge(vector time.VersionVector) bool {
 // isRemovedInView tells whether the node was removed in the view of the
 // given version vector: a deletion it knew that no undo it knew cancelled.
 func (s *RGATreeSplitNode[V]) isRemovedInView(vector time.VersionVector) bool {
+	// A skeleton's removal was stable everywhere when it was collected; its
+	// stand-in removal time is in no vector, so it is answered here.
+	if s.skelLen > 0 {
+		return true
+	}
 	cancels := s.cancelsByDeletion()
 	for _, d := range s.removals() {
 		if !time.TicketKnown(vector, d) {
@@ -596,6 +684,14 @@ func (s *RGATreeSplitNode[V]) isRemovedInView(vector time.VersionVector) bool {
 // the tombstone of) this node.
 func (s *RGATreeSplitNode[V]) canRemove(editedAt *time.Ticket, creationKnown, tombstoneKnown bool) bool {
 	if !creationKnown {
+		return false
+	}
+	// A skeleton's removal was causally stable when it was collected, so no
+	// later deletion can be one it has not seen. Its stand-in removal time is
+	// not in any vector, so without this a remote deletion would read it as
+	// live and record a removal on it. This matches a purged node, which a
+	// deletion over it no longer finds.
+	if s.skelLen > 0 {
 		return false
 	}
 	if s.removedAt == nil {
@@ -635,6 +731,8 @@ func (s *RGATreeSplitNode[V]) DeepCopy() *RGATreeSplitNode[V] {
 		id:        s.id,
 		value:     s.value.DeepCopy().(V),
 		removedAt: s.removedAt,
+		origin:    s.origin,
+		skelLen:   s.skelLen,
 	}
 	node.copyLedger(s)
 	node.indexNode = splay.NewNode(node)
@@ -654,12 +752,30 @@ func (s *RGATreeSplitNode[V]) setPrev(node *RGATreeSplitNode[V]) {
 }
 
 func (s *RGATreeSplitNode[V]) split(offset int) *RGATreeSplitNode[V] {
+	if s.skelLen > 0 {
+		// Skeleton values are empty and never mutated, so both halves share
+		// one.
+		newNode := NewRGATreeSplitNode(s.id.Split(offset), s.value)
+		newNode.removedAt = s.removedAt
+		newNode.skelLen = s.skelLen - offset
+		s.skelLen = offset
+		if s.origin.Left != nil {
+			newNode.origin = InsertOrigin{Left: newNode.id, Right: s.origin.Right}
+		}
+		return newNode
+	}
 	newNode := NewRGATreeSplitNode(
 		s.id.Split(offset),
 		s.value.Split(offset).(V),
 	)
 	newNode.removedAt = s.removedAt
 	newNode.copyLedger(s)
+	if s.origin.Left != nil {
+		// The right piece continues the same insertion: its left origin is
+		// the last character of the left piece (resolved through insPrev),
+		// and it shares the original right origin.
+		newNode.origin = InsertOrigin{Left: newNode.id, Right: s.origin.Right}
+	}
 	return newNode
 }
 
@@ -670,6 +786,9 @@ func (s *RGATreeSplitNode[V]) createdAt() *time.Ticket {
 // toTestString returns a String containing the metadata of the node
 // for debugging purpose.
 func (s *RGATreeSplitNode[V]) toTestString() string {
+	if s.skelLen > 0 {
+		return fmt.Sprintf("%s skel(%d)", s.id.ToTestString(), s.skelLen)
+	}
 	return fmt.Sprintf("%s %s", s.id.ToTestString(), s.value.toTestString())
 }
 
@@ -696,6 +815,10 @@ func (s *RGATreeSplitNode[V]) toTestString() string {
 // without the attributes it carried. That is the price of the replicas
 // agreeing.
 func (s *RGATreeSplitNode[V]) canStyle(vector time.VersionVector) bool {
+	if s.skelLen > 0 {
+		// Collected: there is no value to style, as there is no node in main.
+		return false
+	}
 	return time.TicketKnown(vector, s.createdAt())
 }
 
@@ -724,6 +847,17 @@ type RGATreeSplit[V RGATreeSplitValue] struct {
 	// PruneLedgers can drop anything from. Nil until first needed: a tree
 	// decoded from a snapshot or deep-copied fills it with one scan.
 	cancelled map[*RGATreeSplitNode[V]]struct{}
+
+	// scanOrder is scratch space for integrate, reused across inserts.
+	scanOrder map[*RGATreeSplitNode[V]]int
+	// scanByID maps the start ID of each piece in the integrate window to
+	// its order, so siblings' right origins inside the window resolve
+	// without an index lookup. Reused across inserts.
+	scanByID map[pieceKey]int
+
+	// skelValue is the empty value every skeleton shares. Built lazily.
+	skelValue    V
+	hasSkelValue bool
 }
 
 // trackCancelled records that node's ledger has a cancel.
@@ -813,24 +947,302 @@ func (s *RGATreeSplit[V]) findNodeWithSplit(
 	pos *RGATreeSplitNodePos,
 	updatedAt *time.Ticket,
 ) (*RGATreeSplitNode[V], *RGATreeSplitNode[V], resource.DataSize, error) {
+	left, right, diff, _, err := s.findNodeWithSplitAt(pos, updatedAt)
+	return left, right, diff, err
+}
+
+// findNodeWithSplitAt is findNodeWithSplit that also reports whether the
+// returned left node is the one ending exactly at pos, i.e. the createdAt
+// skip loop did not move past any node.
+func (s *RGATreeSplit[V]) findNodeWithSplitAt(
+	pos *RGATreeSplitNodePos,
+	updatedAt *time.Ticket,
+) (*RGATreeSplitNode[V], *RGATreeSplitNode[V], resource.DataSize, bool, error) {
 	absoluteID := pos.getAbsoluteID()
 	node, err := s.findFloorNodePreferToLeft(absoluteID)
 	if err != nil {
-		return nil, nil, resource.DataSize{}, err
+		return nil, nil, resource.DataSize{}, false, err
 	}
 
 	relativeOffset := absoluteID.offset - node.id.offset
 
 	_, diff, err := s.splitNode(node, relativeOffset)
 	if err != nil {
-		return nil, nil, resource.DataSize{}, err
+		return nil, nil, resource.DataSize{}, false, err
 	}
 
+	atBoundary := true
 	for node.next != nil && node.next.createdAt().After(updatedAt) {
 		node = node.next
+		atBoundary = false
 	}
 
-	return node, node.next, diff, nil
+	return node, node.next, diff, atBoundary, nil
+}
+
+// resolveLeft resolves a scanned node's left origin. A boundary equal to the
+// inserting node's own is answered without a lookup.
+func (s *RGATreeSplit[V]) resolveLeft(
+	id, mine *RGATreeSplitNodeID,
+	left *RGATreeSplitNode[V],
+) (*RGATreeSplitNode[V], error) {
+	if sameBoundary(id, mine) {
+		return left, nil
+	}
+	return s.findFloorNodePreferToLeft(id)
+}
+
+// RightOriginOf returns the right origin a local insert at the given
+// boundary records: the node right after it, tombstones included, or nil at
+// the end of the text. A receiver that has purged it recovers it from the
+// change's version vector (see integrate).
+func (s *RGATreeSplit[V]) RightOriginOf(absoluteID *RGATreeSplitNodeID) (*RGATreeSplitNodeID, error) {
+	node, err := s.findFloorNodePreferToLeft(absoluteID)
+	if err != nil {
+		return nil, err
+	}
+	relativeOffset := absoluteID.offset - node.id.offset
+	if node.contentLenGreaterThan(relativeOffset) {
+		// Inside one insertion: the right neighbour continues it, which is
+		// always a sibling at this boundary.
+		return NewRGATreeSplitNodeID(node.id.createdAt, absoluteID.offset), nil
+	}
+	if node.next == nil {
+		return nil, nil
+	}
+	return node.next.id, nil
+}
+
+// sameBoundary reports whether two left origins name the same boundary.
+// Boundaries are canonical: "after character (C, k)" is always (C, k+1).
+func sameBoundary(a, b *RGATreeSplitNodeID) bool {
+	return a != nil && b != nil && a.offset == b.offset && a.createdAt.Compare(b.createdAt) == 0
+}
+
+// integrate returns the node a new insertion goes after, using both origins
+// (the YjsMod / FugueMax rule). left is the piece ending at the insertion
+// boundary; right is the piece starting at the right origin. Only nodes
+// between the two can be concurrent with the insertion, so the scan is
+// bounded by that window and is empty when nothing was inserted there
+// concurrently.
+func (s *RGATreeSplit[V]) integrate(
+	origin InsertOrigin,
+	editedAt *time.Ticket,
+	vv time.VersionVector,
+) (*RGATreeSplitNode[V], error) {
+	left, err := s.findFloorNodePreferToLeft(origin.Left)
+	if err != nil {
+		return nil, err
+	}
+	right, err := s.originRightNode(origin.Right)
+	rightResolved := err == nil
+	if err != nil {
+		if vv == nil {
+			return nil, err
+		}
+		// The right origin was purged. It was the first node after left
+		// that the author knew; every node between them is concurrent. So
+		// the first node after left that the change's version vector
+		// covers is the same boundary.
+		right = left.next
+		for right != nil && !vv.EqualToOrAfter(right.createdAt()) {
+			right = right.next
+		}
+	}
+	if left.next == right && right != nil {
+		return left, nil
+	}
+	if origin.Right == nil && right == nil {
+		return s.integrateOpen(left, origin, editedAt)
+	}
+
+	// Order of the nodes in the window (left, right]. A right origin that is
+	// not in it lies past right. The map is reused across inserts.
+	if s.scanOrder == nil {
+		s.scanOrder = make(map[*RGATreeSplitNode[V]]int)
+	}
+	order := s.scanOrder
+	clear(order)
+	if s.scanByID == nil {
+		s.scanByID = make(map[pieceKey]int)
+	}
+	byID := s.scanByID
+	clear(byID)
+	order[left] = 0
+	i := 1
+	for n := left.next; n != nil && n != right; n = n.next {
+		order[n] = i
+		byID[pieceKeyOf(n.id)] = i
+		i++
+	}
+	rightIdx := i
+	if right != nil {
+		order[right] = rightIdx
+	}
+	compareRight := func(n *RGATreeSplitNode[V]) int {
+		if n == right {
+			return 0
+		}
+		if idx, ok := order[n]; ok && n != nil {
+			if idx < rightIdx {
+				return -1
+			}
+			return 0
+		}
+		return 1
+	}
+
+	dest := left
+	prev := left
+	scanning := false
+	for o := left.next; ; o = o.next {
+		if !scanning {
+			dest = prev
+		}
+		if o == nil || o == right {
+			break
+		}
+		prev = o
+		if o.origin.Left == nil {
+			break
+		}
+		oleft, err := s.resolveLeft(o.origin.Left, origin.Left, left)
+		if err != nil {
+			return nil, err
+		}
+		if oleft == left {
+			// Siblings typed against the same right neighbour share the
+			// right origin, and a right origin that starts a piece inside
+			// the window is in byID; answer both without an index lookup.
+			var cmp int
+			if rightResolved && o.origin.Right != nil && origin.Right != nil && o.origin.Right.Equal(origin.Right) {
+				cmp = 0
+			} else if idx, ok := byID[pieceKeyOf0(o.origin.Right)]; ok && o.origin.Right != nil {
+				if idx < rightIdx {
+					cmp = -1
+				}
+			} else {
+				oright, err := s.originRightNode(o.origin.Right)
+				if err != nil {
+					return nil, err
+				}
+				cmp = compareRight(oright)
+			}
+			switch {
+			case cmp < 0:
+				scanning = true
+			case cmp == 0:
+				if editedAt.ActorID().Compare(o.createdAt().ActorID()) < 0 {
+					return dest, nil
+				}
+				scanning = false
+			default:
+				scanning = false
+			}
+			continue
+		}
+		if _, inWindow := order[oleft]; !inWindow {
+			// oleft < left: o belongs to an earlier insertion point.
+			break
+		}
+		// oleft > left: o hangs off something inside the window; skip it.
+	}
+	return dest, nil
+}
+
+// integrateOpen places an insertion that has no right origin. It scans
+// forward from left while nodes hang off this boundary or off nodes already
+// scanned, and orders siblings that also have no right origin by actor; a
+// sibling with a right origin is treated as tighter-bound and skipped past.
+func (s *RGATreeSplit[V]) integrateOpen(
+	left *RGATreeSplitNode[V],
+	origin InsertOrigin,
+	editedAt *time.Ticket,
+) (*RGATreeSplitNode[V], error) {
+	if s.scanOrder == nil {
+		s.scanOrder = make(map[*RGATreeSplitNode[V]]int)
+	}
+	seen := s.scanOrder
+	clear(seen)
+	seen[left] = 0
+	dest, prev := left, left
+	scanning := false
+	for o := left.next; ; o = o.next {
+		if !scanning {
+			dest = prev
+		}
+		if o == nil {
+			break
+		}
+		prev = o
+		seen[o] = 1
+		if o.origin.Left == nil {
+			break
+		}
+		oleft, err := s.resolveLeft(o.origin.Left, origin.Left, left)
+		if err != nil {
+			return nil, err
+		}
+		if oleft == left {
+			if o.origin.Right != nil {
+				// o is bound before some node; it sits closer to left.
+				scanning = true
+				continue
+			}
+			if editedAt.ActorID().Compare(o.createdAt().ActorID()) < 0 {
+				return dest, nil
+			}
+			scanning = false
+			continue
+		}
+		if _, ok := seen[oleft]; !ok {
+			break
+		}
+	}
+	return dest, nil
+}
+
+// isUncontested reports, without any index lookup, whether the insertion
+// point found by findNodeWithSplit is already the left origin with the
+// right origin directly after it. That is the case for every local insert
+// and for any remote insert nothing was inserted next to concurrently, and
+// there the two-origin rule has nothing to decide.
+func (s *RGATreeSplit[V]) isUncontested(
+	left, right *RGATreeSplitNode[V],
+	origin InsertOrigin,
+	leftIsOrigin bool,
+) bool {
+	if !leftIsOrigin && (left.id.createdAt.Compare(origin.Left.createdAt) != 0 ||
+		left.id.offset+left.contentLen() != origin.Left.offset) {
+		return false
+	}
+	if origin.Right == nil {
+		// No right constraint: the scan stops at the first node that does
+		// not hang off this boundary. If the node right after the boundary
+		// is not a sibling, that is where it stops.
+		return right == nil || right.origin.Left == nil || !sameBoundary(right.origin.Left, origin.Left)
+	}
+	if right == nil {
+		return false
+	}
+	return right.id.Equal(origin.Right)
+}
+
+// originRightNode returns the piece starting at the given right origin,
+// splitting a piece if needed; nil means the end of the text.
+func (s *RGATreeSplit[V]) originRightNode(id *RGATreeSplitNodeID) (*RGATreeSplitNode[V], error) {
+	if id == nil {
+		return nil, nil
+	}
+	node := s.findFloorNode(id)
+	if node == nil {
+		return nil, fmt.Errorf("right origin not found: %s", id.ToTestString())
+	}
+	if node.id.offset == id.offset {
+		return node, nil
+	}
+	split, _, err := s.splitNode(node, id.offset-node.id.offset)
+	return split, err
 }
 
 func (s *RGATreeSplit[V]) findFloorNodePreferToLeft(id *RGATreeSplitNodeID) (*RGATreeSplitNode[V], error) {
@@ -934,6 +1346,20 @@ func (s *RGATreeSplit[V]) splitNode(
 		return node.next, diff, nil
 	}
 
+	if node.skelLen > 0 {
+		// A skeleton holds no value and is not in the GC registry: its
+		// remainder is a skeleton too and needs neither size accounting nor
+		// a GC pair.
+		splitNode := node.split(offset)
+		s.treeByIndex.UpdateWeight(splitNode.indexNode)
+		s.InsertAfter(node, splitNode)
+		if insNext := node.insNext; insNext != nil {
+			insNext.SetInsPrev(splitNode)
+		}
+		splitNode.SetInsPrev(node)
+		return splitNode, diff, nil
+	}
+
 	prevSize := node.DataSize()
 
 	splitNode := node.split(offset)
@@ -1013,6 +1439,11 @@ func (s *RGATreeSplit[V]) InsertAfter(prev, node *RGATreeSplitNode[V]) *RGATreeS
 	return node
 }
 
+// NextOf returns the node after the given node in the list, or nil.
+func (s *RGATreeSplit[V]) NextOf(node *RGATreeSplitNode[V]) *RGATreeSplitNode[V] {
+	return node.next
+}
+
 // InitialHead returns the head node of this RGATreeSplit.
 func (s *RGATreeSplit[V]) InitialHead() *RGATreeSplitNode[V] {
 	return s.initialHead
@@ -1057,6 +1488,8 @@ func (s *RGATreeSplit[V]) edit(
 	content V,
 	editedAt *time.Ticket,
 	versionVector time.VersionVector,
+	origin InsertOrigin,
+	local bool,
 ) (*RGATreeSplitNodePos, []GCPair, resource.DataSize, []restoreSpanValue[V], error) {
 	var diff resource.DataSize
 
@@ -1066,7 +1499,7 @@ func (s *RGATreeSplit[V]) edit(
 		return nil, s.drainPendingGCPairs(), diff, nil, err
 	}
 
-	fromLeft, fromRight, diffFrom, err := s.findNodeWithSplit(from, editedAt)
+	fromLeft, fromRight, diffFrom, fromAtBoundary, err := s.findNodeWithSplitAt(from, editedAt)
 	if err != nil {
 		diff.Add(diffTo)
 		return nil, s.drainPendingGCPairs(), diff, nil, err
@@ -1088,7 +1521,23 @@ func (s *RGATreeSplit[V]) edit(
 
 	// 03. insert a new node
 	if content.Len() > 0 {
-		inserted := s.InsertAfter(fromLeft, NewRGATreeSplitNode(NewRGATreeSplitNodeID(editedAt, 0), content))
+		insertAfter := fromLeft
+		// fromLeft ends exactly at the left origin when the skip loop did not
+		// move and the origin is from's own boundary, which is how both local
+		// edits and decoded remote edits build it. Knowing that here spares
+		// isUncontested a length count of fromLeft.
+		leftIsOrigin := fromAtBoundary && origin.Left != nil &&
+			origin.Left.offset == from.id.offset+from.relativeOffset &&
+			origin.Left.createdAt.Compare(from.id.createdAt) == 0
+		if origin.Left != nil && !s.isUncontested(fromLeft, fromRight, origin, leftIsOrigin) {
+			insertAfter, err = s.integrate(origin, editedAt, versionVector)
+			if err != nil {
+				return nil, s.drainPendingGCPairs(), diff, nil, err
+			}
+		}
+		node := NewRGATreeSplitNode(NewRGATreeSplitNodeID(editedAt, 0), content)
+		node.origin = origin
+		inserted := s.InsertAfter(insertAfter, node)
 		diff.Add(inserted.DataSize())
 
 		caretPos = NewRGATreeSplitNodePos(inserted.id, inserted.contentLen())
@@ -1281,7 +1730,29 @@ func (s *RGATreeSplit[V]) restore(
 
 			if piece != nil && pieceStart <= cursor {
 				overlapEnd := min(pieceEnd, span.end)
-				if piece.removedAt != nil {
+				if piece.skelLen > 0 {
+					// A skeleton is a collected tombstone: its content is
+					// gone, as a purged node's is in main. Refill it from the
+					// span in place, which is the original slot.
+					target, _, isoErr := s.isolateRange(piece, cursor, overlapEnd)
+					if isoErr != nil {
+						return nil, nil, nil, isoErr
+					}
+					target.value = subValue(span.value, cursor-span.start, overlapEnd-span.start)
+					target.skelLen = 0
+					target.SetRemovedAt(nil)
+					// The collected removal was stable, as a purged node's
+					// is: record the same stand-in removal and cancel as the
+					// recreate path below, so the refilled node answers
+					// isRemovedInView as a recreated one would.
+					stable := time.NewTicket(0, 0, executedAt.ActorID())
+					target.recordRemoval(stable)
+					target.cancelRemoval(stable, executedAt)
+					s.trackCancelled(target)
+					s.treeByIndex.Splay(target.indexNode)
+					recreated = append(recreated, target)
+					chainAnchor = target
+				} else if piece.removedAt != nil {
 					target, _, isoErr := s.isolateRange(piece, cursor, overlapEnd)
 					if isoErr != nil {
 						return nil, nil, nil, isoErr
@@ -1616,7 +2087,6 @@ func (s *RGATreeSplit[V]) ToTestString() string {
 	return builder.String()
 }
 
-// Purge physically purge the given node from RGATreeSplit.
 // PurgeBarrierAt implements GCBarrier[GCChild]. findNodeWithSplit skips forward
 // while node.next was created after the incoming edit, so a tombstone whose
 // createdAt precedes the edit stops that walk. Unlinking it hands the next node
@@ -1632,26 +2102,108 @@ func (s *RGATreeSplit[V]) PurgeBarrierAt(child GCChild) *time.Ticket {
 
 func (s *RGATreeSplit[V]) Purge(child GCChild) error {
 	node := child.(*RGATreeSplitNode[V])
+	if node.skelLen > 0 {
+		return nil
+	}
 	if s.cancelled != nil {
 		delete(s.cancelled, node)
 	}
 
-	s.treeByIndex.Delete(node.indexNode)
-	s.treeByID.Remove(node.id)
-
-	node.prev.next = node.next
-	if node.next != nil {
-		node.next.prev = node.prev
-	}
-	node.prev, node.next = nil, nil
-
-	if node.insPrev != nil {
-		node.insPrev.insNext = node.insNext
-	}
-	if node.insNext != nil {
-		node.insNext.insPrev = node.insPrev
-	}
-	node.insPrev, node.insNext = nil, nil
+	// Keep the node as a skeleton instead of unlinking it. Insertion origins
+	// name nodes by ID, and integrate's window is "the nodes between the two
+	// origins"; both have to look the same on a replica that collected this
+	// tombstone and on one that did not, or the two place a concurrent insert
+	// differently. Only the content and attributes go. The attribute GC
+	// pairs, if any, keep pointing at the old value, so they still purge.
+	node.skelLen = node.contentLen()
+	node.value = s.skeletonValue()
+	// Nothing reads a skeleton's removal time (removal, canStyle, restore and
+	// GC all branch on skelLen first), so every skeleton shares one stand-in
+	// ticket. A snapshot then needs no removed_at for it, and a replica that
+	// loaded the skeleton from a snapshot holds the same state as the one
+	// that collected it. The removal ledger goes with it.
+	node.SetRemovedAt(time.InitialTicket)
+	s.mergeSkeletons(node)
 
 	return nil
+}
+
+// skeletonValue returns the empty value skeletons share.
+func (s *RGATreeSplit[V]) skeletonValue() V {
+	if !s.hasSkelValue {
+		if v, ok := any(s.initialHead.value).(interface{ skeletonValue() RGATreeSplitValue }); ok {
+			s.skelValue = v.skeletonValue().(V)
+		} else {
+			s.skelValue = s.initialHead.value.DeepCopy().(V)
+		}
+		s.hasSkelValue = true
+	}
+	return s.skelValue
+}
+
+// mergeSkeletons folds a skeleton into adjacent skeletons that continue the
+// same insertion (same createdAt, contiguous offsets, adjacent in the list).
+// Pieces of one insertion are split on demand and their fragmentation
+// already differs between replicas, so placement cannot depend on it; the
+// merged node keeps the leftmost piece's ID and origin, and a later lookup
+// inside it splits it again.
+func (s *RGATreeSplit[V]) mergeSkeletons(node *RGATreeSplitNode[V]) {
+	if p := node.prev; p != nil && canMergeSkeletons(p, node) {
+		s.absorbSkeleton(p, node)
+		node = p
+	}
+	if n := node.next; n != nil && canMergeSkeletons(node, n) {
+		s.absorbSkeleton(node, n)
+	}
+}
+
+func canMergeSkeletons[V RGATreeSplitValue](a, b *RGATreeSplitNode[V]) bool {
+	return a.skelLen > 0 && b.skelLen > 0 && a.next == b && b.insPrev == a &&
+		a.id.createdAt.Compare(b.id.createdAt) == 0 &&
+		a.id.offset+a.skelLen == b.id.offset
+}
+
+// absorbSkeleton merges b (a.next) into a.
+func (s *RGATreeSplit[V]) absorbSkeleton(a, b *RGATreeSplitNode[V]) {
+	a.skelLen += b.skelLen
+
+	s.treeByIndex.Delete(b.indexNode)
+	s.treeByID.Remove(b.id)
+
+	a.next = b.next
+	if b.next != nil {
+		b.next.prev = a
+	}
+	b.prev, b.next = nil, nil
+
+	a.insNext = b.insNext
+	if b.insNext != nil {
+		b.insNext.insPrev = a
+	}
+	b.insPrev, b.insNext = nil, nil
+}
+
+// pieceKey is an allocation-free map key for a piece's start ID.
+type pieceKey struct {
+	lamport   int64
+	delimiter uint32
+	actor     time.ActorID
+	offset    int
+}
+
+func pieceKeyOf(id *RGATreeSplitNodeID) pieceKey {
+	return pieceKey{
+		lamport:   id.createdAt.Lamport(),
+		delimiter: id.createdAt.Delimiter(),
+		actor:     id.createdAt.ActorID(),
+		offset:    id.offset,
+	}
+}
+
+// pieceKeyOf0 is pieceKeyOf that maps nil to a key no piece has.
+func pieceKeyOf0(id *RGATreeSplitNodeID) pieceKey {
+	if id == nil {
+		return pieceKey{offset: -1}
+	}
+	return pieceKeyOf(id)
 }

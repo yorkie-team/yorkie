@@ -129,6 +129,15 @@ message Operation {
     // are addressed by original identity so a revived neighbour keeps its
     // relative order across chained undo/redo. restore_mode selects direction.
     repeated RestoreSpan retombstone_spans = 10;
+    // Insertion context for the two-origin placement rule.
+    // has_origin distinguishes "no origin" from "right origin = end".
+    bool has_origin = 11;
+    TextNodeID origin_left = 12;
+    TextNodeID origin_right = 13;
+    // origin_left is omitted when it equals from (the usual case); the
+    // receiver derives it. origin_right_at_from marks a right origin that is
+    // the character at from itself.
+    bool origin_right_at_from = 14;
   }
   message Style {
     TimeTicket parent_created_at = 1;
@@ -163,6 +172,11 @@ message Operation {
     // written before this field existed, which replays through the simulation
     // that reconstructed them from executed_at and the content count.
     repeated TimeTicket split_tickets = 11;
+    // Right insertion origin of the contents. The left origin
+    // is the from position itself, so only the right is carried. has_origin
+    // distinguishes "no origin" from "right origin = end of the parent".
+    bool has_origin = 12;
+    TreeNodeID origin_right = 13;
   }
   message TreeStyle {
     TimeTicket parent_created_at = 1;
@@ -317,6 +331,22 @@ message TextNode {
   // undo cancelling only its own actor's removal; a change to that rule needs
   // a new field, not a new reading of this one.
   repeated TimeTicket removal_events = 6;
+  // Field 6 is taken by removal_events in yorkie-js-sdk; the origin fields
+  // start at 7 to stay wire-compatible with it.
+  bool has_origin = 7;
+  TextNodeID origin_left = 8;
+  TextNodeID origin_right = 9;
+  // Bits for origins that are the node's neighbours in the encoded order,
+  // whose IDs are then omitted: 1 = left is the end of the previous node,
+  // 2 = left is this node itself (a split continuation), 4 = right is the
+  // next node, 8 = right is the previous node's right origin (a run typed
+  // forward shares one right origin).
+  uint32 origin_flags = 10;
+  // skeleton_len > 0 marks a garbage-collected tombstone kept only for its
+  // position: value and attributes are dropped, the ID range
+  // [id.offset, id.offset + skeleton_len) and the origins are kept so
+  // insertion origins that name it resolve the same on every replica.
+  uint32 skeleton_len = 11;
 }
 
 message TextNodeID {
@@ -342,6 +372,22 @@ message TreeNode {
   // the merge-time causal boundary for SplitElement. See
   // docs/design/concurrent-merge-split.md for details.
   TimeTicket merged_at = 10;
+  // Insertion origins for the two-origin placement rule.
+  // has_origin distinguishes "no origin" (legacy node) from an origin whose
+  // left is the start of the parent (origin_left unset) or whose right is
+  // the end of the parent (origin_right unset). Fields 1-10 match
+  // yorkie-js-sdk main; 11-14 are free there.
+  bool has_origin = 11;
+  TreeNodeID origin_left = 12;
+  TreeNodeID origin_right = 13;
+  // 14 is held for origin_flags (neighbour-relative origin compression, as
+  // TextNode.origin_flags does); not written yet.
+  reserved 14;
+  // skeleton_len > 0 marks a garbage-collected tombstone kept in its parent's
+  // child list only for its position: its value, attributes and subtree are
+  // gone. For a text node it is the UTF-16 length of the ID range it still
+  // covers; an element writes 1.
+  uint32 skeleton_len = 15;
 }
 
 message TreeNodes {

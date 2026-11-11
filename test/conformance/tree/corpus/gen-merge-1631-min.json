@@ -2,7 +2,7 @@
   "v": 1,
   "id": "gen-merge-1631-min",
   "issues": ["yorkie#2155"],
-  "status": { "go": "known-error", "js": "known-error" },
+  "status": { "go": "pass", "js": "known-error" },
   "note": "Minimised from gen-merge-n2-s24-1631. Off mode converges; minvv mode throws 'node not found' on d1. Likely cause: GC collected a node that a concurrent merge still refers to, because the replicas disagreed on which nodes the merge removed. The error message has node addresses, so only the result is pinned.",
   "replicas": 2,
   "init": "abcd",

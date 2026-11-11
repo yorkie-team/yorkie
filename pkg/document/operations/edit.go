@@ -72,7 +72,18 @@ type Edit struct {
 	// are addressed by original identity so a revived neighbor keeps its
 	// relative order across chained undo/redo. restoreMode selects direction.
 	retombstoneSpans []*crdt.RestoreSpan
+
+	// origin is the insertion context (left boundary + right origin) used by
+	// the two-origin placement rule. A zero origin keeps the createdAt-only
+	// rule.
+	origin crdt.InsertOrigin
 }
+
+// SetOrigin records the insertion context of this edit.
+func (e *Edit) SetOrigin(origin crdt.InsertOrigin) { e.origin = origin }
+
+// Origin returns the insertion context of this edit.
+func (e *Edit) Origin() crdt.InsertOrigin { return e.origin }
 
 // NewEdit creates a new instance of Edit.
 func NewEdit(
@@ -268,8 +279,8 @@ func (e *Edit) Execute(root *crdt.Root, source OpSource, versionVector time.Vers
 			}
 		}
 
-		_, pairs, diff, removedValues, removedSpans, err := obj.Edit(
-			e.from, e.to, e.content, e.attributes, e.executedAt, versionVector)
+		_, pairs, diff, removedValues, removedSpans, err := obj.EditWithOrigin(
+			e.from, e.to, e.content, e.attributes, e.executedAt, versionVector, e.origin, false)
 		for _, pair := range pairs {
 			root.RegisterGCPair(pair)
 		}
