@@ -512,7 +512,10 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           node "$RUNNER_TEMP/agent-tools/fix-guard.mjs" allowed "$PR" --head "$HEAD_SHA" --out "$RUNNER_TEMP/fix-scope.txt"
-          printf '#!/bin/sh\nexec node "%s" prepush --allowed "%s"\n' \
+          # The hook names the staged configuration itself: it is run by git
+          # from the fixer's shell, which need not carry this job's environment.
+          printf '#!/bin/sh\nexport AGENT_HARNESS_CONFIG_DIR="%s"\nexec node "%s" prepush --allowed "%s"\n' \
+            "$RUNNER_TEMP/agent-harness" \
             "$RUNNER_TEMP/agent-tools/fix-guard.mjs" "$RUNNER_TEMP/fix-scope.txt" > .git/hooks/pre-push
           chmod +x .git/hooks/pre-push
 

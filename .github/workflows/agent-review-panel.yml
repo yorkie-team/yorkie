@@ -2201,7 +2201,10 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           node "$RUNNER_TEMP/agent-tools/fix-guard.mjs" allowed "$PR" --head "$HEAD_SHA" --out "$RUNNER_TEMP/fix-scope.txt"
-          printf '#!/bin/sh\nexec node "%s" prepush --allowed "%s"\n' \
+          # The hook names the staged configuration itself: it is run by git
+          # from the fixer's shell, which need not carry this job's environment.
+          printf '#!/bin/sh\nexport AGENT_HARNESS_CONFIG_DIR="%s"\nexec node "%s" prepush --allowed "%s"\n' \
+            "$RUNNER_TEMP/agent-harness" \
             "$RUNNER_TEMP/agent-tools/fix-guard.mjs" "$RUNNER_TEMP/fix-scope.txt" > .git/hooks/pre-push
           chmod +x .git/hooks/pre-push
 
@@ -2430,7 +2433,7 @@ jobs:
             from each file; anything else in it is discarded.
 
             ```
-            node ${{ runner.temp }}/agent-tools/fix-report.mjs post ${{ needs.review-panel.outputs.pr }} \
+            AGENT_HARNESS_CONFIG_DIR=${{ runner.temp }}/agent-harness node ${{ runner.temp }}/agent-tools/fix-report.mjs post ${{ needs.review-panel.outputs.pr }} \
               --emit ${{ runner.temp }}/fix-report.md \
               --head ${{ github.event.workflow_run.head_sha }} \
               --fixed "<lens>::<path/from/the/finding>::<the finding's own wording, copied>::<what you changed, with file:line>" \
@@ -2449,7 +2452,7 @@ jobs:
               independent adjudicator:
 
               ```
-              node ${{ runner.temp }}/agent-tools/rebuttal.mjs post ${{ needs.review-panel.outputs.pr }} \
+              AGENT_HARNESS_CONFIG_DIR=${{ runner.temp }}/agent-harness node ${{ runner.temp }}/agent-tools/rebuttal.mjs post ${{ needs.review-panel.outputs.pr }} \
                 --emit ${{ runner.temp }}/rebuttals \
                 --lens <lens-id> --file <path/from/the/finding> \
                 --summary "<the finding's own wording, copied>" \
