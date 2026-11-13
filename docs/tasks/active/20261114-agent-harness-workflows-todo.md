@@ -41,6 +41,20 @@ change here beyond the ones listed in the pull request.
 - [x] Repository-shaped assertions moved from the package's tests to
       `repo.test.mjs`
 - [x] `npm test`, `npm run test:repo`, actionlint, `scripts/test`, `make verify`
+- [x] Review round: clear every side-directory path before checking out into
+      it, and make the guard require it; configured values reach the
+      issue-to-PR prompt through `env:` and quoted placeholders, not spliced
+      into the heredoc; a `steps.cfg.outputs.*` read in a job with no reader
+      fails by name; the panel's `gate` job gets `contents: read`
+- [x] Review round: frames that were still this repository's — the
+      kept-reproducer heading and closing line, the API-change sentence, the
+      "do not run" sentence and the licence rule as optional sentences, a
+      CI-fix note; fragment and sentence shapes validated on load; a frame
+      table in the README
+- [x] `agent-scripts.yml` runs weekly, so a linter or Go bump in a file its
+      path filters do not name is checked against the action's pins
+- [x] Prompts rendered from a candidate configuration for the other
+      repository and read against its current prompts
 - [ ] A live run of each of the five agent jobs after merge (the composite
       action and the multi-line step outputs have not run on a runner)
 - [ ] Review rounds on the pull request
@@ -51,5 +65,7 @@ change here beyond the ones listed in the pull request.
 - `redact.extraPatterns` and `ask.permittedMcpTools` are still read by nothing.
 - `agent-scripts.yml` cannot take path filters from configuration, so a change
   to a file only `repo.test.mjs` reads (the Makefile, `go.mod`) does not start
-  that lane.
+  that lane; the weekly run is what catches it.
+- The agent can rewrite the toolchain action's file before the job's post
+  phase. Accepted, and written down beside the step and in the README.
 - Comments that cite this repository's incidents by number stay as history.

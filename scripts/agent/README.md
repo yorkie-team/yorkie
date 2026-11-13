@@ -45,12 +45,7 @@ else as JSON).
 | `review.sourceGlobs` | `lenses/lenses.json`, as `$config:review.sourceGlobs` | wired |
 | `review.sharedPrimitivesNote` | `lenses/design-fit.md`, as `{{config:review.sharedPrimitivesNote}}` | wired |
 | `review.diffExcludes` | the three reviewed-diff steps (panel, panel delta, on-demand) | wired |
-| `fixer.verifyCommand`, `fixer.verifyDescription`, `fixer.verifyFailureHint`, `fixer.integrationWarning`, `fixer.integrationRerunBy`, `fixer.keepReproducerAs`, `fixer.disabledTestForms` | the fix, panel-fix and CI-fix prompts | wired |
-| `fixer.generatedCodeNote` | those three prompts and the issue-to-PR prompt | wired |
-| `fixer.licenceScope`, `fixer.todoTrackingLine`, `fixer.implementVerifyStep` | the issue-to-PR prompt | wired |
-| `fixer.replyVerifyInstruction` | the review-reply prompt | wired |
-| `fixer.toolchainSteps` | the issue-to-PR job's "stopped before the agent" report | wired |
-| `fixer.lastResortDiagnosis` | the CI-fix arm, when no diagnosis can be read | wired |
+| `fixer.*` | the agents' prompts and two messages — see "What the prompts say" below | wired |
 | `tests.rules`, `tests.go.*` | `test-removals.mjs`, `fix-guard.mjs` | wired |
 | `fixGuard.replicatedRuleGlobs`, `fixGuard.replicatedRuleNotice`, `fixGuard.counterpartRepo` | `fix-guard.mjs` | wired |
 | `redact.extraPatterns` | — | not wired yet |
@@ -59,6 +54,53 @@ else as JSON).
 The two keys marked "not wired yet" are required by the schema and read by
 nothing; editing one changes nothing. `repo.appSlug` must agree with the
 logins: `<slug>[bot]` has to be in both `repo.appLogins` and `repo.botLogins`.
+
+`tests.rules` chooses from the rule sets that exist, `go` and `vitest`.
+Another test framework needs a rule set written in `test-removals.mjs` first;
+naming one here does not create it.
+
+### What the prompts say
+
+Each `fixer.*` value is dropped into a sentence a workflow owns. The table
+shows the sentence, with the value in angle brackets, so a configuration can
+be written from it without reading the workflows. Two shapes, checked on load:
+
+- a **fragment** continues the workflow's sentence: one line, no leading
+  punctuation, no trailing `.`, `,`, `;`, `:`, `!` or `?`;
+- **sentences** stand on their own: one line, starting with a capital, a
+  digit, a backtick or a quote, and ending with `.`, `!` or `?`.
+
+A key marked optional may be `""`, and what the table shows in square
+brackets is then left out whole.
+
+| Key | Shape | Where it lands | This repository's value |
+|---|---|---|---|
+| `verifyCommand` | fragment | fix, panel-fix, CI-fix: "Run `<verifyCommand>` ONCE at the end to confirm green — not after every edit." | `make verify` |
+| `verifyDescription` | fragment | the next sentence: "It is `<verifyDescription>`, which is the whole of what this job can verify." | `` `make lint`, the Apache licence-header check, the `go fix` check and `go test ./...` `` |
+| `verifyFailureHint` | sentences, optional | straight after: "…can verify.[ `<verifyFailureHint>`]" | If the `go fix` check or the `modernize` lane fails, run `make modernize` rather than editing the idioms by hand. |
+| `integrationWarning`, `integrationRerunBy` | fragments, optional as a pair | straight after: "[ `<integrationWarning>`, and the push below re-runs `<integrationRerunBy>` anyway.]" ("the push" in the CI-fix prompt) | Do NOT run `make test`: it needs a MongoDB this job does not stand up / the full integration lane |
+| `ciFailureNote` | sentences, optional | CI-fix only, straight after that: "[ `<ciFailureNote>`]" | empty |
+| `generatedCodeNote` | sentences, optional | fix, panel-fix, CI-fix: a list item of its own, "[- `<generatedCodeNote>`]". Issue-to-PR: opens the last paragraph | Generated protobuf under api/yorkie/v1/ cannot be changed from this run: hand-editing it is forbidden, and `make proto` needs buf and two protoc plugins that are not installed here. |
+| `apiChangeNote` | sentences, optional | issue-to-PR, the last paragraph: "[`<generatedCodeNote>` `<apiChangeNote>`]" — either alone is still a paragraph | If the issue requires an API change, say so on the issue and stop rather than working around it. |
+| `keepReproducerAs` | fragment | fix, panel-fix: "If a test you wrote (or found) still fails, the finding is not fixed. `<keepReproducerAs>`, and report that item `--skipped` with the reason." | Go has no `it.fails`, so keep the test and make its first statement `t.Skip("still reproduces: <finding>")`, with a comment naming the finding |
+| `disabledTestForms` | fragment | the same item: "The pipeline records every test a fix round removes or `<disabledTestForms>`, and shows it to the next round's adjudicator…" | switches off with `t.Skip`/`t.Skipf`/`t.SkipNow` |
+| `licenceScope` | sentences, optional | issue-to-PR: "3. IMPLEMENT: make the change.[ `<licenceScope>`] Commit subject <= 70 chars…" | Apache 2.0 licence header on every new Go file; every package needs a package comment. |
+| `todoTrackingLine` | sentences, optional | issue-to-PR: "The todo starts with a `**Created**: YYYY-MM-DD` line.[ `<todoTrackingLine>`]" | empty |
+| `implementVerifyStep` | sentences | issue-to-PR, the whole of step 5: "5. `<implementVerifyStep>`". Say what to run, what not to run, and that CI runs the rest | LET CI VERIFY — do NOT run `make test`, `make test-complex`, `make bench` or `make coverage`: … |
+| `replyVerifyInstruction` | fragment, optional | review-reply: "Act on it if it is right: edit the branch,[ `<replyVerifyInstruction>`,] commit with the trailer…" | empty |
+| `toolchainSteps` | fragment | the issue-to-PR job's report: "This run stopped after setup and before the agent started — `<toolchainSteps>`, or fetching the issue." | the Go toolchain, the linter install |
+| `lastResortDiagnosis` | sentences | CI-fix, when nothing could be read: "No failed-step log could be read for run N. `<lastResortDiagnosis>`" | Re-run the failing lane locally: `make verify` (…), then `make build`. |
+
+The three issue-to-PR values may use that prompt's own placeholders, which
+are filled in after them: `__ISSUE_NUMBER__`, `__TODAY__` (`YYYYMMDD`),
+`__ISSUE_FILE__` and `__PR_FILE__`. A tracking line that names the issue is
+written `` `Tracked as #__ISSUE_NUMBER__` ``.
+
+A repository on another toolchain fills the same frames. With cargo, say:
+`verifyCommand` is `cargo fmt --check && cargo clippy -- -D warnings && cargo
+test` (or the one script that runs them), `verifyDescription` is "the format
+check, clippy with warnings denied and the test suite", and the integration
+pair is empty if no suite needs a service.
 
 ### How a workflow reads a value
 
@@ -101,13 +143,24 @@ five agent jobs run, and the only local action a workflow may use. It runs
 with a token in the environment and, in four of the five jobs, a pull
 request's branch in the workspace, so:
 
-- it pins every version it installs and runs nothing from the working tree;
+- it executes nothing the branch wrote: no build file's install target, no
+  package manager's lifecycle scripts, hooks or branch-supplied settings;
+- the tools it fetches itself are pinned in the action. Where the toolchain
+  has to install the branch's dependencies, it installs exactly what the
+  lockfile names, with scripts off;
 - it saves no cache;
-- those four jobs check `main`'s copy out into `.trusted-toolchain` and use it
-  from there, never from the workspace. The directory stays until the job ends
-  (the runner re-reads a local action before its post steps) and is listed in
-  `.git/info/exclude`. The issue-to-PR job uses it from the workspace, which is
-  still `main` at that step.
+- those four jobs clear `.trusted-toolchain`, check `main`'s copy out into it
+  and use it from there, never from the workspace. The directory stays until
+  the job ends (the runner re-reads a local action before its post steps) and
+  is listed in `.git/info/exclude`. The issue-to-PR job uses it from the
+  workspace, which is still `main` at that step.
+
+The workflows cannot check the first three: the action is a different file in
+every repository. Each repository's `repo.test.mjs` pins them for its own
+action. Here it pins the linter version to the Makefile's `tools` target, the
+Go version to `go.mod`, `cache: false`, and that the action never runs
+`make tools`. `agent-scripts.yml` runs weekly as well as on change, because
+the Makefile and `go.mod` are not among the paths that start it.
 
 ### Globs
 
@@ -147,9 +200,14 @@ repository that adopts the harness follows them:
 
 - The default branch is `main`. Workflows check trusted code out with
   `ref: main`, and the scripts' base-branch arguments default to it.
-- The repository is public. Two jobs that hold no `contents` permission (the
-  issue-to-PR job, and the panel's `gate`) check `main` out with the ambient
-  token, which can read a public repository and nothing else.
+- The repository is public. The issue-to-PR job holds no `contents`
+  permission and checks `main` out with the ambient token, which can read a
+  public repository and nothing else. A private repository would have to
+  grant that job `contents: read`.
+- CI's lane reports, where `ci.laneReports` is true, are an artifact named
+  `ci-lane-reports` rendered by `scripts/ci/summarize-ci.mjs`.
+- The issue-to-PR prompt names `CLAUDE.md`, `CONTRIBUTING.md`, `docs/tasks/`,
+  `docs/design/TEMPLATE.md` and `.github/PULL_REQUEST_TEMPLATE.md`.
 - The CI workflow is `.github/workflows/ci.yml`, named `CI`. The ready gate
   reads that file's runs, and the panel and the CI-fix arm trigger on it.
 - `.github/workflows/**`, `.github/actions/**`, `.github/CODEOWNERS`,
@@ -199,7 +257,9 @@ level.
 It treats a local action the same way as a script: `uses: ./…` is allowed for
 `.github/actions/agent-toolchain` alone, from a tree that is trusted at that
 step. A checkout with no `ref:` is trusted only in a workflow that cannot be
-started by `workflow_dispatch` or a pull request event.
+started by `workflow_dispatch` or a pull request event. A checkout into a side
+directory of a workspace that holds a pull request's tree must be preceded by
+an `rm -rf` of that path: the branch could have committed a symlink there.
 
 ### What this guard does not see
 
@@ -219,6 +279,11 @@ around it, and these pass it:
   `"uses":`), flow-style mappings, anchors.
 - What the toolchain action does once it runs. Where its file came from is
   checked; the actions it nests and the commands it runs are not.
+- What happens to `.trusted-toolchain` after the agent starts. The agent can
+  rewrite the action's file before the job's post phase. The post steps that
+  run were recorded when the action first ran, and an agent with a shell can
+  already rewrite the runner's own action cache, so this is accepted rather
+  than closed.
 
 Workflow files are CI-defining and CODEOWNER-ed, so every edit to one still
 needs a human reviewer. The list above is what that reviewer has to look for,

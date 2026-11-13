@@ -33,6 +33,26 @@
 - `workflow_dispatch` runs from the ref the dispatcher picked. A checkout
   with no `ref:` there is the branch under test, not the default branch.
 
+- A side directory inside a pull request's tree is a path the pull request
+  chose the contents of. `actions/checkout` follows a symlink committed there
+  and empties what it points at, so the path is removed first — after the
+  checkout that could have planted it, which is the half a guard has to check.
+- A configured value interpolated into a `run:` script is shell source, even
+  inside a quoted heredoc: a line equal to the delimiter ends it. Pass it
+  through `env:` and substitute it as data. In bash 5.2 the replacement must
+  be quoted, or `&` in it expands to the text being replaced.
+- A frame is only neutral if it still reads true with the other repository's
+  value in it. "A skipped reproducer … is honest" was a frame, and false for a
+  repository whose kept form is an expected failure and whose forbidden form
+  is a skip. Render the other repository's prompts before calling a frame
+  shared.
+- A sentence that only follows from an optional value belongs to that value.
+  "If the issue requires an API change, stop" after an empty generated-code
+  note tells an agent to refuse every API-changing issue.
+- A text guard that recognises a read by the step it names passes a read that
+  names a step the job does not have. Give the reader one fixed id and flag
+  that id wherever no reader stands behind it.
+
 ## Merging
 
 Runs that started before the merge keep the old workflow file but check out
