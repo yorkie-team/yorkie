@@ -590,6 +590,16 @@ the job is recreated against the new table at the offset where it stopped:
 
 1. Create `<t>_p` and its sync MV. MV names are unique per database, not per
    table, so it takes a temporary name (`<mv>_p`) until the old table is gone.
+   Wait for the build to reach `FINISHED` before the copy in step 3. The copy
+   creates the day partitions, and a partition created while the build is
+   pending conflicts with it: on 3.3.22 the build is `CANCELLED` ("Alter job
+   conflicts with partition creation") and the table is left without its MV,
+   or the `INSERT` itself fails with "number of partition's index is not equal
+   with schema's". `desc <t>_p all` is not the wait, since it lists the index
+   while the build is still running. Read the build state instead: in `SHOW
+   ALTER MATERIALIZED VIEW`, the latest row whose `TableName` and
+   `RollupIndexName` both match. 3.3.22 ignores a `WHERE TableName = ...`
+   filter there.
 2. `PAUSE ROUTINE LOAD FOR <t>`; record `Progress` — the last *consumed*
    offset per Kafka partition.
 3. Copy only what the TTL keeps: `INSERT INTO <t>_p (<cols>) SELECT <cols>
@@ -608,6 +618,10 @@ the job is recreated against the new table at the offset where it stopped:
 6. Once the long windows are verified, drop the old table and `ALTER TABLE <t>
    RENAME ROLLUP <mv>_p <mv>`. Renaming first would leave two MVs of the same
    name, since `RENAME ROLLUP` skips the uniqueness check `CREATE` enforces.
+   Run the two back to back. The analytics chart's hook runs `CREATE
+   MATERIALIZED VIEW <mv>` on every upgrade, and it fails today only because
+   the old table still holds `<mv>`. An upgrade that lands between the drop and
+   the rename builds a second, identical MV on `<t>`.
 
 Rehearsed on 3.3.22 with a producer writing through the cutover: every message
 landed once, none twice. Anything that resumes paused jobs automatically has
