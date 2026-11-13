@@ -1,0 +1,33 @@
+# The toolchain an agent job needs before it can verify a change in THIS
+# repository. One of the per-repository files of the agent harness: the
+# `agent-*.yml` workflows are the same in every repository that runs the
+# harness, and each calls this action where it used to carry the setup steps
+# inline (scripts/agent/README.md).
+#
+# IT RUNS WITH A TOKEN IN THE ENVIRONMENT AND AN UNTRUSTED BRANCH IN THE
+# WORKSPACE. In the fix jobs the workspace is the pull request's branch and an
+# App token is already minted, so nothing here may execute what the branch
+# wrote. `make tools` is exactly that: five `go install` lines a pull request
+# can rewrite. So every version is pinned in THIS file, and the callers take
+# this file from `main`, never from the branch (config-wiring.test.mjs holds
+# them to it). It fails in the safe direction: a pin that goes stale against
+# the Makefile shows up as a lint disagreement, not as a leaked credential.
+#
+# Keep in sync with the Makefile's `tools` target.
+# `.github/agent-harness/repo.test.mjs` pins the linter version to it.
+name: Agent toolchain
+description: Go and the pinned linter an agent job verifies with, installed without running anything from the working tree.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v6
+      with:
+        go-version: "1.26"
+        # NO CACHE. setup-go's post step would SAVE `~/go/pkg/mod` and the
+        # build cache after the agent ran, with whatever the agent left there,
+        # under a key the agent controls through `go.sum` — and `ci.yml` and the
+        # Docker publish restore by the same key on `main`.
+        cache: false
+    - name: Install the linter (pinned here, not read from the branch)
+      shell: bash
+      run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
