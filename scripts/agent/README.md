@@ -4,9 +4,11 @@ The `@claude` command surface: the verb router, the review-panel orchestrator
 and its lenses, and the credential, state, metrics and comment helpers that the
 `agent-*.yml` workflows call.
 
-Everything in this directory is meant to be the same bytes in every repository
-that runs the harness. What differs per repository lives in
-`.github/agent-harness/` and is read only through `config.mjs`.
+Everything in this directory, and every `.github/workflows/agent-*.yml`, is
+meant to be the same bytes in every repository that runs the harness. What
+differs per repository lives in two places: `.github/agent-harness/`, read
+only through `config.mjs`, and one composite action,
+`.github/actions/agent-toolchain`.
 
 ## Configuration
 
@@ -31,27 +33,81 @@ else as JSON).
 
 | Key | Read by | Status |
 |---|---|---|
-| `repo.name` | `review-panel.mjs` (lens prompt), `capture-meta.mjs` (schema id) | wired |
-| `repo.botLogins` | `rounds.mjs`, `metrics.mjs`, `set-state.mjs` | wired |
+| `repo.name` | `review-panel.mjs` (lens prompt), `capture-meta.mjs` (schema id), the issue-to-PR prompt | wired |
+| `repo.appSlug` | workflows: decline messages, `allowed_bots`, the App's own marker | wired |
+| `repo.botLogins` | `rounds.mjs`, `metrics.mjs`, `set-state.mjs`; workflows: the gate, throttle and page allow-lists | wired |
 | `repo.appLogins` | `rebuttal.mjs` | wired |
-| `docs.commandVerbsRef` | `branch-protection.mjs`, `workflow-presence.mjs` | wired |
+| `docs.commandVerbsRef` | `branch-protection.mjs`, `workflow-presence.mjs`; workflows: decline messages | wired |
 | `ci.definingPaths` | `checks.mjs` | wired |
 | `ci.gateLabel`, `ci.handoffSummary` | `checks.mjs`, for `mark-ready.mjs` | wired |
-| `ci.laneReports` | — | not wired yet |
+| `ci.laneReports` | `agent-iterate-ci.yml`: whether the CI-fix arm downloads and renders lane reports before the log tail | wired |
 | `review.classRules.code-adjacent`, `review.classRules.policy` | `review-panel.mjs` | wired |
 | `review.sourceGlobs` | `lenses/lenses.json`, as `$config:review.sourceGlobs` | wired |
 | `review.sharedPrimitivesNote` | `lenses/design-fit.md`, as `{{config:review.sharedPrimitivesNote}}` | wired |
-| `review.diffExcludes` | — | not wired yet |
-| `fixer.verifyCommand`, `fixer.verifyDescription`, `fixer.forbiddenCommands`, `fixer.targetedTestHint`, `fixer.generatedCodeNote`, `fixer.keepReproducerAs`, `fixer.licenceScope`, `fixer.todoTrackingLine` | — | not wired yet |
+| `review.diffExcludes` | the three reviewed-diff steps (panel, panel delta, on-demand) | wired |
+| `fixer.verifyCommand`, `fixer.verifyDescription`, `fixer.verifyFailureHint`, `fixer.integrationWarning`, `fixer.integrationRerunBy`, `fixer.keepReproducerAs`, `fixer.disabledTestForms` | the fix, panel-fix and CI-fix prompts | wired |
+| `fixer.generatedCodeNote` | those three prompts and the issue-to-PR prompt | wired |
+| `fixer.licenceScope`, `fixer.todoTrackingLine`, `fixer.implementVerifyStep` | the issue-to-PR prompt | wired |
+| `fixer.replyVerifyInstruction` | the review-reply prompt | wired |
+| `fixer.toolchainSteps` | the issue-to-PR job's "stopped before the agent" report | wired |
+| `fixer.lastResortDiagnosis` | the CI-fix arm, when no diagnosis can be read | wired |
 | `tests.rules`, `tests.go.*` | `test-removals.mjs`, `fix-guard.mjs` | wired |
 | `fixGuard.replicatedRuleGlobs`, `fixGuard.replicatedRuleNotice`, `fixGuard.counterpartRepo` | `fix-guard.mjs` | wired |
 | `redact.extraPatterns` | — | not wired yet |
 | `ask.permittedMcpTools` | — | not wired yet |
 
-The twelve keys marked "not wired yet" are required by the schema and read by
-nothing. They record the values the workflow prompts and diff commands still
-carry as literals; the workflows are to read them from here in a later change.
-Until then, editing one changes nothing.
+The two keys marked "not wired yet" are required by the schema and read by
+nothing; editing one changes nothing. `repo.appSlug` must agree with the
+logins: `<slug>[bot]` has to be in both `repo.appLogins` and `repo.botLogins`.
+
+### How a workflow reads a value
+
+Through `workflow-values.mjs`, and no other way. A trusted step asks for values
+by name and they become its outputs:
+
+```yaml
+- name: Read the harness configuration
+  id: cfg
+  run: node ./scripts/agent/workflow-values.mjs verify_command docs_ref >> "$GITHUB_OUTPUT"
+```
+
+A later step writes `${{ steps.cfg.outputs.verify_command }}`. A job with no
+checkout of its own takes the value from its `route` job (the panel: its
+`gate` job), which reads it this way and declares it as a job output.
+
+The names and what each renders are the `VALUES` table in that file. Three
+rules hold it together:
+
+- A name the module does not know, or a required value that is blank, exits
+  non-zero. The step is never `continue-on-error`.
+- A value that may be empty (`OPTIONAL` in that file) is rendered with the
+  punctuation that joins it to its sentence, so the workflow writes it against
+  the previous word and the sentence reads whole whether or not the repository
+  said anything. `diff_pathspecs` is never empty — it always starts with `.` —
+  so a diff step that finds it empty fails instead of diffing unfiltered.
+- `workflow-values.test.mjs` reads the workflows and fails on an
+  `outputs.<name>` that the step it names never asked for, on a read that a
+  skipped reader would leave empty, and on a value asked for and never read.
+
+`.github/agent-harness/repo.snapshot.json` records every value and every
+rendered prompt for this repository, so a change to either shows its before
+and after in review.
+
+### The toolchain action
+
+`.github/actions/agent-toolchain/action.yml` installs what an agent needs to
+verify a change in this repository. It is the only per-repository step the
+five agent jobs run, and the only local action a workflow may use. It runs
+with a token in the environment and, in four of the five jobs, a pull
+request's branch in the workspace, so:
+
+- it pins every version it installs and runs nothing from the working tree;
+- it saves no cache;
+- those four jobs check `main`'s copy out into `.trusted-toolchain` and use it
+  from there, never from the workspace. The directory stays until the job ends
+  (the runner re-reads a local action before its post steps) and is listed in
+  `.git/info/exclude`. The issue-to-PR job uses it from the workspace, which is
+  still `main` at that step.
 
 ### Globs
 
@@ -91,6 +147,9 @@ repository that adopts the harness follows them:
 
 - The default branch is `main`. Workflows check trusted code out with
   `ref: main`, and the scripts' base-branch arguments default to it.
+- The repository is public. Two jobs that hold no `contents` permission (the
+  issue-to-PR job, and the panel's `gate`) check `main` out with the ambient
+  token, which can read a public repository and nothing else.
 - The CI workflow is `.github/workflows/ci.yml`, named `CI`. The ready gate
   reads that file's runs, and the panel and the CI-fix arm trigger on it.
 - `.github/workflows/**`, `.github/actions/**`, `.github/CODEOWNERS`,
@@ -137,6 +196,11 @@ It refuses rather than follows: a script run by a relative path in a step with
 `AGENT_HARNESS_CONFIG_DIR` or `NODE_OPTIONS` set at workflow, job or step
 level.
 
+It treats a local action the same way as a script: `uses: ./…` is allowed for
+`.github/actions/agent-toolchain` alone, from a tree that is trusted at that
+step. A checkout with no `ref:` is trusted only in a workflow that cannot be
+started by `workflow_dispatch` or a pull request event.
+
 ### What this guard does not see
 
 It reads workflow text for the shapes the workflows use today. It exists to
@@ -153,7 +217,8 @@ around it, and these pass it:
   other than a literal `node <path>`.
 - YAML in a form the line reader does not expect: quoted keys (`"ref":`,
   `"uses":`), flow-style mappings, anchors.
-- A composite action loaded from a pull request's tree (`uses: ./pr/...`).
+- What the toolchain action does once it runs. Where its file came from is
+  checked; the actions it nests and the commands it runs are not.
 
 Workflow files are CI-defining and CODEOWNER-ed, so every edit to one still
 needs a human reviewer. The list above is what that reviewer has to look for,
