@@ -6,8 +6,8 @@
 // because the failure they catch is SILENT: a drifted copy does not error, it
 // quietly stops doing its job. None of that changes here.
 //
-// What changes is which workflows exist. Every phase in
-// docs/design/agent-command-verbs.md is installed today, so nothing here skips
+// What changes is which workflows exist. Every phase in the command-surface
+// design document is installed today, so nothing here skips
 // — but `agent-implement.yml` (issue → PR) is still deferred, and a guard that
 // reads a workflow which is not there fails for the wrong reason.
 //
@@ -19,6 +19,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { get } from "./config.mjs";
 
 /** `.github/workflows`, resolved from this file rather than from `cwd`. */
 export const WORKFLOW_DIR = path.join(
@@ -54,7 +55,7 @@ export function readWorkflow(name) {
 export function skipWithout(name) {
   return hasWorkflow(name)
     ? {}
-    : { skip: `${name} is not installed in this repository (docs/design/agent-command-verbs.md)` };
+    : { skip: `${name} is not installed in this repository (${get("docs.commandVerbsRef")})` };
 }
 
 /** The same question about a sibling MODULE, for the phases that ship one. */
@@ -66,5 +67,5 @@ export function hasModule(name) {
 export function skipWithoutModule(name) {
   return hasModule(name)
     ? {}
-    : { skip: `${name} is not ported to this repository (docs/design/agent-command-verbs.md)` };
+    : { skip: `${name} is not ported to this repository (${get("docs.commandVerbsRef")})` };
 }

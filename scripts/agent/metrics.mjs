@@ -1189,9 +1189,8 @@ function cmdEffort(args) {
 
 /**
  * Bot identities whose comments may carry a metric ledger: the same
- * `repo.botLogins` list `rounds.mjs::PAGE_AUTHOR_LOGINS` is. Read from the
- * harness configuration here rather than imported from `rounds.mjs`, so this
- * module does not pull that one in; `metrics.test.mjs` pins the two equal.
+ * `repo.botLogins` list `rounds.mjs::PAGE_AUTHOR_LOGINS` is, read from the
+ * harness configuration by both. `metrics.test.mjs` pins the two equal.
  */
 export const LEDGER_AUTHOR_LOGINS = get("repo.botLogins");
 

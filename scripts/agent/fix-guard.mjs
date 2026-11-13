@@ -181,11 +181,27 @@ export function reviewerDirectedHits(files) {
   return hits;
 }
 
-// Go: testify `assert.X(` / `require.X(`, and `t.Error*`/`t.Fatal*`.
-// JS: `assert.X(` / `assert(`, `expect(`.
-const ASSERTION = /\b(assert|require)\.[A-Z]\w*\(|\bt\.(Error|Errorf|Fatal|Fatalf)\(|\bassert(\.\w+)?\(|\bexpect\(/;
+// What an assertion looks like, per language rule set the repository has
+// switched on (`tests.rules`) — the same switch `test-removals.mjs` reads, so a
+// repository with no Go tests is not matched against Go idioms.
+//   go:     testify `assert.X(` / `require.X(`, and `t.Error*`/`t.Fatal*`.
+//   vitest: `assert.X(` / `assert(`, `expect(`.
+const ASSERTION_BY_RULES = {
+  go: ["\\b(assert|require)\\.[A-Z]\\w*\\(", "\\bt\\.(Error|Errorf|Fatal|Fatalf)\\("],
+  vitest: ["\\bassert(\\.\\w+)?\\(", "\\bexpect\\("],
+};
 // A check that can never fail, which a weakened test sometimes becomes.
-const TAUTOLOGY = /\b(assert|require)\.True\(\s*t\s*,\s*true\s*[,)]|\bassert\.ok\(\s*true\s*[,)]|\bexpect\(\s*true\s*\)\.toBe\(\s*true\s*\)/;
+const TAUTOLOGY_BY_RULES = {
+  go: ["\\b(assert|require)\\.True\\(\\s*t\\s*,\\s*true\\s*[,)]"],
+  vitest: ["\\bassert\\.ok\\(\\s*true\\s*[,)]", "\\bexpect\\(\\s*true\\s*\\)\\.toBe\\(\\s*true\\s*\\)"],
+};
+// In the order the rule sets are declared above, whatever order the
+// configuration lists them in, so the pattern is the same for the same set.
+const enabled = (byRules) => new RegExp(
+  Object.keys(byRules).filter((rules) => get("tests.rules").includes(rules)).flatMap((rules) => byRules[rules]).join("|"),
+);
+const ASSERTION = enabled(ASSERTION_BY_RULES);
+const TAUTOLOGY = enabled(TAUTOLOGY_BY_RULES);
 
 /** Test files whose round removed more assertions than it added, or added a tautology. */
 export function weakenedAssertions(files) {

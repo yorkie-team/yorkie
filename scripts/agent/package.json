@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Agent command-surface scripts (review panel orchestrator). Not built or imported by the product's own build.",
   "scripts": {
-    "test": "node --test-timeout=60000 --test '**/*.test.mjs'",
+    "test": "AGENT_HARNESS_CONFIG_DIR=\"$PWD/fixtures/harness-config\" node --test-timeout=60000 --test '**/*.test.mjs'",
     "test:repo": "node --test-timeout=60000 --test ../../.github/agent-harness/repo.test.mjs"
   },
   "dependencies": {
