@@ -167,6 +167,11 @@ test("loadConfig: a value of the wrong type throws, and no value is coerced", (t
     ["tests.go.ciPlatform", "linux/amd64"],
     ["tests.go.ciPlatform.goos", ""],
     ["fixGuard.replicatedRuleGlobs", "lib/**"],
+    ["fixGuard.counterpartRepo", "fixture-counterpart"],
+    ["fixGuard.counterpartRepo", "fixture-org/fixture-counterpart#"],
+    ["fixGuard.counterpartRepo", "https://github.com/fixture-org/fixture-counterpart"],
+    ["fixGuard.counterpartRepo", "a/b/c"],
+    ["fixer.commitNote", "subject under 70"],
     ["redact.extraPatterns", null],
     ["ask.permittedMcpTools", [null]],
   ];
@@ -221,7 +226,7 @@ test("loadConfig: the App's slug and its logins name one App", (t) => {
 });
 
 test("loadConfig: the optional fixer sentences may be empty, the others may not", (t) => {
-  for (const key of ["verifyFailureHint", "ciFailureNote", "generatedCodeNote", "apiChangeNote", "licenceScope", "todoTrackingLine", "replyVerifyInstruction"]) {
+  for (const key of ["verifyFailureHint", "ciFailureNote", "generatedCodeNote", "apiChangeNote", "commitNote", "licenceScope", "todoTrackingLine", "replyVerifyInstruction"]) {
     const dir = scratch(t, (c) => withValue(c, `fixer.${key}`, ""));
     assert.equal(loadConfig(dir).fixer[key], "", key);
   }

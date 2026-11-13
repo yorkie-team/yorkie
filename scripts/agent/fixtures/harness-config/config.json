@@ -37,6 +37,7 @@
     "apiChangeNote": "",
     "keepReproducerAs": "Keep it as a skipped case that names the finding",
     "disabledTestForms": "skips",
+    "commitNote": "",
     "licenceScope": "A licence header on every new source file.",
     "todoTrackingLine": "",
     "implementVerifyStep": "VERIFY with `fixture verify` before the final push.",
@@ -54,7 +55,7 @@
   "fixGuard": {
     "replicatedRuleGlobs": ["lib/rules/*.go"],
     "replicatedRuleNotice": "**Replicated rule changed on one side only (warning).** fixture-counterpart must apply the same rule. Link the matching change in the PR body, or say why none is needed:",
-    "counterpartRepo": "fixture-counterpart"
+    "counterpartRepo": "fixture-org/fixture-counterpart"
   },
   "redact": {
     "extraPatterns": []

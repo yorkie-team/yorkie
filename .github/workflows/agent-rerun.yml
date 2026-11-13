@@ -147,7 +147,7 @@ jobs:
               body: '⏸️ `@claude rerun` needs the `' + APP_SLUG + '` GitHub App, which is not configured on '
                 + 'this repository yet (`AGENT_APP_ID` / `AGENT_APP_PRIVATE_KEY`). It re-engages a loop whose fix rounds push commits, and a `GITHUB_TOKEN` push does not re-trigger CI.\n\n'
                 + '`@claude review` and `@claude summarize` work today; they post with `GITHUB_TOKEN` '
-                + 'and push nothing. See `' + DOCS_REF + '`.',
+                + 'and push nothing. See ' + DOCS_REF + '.',
             });
 
       # Human-facing comments go through a GitHub App token, NOT GITHUB_TOKEN: on a

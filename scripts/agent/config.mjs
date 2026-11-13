@@ -166,6 +166,8 @@ const isFragment = (v) => oneLine(v) && !/^[,.;:!?)\]]/.test(v) && !/[.,;:!?]$/.
 const isSentences = (v) => oneLine(v) && /^[\p{Lu}\p{N}`"'(]/u.test(v) && /[.!?][)"'`\]]*$/.test(v);
 const FRAGMENT = "one line that continues a sentence: no leading punctuation, no trailing `.`, `,`, `;`, `:`, `!` or `?`";
 const SENTENCES = "one line of whole sentences: starts with a capital, a digit, a backtick or a quote, and ends with `.`, `!` or `?`";
+/** `owner/name`, as GitHub spells a repository. */
+const REPO_SLUG = /^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9._-]+$/;
 const fragment = [isFragment, FRAGMENT];
 const optionalFragment = [(v) => v === "" || isFragment(v), `empty, or ${FRAGMENT}`];
 const sentences = [isSentences, SENTENCES];
@@ -271,6 +273,12 @@ const SCHEMA = {
     keepReproducerAs: fragment,
     // "…every test a fix round removes or <disabledTestForms>, and shows it…"
     disabledTestForms: fragment,
+    // Said after the push rules in the three fixer prompts: what this
+    // repository asks of a commit message, or of anything else its own hooks
+    // would check. The harness installs one hook, the scope check, and says so
+    // itself; whether the repository's hooks are active in a fresh checkout is
+    // the repository's to know, so this sentence is the repository's to write.
+    commitNote: optionalSentences,
     // In the issue-to-PR prompt: "3. IMPLEMENT: make the change.
     // <licenceScope> Commit subject …"; "The todo starts with a `**Created**`
     // line. <todoTrackingLine>"; and "5. <implementVerifyStep>". These three
@@ -297,7 +305,12 @@ const SCHEMA = {
   fixGuard: {
     replicatedRuleGlobs: globList,
     replicatedRuleNotice: optionalText,
-    counterpartRepo: optionalText,
+    // `owner/name`: the repository that must apply the same rule. A pull
+    // request body that refers to it — `owner/name`, `owner/name#12`,
+    // `name#12`, or a github.com link to it — has made the question visible.
+    // The full name, because a bare one is a substring of its neighbours
+    // (`yorkie` of `yorkie-js-sdk`) and would match nearly every body.
+    counterpartRepo: [(v) => v === "" || REPO_SLUG.test(v), "empty, or a repository as `owner/name`"],
   },
   redact: {
     extraPatterns: list,

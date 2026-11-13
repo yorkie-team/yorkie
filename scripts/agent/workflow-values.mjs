@@ -65,7 +65,12 @@ export const VALUES = Object.freeze({
   allowed_bots: (c) => `${c.repo.appSlug}[bot],${c.repo.appSlug}`,
   /** A JSON array, for `JSON.parse(process.env.…)` in a `github-script` step. */
   bot_logins: (c) => JSON.stringify(c.repo.botLogins),
-  docs_ref: (c) => c.docs.commandVerbsRef,
+  /**
+   * The command-surface document, as Markdown for a comment: a URL bare, so it
+   * stays a link, and a path in a code span. Either way the message writes it
+   * as it is given, with nothing around it.
+   */
+  docs_ref: (c) => (/^https?:\/\/\S+$/.test(c.docs.commandVerbsRef) ? c.docs.commandVerbsRef : `\`${c.docs.commandVerbsRef}\``),
 
   // --- what a fixer is told ----------------------------------------------------
   verify_command: (c) => c.fixer.verifyCommand,
@@ -90,6 +95,7 @@ export const VALUES = Object.freeze({
   generated_code_paragraph: (c) => joined([c.fixer.generatedCodeNote, c.fixer.apiChangeNote].filter((s) => s !== "").join(" "), "\n\n"),
   keep_reproducer_as: (c) => c.fixer.keepReproducerAs,
   disabled_test_forms: (c) => c.fixer.disabledTestForms,
+  commit_note: (c) => joined(c.fixer.commitNote, " "),
   licence_scope: (c) => joined(c.fixer.licenceScope, " "),
   todo_tracking: (c) => joined(c.fixer.todoTrackingLine, " "),
   implement_verify_step: (c) => c.fixer.implementVerifyStep,
@@ -123,6 +129,7 @@ export const OPTIONAL = Object.freeze(
     "ci_failure_note",
     "generated_code_bullet",
     "generated_code_paragraph",
+    "commit_note",
     "licence_scope",
     "todo_tracking",
     "reply_verify_clause",

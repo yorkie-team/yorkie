@@ -89,6 +89,7 @@
     "apiChangeNote": "If the issue requires an API change, say so on the issue and stop rather than working around it.",
     "keepReproducerAs": "Go has no `it.fails`, so keep the test and make its first statement `t.Skip(\"still reproduces: <finding>\")`, with a comment naming the finding",
     "disabledTestForms": "switches off with `t.Skip`/`t.Skipf`/`t.SkipNow`",
+    "commitNote": "Commit messages follow this repository's convention: subject <= 70 characters, a blank line, body wrapped at 80.",
     "licenceScope": "Apache 2.0 licence header on every new Go file; every package needs a package comment.",
     "todoTrackingLine": "",
     "implementVerifyStep": "LET CI VERIFY — do NOT run `make test`, `make test-complex`, `make bench` or `make coverage`: they need a MongoDB stack and are far too slow for a one-shot headless run. `make lint` and a TARGETED `go test ./path/to/pkg/...` in the foreground are fine. The PR's CI runs the full lanes, including the `-race` integration suite.",
@@ -116,7 +117,7 @@
       "pkg/document/crdt/*.go"
     ],
     "replicatedRuleNotice": "**Replicated CRDT rule changed in Go only (warning).** yorkie-js-sdk must apply the same rule or a Go server and JS clients diverge. Link the matching yorkie-js-sdk change in the PR body, or say why none is needed:",
-    "counterpartRepo": "yorkie-js-sdk"
+    "counterpartRepo": "yorkie-team/yorkie-js-sdk"
   },
   "redact": {
     "extraPatterns": []

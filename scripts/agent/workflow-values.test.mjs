@@ -52,6 +52,15 @@ test("every name renders a string from the configuration", () => {
   assert.equal(get("ci_lane_reports"), "false");
 });
 
+test("the document reference is Markdown: a path in a code span, a URL left a link", (t) => {
+  assert.equal(values(["docs_ref"], FIXTURE)[0][1], "`fixture-docs/command-verbs.md`");
+  const { config } = configWith(t, (c) => {
+    c.docs.commandVerbsRef = "https://example.test/org/repo/blob/main/docs/verbs.md";
+  });
+  // Bare, so the comment renders a link; in a code span it would be dead text.
+  assert.equal(values(["docs_ref"], config)[0][1], "https://example.test/org/repo/blob/main/docs/verbs.md");
+});
+
 test("names are output names: lower_snake_case, readable back as `outputs.<name>`", () => {
   for (const name of Object.keys(VALUES)) assert.match(name, /^[a-z][a-z0-9_]*$/);
   for (const name of OPTIONAL) assert.ok(Object.hasOwn(VALUES, name), `${name} is optional but not a value`);
@@ -72,8 +81,10 @@ test("an optional value carries its own joining punctuation, and vanishes whole"
     c.fixer.apiChangeNote = "If the issue needs it changed, say so and stop.";
     c.fixer.todoTrackingLine = "Its second line is `Tracked as #__ISSUE_NUMBER__`.";
     c.fixer.replyVerifyInstruction = "run `fixture verify`";
+    c.fixer.commitNote = "Commit subjects are 70 characters or fewer.";
   });
   const get = (name) => values([name], config)[0][1];
+  assert.equal(get("commit_note"), " Commit subjects are 70 characters or fewer.");
   assert.equal(get("verify_failure_hint"), " If the lint fails, run the fixer.");
   assert.equal(get("integration_sentence_before_push"), " Do NOT run `fixture test-all`: it needs a stack this job does not stand up, and the push below re-runs it anyway.");
   assert.equal(get("integration_sentence"), " Do NOT run `fixture test-all`: it needs a stack this job does not stand up, and the push re-runs it anyway.");
@@ -319,7 +330,7 @@ test("every configured value a workflow reads was asked for, by a step that can 
 test("the wiring check inspected the sites it is expected to", () => {
   // A guard that finds nothing passes. Adding or removing a reader or a read
   // changes a count; that is the prompt to look at the new site.
-  assert.deepEqual({ readers: WIRING.readers, reads: WIRING.reads }, { readers: 11, reads: 60 });
+  assert.deepEqual({ readers: WIRING.readers, reads: WIRING.reads }, { readers: 11, reads: 63 });
 });
 
 test("no workflow names the repository's values itself", () => {

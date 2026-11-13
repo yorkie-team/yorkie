@@ -86,6 +86,8 @@ const ENV = "AGENT_HARNESS_CONFIG_DIR";
 const TEMP = "$RUNNER_TEMP";
 const STAGED_TOOLS = `${TEMP}/agent-tools`;
 const STAGED_CONFIG = `${TEMP}/agent-harness`;
+/** Where the fix-scope hook is installed: outside the workspace, named by `core.hooksPath`. */
+const HOOK_DIR = `${TEMP}/agent-hooks`;
 /** The one local action a workflow may use, as a path from a tree's root. */
 const TOOLCHAIN = ".github/actions/agent-toolchain";
 
@@ -103,6 +105,8 @@ const EXPECTED = {
   // Side-directory checkouts made inside a workspace that holds a pull
   // request's tree, each of which must clear its path first.
   sideCheckoutsOverUntrustedWorkspace: 8,
+  // Steps that install the fix-scope pre-push hook.
+  scopeHooks: 3,
   // `cp -R … scripts/agent …/agent-tools`, each with its configuration.
   stagingCopies: 4,
   // Places a harness script is run, and how many of them read the configuration.
@@ -295,6 +299,7 @@ function inspect(workflows) {
     toolchainUses: 0,
     toolchainCheckouts: 0,
     sideCheckoutsOverUntrustedWorkspace: 0,
+    scopeHooks: 0,
     stagingCopies: 0,
     invocations: 0,
     configReadingInvocations: 0,
@@ -450,7 +455,22 @@ function inspect(workflows) {
         // Where a relative path resolves is no longer the workspace root once
         // the directory changes. Not resolved — refused, below.
         let directoryChanged = jobChangesDirectory || scalar(step, "working-directory") !== undefined;
-        const writesHook = step.lines.some((l) => !isComment(l) && l.includes(".git/hooks/pre-push"));
+        const code = step.lines.filter((l) => !isComment(l)).map((l) => normalise(l).trim());
+        const writesHook = code.some((l) => /(?:^|[\s>"'/])pre-push["']?\s*$/.test(l) && l.includes(">"));
+        if (writesHook) {
+          counts.scopeHooks++;
+          // WHERE GIT WILL LOOK, not where hooks usually live. `.git/hooks` is
+          // ignored once `core.hooksPath` is set, so a hook written there can
+          // be installed and never run; and a hooks directory inside the
+          // workspace is one the branch can have put files in.
+          const dir = `HOOKS="${HOOK_DIR}"`;
+          if (!code.includes(dir)) flag(`installs a pre-push hook somewhere other than ${HOOK_DIR}; git ignores .git/hooks when core.hooksPath is set`);
+          if (!code.some((l) => l.endsWith('> "$HOOKS/pre-push"'))) flag("installs a pre-push hook that is not written to \"$HOOKS/pre-push\"");
+          if (!code.includes('git config core.hooksPath "$HOOKS"')) flag("installs a pre-push hook without pointing core.hooksPath at it, so git may never run it");
+          if (!code.includes('EFFECTIVE="$(git rev-parse --path-format=absolute --git-path hooks)"') || !code.includes('if [ "$EFFECTIVE" != "$HOOKS" ]; then')) {
+            flag("installs a pre-push hook without checking where git will read hooks from");
+          }
+        }
         const hookNamesConfig =
           step.lines.some((l) => !isComment(l) && l.includes(`export ${ENV}="%s"`)) &&
           step.lines.some((l) => !isComment(l) && normalise(l).trim() === `"${STAGED_CONFIG}" \\`);
@@ -1076,6 +1096,31 @@ const MUTATIONS = [
       }),
     expect: /agent-iterate-ci\.yml › iterate: checks out into \.trusted-agent inside an untrusted workspace without an `rm -rf \.trusted-agent` first/,
   },
+  // …the fix-scope hook: installed where git will actually look.
+  {
+    name: "the scope hook is written to `.git/hooks`, which `core.hooksPath` bypasses",
+    files: () =>
+      edit("agent-fix.yml", (t) => replaceOnce(t, ' > "$HOOKS/pre-push"\n', " > .git/hooks/pre-push\n")),
+    expect: /agent-fix\.yml › fix: installs a pre-push hook that is not written to "\$HOOKS\/pre-push"/,
+  },
+  {
+    name: "the scope hook's directory is inside the workspace",
+    files: () =>
+      edit("agent-review-panel.yml", (t) => replaceOnce(t, '          HOOKS="$RUNNER_TEMP/agent-hooks"\n', '          HOOKS="$GITHUB_WORKSPACE/.agent-hooks"\n')),
+    expect: /agent-review-panel\.yml › fix: installs a pre-push hook somewhere other than \$RUNNER_TEMP\/agent-hooks/,
+  },
+  {
+    name: "the scope hook is written but `core.hooksPath` is not pointed at it",
+    files: () =>
+      edit("agent-iterate-ci.yml", (t) => replaceOnce(t, '          git config core.hooksPath "$HOOKS"\n', "")),
+    expect: /agent-iterate-ci\.yml › iterate: installs a pre-push hook without pointing core\.hooksPath at it/,
+  },
+  {
+    name: "the scope hook is installed without asking git where it reads hooks from",
+    files: () =>
+      edit("agent-fix.yml", (t) => replaceOnce(t, '          EFFECTIVE="$(git rev-parse --path-format=absolute --git-path hooks)"\n', '          EFFECTIVE="$HOOKS"\n')),
+    expect: /agent-fix\.yml › fix: installs a pre-push hook without checking where git will read hooks from/,
+  },
   // …jobs the reader used to walk past.
   {
     name: "a job whose step list is indented differently from its neighbours",
@@ -1125,7 +1170,7 @@ test("each trust-weakening mutation of the real workflows fails the guard", () =
   }
   assert.deepEqual(failures, []);
   // Guard on the guard: the six that got through first, and their neighbours.
-  assert.ok(MUTATIONS.length >= 42, `expected the mutation cases, ran ${MUTATIONS.length}`);
+  assert.ok(MUTATIONS.length >= 46, `expected the mutation cases, ran ${MUTATIONS.length}`);
 });
 
 test("what is not a command is not flagged", () => {

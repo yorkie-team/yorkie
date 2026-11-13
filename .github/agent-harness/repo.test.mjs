@@ -323,7 +323,96 @@ test("every configured path and glob matches a file this repository tracks", () 
   // Guards on the guard: the lists were walked, and RESERVED holds nothing stale.
   assert.ok(checked >= 30, `expected every configured entry, checked ${checked}`);
   assert.deepEqual(reservedSeen.sort(), Object.entries(RESERVED).flatMap(([e, keys]) => keys.map((k) => `${k}: ${e}`)).sort());
-  assert.equal(CONFIG.fixGuard.counterpartRepo, "yorkie-js-sdk");
+  assert.equal(CONFIG.fixGuard.counterpartRepo, "yorkie-team/yorkie-js-sdk");
+  // What a pull request here writes to point at the other side still counts.
+  const named = fixGuard.counterpartReference(CONFIG.fixGuard.counterpartRepo);
+  for (const body of ["JS side: yorkie-js-sdk#1442", "yorkie-team/yorkie-js-sdk#1442", "https://github.com/yorkie-team/yorkie-js-sdk/pull/1442"]) {
+    assert.equal(named(body), true, body);
+  }
+  assert.equal(named("Fixes yorkie-team/yorkie#2100"), false, "this repository's own name is not the counterpart's");
+});
+
+// --- what the harness assumes of this repository's CI workflow --------------------------
+
+test("CI_WORKFLOW_PATH names a workflow file that actually exists", () => {
+  // The gate matches CI runs on this path instead of on the run's display name,
+  // which is what makes gate 1 unforgeable — a second file cannot claim the
+  // path. The cost is that a typo, or renaming ci.yml, silently makes the gate
+  // unsatisfiable for every PR: the workflow-scoped query would find nothing and read as
+  // "CI has not run". Assert the file is there, and that it is the one whose
+  // runs are named "CI".
+  const src = readFileSync(path.join(ROOT, checks.CI_WORKFLOW_PATH), "utf8"); // throws if the path is wrong
+  assert.match(src, /^name:\s*CI\s*$/m, "ci.yml must still be the workflow whose runs are named CI");
+});
+
+test("no two ci.yml triggers can race for the same PR head SHA", () => {
+  // THE INVARIANT `ciConclusion` RESTS ON — stated precisely, because an earlier
+  // revision of this test overclaimed it as "exactly one run per head SHA".
+  // That is false: closing and reopening a PR files a second `pull_request` run
+  // for the same commit. Newest-wins is CORRECT there, because the later run is
+  // a fresh execution of the same file at the same tree and supersedes the
+  // earlier one.
+  //
+  // What must not happen is two runs from DIFFERENT triggers for one PR head,
+  // where "newest" is arbitrary rather than superseding. `push` restricted to
+  // `main` never fires for a PR branch, and a `merge_group` run carries the
+  // speculative merge commit. Widen `push`, or add a trigger that fires on a PR
+  // head, and this fails — making the choice conscious instead of silent.
+  const yml = readFileSync(path.join(ROOT, checks.CI_WORKFLOW_PATH), "utf8");
+  // To the next TOP-LEVEL key, whatever it is. Slicing to a named one (`permissions:`)
+  // silently ran to end-of-file in a workflow that declares none, and the "events"
+  // it then found were job names.
+  const from = yml.indexOf("\non:");
+  const rest = yml.slice(from + 1);
+  const nextKey = rest.slice(3).search(/^[a-z_]+:/m);
+  const on = rest.slice(0, nextKey < 0 ? undefined : nextKey + 3);
+  const code = on.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+
+  const events = [...code.matchAll(/^ {2}([a-z_]+):/gm)].map((m) => m[1]);
+  assert.deepEqual(
+    events.sort(),
+    ["pull_request", "push"],
+    "a new CI trigger may fire for a PR head SHA — see ciConclusion before adding one",
+  );
+  assert.match(
+    code.slice(code.indexOf("push:"), code.indexOf("pull_request:")),
+    /branches: \[["']?main["']?\]/,
+    "push must stay restricted to main, or every PR branch push races pull_request",
+  );
+});
+
+// --- this repository's own script tests --------------------------------------------------
+
+test("every script test outside the harness that creates a git fixture uses git-env.mjs", () => {
+  // The harness package checks its own tests for this (`git-env.test.mjs`).
+  // THIS repository's script tests are held to the same helper by choice:
+  // under a git hook, git exports GIT_DIR and GIT_INDEX_FILE, a fixture
+  // repository that inherits them writes into the real one, and one test here
+  // once set `core.bare` in the shared configuration that way. Another
+  // repository may scrub the environment differently; that is why this
+  // assertion lives here and not in the package.
+  const scriptsDir = path.join(ROOT, "scripts");
+  const files = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === "node_modules") continue;
+      const p = path.join(dir, e.name);
+      if (p === AGENT) continue; // the package grades itself
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith(".test.mjs")) files.push(p);
+    }
+  };
+  walk(scriptsDir);
+  assert.ok(files.length > 0, "found no script tests outside the harness — this check would be vacuous");
+  const spawnsGit = /\b(?:execFileSync|spawnSync|spawn|execFile)\(\s*["']git["']/;
+  const initsRepo = /["']init["']/;
+  const offenders = files
+    .filter((f) => {
+      const src = readFileSync(f, "utf8");
+      return spawnsGit.test(src) && initsRepo.test(src) && !src.includes("git-env.mjs");
+    })
+    .map((f) => path.relative(ROOT, f));
+  assert.deepEqual(offenders, [], "use fixtureGitEnv(dir) from scripts/agent/git-env.mjs for every git call on a fixture");
 });
 
 test("ci.yml files a run for every PR, so a docs-only PR reaches the pipeline", () => {
@@ -757,6 +846,12 @@ test("the commands the fixer prompts name are targets this repository has", () =
   assert.equal(CONFIG.fixer.replyVerifyInstruction, "");
   assert.equal(CONFIG.fixer.todoTrackingLine, "");
   assert.equal(CONFIG.fixer.ciFailureNote, "");
+  // `fixer.commitNote` states the convention and claims no hook: a fresh
+  // checkout on a runner has `core.hooksPath` unset, so `.githooks/commit-msg`
+  // is not active there, and the harness then points the path at its own hook.
+  assert.match(CONFIG.fixer.commitNote, /subject <= 70 characters, a blank line, body wrapped at 80/);
+  assert.ok(!/hook/i.test(CONFIG.fixer.commitNote), "the commit note must not claim a hook checks the message on a runner");
+  assert.ok(existsSync(path.join(ROOT, ".githooks", "commit-msg")), "the convention the note states is the one .githooks/commit-msg enforces locally");
 });
 
 test("a release the agent App created publishes nothing", () => {

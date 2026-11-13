@@ -253,7 +253,7 @@ jobs:
           node "$RUNNER_TEMP/agent-tools/workflow-values.mjs"
           bot_logins allowed_bots ci_lane_reports last_resort_diagnosis
           verify_command verify_description verify_failure_hint
-          integration_sentence ci_failure_note generated_code_bullet
+          integration_sentence ci_failure_note generated_code_bullet commit_note
           >> "$GITHUB_OUTPUT"
 
       # GATED, and this is the step that makes the stand-down real. Everything
@@ -544,9 +544,9 @@ jobs:
       # version-vector caps into unrelated PRs (#2100, #2111, #2112) to clear
       # findings on code those PRs never touched; the prompt asked them not to.
       #
-      # This step is the GUIDE half: a pre-push hook in the fixer's checkout that
+      # This step is the GUIDE half: a pre-push hook for the fixer's checkout that
       # refuses such a push with instructions, while the fixer can still revert
-      # and dispute. The agent owns this checkout and could remove the hook, so the
+      # and dispute. The agent owns this checkout and could unset the hook, so the
       # GATE half is the report job's `fix-guard.mjs check`, on a fresh runner.
       # Written BEFORE the agent from the trusted staged copy; an unreadable scope
       # writes an empty list, and an empty list restricts nothing.
@@ -559,12 +559,33 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           node "$RUNNER_TEMP/agent-tools/fix-guard.mjs" allowed "$PR" --head "$HEAD_SHA" --out "$RUNNER_TEMP/fix-scope.txt"
+          # IN ITS OWN DIRECTORY, NAMED BY `core.hooksPath`, not in `.git/hooks`.
+          # Git reads hooks from one place: where `core.hooksPath` is set — by
+          # a repository's setup script, say — `.git/hooks/pre-push` is never
+          # run, and a hook written there would be installed, reported green
+          # and inert. Setting the path here makes this the hook git runs, and
+          # the directory is outside the workspace, so the branch has no file
+          # in it. The last lines ask git where it will look and fail the step
+          # if the answer is anywhere else.
+          #
+          # ADVISORY ALL THE SAME. The agent owns this checkout's configuration
+          # and can point `core.hooksPath` elsewhere (running the repository's
+          # own hook setup does exactly that). The gate is the report job's
+          # check, which reads the pushed commits and needs no hook.
+          HOOKS="$RUNNER_TEMP/agent-hooks"
+          mkdir -p "$HOOKS"
           # The hook names the staged configuration itself: it is run by git
           # from the fixer's shell, which need not carry this job's environment.
           printf '#!/bin/sh\nexport AGENT_HARNESS_CONFIG_DIR="%s"\nexec node "%s" prepush --allowed "%s"\n' \
             "$RUNNER_TEMP/agent-harness" \
-            "$RUNNER_TEMP/agent-tools/fix-guard.mjs" "$RUNNER_TEMP/fix-scope.txt" > .git/hooks/pre-push
-          chmod +x .git/hooks/pre-push
+            "$RUNNER_TEMP/agent-tools/fix-guard.mjs" "$RUNNER_TEMP/fix-scope.txt" > "$HOOKS/pre-push"
+          chmod +x "$HOOKS/pre-push"
+          git config core.hooksPath "$HOOKS"
+          EFFECTIVE="$(git rev-parse --path-format=absolute --git-path hooks)"
+          if [ "$EFFECTIVE" != "$HOOKS" ]; then
+            echo "::error::git will read hooks from $EFFECTIVE, not $HOOKS; the fix-scope hook is not installed" >&2
+            exit 1
+          fi
 
       # Single-value state: a CI-fix round is in flight → agent:fixing. Repo is
       # already checked out above; best-effort, advisory.
@@ -671,12 +692,10 @@ jobs:
               run with NO resume, so a BACKGROUNDED push is killed when your turn
               ends and the fix is lost. Never background the push or use
               sleep/Monitor/any wait-for-later mechanism to "come back to it".
-            - Push with `git push`. Two hooks run: `commit-msg` at COMMIT time
-              (subject <= 70 characters, a blank line, body wrapped at 80), and a
-              fast pre-push scope check that refuses files outside this PR's
-              original diff (tests and docs excepted). Never use `--no-verify`:
-              the scope rule is checked again after you finish and pages a human
-              if broken.
+            - Push with `git push`. A fast pre-push scope check runs first: it
+              refuses files outside this PR's original diff (tests and docs
+              excepted). Never use `--no-verify`: the scope rule is checked
+              again after you finish and pages a human if broken.${{ steps.cfg.outputs.commit_note }}
             - CONFIRM the push landed with `git ls-remote origin <branch>` rather
               than trusting the exit code — a push whose hook output is very large
               can report non-zero even though the ref advanced. If the remote head
