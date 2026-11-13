@@ -7,7 +7,6 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  globToRegExp,
   lensApplies,
   lensGlobs,
   CONFIG_GLOBS_PREFIX,
@@ -65,7 +64,7 @@ import {
 } from "./review-panel.mjs";
 import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY, EFFORT_LEVELS } from "./ask.mjs";
 import { classify, normalizeSeverity } from "./severity.mjs";
-import { get } from "./config.mjs";
+import { compileGlob, get } from "./config.mjs";
 
 // The lens scoping under test is the REAL manifest, not a copy of it. An
 // earlier draft of this test inlined the globs as literals, which meant an edit
@@ -87,10 +86,10 @@ const lensOf = (id) => {
   return l;
 };
 
-test("globToRegExp / lensApplies: ** always; path globs match & reject", () => {
-  assert.ok(globToRegExp("**").test("packages/frontend/src/x.ts"));
-  assert.ok(globToRegExp("packages/frontend/**").test("packages/frontend/src/a.ts"));
-  assert.ok(!globToRegExp("packages/frontend/**").test("packages/backend/a.ts"));
+test("compileGlob / lensApplies: ** always; path globs match & reject", () => {
+  assert.ok(compileGlob("**").test("packages/frontend/src/x.ts"));
+  assert.ok(compileGlob("packages/frontend/**").test("packages/frontend/src/a.ts"));
+  assert.ok(!compileGlob("packages/frontend/**").test("packages/backend/a.ts"));
   assert.equal(lensApplies({ appliesWhen: ["**"] }, []), true);
   assert.equal(lensApplies({ appliesWhen: [] }, []), true); // empty array = wildcard default
   assert.equal(lensApplies({ appliesWhen: ["packages/frontend/**"] }, ["packages/frontend/a.ts"]), true);
@@ -1795,7 +1794,32 @@ test("lensGlobs: a configuration reference expands in place, and a bad one throw
   // that cannot be resolved must throw instead.
   assert.throws(() => lensGlobs({ id: "x", appliesWhen: [`${CONFIG_GLOBS_PREFIX}review.nope`] }), /no key "review\.nope"/);
   assert.throws(() => lensGlobs({ id: "x", appliesWhen: [`${CONFIG_GLOBS_PREFIX}repo.name`] }), /not a list/);
-  assert.throws(() => lensGlobs({ id: "x", appliesWhen: [CONFIG_GLOBS_PREFIX] }), /harness config/);
+  // A misspelt reference is the same silent skip, so ANYTHING starting with `$`
+  // that is not exactly `$config:<dotted.key>` throws — whatever its case,
+  // padding or punctuation.
+  for (const bad of [
+    CONFIG_GLOBS_PREFIX,
+    "$Config:review.sourceGlobs",
+    "$CONFIG:review.sourceGlobs",
+    "$confg:review.sourceGlobs",
+    "$config.review.sourceGlobs",
+    "$config: review.sourceGlobs",
+    " $config:review.sourceGlobs",
+    "$config:review.sourceGlobs ",
+    "$config:review..sourceGlobs",
+    "$config:review.sourceGlobs/**",
+    "$review.sourceGlobs",
+    "$",
+  ]) {
+    assert.throws(() => lensGlobs({ id: "x", appliesWhen: [bad] }), /is not exactly `\$config:<dotted\.key>`/, JSON.stringify(bad));
+  }
+  // A reference to an EMPTY list would leave appliesWhen empty, which means
+  // "always": the lens would run on everything instead of on source.
+  assert.throws(() => lensGlobs({ id: "x", appliesWhen: [`${CONFIG_GLOBS_PREFIX}redact.extraPatterns`] }), /empty list — the lens would apply to every change/);
+  // An entry that is not a reference must be a glob of the harness dialect.
+  for (const bad of ["{src,lib}/**", "!src/**", "./src/**", "src/", " src/**", "src/*.?s", 7, null]) {
+    assert.throws(() => lensGlobs({ id: "x", appliesWhen: [bad] }), /lens "x"/, JSON.stringify(bad));
+  }
   // ...and lensApplies goes through it, so a raw manifest lens is expanded too.
   const lens = { id: "x", appliesWhen: [`${CONFIG_GLOBS_PREFIX}review.sourceGlobs`] };
   assert.equal(lensApplies(lens, ["src/a.go"]), true);
@@ -1813,7 +1837,7 @@ test("every configuration reference the shipped lenses make resolves", () => {
       if (glob.startsWith(CONFIG_GLOBS_PREFIX)) references++;
     }
     const raw = readFileSync(path.join(HERE, "lenses", `${lens.id}.md`), "utf8");
-    references += [...raw.matchAll(/\{\{[^}]*\}\}/g)].length;
+    references += [...raw.matchAll(/\{\{config:[^}]*\}\}/g)].length;
   }
   // The count is the guard on the guard: zero would mean the manifest stopped
   // using references and this test stopped checking anything.
@@ -1825,7 +1849,7 @@ test("every configuration reference the shipped lenses make resolves", () => {
     for (const glob of lens.appliesWhen ?? []) {
       assert.ok(!glob.startsWith("$"), `${lens.id}: appliesWhen still carries ${glob}`);
     }
-    assert.doesNotMatch(lens.rubric, /\{\{|\}\}/, `${lens.id}: the rubric reached the panel with a placeholder in it`);
+    assert.doesNotMatch(lens.rubric, /\{\{\s*config/i, `${lens.id}: the rubric reached the panel with a placeholder in it`);
   }
   const designFit = loaded.find((l) => l.id === "design-fit");
   assert.ok(designFit.rubric.includes(get("review.sharedPrimitivesNote")), "design-fit lost the repository's sentence");
@@ -1839,16 +1863,28 @@ test("loadLenses: a rubric placeholder that is unknown, or not a string, throws"
       writeFileSync(path.join(dir, "lenses.json"), JSON.stringify([{ id: "one", title: "One" }]));
       writeFileSync(path.join(dir, "one.md"), rubric);
     };
-    write("Shared code: {{review.sharedPrimitivesNote}} End.");
-    assert.equal(loadLenses(dir)[0].rubric, `Shared code: ${get("review.sharedPrimitivesNote")} End.`);
+    write("Shared code: {{config:review.sharedPrimitivesNote}} End. {{config:review.sharedPrimitivesNote}}");
+    const note = get("review.sharedPrimitivesNote");
+    assert.equal(loadLenses(dir)[0].rubric, `Shared code: ${note} End. ${note}`);
     assert.equal(loadLenses(dir)[0].appliesWhen, undefined, "a lens with no appliesWhen keeps none");
-    write("Shared code: {{review.nope}}");
+    write("Shared code: {{config:review.nope}}");
     assert.throws(() => loadLenses(dir), /no key "review\.nope"/);
-    write("Shared code: {{review.sourceGlobs}}");
-    assert.throws(() => loadLenses(dir), /not a string/);
-    // Braces that are not a placeholder are left alone.
-    write("An object literal: { a: 1 } and {{ not a key }}.");
-    assert.equal(loadLenses(dir)[0].rubric, "An object literal: { a: 1 } and {{ not a key }}.");
+    write("Shared code: {{config:review.sourceGlobs}}");
+    assert.throws(() => loadLenses(dir), /not a non-blank string/);
+    // A key that is allowed to be empty would leave a hole in the sentence.
+    write("Shared code: {{config:fixer.todoTrackingLine}}");
+    assert.throws(() => loadLenses(dir), /not a non-blank string/);
+    // Anything that opens like a placeholder and is not exactly one throws: a
+    // near-miss must not reach a reviewer as literal text.
+    for (const bad of ["{{ config:review.sharedPrimitivesNote }}", "{{config: review.sharedPrimitivesNote}}", "{{Config:review.sharedPrimitivesNote}}", "{{config:review/sharedPrimitivesNote}}", "{{config:}}", "{{config:review.}}"]) {
+      write(`Shared code: ${bad}`);
+      assert.throws(() => loadLenses(dir), /is not exactly \{\{config:<dotted\.key>\}\}/, bad);
+    }
+    // Every OTHER `{{…}}` is the rubric's own text, left exactly as written —
+    // including one that happens to be a real configuration key.
+    const literal = "An object literal: { a: 1 }, a template {{count}}, {{ not a key }} and {{review.sharedPrimitivesNote}}.";
+    write(literal);
+    assert.equal(loadLenses(dir)[0].rubric, literal);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

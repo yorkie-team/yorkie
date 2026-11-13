@@ -50,7 +50,7 @@ import { MAX_SLOTS } from "./token-pool.mjs";
 import { publicInfraReason, redactSecrets } from "./redact.mjs";
 import { renderScopeNote, serializeReviewState } from "./review-state.mjs";
 import { CITATION } from "./citation.mjs";
-import { get } from "./config.mjs";
+import { compileGlob, get, globProblem } from "./config.mjs";
 import { findingLocation, noveltyOf, baseResolves, DEMOTING_ORIGINS } from "./novelty.mjs";
 import { surfaceOfFinding, freezeResolves, DEMOTING_SCOPES } from "./review-surface.mjs";
 import {
@@ -204,19 +204,6 @@ const DROP_GROUNDS_BY_CLAIM = {
 
 // --- pure helpers (exported for tests; no SDK dependency) -------------------
 
-/** Minimal glob→RegExp: `**` = any, `*` = non-slash run, `?` = one non-slash. */
-export function globToRegExp(glob) {
-  let re = "";
-  for (let i = 0; i < glob.length; i++) {
-    const c = glob[i];
-    if (c === "*") {
-      if (glob[i + 1] === "*") { re += ".*"; i++; } else re += "[^/]*";
-    } else if (c === "?") re += "[^/]";
-    else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
-  }
-  return new RegExp(`^${re}$`);
-}
-
 /**
  * An `appliesWhen` entry of this form stands for a LIST in the repository's
  * harness configuration: `"$config:review.sourceGlobs"` is replaced by that
@@ -224,22 +211,44 @@ export function globToRegExp(glob) {
  * naming any repository's directories.
  */
 export const CONFIG_GLOBS_PREFIX = "$config:";
+const CONFIG_GLOBS_REF = /^\$config:([A-Za-z][\w-]*(?:\.[A-Za-z][\w-]*)*)$/;
 
 /**
  * A lens's `appliesWhen` with every configuration reference expanded. Missing →
- * `["**"]`. EVERY reader of `appliesWhen` goes through this: an unexpanded
- * reference is a glob that matches no path, which would switch the lens off
- * for every change without an error. A reference to a key that does not exist,
- * or is not a list, throws.
+ * `["**"]`. EVERY reader of `appliesWhen` goes through this, because each way
+ * a reference can go wrong is silent if it is let through:
+ *
+ *   - left unexpanded, or misspelt (`$Config:…`, `$confg:…`, ` $config:…`), it
+ *     is a glob that matches no path, so the lens is skipped on every change;
+ *   - resolved to an EMPTY list, it leaves `appliesWhen` empty, which means
+ *     "always" — the lens would run on every change instead of on source.
+ *
+ * So anything that starts with `$` must be exactly `$config:<dotted.key>`, the
+ * key must exist and be a non-empty list, and every other entry must be a glob
+ * of the harness dialect. Each failure throws.
  */
 export function lensGlobs(lens) {
   const globs = lens.appliesWhen ?? ["**"];
   return globs.flatMap((glob) => {
-    if (typeof glob !== "string" || !glob.startsWith(CONFIG_GLOBS_PREFIX)) return [glob];
-    const key = glob.slice(CONFIG_GLOBS_PREFIX.length);
-    const value = get(key);
+    if (typeof glob !== "string") throw new Error(`lens "${lens.id}": an appliesWhen entry is not a string`);
+    if (!glob.trim().startsWith("$")) {
+      const problem = globProblem(glob);
+      if (problem) throw new Error(`lens "${lens.id}": appliesWhen entry ${JSON.stringify(glob)} ${problem}`);
+      return [glob];
+    }
+    const ref = CONFIG_GLOBS_REF.exec(glob);
+    if (!ref) {
+      throw new Error(
+        `lens "${lens.id}": appliesWhen entry ${JSON.stringify(glob)} starts with \`$\` but is not exactly ` +
+          `\`${CONFIG_GLOBS_PREFIX}<dotted.key>\``,
+      );
+    }
+    const value = get(ref[1]);
     if (!Array.isArray(value)) {
-      throw new Error(`lens "${lens.id}": appliesWhen names ${key}, which is not a list in the harness configuration`);
+      throw new Error(`lens "${lens.id}": appliesWhen names ${ref[1]}, which is not a list in the harness configuration`);
+    }
+    if (value.length === 0) {
+      throw new Error(`lens "${lens.id}": appliesWhen names ${ref[1]}, which is an empty list — the lens would apply to every change`);
     }
     return value;
   });
@@ -249,7 +258,7 @@ export function lensGlobs(lens) {
 export function lensApplies(lens, changedFiles) {
   const globs = lensGlobs(lens);
   if (globs.length === 0 || globs.includes("**")) return true; // empty = wildcard default
-  const res = globs.map(globToRegExp);
+  const res = globs.map(compileGlob);
   return changedFiles.some((f) => res.some((r) => r.test(f)));
 }
 
@@ -315,7 +324,7 @@ export const CLASS_RULES = Object.freeze([
   ]],
 ]);
 
-const COMPILED_RULES = CLASS_RULES.map(([cls, globs]) => [cls, globs.map(globToRegExp)]);
+const COMPILED_RULES = CLASS_RULES.map(([cls, globs]) => [cls, globs.map(compileGlob)]);
 
 /** Classify one repo-relative path. Unknown/unresolvable → `code` (fail-safe). */
 export function classifyFile(filePath) {
@@ -2685,10 +2694,14 @@ function parseArgs(argv) {
 // panel really runs — a private copy of these two lines there could drift from
 // the manifest and quietly report on lenses that no longer exist.
 //
-// A rubric may carry `{{dotted.key}}` where it needs a sentence only the
+// A rubric may carry `{{config:dotted.key}}` where it needs a sentence only the
 // repository can write (where its shared code lives, say). Each is replaced by
-// that STRING from the harness configuration; a key that is missing or is not
-// a string throws rather than reaching a reviewer as a literal placeholder.
+// that STRING from the harness configuration. The `config:` marker is what
+// makes it a placeholder: any other `{{…}}` in a rubric is the rubric's own
+// text and is left exactly as written. Anything that opens with `{{config:`
+// (in any case, with any spacing) and is not exactly that form, or names a key
+// that is missing, not a string, or blank, throws rather than reaching a
+// reviewer as a literal placeholder or as a hole in a sentence.
 // `appliesWhen` is returned expanded for the same reason — see `lensGlobs`.
 export function loadLenses(dir) {
   const manifest = JSON.parse(readFileSync(path.join(dir, "lenses.json"), "utf8"));
@@ -2700,10 +2713,14 @@ export function loadLenses(dir) {
 }
 
 function fillRubric(rubric, lensId) {
-  return rubric.replace(/\{\{([A-Za-z0-9_.-]+)\}\}/g, (_, key) => {
-    const value = get(key);
-    if (typeof value !== "string") {
-      throw new Error(`lens "${lensId}": the rubric names {{${key}}}, which is not a string in the harness configuration`);
+  return rubric.replace(/\{\{\s*config\s*:[^}]*\}\}/gi, (placeholder) => {
+    const ref = /^\{\{config:([A-Za-z][\w-]*(?:\.[A-Za-z][\w-]*)*)\}\}$/.exec(placeholder);
+    if (!ref) {
+      throw new Error(`lens "${lensId}": the rubric placeholder ${placeholder} is not exactly {{config:<dotted.key>}}`);
+    }
+    const value = get(ref[1]);
+    if (typeof value !== "string" || value.trim() === "") {
+      throw new Error(`lens "${lensId}": the rubric names ${placeholder}, which is not a non-blank string in the harness configuration`);
     }
     return value;
   });

@@ -25,6 +25,13 @@
 // directory, which in those jobs is the pull request's checkout — the one
 // place the configuration must never be read from.
 //
+// THE DEFAULT APPLIES ONLY IN PLACE. Two directories up from a staged copy is
+// not a repository root, it is wherever the copy happened to land — the
+// parent of the runner's temp directory, say — and a `.github/agent-harness`
+// that happened to exist there would be read as if it were trusted. So the
+// default is used only when this file really sits at `<root>/scripts/agent/`;
+// anywhere else, the variable is required and its absence throws.
+//
 // NO DEFAULTS, ANYWHERE. A missing directory, a missing file, a missing key or
 // a value of the wrong type throws. Falling back to a built-in value would let
 // a gate keep running on a list that is quietly shorter than the repository's
@@ -38,7 +45,7 @@
 //   node config.mjs get <dotted.key>     a string is printed raw, anything
 //                                        else as JSON; exit 1 on any failure
 
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -51,6 +58,64 @@ export const COVERAGE_NOTE_FILE = "coverage-note.md";
 /** The language rule sets `tests.rules` may name. */
 export const TEST_RULE_SETS = Object.freeze(["go", "vitest"]);
 
+// --- globs -------------------------------------------------------------------
+//
+// ONE DIALECT, for every glob the harness matches a path against — the
+// configured lists and the ones written in this package alike:
+//
+//   **    as a whole path segment: any number of directories, including none.
+//         `**/x` matches `x` and `a/b/x`; `a/**` matches everything under `a/`;
+//         alone, it matches every path.
+//   *     inside a segment: any run of characters that is not a separator.
+//   else  literal.
+//
+// Paths are repository-relative with `/` separators, and a glob is anchored at
+// both ends. NOTHING ELSE IS SUPPORTED, and what is not supported is REFUSED
+// rather than read literally: these lists are refusal surfaces and review
+// scopes, so a pattern in another tool's syntax — `{a,b}`, `!negated`, `./x`,
+// `dir/`, `a?b` — would compile, match no path, and quietly take that entry
+// off the list. `globProblem` says why; `compileGlob` throws it.
+
+export const GLOB_DIALECT = "`**` as a whole segment, `*` within a segment, everything else literal";
+
+/** Why `glob` is not a glob in the harness dialect, or `null` when it is one. */
+export function globProblem(glob) {
+  if (typeof glob !== "string") return "is not a string";
+  if (glob === "" || glob.trim() === "") return "is blank";
+  if (glob !== glob.trim()) return "has leading or trailing whitespace";
+  if (glob.startsWith("!")) return "is a negation; list only what should match";
+  if (/[{}[\]?\\]/.test(glob)) return "uses `{}`, `[]`, `?` or `\\`, which this dialect does not have";
+  if (glob.startsWith("/")) return "starts with `/`; paths are repository-relative, written without it";
+  if (glob.endsWith("/")) return "ends with `/`; write `dir/**` for everything under a directory";
+  const segments = glob.split("/");
+  if (segments.includes("")) return "has an empty path segment (`//`)";
+  if (segments.includes(".") || segments.includes("..")) return "has a `.` or `..` segment; write the path from the repository root";
+  if (segments.some((s) => s.includes("**") && s !== "**")) return "uses `**` inside a segment; it must be a whole segment (`a/**/b`)";
+  return null;
+}
+
+/** Compile one glob of the harness dialect. Throws on anything outside it. */
+export function compileGlob(glob) {
+  const problem = globProblem(glob);
+  if (problem) throw new Error(`harness glob ${JSON.stringify(glob)} ${problem}`);
+  const segments = glob.split("/");
+  let re = "";
+  segments.forEach((segment, i) => {
+    const last = i === segments.length - 1;
+    if (segment === "**") {
+      // Zero or more directories; as the last segment, whatever is left.
+      re += last ? ".*" : "(?:.*/)?";
+      return;
+    }
+    re += segment
+      .split("*")
+      .map((lit) => lit.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("[^/]*");
+    if (!last) re += "/";
+  });
+  return new RegExp(`^${re}$`);
+}
+
 // --- schema ------------------------------------------------------------------
 //
 // One entry per leaf: a predicate and the words for what it wants. A nested
@@ -59,17 +124,43 @@ export const TEST_RULE_SETS = Object.freeze(["go", "vitest"]);
 // simply absent", which is the silent default this module exists to prevent.
 
 const isStr = (v) => typeof v === "string";
-const isList = (v) => Array.isArray(v) && v.every((x) => isStr(x) && x !== "");
+// An entry is a non-blank string with no padding, and a list holds each entry
+// once. A blank or padded entry matches nothing and a repeated one is a typo
+// for something else, so neither is allowed to pass as a value.
+const isEntry = (x) => isStr(x) && x !== "" && x === x.trim();
+const isList = (v) => Array.isArray(v) && v.every(isEntry) && new Set(v).size === v.length;
+const isGlobList = (v) => isList(v) && v.every((x) => globProblem(x) === null);
+const ENTRIES = "strings that are not blank, not padded and not repeated";
+const GLOBS = `globs in the harness dialect (${GLOB_DIALECT}), not blank, not padded and not repeated`;
 
 const text = [(v) => isStr(v) && v.trim() !== "", "a non-empty string"];
 /** A string that may be empty: the repository has nothing to say here, on purpose. */
 const optionalText = [isStr, "a string (may be empty)"];
-const list = [isList, "an array of non-empty strings (may be empty)"];
-const nonEmptyList = [(v) => isList(v) && v.length > 0, "a non-empty array of non-empty strings"];
+const list = [isList, `an array of ${ENTRIES} (may be empty)`];
+const nonEmptyList = [(v) => isList(v) && v.length > 0, `a non-empty array of ${ENTRIES}`];
+/** Names the first entry that is not a glob, and why. */
+const globDetail = (v) => {
+  const bad = Array.isArray(v) ? v.find((x) => globProblem(x) !== null) : undefined;
+  return bad === undefined ? "" : ` — ${JSON.stringify(bad)} ${globProblem(bad)}`;
+};
+const globList = [isGlobList, `an array of ${GLOBS} (may be empty)`, globDetail];
+const nonEmptyGlobList = [(v) => isGlobList(v) && v.length > 0, `a non-empty array of ${GLOBS}`, globDetail];
+/** Lines of prose, in order: indentation is theirs to keep and a line may recur. */
+const lines = [
+  (v) => Array.isArray(v) && v.length > 0 && v.every((x) => isStr(x) && x.trim() !== ""),
+  "a non-empty array of non-blank lines",
+];
 const flag = [(v) => typeof v === "boolean", "a boolean"];
 const ruleSets = [
-  (v) => isList(v) && v.length > 0 && v.every((x) => TEST_RULE_SETS.includes(x)) && new Set(v).size === v.length,
+  (v) => isList(v) && v.length > 0 && v.every((x) => TEST_RULE_SETS.includes(x)),
   `a non-empty array drawn from ${JSON.stringify(TEST_RULE_SETS)}, without repeats`,
+];
+/** `linux`, `amd64`: what a Go file-name suffix can spell. */
+const identifier = [(v) => isStr(v) && /^[a-z][a-z0-9]*$/.test(v), "a lower-case identifier such as \"linux\" or \"amd64\""];
+/** Directory NAMES, matched as one path segment — not paths, not patterns. */
+const dirNames = [
+  (v) => isList(v) && v.every((x) => /^[A-Za-z0-9_][A-Za-z0-9._-]*$/.test(x)),
+  "an array of plain directory names (one path segment each: no slash, no dot-prefix, no pattern)",
 ];
 
 /** Marks a nested schema whose key may be absent as a whole. */
@@ -92,24 +183,25 @@ const SCHEMA = {
   },
   ci: {
     // Paths that define what CI does, beyond the ones every repository shares.
-    definingPaths: nonEmptyList,
+    definingPaths: nonEmptyGlobList,
     // What the green-CI gate covers, in the ready-gate report.
     gateLabel: text,
     // The hand-off comment's CI bullet, one entry per line.
-    handoffSummary: nonEmptyList,
+    handoffSummary: lines,
     // Does CI upload per-lane reports for the CI-fix arm to read?
     laneReports: flag,
   },
   review: {
     classRules: {
-      "code-adjacent": list,
-      policy: list,
+      "code-adjacent": globList,
+      policy: globList,
     },
     // What counts as source for the path-scoped lenses.
-    sourceGlobs: nonEmptyList,
+    sourceGlobs: nonEmptyGlobList,
     // The design-fit rubric's sentence about where shared code lives.
     sharedPrimitivesNote: text,
-    // Pathspecs left out of the diff a reviewer reads.
+    // Git pathspecs left out of the diff a reviewer reads. Git's dialect, not
+    // the harness's: they are handed to `git diff`, never compiled here.
     diffExcludes: list,
   },
   fixer: {
@@ -125,12 +217,12 @@ const SCHEMA = {
   tests: {
     rules: ruleSets,
     go: optional({
-      sharedSuiteDirs: list,
-      ciPlatform: { goos: text, goarch: text },
+      sharedSuiteDirs: dirNames,
+      ciPlatform: { goos: identifier, goarch: identifier },
     }),
   },
   fixGuard: {
-    replicatedRuleGlobs: list,
+    replicatedRuleGlobs: globList,
     replicatedRuleNotice: optionalText,
     counterpartRepo: optionalText,
   },
@@ -158,8 +250,8 @@ function validate(value, schema, where, problems) {
       continue;
     }
     if (Array.isArray(rule)) {
-      const [ok, wants] = rule;
-      if (!ok(value[key])) problems.push(`${at} must be ${wants}`);
+      const [ok, wants, detail] = rule;
+      if (!ok(value[key])) problems.push(`${at} must be ${wants}${detail ? detail(value[key]) : ""}`);
     } else {
       validate(value[key], rule, at, problems);
     }
@@ -171,8 +263,14 @@ function validate(value, schema, where, problems) {
 
 /** Rules that span keys, checked only once each key has the right shape. */
 function crossChecks(config, problems) {
-  if (config.tests.rules.includes("go") && !config.tests.go) {
+  const wantsGo = config.tests.rules.includes("go");
+  if (wantsGo && !config.tests.go) {
     problems.push('tests.go is missing, and tests.rules names "go"');
+  }
+  // The other direction is refused too: a block nothing reads looks like
+  // configuration, and whoever wrote it believes the Go rules are on.
+  if (!wantsGo && config.tests.go) {
+    problems.push('tests.go is present, but tests.rules does not name "go" — nothing would read it');
   }
   const guard = config.fixGuard;
   if (guard.replicatedRuleGlobs.length > 0) {
@@ -200,9 +298,19 @@ function deepFreeze(v) {
  * override when it is set, otherwise `.github/agent-harness` under the root
  * this package sits in. Throws on an override that is empty or relative.
  */
-export function configDir(env = process.env) {
+export function configDir(env = process.env, here = HERE) {
   const override = env[CONFIG_DIR_ENV];
-  if (override === undefined) return path.resolve(HERE, "..", "..", ".github", "agent-harness");
+  if (override === undefined) {
+    const inPlace = path.basename(here) === "agent" && path.basename(path.dirname(here)) === "scripts";
+    if (!inPlace) {
+      throw new Error(
+        `harness config: this copy of the package is at ${here}, not at <root>/scripts/agent, so there is ` +
+          `no repository beside it to read .github/agent-harness from. Set ${CONFIG_DIR_ENV} to the ` +
+          "absolute path of a trusted copy of that directory.",
+      );
+    }
+    return path.resolve(here, "..", "..", ".github", "agent-harness");
+  }
   if (override.trim() === "") {
     throw new Error(
       `${CONFIG_DIR_ENV} is set but empty. Unset it to read the configuration beside this ` +
@@ -301,31 +409,28 @@ export function get(key, config = loadConfig()) {
   return node;
 }
 
-// --- globs -------------------------------------------------------------------
-
-/**
- * Compile one configured glob: `**` spans separators, `*` does not, everything
- * else is literal. Deliberately tiny and deliberately anchored at both ends:
- * the lists these come from are REFUSAL surfaces, so a pattern that
- * accidentally matched less is a fail-open.
- */
-export function compileGlob(glob) {
-  return new RegExp(
-    `^${glob
-      .split("**")
-      .map((span) =>
-        span
-          .split("*")
-          .map((lit) => lit.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-          .join("[^/]*"),
-      )
-      .join(".*")}$`,
-  );
-}
-
 // --- CLI ---------------------------------------------------------------------
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+/**
+ * Is this module the process's entry point? REALPATH BOTH SIDES: the loader
+ * resolves `import.meta.url` through symlinks and `process.argv[1]` is whatever
+ * the caller typed, so compared as plain strings a run through a symlinked
+ * path looks like an import — and the CLI would print nothing and exit 0,
+ * which a caller reads as an empty value. (The same predicate as the
+ * repository-level `scripts/direct-run.mjs`, copied because this package is
+ * checked out without its parent directory.)
+ */
+function isDirectRun() {
+  if (!process.argv[1]) return false;
+  const entry = fileURLToPath(import.meta.url);
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(entry);
+  } catch {
+    return path.resolve(process.argv[1]) === path.resolve(entry);
+  }
+}
+
+if (isDirectRun()) {
   const [verb, key, ...extra] = process.argv.slice(2);
   if (verb !== "get" || !key || extra.length > 0) {
     console.error("usage: node config.mjs get <dotted.key>");

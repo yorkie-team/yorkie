@@ -2,7 +2,7 @@ import { FIXTURE_CONFIG_DIR } from "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +13,7 @@ import {
   compileGlob,
   configDir,
   get,
+  globProblem,
   loadConfig,
 } from "./config.mjs";
 
@@ -184,6 +185,11 @@ test("loadConfig: tests.go is required exactly when tests.rules names go", (t) =
   const noGo = scratch(t, (c) => without(withValue(c, "tests.rules", ["vitest"]), "tests.go"));
   assert.deepEqual([...loadConfig(noGo).tests.rules], ["vitest"]);
   assert.equal(loadConfig(noGo).tests.go, undefined);
+
+  // The other direction: a Go block with the Go rules off is configuration
+  // nothing reads, written by someone who believes it is on.
+  const blockWithoutGo = scratch(t, (c) => withValue(c, "tests.rules", ["vitest"]));
+  assert.throws(() => loadConfig(blockWithoutGo), /tests\.go is present, but tests\.rules does not name "go"/);
 });
 
 test("loadConfig: a replicated-rule glob needs its notice and its counterpart", (t) => {
@@ -212,6 +218,41 @@ test("configDir: beside the package by default, the override when set, never a r
   assert.throws(() => configDir({ [CONFIG_DIR_ENV]: ".github/agent-harness" }), /must be an absolute path/);
 });
 
+test("configDir: the default applies only to a package sitting at <root>/scripts/agent", () => {
+  // In place, under any root — a side-directory checkout included.
+  assert.equal(configDir({}, "/work/repo/.trusted/scripts/agent"), path.normalize("/work/repo/.trusted/.github/agent-harness"));
+  // A staged copy has no repository beside it. Two directories up is wherever
+  // the copy landed, and a `.github/agent-harness` that happened to be there
+  // must not be read as if it were the trusted one.
+  for (const staged of ["/home/runner/work/_temp/agent-tools", "/tmp/agent", "/tmp/scripts/agent-tools", "/tmp/x/scripts/agent/sub"]) {
+    assert.throws(() => configDir({}, staged), /not at <root>\/scripts\/agent/, staged);
+    // …and with the variable, the copy reads exactly what it names.
+    assert.equal(configDir({ [CONFIG_DIR_ENV]: "/trusted/agent-harness" }, staged), path.normalize("/trusted/agent-harness"));
+  }
+});
+
+test("a staged copy without the variable fails even when a config sits two directories up", (t) => {
+  // The real thing, not the function: copy the package to <tmp>/x/agent-tools
+  // and plant a valid configuration at <tmp>/.github/agent-harness, which is
+  // exactly where the old default would have looked.
+  const root = mkdtempSync(path.join(tmpdir(), "harness-staged-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const tools = path.join(root, "x", "agent-tools");
+  mkdirSync(tools, { recursive: true });
+  cpSync(path.join(HERE, "config.mjs"), path.join(tools, "config.mjs"));
+  cpSync(FIXTURE_CONFIG_DIR, path.join(root, ".github", "agent-harness"), { recursive: true });
+  const env = { ...process.env };
+  delete env[CONFIG_DIR_ENV];
+  const run = (extra) => spawnSync(process.execPath, [path.join(tools, "config.mjs"), "get", "repo.name"], { encoding: "utf8", env: { ...env, ...extra } });
+  const bare = run({});
+  assert.equal(bare.status, 1);
+  assert.equal(bare.stdout, "");
+  assert.match(bare.stderr, /not at <root>\/scripts\/agent/);
+  const named = run({ [CONFIG_DIR_ENV]: FIXTURE_CONFIG_DIR });
+  assert.equal(named.status, 0, named.stderr);
+  assert.equal(named.stdout, "fixture-repo\n");
+});
+
 test("get: a dotted key, a section, and a throw for anything that is not there", () => {
   assert.equal(get("repo.name"), "fixture-repo");
   assert.deepEqual([...get("review.classRules.policy")], FIXTURE.review.classRules.policy);
@@ -226,16 +267,102 @@ test("get: a dotted key, a section, and a throw for anything that is not there",
   assert.throws(() => get("ci.definingPaths.length"), /no key/);
 });
 
-test("compileGlob: `**` spans separators, `*` does not, the rest is literal and anchored", () => {
+test("compileGlob: `**` is whole directories (none included), `*` stays in a segment, the rest is literal", () => {
   const m = (glob, p) => compileGlob(glob).test(p);
   assert.ok(m("tools/ci/**", "tools/ci/a/b.sh"));
+  assert.ok(m("tools/ci/**", "tools/ci/a"));
   assert.ok(!m("tools/ci/**", "xtools/ci/a"));
+  assert.ok(!m("tools/ci/**", "tools/ci"), "`dir/**` is what is UNDER the directory");
   assert.ok(m("tools/*.sh", "tools/a.sh"));
   assert.ok(!m("tools/*.sh", "tools/a/b.sh"));
   assert.ok(!m("build.config", "buildXconfig"), "a dot is a dot");
   assert.ok(!m("build.config", "build.config.bak"), "anchored at the end");
   assert.ok(!m("build.config", "sub/build.config"), "anchored at the start");
-  assert.ok(m("a?b", "a?b") && !m("a?b", "axb"), "`?` is literal");
+  // ZERO OR MORE directories. The earlier compilers needed at least one, so
+  // `**/x` silently missed a root-level `x` and `docs/**/*.md` missed
+  // `docs/a.md`.
+  assert.ok(m("**/README.md", "README.md"));
+  assert.ok(m("**/README.md", "a/b/README.md"));
+  assert.ok(!m("**/README.md", "a/XREADME.md"));
+  assert.ok(m("docs/**/*.md", "docs/a.md"));
+  assert.ok(m("docs/**/*.md", "docs/a/b/c.md"));
+  assert.ok(!m("docs/**/*.md", "xdocs/a.md"));
+  assert.ok(m("**/fixtures/**", "fixtures/a.json"));
+  assert.ok(m("**/fixtures/**", "a/fixtures/b/c.json"));
+  assert.ok(!m("**/fixtures/**", "a/xfixtures/b"));
+  assert.ok(m("**", "anything/at/all") && m("**", "x"));
+  assert.ok(m("a/**/b/**/c", "a/b/c") && m("a/**/b/**/c", "a/x/b/y/z/c") && !m("a/**/b/**/c", "a/c"));
+  // Regex metacharacters in a path are literal.
+  assert.ok(m("a+b/(c)/$d.^e", "a+b/(c)/$d.^e") && !m("a+b", "aab"));
+});
+
+test("globProblem / compileGlob: syntax this dialect does not have is REFUSED, not read literally", () => {
+  // Each of these compiles in some other tool and would match NOTHING here —
+  // on a refusal surface that is an entry quietly taken off the list.
+  const refused = [
+    "", " ", "\t", " a", "a ", "./Makefile", "../x", "a/./b", "a/../b", "/Makefile", "tools/", "a//b",
+    "{a,b}/**", "*.{js,ts}", "!secret/**", "a?b", "[ab].txt", "a\\b", "**.md", "a**", "a/**b/c", "***",
+  ];
+  for (const glob of refused) {
+    assert.equal(typeof globProblem(glob), "string", `${JSON.stringify(glob)} must be refused`);
+    assert.throws(() => compileGlob(glob), /harness glob/, JSON.stringify(glob));
+  }
+  for (const notString of [null, undefined, 7, {}, ["a"]]) assert.equal(globProblem(notString), "is not a string");
+  for (const fine of ["Makefile", ".golangci.yml", "a/b.c", "**", "**/x", "a/**", "a/**/b", "*.md", "a/*/b", "a-b_c/d e.txt", "scripts/*.mjs"]) {
+    assert.equal(globProblem(fine), null, fine);
+  }
+});
+
+test("loadConfig: every glob list refuses a non-glob entry and names it; no list takes a blank or repeated entry", (t) => {
+  const globKeys = ["ci.definingPaths", "review.classRules.code-adjacent", "review.classRules.policy", "review.sourceGlobs", "fixGuard.replicatedRuleGlobs"];
+  let checked = 0;
+  for (const key of globKeys) {
+    for (const bad of ["./x", "x/", "{a,b}", "!x", "a?b", "/x", "**.md"]) {
+      const dir = scratch(t, (c) => withValue(c, key, ["ok/**", bad]));
+      assert.throws(
+        () => loadConfig(dir),
+        (err) => err.message.includes(`${key} must be`) && err.message.includes(JSON.stringify(bad)),
+        `${key} must refuse ${bad} and say which entry`,
+      );
+      checked++;
+    }
+  }
+  assert.equal(checked, 35);
+  // Blank, padded and repeated entries: in every list, glob or not.
+  const lists = [...globKeys, "repo.botLogins", "repo.appLogins", "review.diffExcludes", "tests.rules", "tests.go.sharedSuiteDirs", "redact.extraPatterns", "ask.permittedMcpTools"];
+  for (const key of lists) {
+    for (const value of [["a", " "], ["a", ""], ["a", " b"], ["a", "b "], ["a", "a"]]) {
+      const dir = scratch(t, (c) => withValue(c, key, value));
+      assert.throws(() => loadConfig(dir), (err) => err.message.includes(`${key} must be`), `${key} = ${JSON.stringify(value)}`);
+    }
+  }
+  // The hand-off bullet is prose: indentation is kept, and a line may recur.
+  const prose = scratch(t, (c) => withValue(c, "ci.handoffSummary", ["- a", "  indented", "  indented"]));
+  assert.deepEqual([...loadConfig(prose).ci.handoffSummary], ["- a", "  indented", "  indented"]);
+  const blankLine = scratch(t, (c) => withValue(c, "ci.handoffSummary", ["- a", "  "]));
+  assert.throws(() => loadConfig(blankLine), /ci\.handoffSummary must be/);
+});
+
+test("loadConfig: the Go block takes identifiers and plain directory names, nothing else", (t) => {
+  const wrong = [
+    ["tests.go.ciPlatform.goos", "Linux"],
+    ["tests.go.ciPlatform.goos", "linux/amd64"],
+    ["tests.go.ciPlatform.goos", "linux "],
+    ["tests.go.ciPlatform.goarch", "amd-64"],
+    ["tests.go.ciPlatform.goarch", "64"],
+    ["tests.go.sharedSuiteDirs", [".."]],
+    ["tests.go.sharedSuiteDirs", ["."]],
+    ["tests.go.sharedSuiteDirs", ["a/b"]],
+    ["tests.go.sharedSuiteDirs", ["server/rpc/testcases"]],
+    ["tests.go.sharedSuiteDirs", ["test*"]],
+    ["tests.go.sharedSuiteDirs", [".hidden"]],
+  ];
+  for (const [key, value] of wrong) {
+    const dir = scratch(t, (c) => withValue(c, key, value));
+    assert.throws(() => loadConfig(dir), (err) => err.message.includes(`${key} must be`), `${key} = ${JSON.stringify(value)}`);
+  }
+  const fine = scratch(t, (c) => withValue(withValue(c, "tests.go.sharedSuiteDirs", ["testcases", "shared_suites", "v1.suites"]), "tests.go.ciPlatform", { goos: "linux", goarch: "riscv64" }));
+  assert.deepEqual([...loadConfig(fine).tests.go.sharedSuiteDirs], ["testcases", "shared_suites", "v1.suites"]);
 });
 
 // --- CLI ---------------------------------------------------------------------
@@ -283,6 +410,23 @@ test("CLI: every failure exits 1 with a message and prints NOTHING to stdout", (
   }
 });
 
+test("CLI: run through a symlinked path, it still runs", (t) => {
+  // The loader resolves `import.meta.url` through symlinks; `process.argv[1]`
+  // is what the caller typed. Compared as strings the two differ, the CLI body
+  // is skipped, and the process prints nothing and exits 0 — an empty value to
+  // whoever captured stdout.
+  const dir = mkdtempSync(path.join(tmpdir(), "harness-link-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const link = path.join(dir, "scripts-agent-link");
+  symlinkSync(HERE, link, "dir");
+  const viaLink = spawnSync(process.execPath, [path.join(link, "config.mjs"), "get", "repo.name"], { encoding: "utf8" });
+  assert.equal(viaLink.status, 0, viaLink.stderr);
+  assert.equal(viaLink.stdout, "fixture-repo\n");
+  const failing = spawnSync(process.execPath, [path.join(link, "config.mjs"), "get", "ci.nope"], { encoding: "utf8" });
+  assert.equal(failing.status, 1);
+  assert.match(failing.stderr, /no key "ci\.nope"/);
+});
+
 // --- the package's own discipline ---------------------------------------------
 
 const MODULES = readdirSync(HERE).filter((f) => f.endsWith(".mjs"));
@@ -309,7 +453,9 @@ test("config.mjs is the only module that knows where the configuration lives", (
   assert.ok(sources.length > 20, `expected the agent package, found ${sources.length} modules`);
   for (const file of sources) {
     assert.doesNotMatch(
-      source(file).replace(/^\s*(\/\/|\*).*$/gm, ""),
+      // Comments aside, and the one place the directory is NAMED rather than
+      // read: `checks.mjs` lists it among the paths that define CI.
+      source(file).replace(/^\s*(\/\/|\*).*$/gm, "").replace('".github/agent-harness/**"', ""),
       /agent-harness|AGENT_HARNESS_CONFIG_DIR/,
       `${file} names the configuration directory; read values through config.mjs instead`,
     );
