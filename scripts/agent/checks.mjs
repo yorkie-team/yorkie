@@ -174,6 +174,26 @@ export const CI_DEFINING_PATHS = [
   ".githooks/**",
 ];
 
+/**
+ * The ready gate's name for gate 1, and the hand-off comment's bullet for it —
+ * the two places `mark-ready.mjs` tells a human what the green CI run covered.
+ *
+ * They live here for the reason `DEFAULT_REVIEW_CHECKS` does: mark-ready is a
+ * CLI with top-level `process.exit`, so nothing can import it, and these are the
+ * words a reviewer relies on when deciding how much the run proves.
+ */
+export const CI_GATE_NAME = "CI is green for this head SHA (lint, build, vet, -race integration)";
+
+export const HANDOFF_CI_SUMMARY = [
+  "- ✅ CI is green (golangci-lint, buf lint and breaking, codegen freshness,",
+  "  `make build`, `go vet` over the tag-gated files, and the `-race` integration",
+  "  suite against a real MongoDB) for this exact head SHA, on a PR based on the",
+  "  default branch — and the branch changes none of the paths that define what",
+  "  CI does (the workflows, the Makefile, `.golangci.yml`, `go.mod`/`go.sum`, the",
+  "  buf configs, `build/docker/**`), so the CI definition that run executed came",
+  "  from `main` rather than from the branch.",
+];
+
 // `**` spans separators, `*` does not, everything else is literal. Deliberately
 // tiny and deliberately anchored at both ends: this is a REFUSAL surface, so a
 // pattern that accidentally matched less is a fail-open.

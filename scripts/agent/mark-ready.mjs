@@ -75,7 +75,15 @@
 // Requires the `gh` CLI authenticated via GH_TOKEN / GITHUB_TOKEN.
 
 import { execFileSync } from "node:child_process";
-import { allRequiredPassed, ciConclusion, CI_WORKFLOW_FILE, definesCi, DEFAULT_REVIEW_CHECKS } from "./checks.mjs";
+import {
+  allRequiredPassed,
+  ciConclusion,
+  CI_GATE_NAME,
+  CI_WORKFLOW_FILE,
+  definesCi,
+  DEFAULT_REVIEW_CHECKS,
+  HANDOFF_CI_SUMMARY,
+} from "./checks.mjs";
 import { computeLabelSet } from "./set-state.mjs";
 import { disclosesAiAuthorship, HANDOFF_MARKER } from "./disclosure.mjs";
 
@@ -359,7 +367,7 @@ const disclosure = disclosesAiAuthorship(body);
 // --- report ----------------------------------------------------------------
 
 const gates = [
-  { name: "CI is green for this head SHA (lint, build, vet, -race integration)", ok: ciGate },
+  { name: CI_GATE_NAME, ok: ciGate },
   { name: "CI's definition came from main (branch supplies no CI-defining path)", ok: ciDefinitionGate },
   { name: `Review panel approved (all lens checks ✅: ${REQUIRED_CHECKS.join(", ")})`, ok: reviewApproved },
   { name: "AI authorship disclosed in PR body", ok: disclosure },
@@ -475,13 +483,7 @@ const handoff = [
   "This PR was authored autonomously by Claude Code and has cleared the harness",
   "ready gate:",
   "",
-  "- ✅ CI is green (golangci-lint, buf lint and breaking, codegen freshness,",
-  "  `make build`, `go vet` over the tag-gated files, and the `-race` integration",
-  "  suite against a real MongoDB) for this exact head SHA, on a PR based on the",
-  "  default branch — and the branch changes none of the paths that define what",
-  "  CI does (the workflows, the Makefile, `.golangci.yml`, `go.mod`/`go.sum`, the",
-  "  buf configs, `build/docker/**`), so the CI definition that run executed came",
-  "  from `main` rather than from the branch.",
+  ...HANDOFF_CI_SUMMARY,
   "  This does NOT mean every assertion CI ran is main's: a branch can still weaken",
   "  its own tests, which is what the test-adequacy lens reads the diff for.",
   `- ✅ The review panel approved with no blocking findings (${REQUIRED_CHECKS.join(", ")}).`,

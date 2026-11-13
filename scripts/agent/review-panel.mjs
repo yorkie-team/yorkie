@@ -246,7 +246,7 @@ export const FILE_CLASSES = ["code", "code-adjacent", "policy", "design-spec", "
 // requires an explicit match. Anything unrecognized falls through to `code` and
 // is reviewed by everyone. A new kind of file must never silently take the cheap
 // path — same "fail toward blocking" rule as normalizeSeverity's unknown → major.
-const CLASS_RULES = [
+export const CLASS_RULES = [
   // 1. Data that BEHAVIOR depends on: parsed at runtime or asserted against by
   //    tests. Reviewed as code, because it is code's input. Go test SOURCE is
   //    not here — a `_test.go` file is code and falls through to `code` below.
