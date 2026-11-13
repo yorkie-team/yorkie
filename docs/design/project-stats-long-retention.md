@@ -612,9 +612,11 @@ the job is recreated against the new table at the offset where it stopped:
 5. `STOP ROUTINE LOAD FOR <t>`, then `CREATE ROUTINE LOAD` under the same name
    `ON <t>` with the original properties (`property.group.id` included — `SHOW
    CREATE ROUTINE LOAD` omits it) and `"property.kafka_default_offsets" =
-   "<Progress + 1>"`, naming no partitions. Once it is consuming, `PAUSE`,
-   `ALTER ROUTINE LOAD ... FROM KAFKA ("property.kafka_default_offsets" =
-   "OFFSET_BEGINNING")`, `RESUME` (see below).
+   "<Progress + 1>"`, naming no partitions. Once it has loaded a message past
+   the cutover (`Progress` above the recorded value), `PAUSE`, `ALTER ROUTINE
+   LOAD ... FROM KAFKA ("property.kafka_default_offsets" =
+   "OFFSET_BEGINNING")`, `RESUME` (see below). A table with no traffic since
+   the cutover keeps the numeric default until it gets some.
 6. Once the long windows are verified, drop the old table and `ALTER TABLE <t>
    RENAME ROLLUP <mv>_p <mv>`. Renaming first would leave two MVs of the same
    name, since `RENAME ROLLUP` skips the uniqueness check `CREATE` enforces.
@@ -640,8 +642,20 @@ empty partition was read from that offset, failed with "Offset out of range",
 and paused the whole job. Switching the default to `OFFSET_BEGINNING` once the
 job is past it keeps the consumed progress (nothing is re-read) and reads a
 later partition from its start: rehearsed with a partition added after the
-switch, every message on both partitions landed once. A topic with more than
-one partition cannot take this path; it needs the explicit list and is pinned.
+switch, every message on both partitions landed once.
+
+"Past it" means a loaded message, not a `Progress` value. A new job shows
+`Progress` = the numeric offset − 1 as soon as it is created, before it has
+read anything, and on 3.3.22 that value is not durable until a load commits.
+Rehearsed with nothing produced after the cutover: switched right after
+`CREATE`, the job re-read the topic from offset 0; switched after a minute of
+idle scheduling it did not, but a restart of the FE then made it re-read from
+offset 0 as well. Left numeric, a lost progress can only resolve back to the
+cutover offset, so the numeric default is the safe state until a load has
+committed.
+
+A topic with more than one partition cannot take this path; it needs the
+explicit list and is pinned.
 
 **Partition pruning under `DATE()`.** The MV design warned that wrapping
 `timestamp` in `DATE()` can lose partition pruning once the base is partitioned,
