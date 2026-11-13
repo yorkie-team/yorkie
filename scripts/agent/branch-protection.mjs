@@ -12,6 +12,8 @@
 // So the decision is a pure function over already-fetched API payloads, and its
 // caller does nothing but fetch and print.
 
+import { get } from "./config.mjs";
+
 /** Verdict shape. `ok` false always carries a `reason` a maintainer can act on. */
 
 /**
@@ -32,7 +34,7 @@ export function decideProtection({ classic = null, classicError = null, rules = 
       ok: false,
       reason:
         `branch protection could not be read (HTTP ${classicError.status}). The App token needs ` +
-        "Administration: read — see docs/design/agent-command-verbs.md, Phase I",
+        `Administration: read — see ${get("docs.commandVerbsRef")}, Phase I`,
     };
   }
 

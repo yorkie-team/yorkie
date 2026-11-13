@@ -22,6 +22,7 @@
 // `@claude rerun`).
 
 import { parseCommand } from "./command.mjs";
+import { get } from "./config.mjs";
 
 /**
  * The marker that latches a PR as "handed to a human". Written by
@@ -41,14 +42,16 @@ import { parseCommand } from "./command.mjs";
 export const PAGED_LATCH = "<!-- agent-review-paged -->";
 
 /**
- * Bot identities allowed to WRITE the latch. Both are real: the guard and the
- * `stalled` job comment with `secrets.GITHUB_TOKEN` (`github-actions[bot]`),
- * while the fix job's branch-head page uses the App token (`yorkie-team-agent[bot]`).
+ * Bot identities allowed to WRITE the latch. Both kinds are real: the guard and
+ * the `stalled` job comment with `secrets.GITHUB_TOKEN` (`github-actions[bot]`),
+ * while the fix job's branch-head page uses the App token (the agent App's own
+ * `[bot]` login). Which App that is belongs to the installation, so the list is
+ * `repo.botLogins` in the harness configuration.
  *
  * A login allow-list is sound because GitHub reserves the `[bot]` suffix for
  * Apps — no account can register one of these names.
  */
-export const PAGE_AUTHOR_LOGINS = Object.freeze(["github-actions[bot]", "yorkie-team-agent[bot]"]);
+export const PAGE_AUTHOR_LOGINS = get("repo.botLogins");
 
 /**
  * Associations that mean "a human attached to this project", NOT "has write
@@ -94,7 +97,7 @@ export function isPagedLatchComment(comment) {
  *
  * The first version keyed on a hidden marker in the workflow's result comment,
  * trusted by bot login. But `agent-rerun.yml` posts with the App token, so the
- * trusted identity is `yorkie-team-agent[bot]` — the SAME identity the fixer and
+ * trusted identity is the agent App's bot login — the SAME identity the fixer and
  * implementer post their own free-form comments under (the self-review comment on
  * every agent PR is one). That made the party bounded by `MAX_REVIEW_ROUNDS` able
  * to reset its own bound by opening a comment with the marker line: an LLM reading
@@ -284,7 +287,7 @@ export function countFailedReviewRounds(commits, requiredCheckNames, opts = {}) 
 //
 //   - `github-actions[bot]` ONLY — the guard's `secrets.GITHUB_TOKEN` identity.
 //     GitHub reserves the `[bot]` suffix for Apps, so no account can register it.
-//   - NOT `yorkie-team-agent[bot]`, even though it is a trusted latch author: that is
+//   - NOT the agent App's bot login, even though it is a trusted latch author: that is
 //     the FIXER's own identity (the App token it holds to push and comment), and
 //     the party bounded by `MAX_REVIEW_ROUNDS` must not be able to choose the
 //     rule it is counted by. This is the same class of hole `rerunPointFrom`

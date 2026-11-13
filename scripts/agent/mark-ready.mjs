@@ -18,10 +18,10 @@
 //      branch that can edit that file produces a genuinely green run at the
 //      genuine path with no tests in it. Gate 1b closes that:
 //   1b. The branch supplies NO part of the CI definition — none of
-//      `CI_DEFINING_PATHS` (checks.mjs): the workflows, the Makefile and
-//      `.golangci.yml` that `ci.yml` calls into, `go.mod`/`go.sum`, the buf
-//      configs the codegen gate regenerates from, and the compose stack the
-//      integration lane is graded against. If it touches
+//      `CI_DEFINING_PATHS` (checks.mjs): the workflows, plus what this
+//      repository's harness configuration lists as the build files, the lint
+//      and codegen configuration, the dependency manifests and the stacks its
+//      CI resolves through. If it touches
 //      any of them, CI's verdict for this SHA is evidence about the BRANCH's CI
 //      definition rather than about main's, so it is not the evidence gate 1
 //      claims to read and auto-promotion is refused. Such a PR is not blocked,
@@ -214,15 +214,14 @@ function ciPassed(sha) {
   }
   const runs = data.workflow_runs || [];
   // NO RUN AT ALL is reported separately, because the two unknowns need
-  // different words. It USED to be a routine outcome here: `ci.yml` carried
-  // `paths-ignore` for markdown, `api/docs`, `build/charts`, `design/` and
-  // `*.txt`, so a documentation-only PR produced no CI run for its head SHA and
-  // this gate could never go green — the operator was told to promote it by
-  // hand. That filter now lives on ci.yml's `build` JOB instead, precisely so
-  // that every PR produces a run; a documentation PR reaches this gate with a
-  // green run whose Go lane was skipped, and promotes like any other.
+  // different words. A CI workflow with a trigger-level path filter files no
+  // run at all for a PR that touches only filtered paths, so this gate could
+  // never go green for it and the operator would have to promote by hand. A
+  // repository running this harness filters at the JOB level instead, so that
+  // every PR produces a run; a PR whose lanes were all filtered out reaches
+  // this gate with a green run and promotes like any other.
   //
-  // So an empty list is no longer routine. It means this sha's run is not
+  // So an empty list is not routine. It means this sha's run is not
   // visible — deleted, or aged past retention — and the gate still refuses,
   // because "no evidence CI passed" is not "CI passed" and the whole point of
   // gate 1 is that promotion rests on evidence.

@@ -1,0 +1,118 @@
+{
+  "repo": {
+    "name": "yorkie",
+    "botLogins": [
+      "github-actions[bot]",
+      "yorkie-team-agent[bot]"
+    ],
+    "appLogins": [
+      "yorkie-team-agent[bot]",
+      "app/yorkie-team-agent"
+    ]
+  },
+  "docs": {
+    "commandVerbsRef": "docs/design/agent-command-verbs.md"
+  },
+  "ci": {
+    "definingPaths": [
+      "Makefile",
+      ".golangci.yml",
+      "codecov.yml",
+      "go.mod",
+      "go.sum",
+      "buf.gen.yaml",
+      "buf.work.yaml",
+      "api/buf.yaml",
+      "api/buf.gen.yaml",
+      "build/docker/**",
+      "scripts/ci/**",
+      "scripts/go-fix.sh",
+      "scripts/go-build-tags.sh",
+      "scripts/*.mjs",
+      "scripts/test/**"
+    ],
+    "gateLabel": "lint, build, vet, -race integration",
+    "handoffSummary": [
+      "- ✅ CI is green (golangci-lint, buf lint and breaking, codegen freshness,",
+      "  `make build`, `go vet` over the tag-gated files, and the `-race` integration",
+      "  suite against a real MongoDB) for this exact head SHA, on a PR based on the",
+      "  default branch — and the branch changes none of the paths that define what",
+      "  CI does (the workflows, the Makefile, `.golangci.yml`, `go.mod`/`go.sum`, the",
+      "  buf configs, `build/docker/**`), so the CI definition that run executed came",
+      "  from `main` rather than from the branch."
+    ],
+    "laneReports": true
+  },
+  "review": {
+    "classRules": {
+      "code-adjacent": [
+        "**/testdata/**",
+        "**/fixtures/**",
+        "build/docker/**"
+      ],
+      "policy": [
+        ".golangci.yml",
+        "Makefile",
+        "buf.gen.yaml",
+        "buf.work.yaml",
+        "api/buf.yaml",
+        "api/buf.gen.yaml"
+      ]
+    },
+    "sourceGlobs": [
+      "pkg/**",
+      "server/**",
+      "client/**",
+      "admin/**",
+      "cluster/**",
+      "cmd/**",
+      "api/**",
+      "internal/**",
+      "test/**"
+    ],
+    "sharedPrimitivesNote": "This\n  repo layers JSON-like → CRDT → Common, and the shared primitives live in\n  `pkg/`.",
+    "diffExcludes": [
+      "api/yorkie/v1/*.pb.go",
+      "api/yorkie/v1/v1connect/*.connect.go",
+      "api/docs/*"
+    ]
+  },
+  "fixer": {
+    "verifyCommand": "make verify",
+    "verifyDescription": "`make lint`, the Apache licence-header check, the `go fix` check and `go test ./...`. If the `go fix` check fails, run `make modernize` rather than editing the idioms by hand.",
+    "forbiddenCommands": "`make test`, `make test-complex`, `make bench` or `make coverage`",
+    "targetedTestHint": "`make lint` and a targeted `go test ./path/to/pkg/...` in the foreground",
+    "generatedCodeNote": "Generated protobuf under api/yorkie/v1/ cannot be changed from this run: hand-editing it is forbidden, and `make proto` needs buf and two protoc plugins that are not installed here.",
+    "keepReproducerAs": "`t.Skip(\"still reproduces: <finding>\")` as the test's first statement, with a comment naming the finding",
+    "licenceScope": "Apache 2.0 licence header on every new Go file; every package needs a package comment.",
+    "todoTrackingLine": ""
+  },
+  "tests": {
+    "rules": [
+      "go",
+      "vitest"
+    ],
+    "go": {
+      "sharedSuiteDirs": [
+        "testcases"
+      ],
+      "ciPlatform": {
+        "goos": "linux",
+        "goarch": "amd64"
+      }
+    }
+  },
+  "fixGuard": {
+    "replicatedRuleGlobs": [
+      "pkg/document/crdt/*.go"
+    ],
+    "replicatedRuleNotice": "**Replicated CRDT rule changed in Go only (warning).** yorkie-js-sdk must apply the same rule or a Go server and JS clients diverge. Link the matching yorkie-js-sdk change in the PR body, or say why none is needed:",
+    "counterpartRepo": "yorkie-js-sdk"
+  },
+  "redact": {
+    "extraPatterns": []
+  },
+  "ask": {
+    "permittedMcpTools": []
+  }
+}

@@ -50,6 +50,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findingSimilarity, DEFAULT_SIMILARITY } from "./rounds.mjs";
 import { CITATION } from "./citation.mjs";
+import { get } from "./config.mjs";
 import { emitBestEffortWarning } from "./guard-verdict.mjs";
 
 // `maxBuffer`: node's default is 1 MiB, and `gh api --paginate` over a busy PR
@@ -235,8 +236,11 @@ export function parseRebuttalComment(body) {
  * could parse as a record. The login pins it to us, and a `[bot]` login cannot be
  * registered by an ordinary account, so the pair is unforgeable from outside.
  * Same shape as `PAGE_AUTHOR_LOGINS` in rounds.mjs, for the same reason.
+ *
+ * The App's identities, in both spellings the API reports them, are
+ * `repo.appLogins` in the harness configuration.
  */
-export const REBUTTAL_AUTHOR_LOGINS = Object.freeze(["yorkie-team-agent[bot]", "app/yorkie-team-agent"]);
+export const REBUTTAL_AUTHOR_LOGINS = get("repo.appLogins");
 
 /**
  * May this comment's author file a rebuttal at all?

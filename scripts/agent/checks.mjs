@@ -2,6 +2,8 @@
 // A required check "passes" iff its LATEST run on the SHA concluded success;
 // a required check that never ran counts as NOT passed (fail closed).
 
+import { compileGlob, get } from "./config.mjs";
+
 /**
  * Review checks the ready gate requires when the caller passes no
  * `--require-checks` — i.e. the local preview `spec-to-pr.mjs` suggests. The
@@ -86,29 +88,29 @@ export const CI_WORKFLOW_FILE = "ci.yml";
  *
  * A `pull_request` run executes the merge ref's copy of everything CI reaches,
  * so a branch that edits any of these hands gate 1 a green run that proves
- * nothing about main's CI. `.github/workflows/ci.yml` is the obvious one and is
- * nowhere near sufficient: it contains almost no test logic. It calls `make
- * lint` and `make build`, which resolve through the merge ref's `Makefile` into
- * whatever `golangci-lint` config the branch ships, and it grades the
- * integration suite against a compose stack the branch also owns. Listing only
- * the two `.github` prefixes — which an earlier revision of this gate did —
- * meant a branch could gut CI through the `Makefile` and still auto-promote,
- * while the hand-off comment told the human reviewer the run had executed
- * main's CI definition.
+ * nothing about main's CI. The CI workflow file is the obvious one and is
+ * nowhere near sufficient: a workflow contains almost no test logic. Its steps
+ * call into build files, lint configuration, dependency manifests and scripts,
+ * all of which resolve through the merge ref, and it grades the integration
+ * suite against a stack the branch also owns. Listing only the `.github`
+ * prefixes — which an earlier revision of this gate did — meant a branch could
+ * gut CI through a build file and still auto-promote, while the hand-off
+ * comment told the human reviewer the run had executed main's CI definition.
  *
- * NO SECOND LIST TO MIRROR HERE. The repository this gate was ported from keeps
- * its own CODEOWNER-ed declaration of "files that decide how much CI runs", and
- * a test asserts this list covers it entry for entry. This repository has no
- * such file: `ci.yml`'s own filter declares `build: '**'`, so the lint/build/
- * test job is unconditional and no path can shrink it. That removes the drift
- * risk and removes the cross-check with it, which is why the entries below are
- * commented individually — the comment is the only thing left saying why each
- * one is on the list.
+ * TWO PARTS. The entries every repository shares are written here: the
+ * workflows and actions, CODEOWNERS, and the local enforcement layer. What a
+ * particular repository's CI resolves through — its build files, its lint and
+ * codegen configuration, its dependency graph, the scripts its lanes call —
+ * is `ci.definingPaths` in the repository's harness configuration, and the
+ * reason each of those entries is listed is written beside the test that pins
+ * them (`.github/agent-harness/repo.test.mjs`).
  *
- * Hard-coded here rather than read from a config file at runtime for a
- * provenance reason: the promote job checks out the DEFAULT BRANCH, so this
- * module is main's copy, whereas a file read would be whatever tree the caller
- * happens to be standing in. The drift test is what keeps the duplication honest.
+ * PROVENANCE. The promote job checks out the DEFAULT BRANCH, so this module is
+ * main's copy, and `config.mjs` resolves the configuration from beside the
+ * module that is running — main's copy too. It is never read from whatever
+ * tree the caller happens to be standing in. A missing or incomplete
+ * configuration throws at import, so this list cannot be quietly shorter than
+ * the repository's own.
  *
  * WHAT THIS STILL DOES NOT COVER, stated because the hand-off comment must not
  * overclaim it: a branch can always edit its own test files, and CI dutifully
@@ -117,54 +119,11 @@ export const CI_WORKFLOW_FILE = "ci.yml";
  * supplied no part of the CI/harness definition", never "every assertion CI ran
  * came from main".
  */
-export const CI_DEFINING_PATHS = [
+export const CI_DEFINING_PATHS = Object.freeze([
   ".github/workflows/**",
   ".github/actions/**",
   ".github/CODEOWNERS",
-  // The lanes themselves. `ci.yml` calls `make lint`, `make build` and a
-  // `go test` line; what those resolve to lives in the Makefile and
-  // `.golangci.yml`, so a branch editing either supplies part of the CI
-  // definition exactly as if it had edited the workflow.
-  "Makefile",
-  ".golangci.yml",
-  "codecov.yml",
-  // The toolchain and the dependency graph CI resolves before it runs anything.
-  "go.mod",
-  "go.sum",
-  // Codegen configuration: the `buf generate` freshness gate is only as strict
-  // as the config it regenerates from.
-  "buf.gen.yaml",
-  "buf.work.yaml",
-  "api/buf.yaml",
-  "api/buf.gen.yaml",
-  // The stack the integration lane is graded against.
-  "build/docker/**",
-  // Scripts a workflow invokes directly.
-  "scripts/ci/**",
-  // …and the shell scripts a Makefile target a workflow invokes resolves to.
-  // `go-fix.sh` is the whole body of the `modernize` lane (`Makefile`'s
-  // `verify-modernize` runs nothing else) and it also runs on every push
-  // through `make verify`, so a branch editing it decides whether that lane
-  // checks anything at all — the same fail-open as editing the Makefile line
-  // that calls it, one file away.
-  "scripts/go-fix.sh",
-  // `go-build-tags.sh` prints the tag set both `make lint` and `go-fix.sh`
-  // run under. A branch making it print nothing would lint and modernize the
-  // default build only, with every lane still green.
-  "scripts/go-build-tags.sh",
-  // …and the modules those scripts import. `scripts/*.mjs` rather than
-  // `scripts/verify-*.mjs`: `verify-doc-links.mjs` and `verify-license.mjs`
-  // both import `direct-run.mjs` for the predicate that decides whether their
-  // CLI body runs at all, so a branch editing that one file makes both of
-  // docs.yml's gates exit 0 having checked nothing — the same fail-open as
-  // editing the verify scripts themselves, one import away from the pattern
-  // that only named them. The directory holds nothing but those scripts and
-  // their shared helpers, so the wider glob costs no false refusals.
-  "scripts/*.mjs",
-  // …and the suite those scripts are graded by. `docs.yml` runs
-  // `node --test 'scripts/test/**'`, so a branch editing a guard there changes
-  // what the lane proves exactly as much as editing the script it guards.
-  "scripts/test/**",
+  ...get("ci.definingPaths"),
   // The local enforcement layer. `setup.sh` decides what `core.hooksPath` and
   // Claude Code's hook wiring point at, and the two hook directories are what
   // they point at — a branch rewriting any of them changes what runs on a
@@ -172,45 +131,23 @@ export const CI_DEFINING_PATHS = [
   "scripts/setup.sh",
   "scripts/hooks/**",
   ".githooks/**",
-];
+]);
 
 /**
  * The ready gate's name for gate 1, and the hand-off comment's bullet for it —
  * the two places `mark-ready.mjs` tells a human what the green CI run covered.
+ * Which lanes that is differs per repository, so both come from the harness
+ * configuration (`ci.gateLabel`, `ci.handoffSummary`).
  *
- * They live here for the reason `DEFAULT_REVIEW_CHECKS` does: mark-ready is a
- * CLI with top-level `process.exit`, so nothing can import it, and these are the
- * words a reviewer relies on when deciding how much the run proves.
+ * They are exported here for the reason `DEFAULT_REVIEW_CHECKS` is: mark-ready
+ * is a CLI with top-level `process.exit`, so nothing can import it, and these
+ * are the words a reviewer relies on when deciding how much the run proves.
  */
-export const CI_GATE_NAME = "CI is green for this head SHA (lint, build, vet, -race integration)";
+export const CI_GATE_NAME = `CI is green for this head SHA (${get("ci.gateLabel")})`;
 
-export const HANDOFF_CI_SUMMARY = [
-  "- ✅ CI is green (golangci-lint, buf lint and breaking, codegen freshness,",
-  "  `make build`, `go vet` over the tag-gated files, and the `-race` integration",
-  "  suite against a real MongoDB) for this exact head SHA, on a PR based on the",
-  "  default branch — and the branch changes none of the paths that define what",
-  "  CI does (the workflows, the Makefile, `.golangci.yml`, `go.mod`/`go.sum`, the",
-  "  buf configs, `build/docker/**`), so the CI definition that run executed came",
-  "  from `main` rather than from the branch.",
-];
+export const HANDOFF_CI_SUMMARY = get("ci.handoffSummary");
 
-// `**` spans separators, `*` does not, everything else is literal. Deliberately
-// tiny and deliberately anchored at both ends: this is a REFUSAL surface, so a
-// pattern that accidentally matched less is a fail-open.
-const CI_DEFINING_RE = CI_DEFINING_PATHS.map(
-  (glob) =>
-    new RegExp(
-      `^${glob
-        .split("**")
-        .map((span) =>
-          span
-            .split("*")
-            .map((lit) => lit.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-            .join("[^/]*"),
-        )
-        .join(".*")}$`,
-    ),
-);
+const CI_DEFINING_RE = CI_DEFINING_PATHS.map(compileGlob);
 
 /** Does this changed path define what CI does? Non-strings → false. */
 export function definesCi(name) {

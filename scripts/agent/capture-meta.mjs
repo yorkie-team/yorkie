@@ -41,13 +41,15 @@
 import { readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { get } from "./config.mjs";
 import { parseArgs } from "./gh-checks.mjs";
 
 // Bumped only on a BREAKING change to the field set. A consumer that does not
 // recognise the major must skip the capture loudly rather than guess at it —
 // mis-parsing writes plausible garbage into the corpus, which no later check
-// would notice.
-export const CAPTURE_META_SCHEMA = "yorkie/stage-capture-meta@1";
+// would notice. The id is prefixed with the repository's name, so captures from
+// two repositories that run this harness cannot be mistaken for one corpus.
+export const CAPTURE_META_SCHEMA = `${get("repo.name")}/stage-capture-meta@1`;
 
 // The file name is part of the contract: it sits at the ROOT of the artifact,
 // beside the per-lens directories, so a consumer reads one well-known entry.

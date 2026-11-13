@@ -32,6 +32,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { emitBestEffortWarning } from "./guard-verdict.mjs";
 import { ciConclusion, CI_WORKFLOW_FILE } from "./checks.mjs";
+import { get } from "./config.mjs";
 
 // `maxBuffer`: node's default is 1 MiB, and `gh api --paginate` over a busy PR
 // blows through it. When it does, `execFileSync` throws `ENOBUFS` — not an API
@@ -58,11 +59,12 @@ export const LEGACY_LIFECYCLE_LABELS = ["agent:iterating", "agent:needs-human-re
 export const MANAGED_LABELS = [...LIFECYCLE_LABELS, ...LEGACY_LIFECYCLE_LABELS];
 
 /**
- * Bot identities whose paged-latch comment `reconcile` believes. A literal copy
- * of `rounds.mjs::PAGE_AUTHOR_LOGINS`, kept literal because this module is a CLI
- * that must stay importable on its own; `set-state.test.mjs` pins them equal.
+ * Bot identities whose paged-latch comment `reconcile` believes: the same
+ * `repo.botLogins` list `rounds.mjs::PAGE_AUTHOR_LOGINS` is. Read from the
+ * harness configuration here rather than imported from `rounds.mjs`, so this
+ * CLI does not pull that module in; `set-state.test.mjs` pins them equal.
  */
-export const LATCH_AUTHOR_LOGINS = Object.freeze(["github-actions[bot]", "yorkie-team-agent[bot]"]);
+export const LATCH_AUTHOR_LOGINS = get("repo.botLogins");
 
 /** "reviewing" → "agent:reviewing"; null for an unknown state. */
 export function labelFor(state) {

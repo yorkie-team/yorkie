@@ -50,10 +50,12 @@
 //                           refactor legitimately moves assertions, and
 //                           test-removals.mjs already shows deleted tests to the
 //                           adjudicator, so this is evidence, not a gate.
-//   one-sided CRDT rule     WARNS. A non-test change under pkg/document/crdt/
-//                           changes a replicated rule that yorkie-js-sdk must
-//                           apply identically or replicas diverge. This repo
-//                           cannot see the other SDK, so it can only ask.
+//   one-sided replicated    WARNS. A non-test change to a path the harness
+//   rule                    configuration lists (`fixGuard.replicatedRuleGlobs`)
+//                           changes a rule a counterpart repository must apply
+//                           identically or replicas diverge. This repo cannot
+//                           see the counterpart, so it can only ask. A
+//                           repository with no such rule lists no paths.
 //
 // Usage:
 //   node fix-guard.mjs allowed <pr> [--base main] --out <file>
@@ -68,6 +70,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { compileGlob, get } from "./config.mjs";
 import { isTestFile, roundCommits, fixerHead, safePath } from "./test-removals.mjs";
 import { frozenShaFrom } from "./review-surface.mjs";
 import { PAGED_LATCH } from "./rounds.mjs";
@@ -199,11 +202,17 @@ export function weakenedAssertions(files) {
   return out;
 }
 
-/** Non-test changes to a replicated CRDT rule. */
+// Read at import, like every configured value: a configuration without these
+// keys throws here rather than leaving the lint with nothing to match.
+const REPLICATED_RULE = get("fixGuard.replicatedRuleGlobs").map(compileGlob);
+const REPLICATED_RULE_NOTICE = get("fixGuard.replicatedRuleNotice");
+const COUNTERPART_REPO = get("fixGuard.counterpartRepo").toLowerCase();
+
+/** Non-test changes to a replicated rule (the paths `fixGuard.replicatedRuleGlobs` lists). */
 export function crdtRuleChanges(files) {
   return (Array.isArray(files) ? files : [])
     .map((f) => str(f?.filename))
-    .filter((n) => /^pkg\/document\/crdt\/[^/]+\.go$/.test(n) && !isTestFile(n));
+    .filter((n) => REPLICATED_RULE.some((re) => re.test(n)) && !isTestFile(n));
 }
 
 /**
@@ -217,9 +226,11 @@ export function lintRound({ files = [], original = null, prBody = "" } = {}) {
   const violations = original ? scopeViolations(files, original) : [];
   const reviewerDirected = reviewerDirectedHits(files);
   const weakened = weakenedAssertions(files);
-  // Asked only when nothing already points at the other SDK: a PR body that
-  // names yorkie-js-sdk has made the cross-SDK change visible to a human.
-  const crdt = /yorkie-js-sdk/i.test(str(prBody)) ? [] : [...new Set(crdtRuleChanges(files))];
+  // Asked only when nothing already points at the counterpart: a PR body that
+  // names it (in any case) has made the cross-repository change visible to a
+  // human.
+  const named = COUNTERPART_REPO !== "" && str(prBody).toLowerCase().includes(COUNTERPART_REPO);
+  const crdt = named ? [] : [...new Set(crdtRuleChanges(files))];
   return {
     scopeKnown: !!original,
     violations,
@@ -279,7 +290,7 @@ export function renderFixGuard(result, { head = "", after = "" } = {}) {
   }
   if (result.crdt.length) {
     lines.push(
-      "**Replicated CRDT rule changed in Go only (warning).** yorkie-js-sdk must apply the same rule or a Go server and JS clients diverge. Link the matching yorkie-js-sdk change in the PR body, or say why none is needed:",
+      REPLICATED_RULE_NOTICE,
       ...result.crdt.slice(0, 20).map((f) => `- \`${safePath(f)}\``),
       "",
     );

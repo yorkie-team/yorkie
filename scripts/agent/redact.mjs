@@ -208,19 +208,17 @@ export function redactSecrets(text, { extra = secretsFromEnv() } = {}) {
     /\b(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,})(?:\s+[A-Za-z0-9_-]{8,})*/g,
     "<REDACTED_GITHUB_TOKEN>",
   );
-  // NO SHAPE RULE FOR THIS PROJECT'S OWN KEYS, deliberately. A yorkie project's
-  // public and secret keys are bare `shortuuid` values
-  // (server/backend/database/project_info.go) — 22 base57 characters with no
-  // prefix, so there is nothing to match that would not also redact every commit
-  // sha and identifier in the text. And 22 is below layer 5's entropy floor, so
-  // that net does not catch them either.
+  // NO SHAPE RULE FOR A PRODUCT'S OWN KEYS, deliberately. A key that is a bare
+  // short identifier — some twenty alphanumeric characters with no prefix —
+  // gives a shape rule nothing to match that would not also redact every
+  // commit sha and identifier in the text, and it sits below layer 5's entropy
+  // floor, so that net does not catch it either.
   //
-  // Layer 4's FIELD NAME is therefore the only thing standing between a project
+  // Layer 4's FIELD NAME is therefore the only thing standing between such a
   // key and a published comment, which is why `secret[-_]?key` is spelled out
-  // there: this codebase's tag is `secret_key` (`api/types/project.go`), and an
-  // earlier revision of this comment claimed the bare `secret` alternative
-  // covered it. It does not — the separator class has no `_`, so `secret_key: …`
-  // matched nothing and went out verbatim.
+  // there. An earlier revision of this comment claimed the bare `secret`
+  // alternative covered a `secret_key` field. It does not — the separator
+  // class has no `_`, so `secret_key: …` matched nothing and went out verbatim.
   // JWTs before the Bearer rule, so a bearer-carried JWT is labelled as a JWT
   // rather than swallowed by the broader pattern.
   s = s.replace(/\beyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*/g, "<REDACTED_JWT>");
