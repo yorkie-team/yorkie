@@ -72,8 +72,8 @@ const GIT_MAX_BUFFER = 32 * 1024 * 1024;
 
 /**
  * How far from a changed line a finding may sit and still count as ABOUT the
- * change. Ten lines is roughly "the function the hunk is in" for this codebase's
- * Go and the harness's JavaScript: a finding three lines below an edited guard is
+ * change. Ten lines is roughly "the function the hunk is in" for ordinary
+ * source and the harness's JavaScript: a finding three lines below an edited guard is
  * about that guard, and one two hundred lines away in the same file is not. The
  * margin errs wide — a finding inside it keeps gating exactly as today — so a
  * wrong value can only fail to demote, never demote wrongly by itself; the

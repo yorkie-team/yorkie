@@ -171,7 +171,7 @@ const SUITE_OFF = /^[-+]\s*describe(?:\.\w+)*\.(?:skip|todo|skipIf|runIf)\s*[(`]
 // does not run them, so they cannot show that a finding reproduces. Rows of a
 // table-driven test are not seen — a known gap, stated rather than guessed at.
 const GO_CASE = /^[-+]func\s+(?:Test|Fuzz)(?![a-z])\w*\s*\(\s*\w+\s+\*testing\.[TF]\s*\)/;
-// In a shared suite body (`testcases/`), a top-level `func RunXxx(` is the case:
+// In a shared suite body (a configured directory), a top-level `func RunXxx(` is the case:
 // gofmt breaks its signature over the following lines, so the parameter type
 // is not on the line to check.
 const GO_SHARED_CASE = /^[-+]func\s+Run[A-Z0-9_]\w*\s*\(/;
