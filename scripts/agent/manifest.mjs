@@ -46,7 +46,7 @@ import { existsSync, readFileSync, readdirSync, realpathSync, writeFileSync } fr
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { HARNESS_DIR } from "./config.mjs";
+import { HARNESS_DIR, isRepoSlug } from "./config.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -91,7 +91,8 @@ export function corePaths(root) {
       // which is not a statement about this tree.
       if (e.isSymbolicLink()) throw new Error(`manifest: ${childRel} is a symbolic link; the core holds regular files only`);
       if (e.isDirectory()) walk(path.join(dir, e.name), childRel);
-      else found.push(childRel);
+      else if (e.isFile()) found.push(childRel);
+      else throw new Error(`manifest: ${childRel} is not a regular file; the core holds regular files only`);
     }
   };
   const pkg = path.join(root, PACKAGE_DIR);
@@ -99,7 +100,9 @@ export function corePaths(root) {
   const wf = path.join(root, WORKFLOW_DIR);
   if (existsSync(wf)) {
     for (const e of readdirSync(wf, { withFileTypes: true })) {
-      if (!e.isDirectory() && isAgentWorkflow(e.name)) found.push(`${WORKFLOW_DIR}/${e.name}`);
+      if (!isAgentWorkflow(e.name)) continue;
+      if (!e.isFile()) throw new Error(`manifest: ${WORKFLOW_DIR}/${e.name} is not a regular file; the core holds regular files only`);
+      found.push(`${WORKFLOW_DIR}/${e.name}`);
     }
   }
   // Byte order, not locale order: the same list on every machine.
@@ -121,6 +124,11 @@ export function buildManifest(root) {
  */
 export function parseManifest(text) {
   if (typeof text !== "string" || text === "") throw new Error("manifest: empty");
+  // Said by name, because the alternative is a complaint about a line that
+  // looks perfectly well formed: with `core.autocrlf` on and no attribute
+  // telling git to leave these files alone, a checkout rewrites every line
+  // ending, the manifest's included.
+  if (text.includes("\r")) throw new Error(`manifest: ${LINE_ENDINGS}`);
   if (!text.endsWith("\n")) throw new Error("manifest: does not end with a newline");
   const entries = new Map();
   let previous = "";
@@ -167,6 +175,32 @@ function throwEmpty(root) {
   throw new Error(`manifest: no core files under ${root}`);
 }
 
+/**
+ * The attributes a repository's root `.gitattributes` must set, so that no
+ * checkout converts the core's line endings. The manifest is over bytes.
+ */
+export const GITATTRIBUTES_LINES = Object.freeze([`${PACKAGE_DIR}/** -text`, `${WORKFLOW_DIR}/agent-*.yml -text`]);
+
+const LINE_ENDINGS =
+  "the file has CR line endings. The shared files are compared byte for byte and must be checked out unconverted: " +
+  `the repository's root .gitattributes needs \`${GITATTRIBUTES_LINES.join("` and `")}\`, ` +
+  "and a checkout made before that was added needs `git add --renormalize .` or a fresh clone.";
+
+/**
+ * Why files that "changed" may not have been edited at all: a sentence when
+ * any of them now has CRLF line endings, else "". None of the core does.
+ */
+export function lineEndingHint(root, changed) {
+  const converted = changed.filter((rel) => {
+    try {
+      return readFileSync(path.join(root, rel)).includes("\r\n");
+    } catch {
+      return false;
+    }
+  });
+  return converted.length === 0 ? "" : `${converted.length} of the changed files have CRLF line endings: ${LINE_ENDINGS}`;
+}
+
 /** `compareTree`'s result as lines for a person, or `[]` when it matches. */
 export function describeDifference({ added, removed, changed }) {
   return [
@@ -189,8 +223,6 @@ export function describeDifference({ added, removed, changed }) {
 // Every key is required and no other is allowed, for the reason the
 // configuration is strict: a typo must not read as "that value is absent".
 
-const REPO_SLUG = /^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9._-]+$/;
-
 /** Validate a parsed `upstream.json`. Returns it, or throws naming every problem. */
 export function validateUpstream(value) {
   const problems = [];
@@ -202,7 +234,7 @@ export function validateUpstream(value) {
     if (!allowed.includes(key)) problems.push(`${key} is not a known key${value.repository === null ? " when repository is null" : ""}`);
   }
   if (Object.hasOwn(value, "repository") && value.repository !== null) {
-    if (typeof value.repository !== "string" || !REPO_SLUG.test(value.repository)) problems.push("repository must be null or `owner/name`");
+    if (!isRepoSlug(value.repository)) problems.push("repository must be null or `owner/name`");
     if (typeof value.commit !== "string" || !/^[0-9a-f]{40}$/.test(value.commit)) problems.push("commit must be a full 40-character commit id, lower-case");
     if (typeof value.manifestDigest !== "string" || !/^[0-9a-f]{64}$/.test(value.manifestDigest)) problems.push("manifestDigest must be a sha256, 64 lower-case hex characters");
   }
@@ -250,69 +282,140 @@ export function adoptionProblem(root) {
  * Compare this copy with the repository it names. Returns `{ ok, lines,
  * warnings }`; never throws for something the network did.
  *
- * FAILS CLOSED on the comparison that matters: if the manifest at the recorded
- * commit cannot be fetched, that is a failure with the status and the URL in
- * it, not a pass. The second fetch — is the default branch ahead? — only ever
- * warns, including when it cannot be made: being behind is information, and
- * not knowing whether one is behind must not red a pull request.
+ * FOUR QUESTIONS, and the first three FAIL CLOSED: if upstream cannot be
+ * asked, the answer is a failure with the URL and the status in it, never a
+ * pass. A transient refusal (429, 5xx, a network error) is retried a few
+ * times first.
  *
- * `fetchText(url)` resolves to `{ status, text }`.
+ *   1. Does this copy still carry the recorded manifest? (No network.)
+ *   2. Is the recorded commit ON UPSTREAM'S DEFAULT BRANCH? A commit id alone
+ *      proves little: every head a pull request ever had stays fetchable from
+ *      the repository it was opened against, merged or not, so "this commit
+ *      exists upstream" is true of code upstream never accepted. The default
+ *      branch is read from the repository, not assumed, and the comparison
+ *      must say the commit is `behind` it or `identical` to it. There is no
+ *      fallback: a commit that cannot be placed on that branch fails.
+ *   3. Is the manifest at that commit the recorded one?
+ *   4. Has the default branch moved on? This one only ever WARNS, including
+ *      when it cannot be asked: being behind is information, and not knowing
+ *      must not red a pull request.
+ *
+ * `fetchText(url)` resolves to `{ status, text }`. `self` is the repository
+ * this is running in, when known; `sleep(ms)` is the pause between retries.
  */
-export async function checkUpstream({ upstream, localDigest, fetchText }) {
+export async function checkUpstream({ upstream, localDigest, fetchText, self = "", sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   if (upstream.repository === null) {
-    return { ok: true, lines: ["This is the repository the core is written in (upstream.json: repository is null); nothing to compare."], warnings: [] };
+    // Nothing here can tell the origin from a copy that says it is the
+    // origin — that is pinned by each repository's own tests. What this can do
+    // is put the claim, and who is making it, in the log.
+    const who = self ? `${self} is` : "This is";
+    return {
+      ok: true,
+      lines: [`${who} recorded as the repository the core is written in (${UPSTREAM_PATH}: repository is null); nothing to compare. A copy must name its upstream there instead.`],
+      warnings: [],
+    };
   }
   const { repository, commit, manifestDigest: recorded } = upstream;
   const lines = [];
   const warnings = [];
-  const url = (ref) => `https://api.github.com/repos/${repository}/contents/${MANIFEST_PATH}${ref ? `?ref=${ref}` : ""}`;
+  const api = `https://api.github.com/repos/${repository}`;
+  const manifestUrl = (ref) => `${api}/contents/${MANIFEST_PATH}${ref ? `?ref=${ref}` : ""}`;
+  const fail = (line) => {
+    lines.push(line);
+    return { ok: false, lines, warnings };
+  };
+  const CLOSED = "The copy cannot be compared, so this check fails rather than passes.";
 
-  if (localDigest !== recorded) {
-    lines.push(`This copy's manifest digest is ${localDigest}; ${UPSTREAM_PATH} records ${recorded}.`);
-    return { ok: false, lines, warnings };
-  }
-  let pinned;
+  /** One GET with retries. Returns `{ status, text }` or `{ error }`. */
+  const get = async (url) => {
+    let last = {};
+    for (let attempt = 0; attempt < RETRY_DELAYS_MS.length + 1; attempt++) {
+      if (attempt > 0) await sleep(RETRY_DELAYS_MS[attempt - 1]);
+      try {
+        last = await fetchText(url);
+        if (last.status !== 429 && !(last.status >= 500 && last.status <= 599)) return last;
+      } catch (err) {
+        last = { error: err.message };
+      }
+    }
+    return last;
+  };
+  const unreachable = (url, r) =>
+    r.error !== undefined
+      ? `Could not fetch ${url}: ${r.error} (after ${RETRY_DELAYS_MS.length + 1} attempts). ${CLOSED}`
+      : `Fetching ${url} returned HTTP ${r.status}. ${CLOSED}`;
+
+  // 1.
+  if (localDigest !== recorded) return fail(`This copy's manifest digest is ${localDigest}; ${UPSTREAM_PATH} records ${recorded}.`);
+
+  // 2.
+  const repo = await get(api);
+  if (repo.status !== 200) return fail(unreachable(api, repo));
+  let branch;
   try {
-    pinned = await fetchText(url(commit));
-  } catch (err) {
-    lines.push(`Could not fetch ${url(commit)}: ${err.message}. The copy cannot be compared with ${repository}, so this check fails rather than passes.`);
-    return { ok: false, lines, warnings };
+    branch = JSON.parse(repo.text).default_branch;
+  } catch {
+    branch = undefined;
   }
-  if (pinned.status !== 200) {
-    lines.push(
-      `Fetching ${url(commit)} returned HTTP ${pinned.status}. Either ${repository} has no manifest at ${commit}, the commit does not exist there, ` +
-        "or the request was refused. The copy cannot be compared, so this check fails rather than passes.",
+  if (typeof branch !== "string" || !/^[\w./-]+$/.test(branch)) return fail(`${api} did not say what ${repository}'s default branch is. ${CLOSED}`);
+  const compareUrl = `${api}/compare/${encodeURIComponent(branch)}...${commit}`;
+  const compare = await get(compareUrl);
+  if (compare.status === 404) {
+    return fail(`${repository} has no commit ${commit} that can be compared with its default branch (${compareUrl} returned HTTP 404). ${UPSTREAM_PATH} must record a commit on ${branch}.`);
+  }
+  if (compare.status !== 200) return fail(unreachable(compareUrl, compare));
+  let status;
+  try {
+    status = JSON.parse(compare.text).status;
+  } catch {
+    status = undefined;
+  }
+  if (status !== "behind" && status !== "identical") {
+    return fail(
+      `The recorded commit ${commit} is not on ${repository}'s default branch (${branch}): it is ${JSON.stringify(status ?? "unknown")} relative to it. ` +
+        `A copy is synced from the default branch only — a pull request's head exists upstream whether or not it was merged. Sync again from ${branch}.`,
     );
-    return { ok: false, lines, warnings };
   }
+
+  // 3.
+  const pinnedUrl = manifestUrl(commit);
+  const pinned = await get(pinnedUrl);
+  if (pinned.status === 404) {
+    return fail(`${repository} has no ${MANIFEST_PATH} at ${commit} (${pinnedUrl} returned HTTP 404). The recorded commit predates the manifest, or the record is wrong. ${CLOSED}`);
+  }
+  if (pinned.status !== 200) return fail(unreachable(pinnedUrl, pinned));
   const upstreamDigest = manifestDigest(pinned.text);
   if (upstreamDigest !== recorded) {
-    lines.push(`${repository} at ${commit} has manifest digest ${upstreamDigest}; ${UPSTREAM_PATH} records ${recorded}. The record does not describe that commit.`);
-    return { ok: false, lines, warnings };
+    return fail(`${repository} at ${commit} has manifest digest ${upstreamDigest}; ${UPSTREAM_PATH} records ${recorded}. The record does not describe that commit.`);
   }
-  lines.push(`This copy is ${repository} at ${commit} (manifest digest ${recorded}).`);
+  lines.push(`This copy is ${repository} at ${commit}, on ${branch} (manifest digest ${recorded}).`);
 
+  // 4.
+  const behind = `this copy is behind. Sync with \`node scripts/agent/sync.mjs --from <checkout>\`.`;
   try {
-    const head = await fetchText(url(""));
+    const head = await fetchText(manifestUrl(""));
     if (head.status !== 200) warnings.push(`Could not tell whether ${repository} has moved on: its default branch's manifest returned HTTP ${head.status}.`);
-    else if (manifestDigest(head.text) !== recorded) {
-      warnings.push(`${repository}'s default branch has a different manifest (digest ${manifestDigest(head.text)}); this copy is behind. Sync with \`node scripts/agent/sync.mjs --from <checkout>\`.`);
-    }
+    else if (manifestDigest(head.text) !== recorded) warnings.push(`${repository}'s default branch has a different manifest (digest ${manifestDigest(head.text)}); ${behind}`);
   } catch (err) {
     warnings.push(`Could not tell whether ${repository} has moved on: ${err.message}.`);
   }
   return { ok: true, lines, warnings };
 }
 
+/** Pauses before the second, third and fourth attempt at a fetch that must not be skipped. */
+export const RETRY_DELAYS_MS = Object.freeze([1000, 3000, 9000]);
+
 /** `fetchText` over the GitHub API: raw content, the ambient token if there is one. */
 async function githubFetchText(url) {
   const headers = { Accept: "application/vnd.github.raw+json", "User-Agent": "harness-manifest-check", "X-GitHub-Api-Version": "2022-11-28" };
   // The job's own read token, when present: it reads any public repository and
   // lifts the unauthenticated rate limit, which shared runner addresses
-  // exhaust. It is sent to api.github.com and nowhere else.
+  // exhaust. It is sent to api.github.com and nowhere else — the URL is
+  // checked, and a redirect is not followed with it.
+  if (!url.startsWith("https://api.github.com/")) throw new Error(`refusing to fetch ${url}: not api.github.com`);
   const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(url, { headers, redirect: "follow", signal: AbortSignal.timeout(30_000) });
+  const res = await fetch(url, { headers, redirect: "error", signal: AbortSignal.timeout(30_000) });
   return { status: res.status, text: res.status === 200 ? await res.text() : "" };
 }
 
@@ -349,6 +452,8 @@ async function main(argv) {
       return 0;
     }
     console.error(`The core does not match ${MANIFEST_PATH}:\n${lines.map((l) => `  ${l}`).join("\n")}`);
+    const hint = lineEndingHint(root, compareTree(root).changed);
+    if (hint) console.error(hint);
     console.error("If the change is meant, it belongs upstream; in the repository the core is written in, run `node scripts/agent/manifest.mjs build`.");
     return 1;
   }
@@ -356,7 +461,12 @@ async function main(argv) {
     console.log(manifestDigest(readManifest(root)));
     return 0;
   }
-  const result = await checkUpstream({ upstream: readUpstream(root), localDigest: manifestDigest(readManifest(root)), fetchText: githubFetchText });
+  const result = await checkUpstream({
+    upstream: readUpstream(root),
+    localDigest: manifestDigest(readManifest(root)),
+    fetchText: githubFetchText,
+    self: process.env.GITHUB_REPOSITORY || "",
+  });
   for (const line of result.lines) console.log(result.ok ? line : `::error::${line}`);
   for (const line of result.warnings) console.log(`::warning::${line}`);
   return result.ok ? 0 : 1;

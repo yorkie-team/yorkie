@@ -22,7 +22,9 @@ import {
   corePaths,
   defaultRoot,
   describeDifference,
+  GITATTRIBUTES_LINES,
   isCorePath,
+  lineEndingHint,
   manifestDigest,
   parseManifest,
   readManifest,
@@ -186,6 +188,24 @@ test("a symbolic link in the core is refused, not hashed as its target", (t) => 
   const { root } = tree(t);
   symlinkSync(path.join(root, "scripts/agent/a.mjs"), path.join(root, "scripts/agent/link.mjs"));
   assert.throws(() => buildManifest(root), /link\.mjs is a symbolic link/);
+  const { root: other } = tree(t);
+  symlinkSync(path.join(other, ".github/workflows/ci.yml"), path.join(other, ".github/workflows/agent-linked.yml"));
+  assert.throws(() => buildManifest(other), /agent-linked\.yml is not a regular file/);
+});
+
+test("a checkout that converted line endings is told so", (t) => {
+  // `core.autocrlf` with no `-text` attribute rewrites every file on checkout.
+  // Each then hashes differently, and "126 files changed" says nothing useful.
+  const { root, write } = tree(t);
+  write("scripts/agent/a.mjs", "export const a = 1;\r\n");
+  write("scripts/agent/lenses/x.md", "# x\r\n");
+  const { changed } = compareTree(root);
+  assert.deepEqual(changed, ["scripts/agent/a.mjs", "scripts/agent/lenses/x.md"]);
+  assert.match(lineEndingHint(root, changed), /^2 of the changed files have CRLF line endings[\s\S]*\.gitattributes/);
+  // An ordinary edit gets no such hint.
+  write("scripts/agent/a.mjs", "export const a = 2;\n");
+  assert.equal(lineEndingHint(root, ["scripts/agent/a.mjs"]), "");
+  assert.deepEqual([...GITATTRIBUTES_LINES], ["scripts/agent/** -text", ".github/workflows/agent-*.yml -text"]);
 });
 
 test("parseManifest: refuses anything that is not a sorted list of core files", () => {
@@ -201,6 +221,8 @@ test("parseManifest: refuses anything that is not a sorted list of core files", 
     [line(".github/agent-harness/config.json"), /not a file of the core/],
     [line("scripts/agent/../../etc/passwd"), /not a file of the core/],
     [line(MANIFEST_PATH), /not a file of the core/],
+    // Converted line endings are named as such, not reported as a malformed line.
+    [line("scripts/agent/a.mjs").replace("\n", "\r\n"), /CR line endings[\s\S]*scripts\/agent\/\*\* -text[\s\S]*\.github\/workflows\/agent-\*\.yml -text/],
   ]) {
     assert.throws(() => parseManifest(text), why, JSON.stringify(text.slice(0, 80)));
   }
@@ -227,6 +249,12 @@ test("validateUpstream: null for the origin, three exact fields for a copy", () 
     [{ ...copy, note: "x" }, /note is not a known key/],
     [{ ...copy, repository: "repo" }, /`owner\/name`/],
     [{ ...copy, repository: "https://github.com/org/repo" }, /`owner\/name`/],
+    [{ ...copy, repository: "org/.." }, /`owner\/name`/],
+    [{ ...copy, repository: "org/." }, /`owner\/name`/],
+    [{ ...copy, repository: "../repo" }, /`owner\/name`/],
+    [{ ...copy, repository: "org/repo/extra" }, /`owner\/name`/],
+    [{ ...copy, repository: "-org/repo" }, /`owner\/name`/],
+    [{ ...copy, repository: "org/re po" }, /`owner\/name`/],
     [{ ...copy, commit: "main" }, /40-character/],
     [{ ...copy, commit: copy.commit.slice(0, 7) }, /40-character/],
     [{ ...copy, commit: copy.commit.toUpperCase() }, /40-character/],
@@ -261,70 +289,137 @@ test("adoptionProblem: a copy whose manifest is not the recorded one says so", (
 const MANIFEST = `${H("a")}  scripts/agent/a.mjs\n`;
 const DIGEST = manifestDigest(MANIFEST);
 const COPY = { repository: "org/repo", commit: "0123456789abcdef0123456789abcdef01234567", manifestDigest: DIGEST };
-const PINNED = `https://api.github.com/repos/org/repo/contents/${MANIFEST_PATH}?ref=${COPY.commit}`;
-const HEAD = `https://api.github.com/repos/org/repo/contents/${MANIFEST_PATH}`;
+const API = "https://api.github.com/repos/org/repo";
+const COMPARE = `${API}/compare/trunk...${COPY.commit}`;
+const PINNED = `${API}/contents/${MANIFEST_PATH}?ref=${COPY.commit}`;
+const HEAD = `${API}/contents/${MANIFEST_PATH}`;
+const ok = (text) => ({ status: 200, text });
+/** Upstream as it should be: default branch `trunk`, the commit on it, the manifest there and at the tip. */
+const GOOD = {
+  [API]: ok(JSON.stringify({ default_branch: "trunk" })),
+  [COMPARE]: ok(JSON.stringify({ status: "behind" })),
+  [PINNED]: ok(MANIFEST),
+  [HEAD]: ok(MANIFEST),
+};
+/** A fetch that answers from `answers`; an array is one answer per call. */
 const fetcher = (answers, seen = []) => async (url) => {
   seen.push(url);
-  const answer = answers[url];
+  let answer = answers[url];
+  if (Array.isArray(answer)) answer = answer.length > 1 ? answer.shift() : answer[0];
   if (answer instanceof Error) throw answer;
   return answer ?? { status: 404, text: "" };
 };
+const slept = [];
+const check = (answers, { upstream = COPY, localDigest = DIGEST, seen = [], self } = {}) =>
+  checkUpstream({ upstream, localDigest, self, fetchText: fetcher(answers, seen), sleep: async (ms) => void slept.push(ms) });
 
-test("checkUpstream: the origin has nothing to compare, and asks nothing", async () => {
+test("checkUpstream: the origin has nothing to compare, asks nothing, and says who claims to be it", async () => {
   const seen = [];
-  const r = await checkUpstream({ upstream: { repository: null }, localDigest: DIGEST, fetchText: fetcher({}, seen) });
+  const r = await check({}, { upstream: { repository: null }, seen, self: "some-org/some-copy" });
   assert.equal(r.ok, true);
   assert.deepEqual(seen, []);
   assert.deepEqual(r.warnings, []);
+  // A copy that sets `repository: null` passes here; the log at least names it.
+  assert.match(r.lines.join("\n"), /^some-org\/some-copy is recorded as the repository the core is written in/);
+  assert.match((await check({}, { upstream: { repository: null } })).lines.join("\n"), /^This is recorded as the repository/);
 });
 
-test("checkUpstream: a copy that is upstream at the recorded commit passes", async () => {
-  const seen = [];
-  const r = await checkUpstream({ upstream: COPY, localDigest: DIGEST, fetchText: fetcher({ [PINNED]: { status: 200, text: MANIFEST }, [HEAD]: { status: 200, text: MANIFEST } }, seen) });
-  assert.equal(r.ok, true);
-  assert.deepEqual(r.warnings, []);
-  assert.deepEqual(seen, [PINNED, HEAD]);
-  assert.match(r.lines.join("\n"), /This copy is org\/repo at 0123456789abcdef0123456789abcdef01234567/);
-});
-
-test("checkUpstream: fails closed when upstream cannot be read", async () => {
-  for (const [answers, why] of [
-    [{ [PINNED]: { status: 404, text: "" } }, /returned HTTP 404[\s\S]*fails rather than passes/],
-    [{ [PINNED]: { status: 403, text: "" } }, /returned HTTP 403/],
-    [{ [PINNED]: new Error("getaddrinfo ENOTFOUND api.github.com") }, /Could not fetch .*ENOTFOUND[\s\S]*fails rather than passes/],
-  ]) {
-    const r = await checkUpstream({ upstream: COPY, localDigest: DIGEST, fetchText: fetcher(answers) });
-    assert.equal(r.ok, false);
-    assert.match(r.lines.join("\n"), why);
-    assert.ok(r.lines.join("\n").includes(PINNED), "the message names what it tried to fetch");
+test("checkUpstream: a copy of upstream's default branch at the recorded commit passes", async () => {
+  for (const status of ["behind", "identical"]) {
+    const seen = [];
+    const r = await check({ ...GOOD, [COMPARE]: ok(JSON.stringify({ status })) }, { seen });
+    assert.equal(r.ok, true, status);
+    assert.deepEqual(r.warnings, []);
+    // The default branch is asked for, never assumed.
+    assert.deepEqual(seen, [API, COMPARE, PINNED, HEAD]);
+    assert.match(r.lines.join("\n"), /This copy is org\/repo at 0123456789abcdef0123456789abcdef01234567, on trunk/);
   }
+});
+
+test("checkUpstream: a commit that is not on upstream's default branch fails, whatever its manifest says", async () => {
+  // Every head a pull request ever had stays fetchable upstream. Its manifest
+  // can match the record exactly and it is still code upstream never took.
+  for (const status of ["ahead", "diverged", undefined, "something-new"]) {
+    const seen = [];
+    const r = await check({ ...GOOD, [COMPARE]: ok(JSON.stringify({ status })) }, { seen });
+    assert.equal(r.ok, false, String(status));
+    assert.match(r.lines.join("\n"), /is not on org\/repo's default branch \(trunk\)[\s\S]*Sync again from trunk/);
+    assert.ok(!seen.includes(PINNED), "the manifest is not consulted for a commit that is not on the branch: there is no fallback");
+  }
+  const gone = await check({ ...GOOD, [COMPARE]: { status: 404, text: "" } });
+  assert.equal(gone.ok, false);
+  assert.match(gone.lines.join("\n"), /has no commit 0123456789abcdef0123456789abcdef01234567 that can be compared[\s\S]*must record a commit on trunk/);
+});
+
+test("checkUpstream: fails closed when upstream cannot be read, at each of the three questions", async () => {
+  for (const url of [API, COMPARE, PINNED]) {
+    for (const [answer, why] of [
+      [{ status: 403, text: "" }, /returned HTTP 403\. The copy cannot be compared, so this check fails rather than passes/],
+      [new Error("getaddrinfo ENOTFOUND api.github.com"), /Could not fetch .*ENOTFOUND api\.github\.com \(after 4 attempts\)[\s\S]*fails rather than passes/],
+      [{ status: 503, text: "" }, /returned HTTP 503/],
+    ]) {
+      const r = await check({ ...GOOD, [url]: answer });
+      assert.equal(r.ok, false, `${url} ${answer.status ?? answer.message}`);
+      assert.match(r.lines.join("\n"), why);
+      assert.ok(r.lines.join("\n").includes(url), "the message names what it tried to fetch");
+    }
+  }
+  // No manifest at the recorded commit is its own sentence: the record predates it, or is wrong.
+  const none = await check({ ...GOOD, [PINNED]: { status: 404, text: "" } });
+  assert.equal(none.ok, false);
+  assert.match(none.lines.join("\n"), /has no scripts\/agent\/MANIFEST\.sha256 at 0123456789abcdef0123456789abcdef01234567/);
+  // A repository answer with no default branch in it is not a pass either.
+  for (const text of ["{}", "not json", JSON.stringify({ default_branch: "a b" })]) {
+    const r = await check({ ...GOOD, [API]: ok(text) });
+    assert.equal(r.ok, false, text);
+    assert.match(r.lines.join("\n"), /did not say what org\/repo's default branch is/);
+  }
+});
+
+test("checkUpstream: a transient refusal is retried, a lasting one still fails", async () => {
+  slept.length = 0;
+  const seen = [];
+  const r = await check(
+    { ...GOOD, [API]: [{ status: 503, text: "" }, GOOD[API]], [COMPARE]: [new Error("socket hang up"), { status: 429, text: "" }, GOOD[COMPARE]], [PINNED]: [{ status: 502, text: "" }, GOOD[PINNED]] },
+    { seen },
+  );
+  assert.equal(r.ok, true, r.lines.join("\n"));
+  assert.deepEqual(seen, [API, API, COMPARE, COMPARE, COMPARE, PINNED, PINNED, HEAD]);
+  assert.deepEqual(slept, [1000, 1000, 3000, 1000]);
+  // 404 and 403 are answers, not weather: asked once.
+  const once = [];
+  await check({ ...GOOD, [PINNED]: { status: 404, text: "" } }, { seen: once });
+  assert.equal(once.filter((u) => u === PINNED).length, 1);
+  // …and four refusals in a row are a failure, after three pauses.
+  slept.length = 0;
+  const down = [];
+  const failed = await check({ ...GOOD, [PINNED]: { status: 500, text: "" } }, { seen: down });
+  assert.equal(failed.ok, false);
+  assert.equal(down.filter((u) => u === PINNED).length, 4);
+  assert.deepEqual(slept, [1000, 3000, 9000]);
 });
 
 test("checkUpstream: fails when the record, the copy and upstream do not agree", async () => {
   const other = `${H("b")}  scripts/agent/a.mjs\n`;
   // upstream.json edited to match a drifted copy: upstream at that commit says otherwise.
-  const drifted = await checkUpstream({
-    upstream: { ...COPY, manifestDigest: manifestDigest(other) },
-    localDigest: manifestDigest(other),
-    fetchText: fetcher({ [PINNED]: { status: 200, text: MANIFEST } }),
-  });
+  const drifted = await check(GOOD, { upstream: { ...COPY, manifestDigest: manifestDigest(other) }, localDigest: manifestDigest(other) });
   assert.equal(drifted.ok, false);
   assert.match(drifted.lines.join("\n"), /The record does not describe that commit/);
   // The copy no longer carries the recorded manifest: nothing is fetched to say so.
   const seen = [];
-  const local = await checkUpstream({ upstream: COPY, localDigest: manifestDigest(other), fetchText: fetcher({}, seen) });
+  const local = await check(GOOD, { localDigest: manifestDigest(other), seen });
   assert.equal(local.ok, false);
   assert.deepEqual(seen, []);
 });
 
 test("checkUpstream: being behind is a warning, and so is not knowing", async () => {
   const newer = `${H("b")}  scripts/agent/a.mjs\n`;
-  const behind = await checkUpstream({ upstream: COPY, localDigest: DIGEST, fetchText: fetcher({ [PINNED]: { status: 200, text: MANIFEST }, [HEAD]: { status: 200, text: newer } }) });
+  const behind = await check({ ...GOOD, [HEAD]: ok(newer) });
   assert.equal(behind.ok, true);
   assert.equal(behind.warnings.length, 1);
   assert.match(behind.warnings[0], /default branch has a different manifest[\s\S]*this copy is behind/);
   for (const head of [{ status: 500, text: "" }, new Error("timeout")]) {
-    const unknown = await checkUpstream({ upstream: COPY, localDigest: DIGEST, fetchText: fetcher({ [PINNED]: { status: 200, text: MANIFEST }, [HEAD]: head }) });
+    const unknown = await check({ ...GOOD, [HEAD]: head });
     assert.equal(unknown.ok, true, "not knowing whether upstream moved must not fail the check");
     assert.match(unknown.warnings[0], /Could not tell whether org\/repo has moved on/);
   }

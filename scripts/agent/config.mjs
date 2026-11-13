@@ -168,8 +168,24 @@ const isFragment = (v) => oneLine(v) && !/^[,.;:!?)\]]/.test(v) && !/[.,;:!?]$/.
 const isSentences = (v) => oneLine(v) && /^[\p{Lu}\p{N}`"'(]/u.test(v) && /[.!?][)"'`\]]*$/.test(v);
 const FRAGMENT = "one line that continues a sentence: no leading punctuation, no trailing `.`, `,`, `;`, `:`, `!` or `?`";
 const SENTENCES = "one line of whole sentences: starts with a capital, a digit, a backtick or a quote, and ends with `.`, `!` or `?`";
-/** `owner/name`, as GitHub spells a repository. */
-const REPO_SLUG = /^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9._-]+$/;
+/**
+ * `owner/name`, as GitHub spells a repository, and nothing looser: the value is
+ * put into URLs and paths. An owner is letters, digits and single inner
+ * hyphens, at most 39 characters; a name is letters, digits, `.`, `_` and `-`,
+ * at most 100, and is not `.` or `..`.
+ */
+export function isRepoSlug(value) {
+  if (typeof value !== "string") return false;
+  const parts = value.split("/");
+  if (parts.length !== 2) return false;
+  const [owner, name] = parts;
+  return (
+    /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/.test(owner) &&
+    /^[A-Za-z0-9._-]{1,100}$/.test(name) &&
+    name !== "." &&
+    name !== ".."
+  );
+}
 const fragment = [isFragment, FRAGMENT];
 const optionalFragment = [(v) => v === "" || isFragment(v), `empty, or ${FRAGMENT}`];
 const sentences = [isSentences, SENTENCES];
@@ -312,7 +328,7 @@ const SCHEMA = {
     // `name#12`, or a github.com link to it — has made the question visible.
     // The full name, because a bare one is a substring of its neighbours
     // (`yorkie` of `yorkie-js-sdk`) and would match nearly every body.
-    counterpartRepo: [(v) => v === "" || REPO_SLUG.test(v), "empty, or a repository as `owner/name`"],
+    counterpartRepo: [(v) => v === "" || isRepoSlug(v), "empty, or a repository as `owner/name`"],
   },
   redact: {
     extraPatterns: list,

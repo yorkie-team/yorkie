@@ -1,0 +1,5 @@
+# The shared agent harness is compared byte for byte against
+# scripts/agent/MANIFEST.sha256, so no checkout may convert its line endings
+# (core.autocrlf would). See "Adopting and syncing" in scripts/agent/README.md.
+scripts/agent/** -text
+.github/workflows/agent-*.yml -text

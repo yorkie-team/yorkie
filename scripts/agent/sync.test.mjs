@@ -6,7 +6,7 @@ import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -59,7 +59,30 @@ function source(t) {
   r.write(MANIFEST_PATH, buildManifest(r.dir));
   r.git("remote", "add", "origin", "https://github.com/fixture-org/fixture-upstream.git");
   const head = r.commit("core");
-  return { ...r, head };
+  // As a clone has it after a fetch: the remote's default branch, here called
+  // `trunk` so that nothing can pass by assuming `main`, at this commit.
+  const publish = () => {
+    r.git("update-ref", "refs/remotes/origin/trunk", "HEAD");
+    r.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk");
+  };
+  publish();
+  return { ...r, head, publish };
+}
+
+/** Every file under `dir`, with its bytes, for "nothing changed" assertions. */
+function snapshot(dir) {
+  const out = {};
+  const walk = (d) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.name === ".git") continue;
+      const p = path.join(d, e.name);
+      if (e.isSymbolicLink()) out[path.relative(dir, p)] = "<link>";
+      else if (e.isDirectory()) walk(p);
+      else out[path.relative(dir, p)] = readFileSync(p, "utf8");
+    }
+  };
+  walk(dir);
+  return out;
 }
 
 /** A repository with an older copy of the core, and files of its own. */
@@ -151,6 +174,153 @@ test("sync: a repository adopting the harness for the first time", (t) => {
   assert.equal(result.configProblems.length > 0, true);
   assert.match(result.configProblems.join("\n"), /no directory|cannot read/);
   assert.equal(dst.has(".github/actions"), false, "the toolchain action is the adopter's to write");
+  // What is left for a person, in the order it has to be done: pin the
+  // upstream, then stage BEFORE testing — the suite compares the manifest with
+  // what git tracks, and nothing copied is tracked yet.
+  assert.equal(result.todo.length, 2);
+  assert.match(result.todo[0], /Pin the upstream in \.github\/agent-harness\/repo\.test\.mjs[\s\S]*"another-org\/renamed-upstream"/);
+  assert.match(result.todo[1], /^Stage the result before testing — `git add scripts\/agent \.github\/workflows \.github\/agent-harness`[\s\S]*npm ci && npm test && npm run test:repo/);
+  // No `.gitattributes` here yet: said, not fatal.
+  assert.equal(result.warnings.length, 2);
+  assert.match(result.warnings.join("\n"), /does not set `scripts\/agent\/\*\* -text`[\s\S]*does not set `\.github\/workflows\/agent-\*\.yml -text`/);
+});
+
+test("sync: no line-ending warning where .gitattributes already protects the core", (t) => {
+  const src = source(t);
+  const dst = destination(t);
+  dst.write(".gitattributes", "scripts/agent/** -text\n.github/workflows/agent-*.yml -text\n");
+  dst.commit("attributes");
+  assert.deepEqual(sync({ from: src.dir, to: dst.dir }).warnings, []);
+});
+
+test("sync: only from the upstream's default branch, unless told it is a trial", (t) => {
+  // The copy's CI looks the recorded commit up on upstream's default branch.
+  // A local commit is not there at all; a pull request's head is there and
+  // must not count.
+  const src = source(t);
+  const dst = destination(t);
+  src.write("scripts/agent/keep.mjs", "export const v = 3;\n");
+  src.write(MANIFEST_PATH, buildManifest(src.dir));
+  const unpushed = src.commit("not pushed, not merged");
+  const before = snapshot(dst.dir);
+  assert.throws(
+    () => sync({ from: src.dir, to: dst.dir }),
+    new RegExp(`source's HEAD \\(${unpushed}\\) is not contained in origin/trunk as last fetched[\\s\\S]*git fetch origin[\\s\\S]*--allow-unmerged`),
+  );
+  assert.deepEqual(snapshot(dst.dir), before);
+
+  // The trial switch proceeds and says, loudly, what it costs.
+  const trial = sync({ from: src.dir, to: dst.dir, allowUnmerged: true });
+  assert.equal(JSON.parse(dst.read(UPSTREAM_PATH)).commit, unpushed);
+  assert.match(trial.warnings[0], /^NOT ON THE DEFAULT BRANCH[\s\S]*WILL FAIL[\s\S]*Do not merge this sync/);
+
+  // Once that commit is on the default branch, it is an ordinary sync.
+  const dst2 = destination(t);
+  src.publish();
+  assert.deepEqual(sync({ from: src.dir, to: dst2.dir }).warnings.filter((w) => /DEFAULT BRANCH/.test(w)), []);
+
+  // A source that does not know its remote's default branch is not assumed to be on it.
+  const src3 = source(t);
+  src3.git("symbolic-ref", "--delete", "refs/remotes/origin/HEAD");
+  assert.throws(() => sync({ from: src3.dir, to: destination(t).dir }), /does not know its remote's default branch[\s\S]*git remote set-head origin --auto/);
+});
+
+test("sync: a file git does not track under the core is never deleted, overwritten or stranded", (t) => {
+  // `git status` does not list ignored files, and quotes names that are not
+  // plain ASCII. Either way the file is one git could not give back.
+  const cases = [
+    ["an ignored file", (dst) => {
+      dst.write(".gitignore", "*.log\n");
+      dst.commit("ignore logs");
+      dst.write("scripts/agent/debug.log", "hours of output\n");
+    }, "scripts/agent/debug.log"],
+    ["an ignored file where the source has one", (dst) => {
+      dst.write(".gitignore", "scripts/agent/added.mjs\n");
+      dst.commit("ignore it");
+      dst.write("scripts/agent/added.mjs", "// local\n");
+    }, "scripts/agent/added.mjs"],
+    ["an untracked file with a non-ASCII name", (dst) => dst.write("scripts/agent/한글.mjs", "// 메모\n"), "scripts/agent/한글.mjs"],
+    ["an untracked workflow", (dst) => dst.write(".github/workflows/agent-local.yml", "name: local\n"), ".github/workflows/agent-local.yml"],
+  ];
+  for (const [what, arrange, rel] of cases) {
+    const src = source(t);
+    const dst = destination(t);
+    arrange(dst);
+    const before = snapshot(dst.dir);
+    assert.throws(() => sync({ from: src.dir, to: dst.dir }), (err) => /files under the core that git does not track \(ignored ones count\)/.test(err.message) && err.message.includes(`  ${rel}`), what);
+    assert.deepEqual(snapshot(dst.dir), before, `${what}: nothing may change`);
+  }
+  // A MODIFIED tracked file with such a name is caught as modified.
+  {
+    const src = source(t);
+    const dst = destination(t);
+    dst.write("scripts/agent/한글.mjs", "// v1\n");
+    dst.commit("a tracked non-ASCII name");
+    dst.write("scripts/agent/한글.mjs", "// edited by hand\n");
+    const before = snapshot(dst.dir);
+    assert.throws(() => sync({ from: src.dir, to: dst.dir }), (err) => /destination has uncommitted changes under the core/.test(err.message) && err.message.includes("scripts/agent/한글.mjs"));
+    assert.deepEqual(snapshot(dst.dir), before);
+    // Committed, it is an ordinary core file the source lacks: deleted, and git has it.
+    dst.commit("commit the edit");
+    assert.ok(sync({ from: src.dir, to: dst.dir }).deleted.includes("scripts/agent/한글.mjs"));
+  }
+  // What the rule never calls core is left exactly where it is.
+  {
+    const src = source(t);
+    const dst = destination(t);
+    dst.write("scripts/agent/node_modules/dep/index.js", "installed\n");
+    dst.write("scripts/agent/.scratch/notes.txt", "mine\n");
+    sync({ from: src.dir, to: dst.dir });
+    assert.equal(dst.read("scripts/agent/node_modules/dep/index.js"), "installed\n");
+    assert.equal(dst.read("scripts/agent/.scratch/notes.txt"), "mine\n");
+  }
+});
+
+test("sync: a symbolic link where the core goes is refused before anything is written", (t) => {
+  const outside = mkdtempSync(path.join(os.tmpdir(), "sync-outside-"));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  writeFileSync(path.join(outside, "f"), "not the repository's\n");
+  mkdirSync(path.join(outside, "dir"));
+  writeFileSync(path.join(outside, "dir", "x.md"), "not the repository's either\n");
+
+  const cases = [
+    // A committed file link at a path the source has a file for.
+    ["a link at a file the sync would write", (dst) => {
+      rmSync(path.join(dst.dir, "scripts/agent/keep.mjs"));
+      symlinkSync(path.join(outside, "f"), path.join(dst.dir, "scripts/agent/keep.mjs"));
+    }, /scripts\/agent\/keep\.mjs is a symbolic link/],
+    // A committed directory link on the way to one.
+    ["a linked directory on the way to a file", (dst) => {
+      rmSync(path.join(dst.dir, "scripts/agent/lenses"), { recursive: true });
+      symlinkSync(path.join(outside, "dir"), path.join(dst.dir, "scripts/agent/lenses"));
+    }, /scripts\/agent\/lenses is a symbolic link/],
+    // A link the source has no file for: the walk that lists what to delete must not follow it.
+    ["a stray link under the core", (dst) => symlinkSync(path.join(outside, "f"), path.join(dst.dir, "scripts/agent/x")), /scripts\/agent\/x is a symbolic link/],
+    ["the package directory itself", (dst) => {
+      rmSync(path.join(dst.dir, "scripts/agent"), { recursive: true });
+      symlinkSync(path.join(outside, "dir"), path.join(dst.dir, "scripts/agent"));
+    }, /scripts\/agent is a symbolic link/],
+    ["the record's directory", (dst) => {
+      rmSync(path.join(dst.dir, ".github/agent-harness"), { recursive: true });
+      symlinkSync(path.join(outside, "dir"), path.join(dst.dir, ".github/agent-harness"));
+    }, /\.github\/agent-harness is a symbolic link/],
+    ["a directory where a file goes", (dst) => {
+      rmSync(path.join(dst.dir, "scripts/agent/keep.mjs"));
+      mkdirSync(path.join(dst.dir, "scripts/agent/keep.mjs"));
+      writeFileSync(path.join(dst.dir, "scripts/agent/keep.mjs/inner"), "x\n");
+    }, /scripts\/agent\/keep\.mjs is not a regular file/],
+  ];
+  for (const [what, arrange, why] of cases) {
+    const src = source(t);
+    const dst = destination(t);
+    arrange(dst);
+    dst.commit(what); // committed, so the "uncommitted changes" check is not what stops it
+    const before = snapshot(dst.dir);
+    const outsideBefore = snapshot(outside);
+    assert.throws(() => sync({ from: src.dir, to: dst.dir }), why, what);
+    assert.deepEqual(snapshot(dst.dir), before, `${what}: the destination must be untouched`);
+    assert.deepEqual(snapshot(outside), outsideBefore, `${what}: nothing outside the repository may be written`);
+  }
 });
 
 test("sync: refuses, and changes nothing, when a precondition fails", (t) => {
@@ -183,6 +353,7 @@ test("sync: refuses, and changes nothing, when a precondition fails", (t) => {
     const dst = destination(t);
     src.write(UPSTREAM_PATH, JSON.stringify({ repository: "org/origin", commit: "0123456789abcdef0123456789abcdef01234567", manifestDigest: "a".repeat(64) }));
     src.commit("pretend to be a copy");
+    src.publish();
     assert.throws(() => sync({ from: src.dir, to: dst.dir }), /source is itself a copy \(of org\/origin\)/);
     untouched(dst);
   }
@@ -195,7 +366,7 @@ test("sync: refuses, and changes nothing, when a precondition fails", (t) => {
     const src = source(t);
     const dst = destination(t);
     dirty(dst);
-    assert.throws(() => sync({ from: src.dir, to: dst.dir }), /destination has uncommitted changes under the core/);
+    assert.throws(() => sync({ from: src.dir, to: dst.dir }), /destination has (?:uncommitted changes under the core|files under the core that git does not track)/);
     assert.equal(dst.has("scripts/agent/gone.mjs"), true);
     assert.equal(dst.has(UPSTREAM_PATH), false);
   }
@@ -241,7 +412,7 @@ test("CLI: syncs into the repository named by --to and says what is left to do",
     return c;
   });
   const run = (...args) => spawnSync(process.execPath, [path.join(HERE, "sync.mjs"), ...args], { encoding: "utf8" });
-  for (const args of [[], ["--to", dst.dir], ["--from"], ["--from", src.dir, "--force", "yes"]]) {
+  for (const args of [[], ["--to", dst.dir], ["--from"], ["--from", src.dir, "--force", "yes"], ["--allow-unmerged"]]) {
     const bad = run(...args);
     assert.equal(bad.status, 1, JSON.stringify(args));
     assert.match(bad.stderr, /usage: node sync\.mjs --from/);
@@ -252,8 +423,20 @@ test("CLI: syncs into the repository named by --to and says what is left to do",
   assert.match(ok.stdout, /deleted: scripts\/agent\/gone\.mjs/);
   assert.match(ok.stdout, new RegExp(`upstream\\.json: fixture-org/fixture-upstream at ${src.head}`));
   assert.match(ok.stdout, /does not load under the new schema[\s\S]*- repo\.appSlug is missing/);
+  // Staging comes before testing in what it tells the person to do next.
+  assert.match(ok.stdout, /To do:\n {2}1\. Pin the upstream[\s\S]*\n {2}2\. Stage the result before testing — `git add /);
+  assert.ok(!/NOT ON THE DEFAULT BRANCH/.test(ok.stdout));
   // A second run has uncommitted changes under the core to refuse.
   const again = run("--from", src.dir, "--to", dst.dir);
   assert.equal(again.status, 1);
-  assert.match(again.stderr, /destination has uncommitted changes under the core/);
+  assert.match(again.stderr, /destination has (?:uncommitted changes under the core|files under the core that git does not track)/);
+  // The trial switch is a flag, and its warning is printed.
+  const dst2 = destination(t);
+  src.write("scripts/agent/keep.mjs", "export const v = 4;\n");
+  src.write(MANIFEST_PATH, buildManifest(src.dir));
+  src.commit("ahead of the default branch");
+  assert.equal(run("--from", src.dir, "--to", dst2.dir).status, 1);
+  const trial = run("--from", src.dir, "--to", dst2.dir, "--allow-unmerged");
+  assert.equal(trial.status, 0, trial.stderr);
+  assert.match(trial.stdout, /\nWARNING: NOT ON THE DEFAULT BRANCH/);
 });
