@@ -308,6 +308,16 @@ test("globProblem / compileGlob: syntax this dialect does not have is REFUSED, n
     assert.throws(() => compileGlob(glob), /harness glob/, JSON.stringify(glob));
   }
   for (const notString of [null, undefined, 7, {}, ["a"]]) assert.equal(globProblem(notString), "is not a string");
+  // A run of wildcards in one segment is a typo that compiles into a pattern
+  // which backtracks for minutes on a single long path. Two is the cap.
+  for (const glob of ["a*b*c*d", "*a*a*a*a*a*a*a*a*b", "dir/*x*y*.go", "*/*/a*b*c*"]) {
+    assert.match(globProblem(glob) ?? "", /more than 2 `\*` in one path segment/, glob);
+    assert.throws(() => compileGlob(glob), /harness glob/, glob);
+  }
+  for (const glob of ["*.pb.go", "*_test.*", "tsconfig*.json", "*/*/*", "a*/b*/c*c*"]) assert.equal(globProblem(glob), null, glob);
+  const started = Date.now();
+  assert.equal(compileGlob("*a*b").test(`${"a".repeat(5000)}c`), false);
+  assert.ok(Date.now() - started < 1000, "a capped glob must not backtrack for long on a long path");
   for (const fine of ["Makefile", ".golangci.yml", "a/b.c", "**", "**/x", "a/**", "a/**/b", "*.md", "a/*/b", "a-b_c/d e.txt", "scripts/*.mjs"]) {
     assert.equal(globProblem(fine), null, fine);
   }

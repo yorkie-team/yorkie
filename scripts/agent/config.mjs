@@ -70,11 +70,17 @@ export const TEST_RULE_SETS = Object.freeze(["go", "vitest"]);
 //   else  literal.
 //
 // Paths are repository-relative with `/` separators, and a glob is anchored at
-// both ends. NOTHING ELSE IS SUPPORTED, and what is not supported is REFUSED
+// both ends — so a bare `dir` matches only a path that is exactly `dir` (write
+// `dir/**` for its contents), and `*.ext` matches only at the root (write
+// `**/*.ext` for any depth). Those two are valid globs and cannot be refused
+// here; a repository's `repo.test.mjs` catches them by requiring every
+// configured entry to match a tracked file. NOTHING ELSE IS SUPPORTED, and what is not supported is REFUSED
 // rather than read literally: these lists are refusal surfaces and review
 // scopes, so a pattern in another tool's syntax — `{a,b}`, `!negated`, `./x`,
 // `dir/`, `a?b` — would compile, match no path, and quietly take that entry
 // off the list. `globProblem` says why; `compileGlob` throws it.
+
+const MAX_STARS_PER_SEGMENT = 2;
 
 export const GLOB_DIALECT = "`**` as a whole segment, `*` within a segment, everything else literal";
 
@@ -91,6 +97,12 @@ export function globProblem(glob) {
   if (segments.includes("")) return "has an empty path segment (`//`)";
   if (segments.includes(".") || segments.includes("..")) return "has a `.` or `..` segment; write the path from the repository root";
   if (segments.some((s) => s.includes("**") && s !== "**")) return "uses `**` inside a segment; it must be a whole segment (`a/**/b`)";
+  // Each `*` is a place the matcher may backtrack. Two in a segment covers
+  // every real name (`*.pb.go`, `tsconfig*.json`, `*_test.*`); a mistyped run
+  // of them compiles to a pattern that takes minutes on one long path.
+  if (segments.some((s) => s.split("*").length - 1 > MAX_STARS_PER_SEGMENT)) {
+    return `has more than ${MAX_STARS_PER_SEGMENT} \`*\` in one path segment`;
+  }
   return null;
 }
 

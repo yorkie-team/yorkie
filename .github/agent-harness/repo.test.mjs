@@ -10,6 +10,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,7 +37,7 @@ const fixGuard = await agent("fix-guard.mjs");
 const testRemovals = await agent("test-removals.mjs");
 const protection = await agent("branch-protection.mjs");
 const reviewScope = await agent("review-scope.mjs");
-const { loadConfig } = await agent("config.mjs");
+const { compileGlob, loadConfig } = await agent("config.mjs");
 
 const CONFIG = loadConfig();
 
@@ -268,30 +269,60 @@ test("CI_DEFINING_PATHS covers the surface CI's behaviour is read from", () => {
   }
 });
 
-test("ci.definingPaths names files this repository has", () => {
-  // A literal entry that matches nothing is either a typo — which silently
-  // leaves the real file off the refusal surface — or a file that was removed.
-  // The one exception is listed, so it stays a decision: `api/buf.gen.yaml`
-  // does not exist today and is refused pre-emptively, because creating it
-  // would change what the codegen gate regenerates from.
-  const RESERVED = ["api/buf.gen.yaml"];
-  let literals = 0;
-  for (const entry of CONFIG.ci.definingPaths) {
-    if (entry.includes("*")) {
-      const base = entry.slice(0, entry.indexOf("*")).replace(/[^/]*$/, "");
-      assert.ok(existsSync(path.join(ROOT, base)), `${entry}: ${base} does not exist`);
-      continue;
+test("every configured path and glob matches a file this repository tracks", () => {
+  // The loader can tell a glob from a non-glob, not a right glob from a wrong
+  // one. `build/docker` is a valid glob that matches only a FILE of that name;
+  // `*.go` is a valid glob that matches only at the root; a renamed directory
+  // leaves a valid glob behind. Each matches nothing, and on these lists
+  // "matches nothing" means an entry quietly off a refusal surface or out of a
+  // review scope. So every entry must match at least one tracked file — or be
+  // on RESERVED, with the reason it is listed ahead of the file existing.
+  const RESERVED = {
+    // Not present today. Listed so that CREATING it — which would change what
+    // the codegen gate regenerates from — is refused and reviewed as policy.
+    "api/buf.gen.yaml": ["ci.definingPaths", "review.classRules.policy"],
+  };
+  const tracked = execFileSync("git", ["ls-files"], { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
+    .split("\n")
+    .filter(Boolean);
+  assert.ok(tracked.length > 500, `expected the repository's files, git listed ${tracked.length}`);
+
+  const lists = {
+    "ci.definingPaths": CONFIG.ci.definingPaths,
+    "review.classRules.code-adjacent": CONFIG.review.classRules["code-adjacent"],
+    "review.classRules.policy": CONFIG.review.classRules.policy,
+    "review.sourceGlobs": CONFIG.review.sourceGlobs,
+    "fixGuard.replicatedRuleGlobs": CONFIG.fixGuard.replicatedRuleGlobs,
+  };
+  let checked = 0;
+  const reservedSeen = [];
+  for (const [key, entries] of Object.entries(lists)) {
+    for (const entry of entries) {
+      checked++;
+      const re = compileGlob(entry);
+      const matches = tracked.some((f) => re.test(f));
+      const reserved = (RESERVED[entry] ?? []).includes(key);
+      if (reserved) reservedSeen.push(`${key}: ${entry}`);
+      assert.equal(
+        matches,
+        !reserved,
+        reserved
+          ? `${key}: ${entry} matches a tracked file now — take it off RESERVED`
+          : `${key}: ${entry} matches no tracked file. A directory is \`dir/**\`, any depth is \`**/name\`; ` +
+            "if the entry is deliberate, add it to RESERVED with the reason",
+      );
     }
-    literals++;
-    assert.equal(
-      existsSync(path.join(ROOT, entry)),
-      !RESERVED.includes(entry),
-      RESERVED.includes(entry)
-        ? `${entry} exists now — take it off the RESERVED list`
-        : `${entry} is listed as CI-defining but does not exist`,
-    );
   }
-  assert.ok(literals >= 10, `expected the literal entries, checked ${literals}`);
+  // `review.diffExcludes` are git pathspecs, so git is asked.
+  for (const spec of CONFIG.review.diffExcludes) {
+    checked++;
+    const hit = execFileSync("git", ["ls-files", "--", spec], { cwd: ROOT, encoding: "utf8" }).trim();
+    assert.ok(hit !== "", `review.diffExcludes: ${spec} matches no tracked file`);
+  }
+  // Guards on the guard: the lists were walked, and RESERVED holds nothing stale.
+  assert.ok(checked >= 30, `expected every configured entry, checked ${checked}`);
+  assert.deepEqual(reservedSeen.sort(), Object.entries(RESERVED).flatMap(([e, keys]) => keys.map((k) => `${k}: ${e}`)).sort());
+  assert.equal(CONFIG.fixGuard.counterpartRepo, "yorkie-js-sdk");
 });
 
 test("ci.yml files a run for every PR, so a docs-only PR reaches the pipeline", () => {
@@ -436,24 +467,6 @@ test("review.sourceGlobs covers this repository's source, and the path-scoped le
   assert.ok(!reviewing.includes("docs"), "the docs lens must not be required for a .go-only change");
   const docsOnly = reviewScope.reviewingLensIds(manifest, ["docs/tasks/active/20260912-x-todo.md"]);
   for (const id of ["test-adequacy", "blast-radius"]) assert.ok(!docsOnly.includes(id), id);
-});
-
-test("review.diffExcludes and fixGuard.replicatedRuleGlobs still match files", () => {
-  // A pathspec or a glob that matches nothing is a rename nobody carried over:
-  // generated code would flood the reviewers' diff, or a replicated rule would
-  // change with no warning.
-  const matches = (glob) => {
-    const dir = path.dirname(glob);
-    const re = new RegExp(`^${path.basename(glob).replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`);
-    return existsSync(path.join(ROOT, dir)) ? readdirSync(path.join(ROOT, dir)).filter((f) => re.test(f)).length : 0;
-  };
-  const globs = [...CONFIG.review.diffExcludes, ...CONFIG.fixGuard.replicatedRuleGlobs];
-  assert.ok(globs.length >= 4, `expected the configured globs, found ${globs.length}`);
-  for (const glob of globs) {
-    assert.ok(!path.dirname(glob).includes("*"), `${glob}: this check only reads a literal directory`);
-    assert.ok(matches(glob) > 0, `${glob} matches no file in this repository`);
-  }
-  assert.equal(CONFIG.fixGuard.counterpartRepo, "yorkie-js-sdk");
 });
 
 // --- the mechanical-coverage note ---------------------------------------------------
