@@ -332,6 +332,16 @@ test("every configured path and glob matches a file this repository tracks", () 
   assert.equal(named("Fixes yorkie-team/yorkie#2100"), false, "this repository's own name is not the counterpart's");
 });
 
+test("this is the repository the shared files are written in", () => {
+  // `upstream.json` says so with `repository: null`. A copy records the
+  // repository and commit it was synced from instead, and the package's own
+  // suite then holds it to that manifest; here, the manifest is whatever
+  // `node scripts/agent/manifest.mjs build` last wrote, and the suite only
+  // requires that it matches the tree.
+  const upstream = JSON.parse(readFileSync(path.join(HERE, "upstream.json"), "utf8"));
+  assert.deepEqual(upstream, { repository: null });
+});
+
 // --- what the harness assumes of this repository's CI workflow --------------------------
 
 test("CI_WORKFLOW_PATH names a workflow file that actually exists", () => {

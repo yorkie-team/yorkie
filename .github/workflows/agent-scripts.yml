@@ -26,7 +26,9 @@
 # not start this lane: a `paths:` filter cannot be read from configuration.
 # So it also runs WEEKLY, on `main`: a linter bumped in a build file, or a
 # toolchain version moved, is checked against the toolchain action's pins
-# within a week instead of at the next harness change.
+# within a week instead of at the next harness change. The weekly run is also
+# when a repository that copied these files learns that the repository they
+# came from has moved on (the last step of the `test` job).
 name: Agent Scripts
 
 on:
@@ -96,6 +98,28 @@ jobs:
       # failure names which half broke.
       - name: Test this repository's harness configuration
         run: npm run test:repo
+        working-directory: scripts/agent
+
+      # IS THIS COPY THE ONE IT SAYS IT IS? The suite above already fails when a
+      # shared file differs from `scripts/agent/MANIFEST.sha256`, and when that
+      # manifest is not the one `.github/agent-harness/upstream.json` records.
+      # Both are local, so both can be satisfied by editing the record. This
+      # asks the repository the record names: it fetches the manifest at the
+      # recorded commit and compares, and FAILS if it cannot fetch it — a check
+      # that passes when it could not look is not a check. It also warns,
+      # without failing, when that repository's default branch has moved on.
+      #
+      # In the repository the shared files are written in, the record says
+      # `repository: null` and this step says so and exits 0.
+      #
+      # The job's own read-only token, for the rate limit: it can read any
+      # public repository's contents and nothing else, and it goes to
+      # api.github.com only. An upstream that is private would need a token of
+      # its own, which this step does not take.
+      - name: Compare the shared files with the repository they were copied from
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npm run check:upstream
         working-directory: scripts/agent
 
   # THE TEST SUITE CANNOT CATCH THIS CLASS, AND ONE OF THEM SHIPPED.

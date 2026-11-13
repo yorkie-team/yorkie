@@ -52,6 +52,8 @@ import { fileURLToPath } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 export const CONFIG_DIR_ENV = "AGENT_HARNESS_CONFIG_DIR";
+/** The repository's own half of the harness, as a path from the repository's root. */
+export const HARNESS_DIR = ".github/agent-harness";
 export const CONFIG_FILE = "config.json";
 export const COVERAGE_NOTE_FILE = "coverage-note.md";
 
@@ -405,7 +407,7 @@ export function configDir(env = process.env, here = HERE) {
           "absolute path of a trusted copy of that directory.",
       );
     }
-    return path.resolve(here, "..", "..", ".github", "agent-harness");
+    return path.resolve(here, "..", "..", ...HARNESS_DIR.split("/"));
   }
   if (override.trim() === "") {
     throw new Error(
