@@ -33,6 +33,29 @@
 // package, and the checks run on text handed in — which is what lets the
 // mutation cases run against altered workflows without touching a file.
 //
+// WHAT THIS GUARD DOES NOT SEE. It reads workflow text for the shapes the
+// workflows use today, and a text guard can always be written around. It
+// exists to catch a well-meaning edit that quietly moves a script or its
+// configuration onto an untrusted tree — not to stop someone who is trying.
+// Workflow files are CI-defining and CODEOWNER-ed, so every edit to one still
+// needs a human reviewer, and these are the things that reviewer must look for
+// because nothing here will:
+//
+//   - writes into a trusted tree or the staged copy by any means other than
+//     the recognised `cp -R` staging lines: `cp -a`, `rsync`, `tar -x`,
+//     `actions/download-artifact`, a redirect into a script's path;
+//   - the dependency tarball a `deps` job builds and a later job unpacks
+//     beside the trusted scripts (the cross-job hand-off is not followed);
+//   - a script run through a shell variable, `xargs`, `make`, or any
+//     interpreter other than a literal `node <path>`;
+//   - YAML written in a form the line reader does not expect: quoted keys
+//     (`"ref":`, `"uses":`), flow-style mappings, anchors;
+//   - a composite action loaded from a pull request's tree (`uses: ./pr/…`).
+//
+// Directory changes ARE seen, coarsely: a script run by relative path in a
+// step with `working-directory:`, a `cd`, or through `npm run` is refused
+// outright rather than resolved, apart from the one job listed below.
+//
 // IT ASSERTS HOW MANY SITES IT INSPECTED. A guard that depends on where things
 // are — a step shape, an indentation, a path spelling — passes vacuously the
 // day the shape changes and it finds nothing. Adding or removing a site changes
@@ -74,6 +97,13 @@ const EXPECTED = {
 };
 
 /**
+ * Jobs allowed to run the package from a changed directory. `agent-scripts.yml`
+ * is this package's own test lane: it runs the PULL REQUEST's copy on purpose,
+ * with `contents: read` and no secrets, so there is no gate for it to subvert.
+ */
+const DIRECTORY_CHANGE_ALLOWED = new Set(["agent-scripts.yml › test"]);
+
+/**
  * Events whose DEFAULT checkout ref is trusted, so a checkout with no `ref:`
  * may be believed. An allow-list, because the default ref is whatever the event
  * says it is and new events appear: anything not named here is not trusted.
@@ -90,7 +120,7 @@ const EXPECTED = {
 const TRUSTED_DEFAULT_REF_EVENTS = new Set(["issue_comment", "workflow_run", "schedule", "workflow_dispatch"]);
 
 /** `ref:` values that name the default branch outright. */
-const TRUSTED_REFS = new Set(["main", "${{ github.event.repository.default_branch }}"]);
+const TRUSTED_REFS = new Set(["main", "refs/heads/main", "${{ github.event.repository.default_branch }}"]);
 
 // --- which scripts read the configuration ---------------------------------------
 
@@ -116,7 +146,18 @@ const READS_CONFIG = new Set(MODULES.filter((f) => reachesConfig(f)));
 
 const isComment = (line) => /^\s*#/.test(line);
 /** `${{ runner.temp }}` and `$RUNNER_TEMP` are one place. */
-const normalise = (line) => line.replaceAll("${{ runner.temp }}", TEMP).replaceAll("${RUNNER_TEMP}", TEMP);
+const normalise = (line) =>
+  line
+    .replaceAll("${{ runner.temp }}", TEMP)
+    .replaceAll("${RUNNER_TEMP}", TEMP)
+    .replaceAll("${GITHUB_WORKSPACE}", "$GITHUB_WORKSPACE")
+    // A trailing comment says nothing about what runs. (`#` after whitespace
+    // and before a space: `'#!/bin/sh'` and `#123` are not comments.)
+    .replace(/\s+#\s.*$/, "");
+const indentOf = (line) => /^(\s*)/.exec(line)[1].length;
+const isBlank = (line) => line.trim() === "" || isComment(line);
+/** A step's `uses:` or `run:` key — what makes a step a step. */
+const isStepKey = (line) => !isComment(line) && /^\s*(?:- )?(?:uses|run):(?:\s|$)/.test(line);
 
 function parseWorkflow(file, text) {
   const lines = text.split("\n");
@@ -131,25 +172,46 @@ function parseWorkflow(file, text) {
       if (m) events.push(m[1]);
     }
   }
+  // Indentation is read off the file, not assumed: a job or a step list
+  // indented differently from its neighbours is still a job and still steps.
+  const body = lines.slice(jobsAt + 1);
+  const firstKey = body.find((l) => !isBlank(l));
+  const jobIndent = firstKey ? indentOf(firstKey) : 2;
   const jobs = [];
   let job = null;
   let step = null;
-  for (const line of lines.slice(jobsAt + 1)) {
-    const header = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(line);
+  let stepIndent = -1;
+  let inSteps = false;
+  for (const line of body) {
+    const header = !isBlank(line) && indentOf(line) === jobIndent && /^\s*([A-Za-z0-9_-]+):\s*(?:#.*)?$/.exec(line);
     if (header) {
-      job = { file, name: header[1], events, steps: [] };
+      job = { file, name: header[1], events, head: [], steps: [] };
       jobs.push(job);
       step = null;
+      stepIndent = -1;
+      inSteps = false;
       continue;
     }
     if (!job) continue;
-    if (/^ {6}- /.test(line)) {
+    if (!inSteps) {
+      if (!isBlank(line) && /^\s*steps:\s*(?:#.*)?$/.test(line)) inSteps = true;
+      else job.head.push(line);
+      continue;
+    }
+    if (stepIndent < 0 && !isBlank(line) && /^\s*- /.test(line)) stepIndent = indentOf(line);
+    if (stepIndent >= 0 && indentOf(line) === stepIndent && /^\s*- /.test(line)) {
       step = { lines: [] };
       job.steps.push(step);
     }
     if (step) step.lines.push(line);
   }
-  return { file, events, jobs };
+  // THE INDEPENDENT COUNT. Every `uses:`/`run:` key in the file must sit inside
+  // a step the walk above produced. One that does not belongs to a job this
+  // reader could not parse — which would otherwise be a job nothing inspects.
+  const stepKeys = body.filter(isStepKey).length;
+  const seen = jobs.reduce((n, j) => n + j.steps.reduce((m, st) => m + st.lines.filter(isStepKey).length, 0), 0);
+  const unparsed = stepKeys === seen ? null : `${stepKeys - seen} of ${stepKeys} \`uses:\`/\`run:\` keys are outside every step this guard could parse`;
+  return { file, events, jobs, preamble: lines.slice(0, jobsAt), unparsed };
 }
 
 /** A step's own scalar key, or undefined. Comment lines are not values. */
@@ -189,6 +251,21 @@ const uses = (step, action) => step.lines.some((l) => !isComment(l) && new RegEx
 // --- the walk ----------------------------------------------------------------------
 
 /**
+ * Variables no workflow, job or step `env:` may set: the configuration's
+ * location (one writer, the staging step) and `NODE_OPTIONS`, which can
+ * preload a module into every script.
+ */
+const FORBIDDEN_ENV = /\b(?:AGENT_HARNESS_CONFIG_DIR|NODE_OPTIONS)\b/;
+
+const ACCEPTED_FORMS =
+  'the staging copy `cp -R <trusted tree>/.github/agent-harness "$RUNNER_TEMP/agent-harness"`, ' +
+  'the export `echo "AGENT_HARNESS_CONFIG_DIR=$RUNNER_TEMP/agent-harness" >> "$GITHUB_ENV"`, ' +
+  "the pre-push hook's own export line and its argument, or the prefix " +
+  "`AGENT_HARNESS_CONFIG_DIR=$RUNNER_TEMP/agent-harness node $RUNNER_TEMP/agent-tools/<script>`";
+
+const GIT_SWITCH = /\bgit((?:\s+-[Cc]\s+\S+)*)\s+(?:checkout|switch|fetch|pull|merge|reset|restore|worktree|clone|apply|am|cherry-pick|rebase|stash)(?![\w-])/;
+
+/**
  * Walk every job and return what was found: `problems` (each a sentence naming
  * the workflow and job) and `counts`. `workflows` is `[{ file, text }]`.
  */
@@ -214,6 +291,13 @@ function inspect(workflows) {
       problems.push(`${file}: ${wf.unreadable}`);
       continue;
     }
+    if (wf.unparsed) problems.push(`${file}: ${wf.unparsed}`);
+    // Workflow-level `env:` reaches every step of every job.
+    for (const line of wf.preamble) {
+      if (!isComment(line) && FORBIDDEN_ENV.test(normalise(line))) {
+        problems.push(`${file}: sets ${FORBIDDEN_ENV.exec(line)[0]} for the whole workflow: ${line.trim().slice(0, 100)}`);
+      }
+    }
     for (const job of wf.jobs) {
       counts.jobs++;
       const at = `${file} › ${job.name}`;
@@ -233,13 +317,24 @@ function inspect(workflows) {
         for (const [dir, tree] of side) if (!dir.startsWith(TEMP)) side.set(dir, { ...tree, trusted: false, why });
       };
 
+      // Job-level keys: `env:` and `defaults.run.working-directory` apply to
+      // every step below.
+      const jobHead = job.head.filter((l) => !isComment(l)).map(normalise);
+      for (const line of jobHead) {
+        if (FORBIDDEN_ENV.test(line)) flag(`sets ${FORBIDDEN_ENV.exec(line)[0]} for the whole job: ${line.trim().slice(0, 100)}`);
+      }
+      const jobChangesDirectory = jobHead.some((l) => /^\s*working-directory:/.test(l));
+      const directoryChangeAllowed = DIRECTORY_CHANGE_ALLOWED.has(at);
+
       job.steps.forEach((step, stepIndex) => {
         // ---- a checkout -------------------------------------------------------
         if (uses(step, "actions/checkout")) {
           const patterns = sparsePatterns(step);
           const ref = scalar(step, "ref");
           const repository = scalar(step, "repository");
-          const target = scalar(step, "path");
+          // `path: .` and the workspace spelt out are the workspace.
+          const rawTarget = scalar(step, "path");
+          const target = rawTarget === undefined || /^(?:\.\/?|\$\{\{ github\.workspace \}\}\/?)$/.test(rawTarget) ? undefined : rawTarget;
 
           let trusted = true;
           let why = "";
@@ -291,6 +386,9 @@ function inspect(workflows) {
         }
 
         const isAgent = uses(step, "anthropics/claude-code-action");
+        // Where a relative path resolves is no longer the workspace root once
+        // the directory changes. Not resolved — refused, below.
+        let directoryChanged = jobChangesDirectory || scalar(step, "working-directory") !== undefined;
         const writesHook = step.lines.some((l) => !isComment(l) && l.includes(".git/hooks/pre-push"));
         const hookNamesConfig =
           step.lines.some((l) => !isComment(l) && l.includes(`export ${ENV}="%s"`)) &&
@@ -300,15 +398,37 @@ function inspect(workflows) {
           if (isComment(rawLine)) continue;
           const line = normalise(rawLine);
           const trimmed = line.trim();
+          if (trimmed === "") continue;
+
+          if (FORBIDDEN_ENV.test(line) && /\bNODE_OPTIONS\b/.test(line)) flag(`sets or reads NODE_OPTIONS: ${trimmed.slice(0, 100)}`);
+
+          // ---- a directory change, or a package script ---------------------------
+          if (!isAgent && !directoryChangeAllowed) {
+            if (/(?:^|[\s;&|(])(?:cd|pushd)\s/.test(line)) directoryChanged = true;
+            if (!/^\/\//.test(trimmed) && /\bnpm\s+(?:(?:--prefix|-C)\s+\S+\s+)?(?:run|run-script|test|start|exec|x)\b|(?:^|[\s;&|(])npx\s/.test(line)) {
+              flag(`runs a package script (\`${trimmed.slice(0, 80)}\`), which this guard cannot follow to the scripts it runs`);
+            }
+            if (directoryChanged) {
+              // After a directory change a bare `node set-state.mjs` IS a harness script.
+              for (const m of line.matchAll(/\bnode\s+(?:--[\w=-]+\s+)*["']?(?:\.\/)?([\w-]+\.mjs)\b/g)) {
+                if (MODULES.includes(m[1])) flag(`runs ${m[1]} by a bare path after a directory change; run it by its path from the workspace root or the runner's temp directory`);
+              }
+            }
+          }
 
           // ---- something that changes what the workspace holds -----------------
           // (Not inside the agent's own prompt: the agent step distrusts
           // everything when it ends, below.)
-          if (
-            !isAgent &&
-            /\bgh pr checkout\b|\bgit (?:checkout|switch|fetch|pull|merge|reset|restore|worktree|clone|apply|am|cherry-pick|rebase|stash)(?![\w-])/.test(line)
-          ) {
-            distrust(`\`${trimmed.slice(0, 60)}\` ran in the workspace`);
+          const git = isAgent ? null : GIT_SWITCH.exec(line);
+          if (git || (!isAgent && /\bgh pr checkout\b/.test(line))) {
+            // `git -C <dir> …` acts on that directory: a side directory if it
+            // names one, otherwise (`.`, the workspace path, anything this
+            // guard cannot place) the workspace.
+            const dashC = git && /-C\s+["']?([^\s"']+)/.exec(git[1]);
+            const target = dashC ? dashC[1].replace(/^\.\//, "").replace(/\/$/, "") : "";
+            const why = `\`${trimmed.slice(0, 60)}\` ran there`;
+            if (target !== "" && side.has(target)) side.set(target, { ...side.get(target), trusted: false, why });
+            else distrust(why);
           }
 
           // ---- side directories moved or removed --------------------------------
@@ -358,12 +478,19 @@ function inspect(workflows) {
           // else. One writer per job means one answer to "which configuration
           // did this job read".
           const inlineEnv = `${ENV}=${STAGED_CONFIG} node ${STAGED_TOOLS}/`;
-          if (line.includes("agent-harness") || line.includes(ENV)) {
+          // A step's `name:` is a label, not a command.
+          const isLabel = /^(?:- )?name:\s/.test(trimmed);
+          if (!isLabel && (line.includes("agent-harness") || line.includes(ENV))) {
             const rest = trimmed.slice(inlineEnv.length);
             const accounted =
               (writesHook && (line.includes(`export ${ENV}="%s"`) || trimmed === `"${STAGED_CONFIG}" \\`)) ||
               (trimmed.startsWith(inlineEnv) && !rest.includes("agent-harness") && !rest.includes(ENV));
-            if (!accounted) flag(`touches the harness configuration outside the staging step: ${trimmed.slice(0, 120)}`);
+            if (!accounted) {
+              flag(
+                `touches the harness configuration outside the staging step: ${trimmed.slice(0, 120)} ` +
+                  `(any mention of \`agent-harness\` or ${ENV} outside a comment or a step name is refused unless it is ${ACCEPTED_FORMS})`,
+              );
+            }
           }
           if (/\b(?:cp|mv|ln|rsync|rm)\b[^|;&]*\$RUNNER_TEMP\/agent-tools(?!\/)/.test(line)) {
             flag(`rewrites the staged scripts outside the staging step: ${trimmed.slice(0, 120)}`);
@@ -416,7 +543,9 @@ function inspect(workflows) {
             const name = root || "the workspace";
             if (root === "") counts.fromWorkspace++;
             else counts.fromSideDirectory++;
-            if (!tree) flag(`runs ${script} from ${name}, which no checkout in this job produced`);
+            if (directoryChanged && !root.startsWith(TEMP) && !prefix.startsWith("$GITHUB_WORKSPACE/") && !directoryChangeAllowed) {
+              flag(`runs ${script} by a relative path in a step that changes directory (\`working-directory:\` or \`cd\`); the path no longer means ${name}`);
+            } else if (!tree) flag(`runs ${script} from ${name}, which no checkout in this job produced`);
             else if (!tree.trusted) flag(`runs ${script} from ${name}, which is not trusted at that step: ${tree.why}`);
             else if (afterAgent && !root.startsWith(TEMP)) flag(`runs ${script} from ${name} after the agent ran in this job`);
             else if (tree.scripts === "none" || (tree.scripts === "router" && `${SCRIPTS}/${script}` !== ROUTER)) {
@@ -448,6 +577,15 @@ const REAL = inspect(WORKFLOWS);
 test("the workflows were read: every agent workflow, with jobs and steps", () => {
   assert.ok(REAL.counts.files >= 9, `expected the agent workflows, read ${REAL.counts.files}`);
   assert.ok(REAL.counts.jobs >= 25, `expected their jobs, read ${REAL.counts.jobs}`);
+  // Jobs and steps, counted a second way: by the keys that open them, read
+  // straight off each file with no parsing of structure at all.
+  for (const { file, text } of WORKFLOWS) {
+    const parsed = parseWorkflow(file, text);
+    assert.equal(parsed.unparsed, null, `${file}: ${parsed.unparsed}`);
+    const runsOn = text.split("\n").filter((l) => /^\s+(?:runs-on|uses):\s/.test(l) && indentOf(l) === 4 && !isComment(l)).length;
+    assert.equal(parsed.jobs.length, runsOn, `${file}: read ${parsed.jobs.length} jobs, but the file has ${runsOn} \`runs-on:\` keys`);
+    for (const job of parsed.jobs) assert.ok(job.steps.length > 0, `${file} › ${job.name}: no steps were read`);
+  }
   assert.ok(READS_CONFIG.size >= 20 && READS_CONFIG.has("set-state.mjs"), "the import walk found too few configuration readers");
   assert.ok(!READS_CONFIG.has("command.mjs"), "the router must not read the configuration");
 });
@@ -482,7 +620,17 @@ test("the repository has the configuration the default resolution expects", () =
 // applied in memory, so they keep testing the guard against the workflows as
 // they are, not against a fixture that drifts.
 
-const edit = (file, change) => WORKFLOWS.map((w) => (w.file === file ? { file, text: change(w.text) } : w));
+const edit = (file, change) =>
+  WORKFLOWS.map((w) => {
+    if (w.file !== file) return w;
+    try {
+      return { file, text: change(w.text) };
+    } catch (err) {
+      throw new Error(`${file}: ${err.message}`);
+    }
+  });
+const addJob = (file, job) => edit(file, (t) => `${t}\n${job}`);
+const PR_HEAD = "${{ github.event.workflow_run.head_sha }}";
 const replaceOnce = (text, anchor, replacement) => {
   assert.equal(text.split(anchor).length - 1, 1, `mutation anchor not found exactly once: ${anchor.slice(0, 60)}`);
   return text.replace(anchor, () => replacement);
@@ -642,17 +790,182 @@ const MUTATIONS = [
         )),
     expect: /agent-sweep\.yml › sweep: runs loop-sweep\.mjs from the workspace, which is not trusted at that step: `/,
   },
+  // …directory changes: the path on the line is no longer the path that runs.
+  {
+    name: "the pull request is checked out at `pr` and a step runs from there",
+    files: () =>
+      addJob("agent-sweep.yml", `  evil:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/checkout@v4
+        with:
+          ref: ${PR_HEAD}
+          path: pr
+      - working-directory: pr
+        run: node scripts/agent/set-state.mjs "$PR" blocked
+`),
+    expect: /agent-sweep\.yml › evil: runs set-state\.mjs by a relative path in a step that changes directory/,
+  },
+  {
+    name: "`cd` into the package and a bare script name",
+    files: () =>
+      addJob("agent-sweep.yml", `  evil:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${PR_HEAD}
+      - run: cd scripts/agent && node set-state.mjs "$PR" blocked
+`),
+    expect: /agent-sweep\.yml › evil: runs set-state\.mjs by a bare path after a directory change/,
+  },
+  {
+    name: "`cd pr` before an existing trusted invocation",
+    files: () => edit("agent-sweep.yml", (t) => replaceOnce(t, "node scripts/agent/loop-sweep.mjs ", "cd pr && node scripts/agent/loop-sweep.mjs ")),
+    expect: /agent-sweep\.yml › sweep: runs loop-sweep\.mjs by a relative path in a step that changes directory/,
+  },
+  {
+    name: "a job-level `defaults.run.working-directory`",
+    files: () =>
+      edit("agent-sweep.yml", (t) => replaceOnce(t, "  sweep:\n", "  sweep:\n    defaults:\n      run:\n        working-directory: pr\n")),
+    expect: /agent-sweep\.yml › sweep: runs loop-sweep\.mjs by a relative path in a step that changes directory/,
+  },
+  {
+    name: "a harness script reached through `npm --prefix … run`",
+    files: () =>
+      edit("agent-sweep.yml", (t) =>
+        replaceOnce(t, "      - name: Sweep the loop PRs\n", "      - run: npm --prefix pr/scripts/agent run sweep\n      - name: Sweep the loop PRs\n")),
+    expect: /agent-sweep\.yml › sweep: runs a package script/,
+  },
+  // …environment set above the steps.
+  {
+    name: "a job-level `env:` names a configuration",
+    files: () =>
+      edit("agent-sweep.yml", (t) =>
+        replaceOnce(t, "  sweep:\n", "  sweep:\n    env:\n      AGENT_HARNESS_CONFIG_DIR: ${{ github.workspace }}/pr/.github/agent-harness\n")),
+    expect: /agent-sweep\.yml › sweep: sets AGENT_HARNESS_CONFIG_DIR for the whole job/,
+  },
+  {
+    name: "a workflow-level `env:` names a configuration",
+    files: () =>
+      edit("agent-sweep.yml", (t) => replaceOnce(t, "\njobs:\n", "\nenv:\n  AGENT_HARNESS_CONFIG_DIR: /tmp/pr-config\n\njobs:\n")),
+    expect: /agent-sweep\.yml: sets AGENT_HARNESS_CONFIG_DIR for the whole workflow/,
+  },
+  {
+    name: "a job-level `NODE_OPTIONS` preloads a module into every script",
+    files: () =>
+      edit("agent-sweep.yml", (t) => replaceOnce(t, "  sweep:\n", "  sweep:\n    env:\n      NODE_OPTIONS: --import ./pr/hook.mjs\n")),
+    expect: /agent-sweep\.yml › sweep: sets NODE_OPTIONS for the whole job/,
+  },
+  // …git, spelt with options before the verb.
+  {
+    name: "`git -C . checkout` replaces a trusted workspace",
+    files: () =>
+      edit("agent-sweep.yml", (t) =>
+        replaceOnce(t, "      - name: Sweep the loop PRs\n", '      - run: git -C . checkout "$SHA"\n      - name: Sweep the loop PRs\n')),
+    expect: /agent-sweep\.yml › sweep: runs loop-sweep\.mjs from the workspace, which is not trusted at that step: `/,
+  },
+  {
+    name: "`git -c key=value checkout` replaces a trusted workspace",
+    files: () =>
+      edit("agent-sweep.yml", (t) =>
+        replaceOnce(
+          t,
+          "      - name: Sweep the loop PRs\n",
+          '      - run: git -c advice.detachedHead=false checkout "$SHA"\n      - name: Sweep the loop PRs\n',
+        )),
+    expect: /agent-sweep\.yml › sweep: runs loop-sweep\.mjs from the workspace, which is not trusted at that step: `/,
+  },
+  {
+    name: "`git -C .trusted checkout` replaces a trusted side directory",
+    files: () =>
+      edit("agent-review-on-demand.yml", (t) =>
+        replaceOnce(
+          t,
+          "      - name: Describe the capture (attribution for the artifact below)\n",
+          '      - run: git -C .trusted checkout "$HEAD_SHA"\n      - name: Describe the capture (attribution for the artifact below)\n',
+        )),
+    expect: /agent-review-on-demand\.yml › review: runs capture-meta\.mjs from \.trusted, which is not trusted at that step: `/,
+  },
+  {
+    name: "a pull-request checkout into `path: .` over a trusted workspace",
+    files: () =>
+      edit("agent-sweep.yml", (t) =>
+        replaceOnce(
+          t,
+          "      - name: Sweep the loop PRs\n",
+          `      - uses: actions/checkout@v4\n        with:\n          ref: ${PR_HEAD}\n          path: .\n      - name: Sweep the loop PRs\n`,
+        )),
+    expect: /agent-sweep\.yml › sweep: runs loop-sweep\.mjs from the workspace, which is not trusted at that step: its ref is/,
+  },
+  // …jobs the reader used to walk past.
+  {
+    name: "a job whose step list is indented differently from its neighbours",
+    files: () =>
+      addJob("agent-sweep.yml", `  evil:
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v4
+          with:
+            ref: ${PR_HEAD}
+        - run: node ./scripts/agent/set-state.mjs "$PR" blocked
+`),
+    expect: /agent-sweep\.yml › evil: runs set-state\.mjs from the workspace, which is not trusted at that step/,
+  },
+  {
+    name: "a job whose steps this reader cannot parse at all",
+    files: () =>
+      addJob("agent-sweep.yml", `  evil:
+    runs-on: ubuntu-latest
+    "steps":
+      - uses: actions/checkout@v4
+        with:
+          ref: ${PR_HEAD}
+      - run: node ./scripts/agent/set-state.mjs "$PR" blocked
+`),
+    expect: /agent-sweep\.yml: 2 of \d+ `uses:`\/`run:` keys are outside every step this guard could parse/,
+  },
 ];
 
 test("each trust-weakening mutation of the real workflows fails the guard", () => {
+  // Every case runs, whatever happens to the others: a mutation whose anchor no
+  // longer exists (a renamed step, say) is reported by name, with its file, and
+  // the rest are still checked.
+  const failures = [];
   for (const { name, files, expect } of MUTATIONS) {
-    const { problems } = inspect(files());
-    assert.ok(problems.length > 0, `PASSED THE GUARD: ${name}`);
-    assert.ok(
-      problems.some((p) => expect.test(p)),
-      `${name}: the guard failed, but not for the reason expected.\n  wanted ${expect}\n  got:\n  - ${problems.join("\n  - ")}`,
-    );
+    let problems;
+    try {
+      ({ problems } = inspect(files()));
+    } catch (err) {
+      failures.push(`COULD NOT APPLY "${name}" — ${err.message}. Update the mutation to match the workflow.`);
+      continue;
+    }
+    if (problems.length === 0) failures.push(`PASSED THE GUARD: ${name}`);
+    else if (!problems.some((p) => expect.test(p))) {
+      failures.push(`${name}: the guard failed, but not for the reason expected.\n  wanted ${expect}\n  got:\n  - ${problems.join("\n  - ")}`);
+    }
   }
-  // Guard on the guard: the six that got through before, and their neighbours.
-  assert.ok(MUTATIONS.length >= 16, `expected the mutation cases, ran ${MUTATIONS.length}`);
+  assert.deepEqual(failures, []);
+  // Guard on the guard: the six that got through first, and their neighbours.
+  assert.ok(MUTATIONS.length >= 30, `expected the mutation cases, ran ${MUTATIONS.length}`);
+});
+
+test("what is not a command is not flagged", () => {
+  // A trailing comment, a step name and a full-line comment mention the
+  // directory without touching it. The guard must stay quiet, or people learn
+  // to route around it.
+  const quiet = [
+    ["a trailing comment", (t) => replaceOnce(t, "          ref: main\n", "          ref: main # with .github/agent-harness, see AGENT_HARNESS_CONFIG_DIR\n")],
+    ["a step name", (t) => replaceOnce(t, "      - name: Sweep the loop PRs\n", "      - name: Sweep the loop PRs (reads .github/agent-harness)\n")],
+    ["a full-line comment", (t) => replaceOnce(t, "      - name: Sweep the loop PRs\n", "      # AGENT_HARNESS_CONFIG_DIR is not set here; agent-harness is beside the scripts.\n      - name: Sweep the loop PRs\n")],
+    ["`ref: refs/heads/main`", (t) => replaceOnce(t, "          ref: main\n", "          ref: refs/heads/main\n")],
+  ];
+  for (const [what, change] of quiet) {
+    const { problems, counts } = inspect(edit("agent-sweep.yml", change));
+    assert.deepEqual(problems, [], what);
+    assert.equal(counts.invocations, EXPECTED.invocations, what);
+  }
 });
