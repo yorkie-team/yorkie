@@ -56,7 +56,8 @@ A hand edit to the shared files fails CI in the repository that made it, and
   toolchain-after-re-verification in all three jobs that act on a reviewed
   commit.
 - The weekly "upstream has moved on" signal is a warning on a green run. An
-  adopting repository that wants to be told needs its own reminder.
+  adopting repository that wants to be told needs its own reminder. (Taken
+  up in `20261114-agent-harness-notify-todo.md`.)
 
 ## Not in this change
 
