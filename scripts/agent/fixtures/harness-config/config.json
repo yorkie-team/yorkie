@@ -1,6 +1,7 @@
 {
   "repo": {
     "name": "fixture-repo",
+    "appSlug": "fixture-agent",
     "botLogins": ["github-actions[bot]", "fixture-agent[bot]"],
     "appLogins": ["fixture-agent[bot]", "app/fixture-agent"]
   },
@@ -28,12 +29,18 @@
   "fixer": {
     "verifyCommand": "fixture verify",
     "verifyDescription": "the fixture lint and the fixture unit suites",
-    "forbiddenCommands": "`fixture test-all`",
-    "targetedTestHint": "`fixture test <path>`",
+    "verifyFailureHint": "",
+    "integrationWarning": "Do NOT run `fixture test-all`: it needs a stack this job does not stand up",
+    "integrationRerunBy": "it",
     "generatedCodeNote": "",
-    "keepReproducerAs": "a skipped case that names the finding",
-    "licenceScope": "every new source file",
-    "todoTrackingLine": ""
+    "keepReproducerAs": "Keep it as a skipped case that names the finding",
+    "disabledTestForms": "skips",
+    "licenceScope": "A licence header on every new source file.",
+    "todoTrackingLine": "",
+    "implementVerifyStep": "VERIFY with `fixture verify` before the final push.",
+    "replyVerifyInstruction": "",
+    "toolchainSteps": "the fixture toolchain",
+    "lastResortDiagnosis": "Re-run `fixture verify` locally."
   },
   "tests": {
     "rules": ["go", "vitest"],

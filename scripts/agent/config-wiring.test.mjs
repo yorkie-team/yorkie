@@ -50,7 +50,15 @@
 //     interpreter other than a literal `node <path>`;
 //   - YAML written in a form the line reader does not expect: quoted keys
 //     (`"ref":`, `"uses":`), flow-style mappings, anchors;
-//   - a composite action loaded from a pull request's tree (`uses: ./pr/…`).
+//   - what the toolchain action does once it is running: the actions it
+//     nests and the commands it runs are that file's, and only WHERE the file
+//     came from is checked here.
+//
+// LOCAL ACTIONS ARE SEEN. `uses: ./…` loads an action from the workspace at
+// the step that runs it, with the job's tokens — the same exposure as a script.
+// Exactly one is allowed, the repository's `agent-toolchain`, and only from a
+// tree that is trusted at that step: a side-directory checkout of the default
+// branch, or a workspace that still is one.
 //
 // Directory changes ARE seen, coarsely: a script run by relative path in a
 // step with `working-directory:`, a `cd`, or through `npm run` is refused
@@ -78,22 +86,29 @@ const ENV = "AGENT_HARNESS_CONFIG_DIR";
 const TEMP = "$RUNNER_TEMP";
 const STAGED_TOOLS = `${TEMP}/agent-tools`;
 const STAGED_CONFIG = `${TEMP}/agent-harness`;
+/** The one local action a workflow may use, as a path from a tree's root. */
+const TOOLCHAIN = ".github/actions/agent-toolchain";
 
 // The counts. Each is the number of sites of one kind in the workflows today.
 const EXPECTED = {
   // Sparse checkouts of the scripts directory from the default branch.
-  trustedSparseCheckouts: 12,
-  // Route jobs: `command.mjs` alone. They read no configuration.
-  routerCheckouts: 7,
+  trustedSparseCheckouts: 18,
+  // Route jobs that check out `command.mjs` alone. They read no configuration;
+  // the others bring the whole package and hand configured values on.
+  routerCheckouts: 2,
+  // `uses: ./…/agent-toolchain`, and the side-directory checkouts made for it
+  // (the fifth use is from a workspace that is still the default branch).
+  toolchainUses: 5,
+  toolchainCheckouts: 4,
   // `cp -R … scripts/agent …/agent-tools`, each with its configuration.
   stagingCopies: 4,
   // Places a harness script is run, and how many of them read the configuration.
-  invocations: 102,
-  configReadingInvocations: 78,
+  invocations: 113,
+  configReadingInvocations: 89,
   // …by the kind of tree each runs from.
-  fromWorkspace: 58,
-  fromSideDirectory: 24,
-  fromStagedCopy: 20,
+  fromWorkspace: 65,
+  fromSideDirectory: 27,
+  fromStagedCopy: 21,
 };
 
 /**
@@ -110,14 +125,14 @@ const DIRECTORY_CHANGE_ALLOWED = new Set(["agent-scripts.yml › test"]);
  *
  *   issue_comment, workflow_run, schedule — GitHub runs these from the default
  *     branch, whatever pull request the event is about.
- *   workflow_dispatch — runs from the ref a maintainer with write access
- *     picked. The workflow FILE comes from that same ref, so the checkout is
- *     exactly as trusted as the definition that asked for it.
  *
  * Deliberately absent: every `pull_request*` event and `push`, where the
- * default ref is the author's.
+ * default ref is the author's — and `workflow_dispatch`, where it is whichever
+ * ref the dispatcher picked. That ref is a maintainer's choice, but "the
+ * branch I am testing" is exactly a tree that is not the default branch's, so
+ * a workflow that can be dispatched names `main` on every checkout it trusts.
  */
-const TRUSTED_DEFAULT_REF_EVENTS = new Set(["issue_comment", "workflow_run", "schedule", "workflow_dispatch"]);
+const TRUSTED_DEFAULT_REF_EVENTS = new Set(["issue_comment", "workflow_run", "schedule"]);
 
 /** `ref:` values that name the default branch outright. */
 const TRUSTED_REFS = new Set(["main", "refs/heads/main", "${{ github.event.repository.default_branch }}"]);
@@ -274,6 +289,8 @@ function inspect(workflows) {
   const counts = {
     trustedSparseCheckouts: 0,
     routerCheckouts: 0,
+    toolchainUses: 0,
+    toolchainCheckouts: 0,
     stagingCopies: 0,
     invocations: 0,
     configReadingInvocations: 0,
@@ -352,7 +369,8 @@ function inspect(workflows) {
 
           const hasDir = (dir) => patterns === null || patterns.includes(dir);
           const scripts = hasDir(SCRIPTS) ? "all" : patterns.length === 1 && patterns[0] === ROUTER ? "router" : "none";
-          const tree = { trusted, why, scripts, config: hasDir(CONFIG) };
+          const tree = { trusted, why, scripts, config: hasDir(CONFIG), toolchain: hasDir(TOOLCHAIN) };
+          if (patterns !== null && tree.toolchain && trusted) counts.toolchainCheckouts++;
 
           if (patterns !== null) {
             const partial = patterns.some((p) => p.startsWith(`${SCRIPTS}/`));
@@ -386,6 +404,29 @@ function inspect(workflows) {
         }
 
         const isAgent = uses(step, "anthropics/claude-code-action");
+
+        // ---- a local action ------------------------------------------------------
+        // Read from the workspace when the step runs, and run with whatever the
+        // job holds. One is allowed, from a tree that is trusted right now.
+        for (const rawLine of step.lines) {
+          if (isComment(rawLine)) continue;
+          const local = /^\s*(?:- )?uses:\s*["']?(\.{1,2}\/[^\s"'#]*)/.exec(normalise(rawLine));
+          if (!local) continue;
+          const ref = local[1].replace(/\/+$/, "");
+          const m = /^\.\/(?:(.+)\/)?\.github\/actions\/agent-toolchain$/.exec(ref);
+          if (!m || ref.includes("..")) {
+            flag(`uses the local action ${ref}; the only local action a workflow may use is ${TOOLCHAIN}, from a trusted tree`);
+            continue;
+          }
+          counts.toolchainUses++;
+          const root = m[1] ?? "";
+          const tree = root === "" ? workspace : side.get(root);
+          const name = root || "the workspace";
+          if (!tree) flag(`uses the toolchain action from ${name}, which no checkout in this job produced`);
+          else if (!tree.trusted) flag(`uses the toolchain action from ${name}, which is not trusted at that step: ${tree.why}`);
+          else if (afterAgent) flag(`uses the toolchain action from ${name} after the agent ran in this job`);
+          else if (!tree.toolchain) flag(`uses the toolchain action from ${name}, whose checkout does not include ${TOOLCHAIN}`);
+        }
         // Where a relative path resolves is no longer the workspace root once
         // the directory changes. Not resolved — refused, below.
         let directoryChanged = jobChangesDirectory || scalar(step, "working-directory") !== undefined;
@@ -901,6 +942,95 @@ const MUTATIONS = [
         )),
     expect: /agent-sweep\.yml › sweep: runs loop-sweep\.mjs from the workspace, which is not trusted at that step: its ref is/,
   },
+  // …the toolchain action: a local action runs with the job's tokens.
+  {
+    name: "the toolchain action is used from the pull request's workspace",
+    files: () =>
+      edit("agent-review-reply.yml", (t) =>
+        replaceOnce(t, `        uses: ./.trusted-toolchain/${TOOLCHAIN}\n`, `        uses: ./${TOOLCHAIN}\n`)),
+    expect: /agent-review-reply\.yml › reply: uses the toolchain action from the workspace, which is not trusted at that step/,
+  },
+  {
+    name: "the toolchain action's checkout takes the pull request's ref",
+    files: () =>
+      edit("agent-fix.yml", (t) =>
+        replaceOnce(t, "          ref: main\n          path: .trusted-toolchain\n", `          ref: ${PR_HEAD}\n          path: .trusted-toolchain\n`)),
+    expect: /agent-fix\.yml › fix: uses the toolchain action from \.trusted-toolchain, which is not trusted at that step: its ref is/,
+  },
+  {
+    name: "the toolchain action's checkout names another repository",
+    files: () =>
+      edit("agent-iterate-ci.yml", (t) =>
+        replaceOnce(
+          t,
+          "          ref: main\n          path: .trusted-toolchain\n",
+          "          repository: ${{ github.event.workflow_run.head_repository.full_name }}\n          ref: main\n          path: .trusted-toolchain\n",
+        )),
+    expect: /agent-iterate-ci\.yml › iterate: uses the toolchain action from \.trusted-toolchain, which is not trusted at that step: it names a repository/,
+  },
+  {
+    name: "the toolchain action's checkout no longer fetches the action",
+    files: () =>
+      edit("agent-review-panel.yml", (t) =>
+        replaceOnce(t, `          sparse-checkout: ${TOOLCHAIN}\n`, "          sparse-checkout: .github/workflows\n")),
+    expect: /agent-review-panel\.yml › fix: uses the toolchain action from \.trusted-toolchain, whose checkout does not include/,
+  },
+  {
+    name: "a `git checkout` in the side directory before the toolchain action is used",
+    files: () =>
+      edit("agent-fix.yml", (t) =>
+        replaceOnce(
+          t,
+          "      - name: Set up the toolchain (main's definition, not the branch's)\n",
+          '      - run: git -C .trusted-toolchain checkout "$SHA"\n      - name: Set up the toolchain (main\'s definition, not the branch\'s)\n',
+        )),
+    expect: /agent-fix\.yml › fix: uses the toolchain action from \.trusted-toolchain, which is not trusted at that step: `/,
+  },
+  {
+    name: "the branch is checked out over a workspace the toolchain action is then used from",
+    files: () =>
+      edit("agent-implement.yml", (t) =>
+        replaceOnce(
+          t,
+          "      - name: Set up the toolchain (the workspace is still main)\n",
+          `      - uses: actions/checkout@v4\n        with:\n          ref: ${PR_HEAD}\n      - name: Set up the toolchain (the workspace is still main)\n`,
+        )),
+    expect: /agent-implement\.yml › implement: uses the toolchain action from the workspace, which is not trusted at that step: its ref is/,
+  },
+  {
+    name: "the dispatcher's ref, not `main`, under the workspace the toolchain action is used from",
+    files: () =>
+      edit("agent-implement.yml", (t) =>
+        replaceOnce(t, "          ref: main # not the dispatcher's ref: the prompt says \"the checkout is on `main`\"\n", "")),
+    expect: /agent-implement\.yml › implement: uses the toolchain action from the workspace, which is not trusted at that step: it has no ref, and the workflow runs on workflow_dispatch/,
+  },
+  {
+    name: "the toolchain action is used after the agent",
+    files: () =>
+      edit("agent-fix.yml", (t) => {
+        const anchor = "      # EVERYTHING AFTER THE AGENT RUNS IN THE `report` JOB BELOW";
+        return replaceOnce(t, anchor, `      - name: late\n        uses: ./.trusted-toolchain/${TOOLCHAIN}\n\n${anchor}`);
+      }),
+    expect: /agent-fix\.yml › fix: uses the toolchain action from \.trusted-toolchain(?:, which is not trusted at that step| after the agent ran)/,
+  },
+  {
+    name: "a second local action, from the pull request's tree",
+    files: () =>
+      edit("agent-review-reply.yml", (t) =>
+        replaceOnce(
+          t,
+          "      - name: Keep the toolchain action out of the fixer's commits\n",
+          "      - uses: ./.github/actions/setup\n      - name: Keep the toolchain action out of the fixer's commits\n",
+        )),
+    expect: /agent-review-reply\.yml › reply: uses the local action \.\/\.github\/actions\/setup; the only local action/,
+  },
+  {
+    name: "a local action reached by climbing out of the trusted directory",
+    files: () =>
+      edit("agent-review-reply.yml", (t) =>
+        replaceOnce(t, `        uses: ./.trusted-toolchain/${TOOLCHAIN}\n`, `        uses: ./.trusted-toolchain/../${TOOLCHAIN}\n`)),
+    expect: /agent-review-reply\.yml › reply: uses the local action/,
+  },
   // …jobs the reader used to walk past.
   {
     name: "a job whose step list is indented differently from its neighbours",
@@ -950,7 +1080,7 @@ test("each trust-weakening mutation of the real workflows fails the guard", () =
   }
   assert.deepEqual(failures, []);
   // Guard on the guard: the six that got through first, and their neighbours.
-  assert.ok(MUTATIONS.length >= 30, `expected the mutation cases, ran ${MUTATIONS.length}`);
+  assert.ok(MUTATIONS.length >= 40, `expected the mutation cases, ran ${MUTATIONS.length}`);
 });
 
 test("what is not a command is not flagged", () => {

@@ -38,6 +38,7 @@ const testRemovals = await agent("test-removals.mjs");
 const protection = await agent("branch-protection.mjs");
 const reviewScope = await agent("review-scope.mjs");
 const { compileGlob, loadConfig } = await agent("config.mjs");
+const workflowValues = await agent("workflow-values.mjs");
 
 const CONFIG = loadConfig();
 
@@ -591,30 +592,144 @@ test("the coverage note claims only mechanisms this repo actually runs", () => {
 
 // --- the bots ------------------------------------------------------------------------
 
-test("every workflow's inline bot allow-list is this repository's repo.botLogins", () => {
-  // Jobs that run before any checkout cannot import `rounds.mjs`, so they carry
-  // a literal copy of the allow-list. A copy that drifted to a smaller set
-  // would silently stop honouring a real page; a larger one re-opens the spoof
-  // the author check exists to close.
-  const sites = [
-    ["agent-review-panel.yml", "PAGE_AUTHOR_LOGINS"],
-    ["agent-iterate-ci.yml", "PAGE_AUTHOR_LOGINS"],
-    ["agent-rerun.yml", "PAGE_AUTHORS"],
-    ["agent-review-on-demand.yml", "THROTTLE_AUTHORS"],
-    ["agent-summarize.yml", "THROTTLE_AUTHORS"],
-  ];
-  let inspected = 0;
-  for (const [file, name] of sites) {
-    const wf = readFileSync(path.join(WORKFLOWS, file), "utf8");
-    const copies = [...wf.matchAll(new RegExp(`const ${name} = (\\[.*\\]);`, "g"))];
-    assert.ok(copies.length > 0, `${file} no longer carries ${name}`);
-    for (const [, literal] of copies) {
-      assert.deepEqual(JSON.parse(literal.replace(/'/g, '"')), [...CONFIG.repo.botLogins], `${file}: ${name}`);
-      inspected++;
+test("the bots the workflows believe are the ones the scripts believe", () => {
+  // The gate, throttle and page steps used to carry a literal copy of the
+  // allow-list each, pinned here to `repo.botLogins`. They read it from the
+  // configuration now (`workflow-values.mjs`, `bot_logins`), so what is left to
+  // pin is that the workflows' list and the scripts' list are one list, and
+  // that the App the fixer jobs allow is the App the readers believe.
+  const value = (name) => workflowValues.values([name])[0][1];
+  assert.deepEqual(JSON.parse(value("bot_logins")), [...rounds.PAGE_AUTHOR_LOGINS]);
+  assert.deepEqual(JSON.parse(value("bot_logins")), ["github-actions[bot]", "yorkie-team-agent[bot]"]);
+  assert.equal(value("app_slug"), "yorkie-team-agent");
+  assert.ok(CONFIG.repo.appLogins.includes(value("app_bot_login")));
+  assert.equal(value("allowed_bots"), "yorkie-team-agent[bot],yorkie-team-agent");
+});
+
+// --- what the workflows say, in this repository's words ---------------------------------
+//
+// The `agent-*.yml` files carry no command, path or name of this repository's:
+// they read each from the configuration through `workflow-values.mjs`. These
+// tests are where the result is pinned for THIS repository.
+
+/** Collapse runs of whitespace: a prompt's line wrapping is not its text. */
+const flat = (text) => text.replace(/\s+/g, " ").trim();
+
+/** `text` with every configured-value expression replaced by this repository's value. */
+function rendered(text) {
+  const all = Object.fromEntries(workflowValues.values(Object.keys(workflowValues.VALUES)));
+  return text.replace(/\$\{\{\s*(?:steps\.cfg|needs\.[\w-]+)\.outputs\.([a-z_]+)\s*\}\}/g, (whole, name) =>
+    Object.hasOwn(all, name) ? all[name] : whole);
+}
+
+/** Every `prompt: |` block of a workflow, in order. */
+function promptBlocks(text) {
+  const lines = text.split("\n");
+  const blocks = [];
+  lines.forEach((line, i) => {
+    const m = /^(\s+)prompt: \|\s*$/.exec(line);
+    if (!m) return;
+    const body = [];
+    for (const next of lines.slice(i + 1)) {
+      if (next.trim() !== "" && /^(\s*)/.exec(next)[1].length <= m[1].length) break;
+      body.push(next);
     }
+    blocks.push(body.join("\n"));
+  });
+  return blocks;
+}
+
+/** The issue-to-PR prompt, which is a heredoc in a `run:` step. */
+function heredocPrompt(text) {
+  const start = text.indexOf("<<'PROMPT'\n");
+  const end = text.indexOf("\n          PROMPT\n", start);
+  assert.ok(start > 0 && end > start, "agent-implement.yml no longer builds its prompt in a `PROMPT` heredoc");
+  return [text.slice(start + "<<'PROMPT'\n".length, end)];
+}
+
+test("snapshot: every value the workflows read from the configuration", () => {
+  const names = Object.keys(workflowValues.VALUES);
+  assert.deepEqual(Object.fromEntries(workflowValues.values(names)), SNAPSHOT.WORKFLOW_VALUES);
+});
+
+test("snapshot: the prompts the agents are given, as rendered for this repository", () => {
+  // Recorded from the prompts as they stood while every command and path in
+  // them was a literal, with two deliberate differences (the fix, panel-fix
+  // and CI-fix prompts gained the generated-code rule, and the first two name
+  // the `modernize` lane as the CI-fix prompt already did). Line wrapping is
+  // not compared: a configured value arrives as one line.
+  //
+  // After that it is a change detector, like the rest of the recording: a
+  // prompt edit, here or in a workflow, shows its before and after in the diff
+  // of `repo.snapshot.json`.
+  const sites = [
+    ["agent-fix.yml", promptBlocks],
+    ["agent-review-panel.yml", promptBlocks],
+    ["agent-iterate-ci.yml", promptBlocks],
+    ["agent-review-reply.yml", promptBlocks],
+    ["agent-summarize.yml", promptBlocks],
+    ["agent-implement.yml", heredocPrompt],
+  ];
+  const got = {};
+  for (const [file, extract] of sites) {
+    const blocks = extract(readFileSync(path.join(WORKFLOWS, file), "utf8"));
+    assert.ok(blocks.length > 0, `${file}: no prompt found`);
+    blocks.forEach((block, i) => {
+      const text = flat(rendered(block));
+      // Nothing configured may be left unrendered, and nothing may render to a hole.
+      assert.ok(!/(?:steps\.cfg|needs\.route)\.outputs\./.test(text), `${file}: a configured value was not rendered`);
+      got[`${file}#${i}`] = text;
+    });
   }
-  assert.equal(inspected, 5, "a copy of the allow-list was added or removed — update this list of sites");
-  assert.deepEqual([...rounds.PAGE_AUTHOR_LOGINS], [...CONFIG.repo.botLogins]);
+  assert.deepEqual(got, SNAPSHOT.WORKFLOW_PROMPTS);
+});
+
+test("the toolchain action pins what the Makefile's `tools` target installs", () => {
+  // The action exists so that a token-bearing job never runs `make tools` from
+  // a branch. The price is a second copy of the linter version, and a copy
+  // that goes stale shows up as the fixer and CI disagreeing about lint.
+  const action = readFileSync(path.join(ROOT, ".github", "actions", "agent-toolchain", "action.yml"), "utf8");
+  const code = action.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+  const PIN = /go install (github\.com\/golangci\/golangci-lint\/v2\/cmd\/golangci-lint@v[0-9.]+)/;
+  const pinned = PIN.exec(code);
+  assert.ok(pinned, "the toolchain action must install the linter at a pinned version");
+  const makefile = readFileSync(path.join(ROOT, "Makefile"), "utf8");
+  assert.ok(makefile.includes(`go install ${pinned[1]}\n`), `the Makefile's tools target does not install ${pinned[1]}`);
+  // It must not be the thing it replaces, and it must save no cache: a post
+  // step would store what the agent left behind under a key the agent controls.
+  assert.ok(!/\bmake\s+tools\b/.test(code), "the toolchain action runs the working tree's `make tools`");
+  assert.match(code, /uses: actions\/setup-go@v\d+\n\s+with:\n\s+go-version: "(\d+\.\d+)"\n\s+cache: false\n/);
+  const goVersion = /go-version: "(\d+\.\d+)"/.exec(code)[1];
+  assert.match(readFileSync(path.join(ROOT, "go.mod"), "utf8"), new RegExp(`^go ${goVersion.replace(".", "\\.")}(?:\\.\\d+)?$`, "m"),
+    "the toolchain action's Go version is not go.mod's");
+  // And it is governed like the workflows that call it.
+  assert.equal(checks.definesCi(".github/actions/agent-toolchain/action.yml"), true);
+  assert.equal(panel.classifyFile(".github/actions/agent-toolchain/action.yml"), "policy");
+});
+
+test("the commands the fixer prompts name are targets this repository has", () => {
+  const makefile = readFileSync(path.join(ROOT, "Makefile"), "utf8");
+  const target = (name) => new RegExp(`^${name}:`, "m").test(makefile);
+  // `fixer.verifyCommand` is the whole of what a fixer verifies with: lint, the
+  // licence headers, `go fix`, the unit tests. A hand-written subset would let
+  // a fixer push something CI then refuses.
+  assert.equal(CONFIG.fixer.verifyCommand, "make verify");
+  assert.ok(target("verify"));
+  assert.match(makefile, /^verify: lint verify-license verify-modernize\b/m);
+  // Every `make <target>` any configured sentence names exists.
+  const named = new Set();
+  for (const value of Object.values(CONFIG.fixer)) {
+    for (const m of String(value).matchAll(/`make ([a-z-]+)`/g)) named.add(m[1]);
+  }
+  assert.ok(named.size >= 8, `expected the make targets the prompts name, found ${[...named].join(", ")}`);
+  for (const name of named) assert.ok(target(name), `a fixer prompt names \`make ${name}\`, which the Makefile does not have`);
+  // The reproducer convention is the one `test-removals.mjs` records for Go.
+  assert.match(CONFIG.fixer.keepReproducerAs, /`t\.Skip\("still reproduces: <finding>"\)`/);
+  assert.match(CONFIG.fixer.disabledTestForms, /`t\.Skip`\/`t\.Skipf`\/`t\.SkipNow`/);
+  // Not configured, on purpose: a review reply names no verify command here,
+  // and the todo carries no tracking line.
+  assert.equal(CONFIG.fixer.replyVerifyInstruction, "");
+  assert.equal(CONFIG.fixer.todoTrackingLine, "");
 });
 
 test("a release the agent App created publishes nothing", () => {

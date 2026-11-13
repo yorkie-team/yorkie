@@ -184,6 +184,9 @@ const SCHEMA = {
     // The repository's name as a reviewer is told it, and the prefix of the
     // capture schema id.
     name: text,
+    // The agent GitHub App's slug: what a message calls the App, and the stem
+    // of its two logins.
+    appSlug: [(v) => isStr(v) && /^[a-z0-9][a-z0-9-]*$/.test(v), "a GitHub App slug (lower-case letters, digits and hyphens)"],
     // Bots whose latch, page and ledger comments are believed.
     botLogins: nonEmptyList,
     // The agent App's own identities, in both spellings the API reports.
@@ -216,15 +219,41 @@ const SCHEMA = {
     // the harness's: they are handed to `git diff`, never compiled here.
     diffExcludes: list,
   },
+  // What the workflows tell a fixer, in this repository's words. Each value is
+  // dropped into a sentence the workflow owns (`workflow-values.mjs` says where),
+  // so each is a FRAGMENT with no trailing full stop unless it is whole
+  // sentences. An optional one may be empty: the sentence is then left out.
   fixer: {
+    // The one command a fixer runs to confirm its change, and what it covers:
+    // "Run `<verifyCommand>` ONCE … It is <verifyDescription>, which is the
+    // whole of what this job can verify."
     verifyCommand: text,
     verifyDescription: text,
-    forbiddenCommands: text,
-    targetedTestHint: text,
+    // Whole sentences: what to do when a particular part of it fails.
+    verifyFailureHint: optionalText,
+    // "<integrationWarning>, and the push re-runs <integrationRerunBy> anyway."
+    integrationWarning: text,
+    integrationRerunBy: text,
+    // Whole sentences: which generated code may not be edited by hand.
     generatedCodeNote: optionalText,
+    // "If a test … still fails, the finding is not fixed. <keepReproducerAs>,
+    // and report that item `--skipped` …"
     keepReproducerAs: text,
+    // "…every test a fix round removes or <disabledTestForms>, and shows it…"
+    disabledTestForms: text,
+    // Whole sentences, in the issue-to-PR prompt: the licence-header rule,
+    // the todo's tracking line, and the body of its "verify" step.
     licenceScope: text,
     todoTrackingLine: optionalText,
+    implementVerifyStep: text,
+    // "…edit the branch, <replyVerifyInstruction>, commit with the trailer…"
+    replyVerifyInstruction: optionalText,
+    // "…stopped after setup and before the agent started — <toolchainSteps>,
+    // or fetching the issue."
+    toolchainSteps: text,
+    // Whole sentences: how to reproduce a CI failure locally, said when no
+    // diagnosis could be read at all.
+    lastResortDiagnosis: text,
   },
   tests: {
     rules: ruleSets,
@@ -284,6 +313,11 @@ function crossChecks(config, problems) {
   if (!wantsGo && config.tests.go) {
     problems.push('tests.go is present, but tests.rules does not name "go" — nothing would read it');
   }
+  // One App, named three ways. A slug that disagreed with the logins would
+  // have the workflows allow-list one bot while the scripts believe another.
+  const appBot = `${config.repo.appSlug}[bot]`;
+  if (!config.repo.appLogins.includes(appBot)) problems.push(`repo.appLogins must include ${JSON.stringify(appBot)}, the login of repo.appSlug`);
+  if (!config.repo.botLogins.includes(appBot)) problems.push(`repo.botLogins must include ${JSON.stringify(appBot)}, the login of repo.appSlug`);
   const guard = config.fixGuard;
   if (guard.replicatedRuleGlobs.length > 0) {
     if (guard.replicatedRuleNotice.trim() === "") {

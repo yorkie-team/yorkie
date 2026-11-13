@@ -142,8 +142,15 @@ test("loadConfig: a value of the wrong type throws, and no value is coerced", (t
     ["review.classRules.policy", null],
     ["review.sourceGlobs", []],
     ["review.diffExcludes", {}],
+    ["repo.appSlug", ""],
+    ["repo.appSlug", "Fixture Agent"],
+    ["repo.appSlug", "fixture-agent[bot]"],
     ["fixer.verifyCommand", "   "],
+    ["fixer.integrationWarning", ""],
+    ["fixer.implementVerifyStep", 5],
     ["fixer.todoTrackingLine", null],
+    ["fixer.verifyFailureHint", null],
+    ["fixer.replyVerifyInstruction", ["run it"]],
     ["tests.rules", []],
     ["tests.rules", ["cobol"]],
     ["tests.rules", ["go", "go"]],
@@ -190,6 +197,28 @@ test("loadConfig: tests.go is required exactly when tests.rules names go", (t) =
   // nothing reads, written by someone who believes it is on.
   const blockWithoutGo = scratch(t, (c) => withValue(c, "tests.rules", ["vitest"]));
   assert.throws(() => loadConfig(blockWithoutGo), /tests\.go is present, but tests\.rules does not name "go"/);
+});
+
+test("loadConfig: the App's slug and its logins name one App", (t) => {
+  // The workflows allow-list `<slug>[bot]` and the scripts believe the logins.
+  // A slug that named another App would have the two disagree in silence.
+  const other = scratch(t, (c) => withValue(c, "repo.appSlug", "another-agent"));
+  assert.throws(() => loadConfig(other), (err) =>
+    err.message.includes('repo.appLogins must include "another-agent[bot]"') &&
+    err.message.includes('repo.botLogins must include "another-agent[bot]"'));
+  const missing = scratch(t, (c) => without(c, "repo.appSlug"));
+  assert.throws(() => loadConfig(missing), /repo\.appSlug is missing/);
+});
+
+test("loadConfig: the optional fixer sentences may be empty, the others may not", (t) => {
+  for (const key of ["verifyFailureHint", "generatedCodeNote", "todoTrackingLine", "replyVerifyInstruction"]) {
+    const dir = scratch(t, (c) => withValue(c, `fixer.${key}`, ""));
+    assert.equal(loadConfig(dir).fixer[key], "", key);
+  }
+  for (const key of ["verifyCommand", "verifyDescription", "integrationWarning", "integrationRerunBy", "keepReproducerAs", "disabledTestForms", "licenceScope", "implementVerifyStep", "toolchainSteps", "lastResortDiagnosis"]) {
+    const dir = scratch(t, (c) => withValue(c, `fixer.${key}`, ""));
+    assert.throws(() => loadConfig(dir), (err) => err.message.includes(`fixer.${key} must be`), key);
+  }
 });
 
 test("loadConfig: a replicated-rule glob needs its notice and its counterpart", (t) => {

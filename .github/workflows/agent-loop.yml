@@ -32,12 +32,25 @@ jobs:
       contents: read
     outputs:
       command: ${{ steps.route.outputs.command }}
+      # This repository's values for the jobs below, which hold no `contents`
+      # permission and so have no checkout to read them from. Read here, from
+      # main, by scripts/agent/workflow-values.mjs.
+      app_slug: ${{ steps.cfg.outputs.app_slug }}
+      docs_ref: ${{ steps.cfg.outputs.docs_ref }}
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: scripts/agent/command.mjs
+          ref: main
+          # The scripts and the configuration they read, from the same ref: a
+          # script resolves `.github/agent-harness` beside its own checkout.
+          sparse-checkout: |
+            scripts/agent
+            .github/agent-harness
           sparse-checkout-cone-mode: false
           persist-credentials: false
+      - name: Read the harness configuration
+        id: cfg
+        run: node scripts/agent/workflow-values.mjs app_slug docs_ref >> "$GITHUB_OUTPUT"
       - name: Route command
         id: route
         env:
@@ -107,17 +120,21 @@ jobs:
       - name: Say so, and stop
         if: steps.app.outputs.configured != 'true'
         uses: actions/github-script@v7
+        env:
+          APP_SLUG: ${{ needs.route.outputs.app_slug }}
+          DOCS_REF: ${{ needs.route.outputs.docs_ref }}
         with:
           retries: 3
           script: |
+            const { APP_SLUG, DOCS_REF } = process.env;
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: context.payload.issue.number,
-              body: '⏸️ This verb needs the `yorkie-team-agent` GitHub App, which is not configured on this '
+              body: '⏸️ This verb needs the `' + APP_SLUG + '` GitHub App, which is not configured on this '
                 + 'repository yet (`AGENT_APP_ID` / `AGENT_APP_PRIVATE_KEY`). It pushes commits, and a '
                 + '`GITHUB_TOKEN` push does not re-trigger CI — so the loop would stop without saying so.\n\n'
                 + '`@claude review` and `@claude summarize` work today; they post with `GITHUB_TOKEN` and '
-                + 'push nothing. See `docs/design/agent-command-verbs.md`.',
+                + 'push nothing. See `' + DOCS_REF + '`.',
             });
 
       # Comments are posted/edited with a GitHub App token, NOT GITHUB_TOKEN: on a
@@ -213,11 +230,9 @@ jobs:
             // Re-run the latest CI run for the head SHA so the loop engages now
             // (a green run → review panel; a red run → CI-fix arm). Best-effort:
             // if there's nothing to re-run, the label still engages the next CI run.
-            // No longer carries the docs-only caveat it used to. `ci.yml` filters
-            // documentation on its `build` JOB rather than on the workflow
+            // No docs-only caveat: `ci.yml` has no path filter on its workflow
             // trigger, so every pull request produces a CI run and every pull
-            // request therefore reaches the panel — a documentation PR just runs
-            // no Go lane inside it.
+            // request therefore reaches the panel.
             let ciNote = "\n\nIt will engage on the next CI run.";
             try {
               // Mirrors `ciRunToRerun` / `ciRunToAwait` in scripts/agent/checks.mjs,

@@ -157,6 +157,21 @@ jobs:
           ref: main
           persist-credentials: false
 
+      # THIS REPOSITORY'S WORDS for what the steps below say: the App's name,
+      # the command a fixer verifies with, what it must not run. Read once, here,
+      # by main's script from main's `.github/agent-harness` — the workspace is
+      # still main — and fixed as step outputs before any branch is checked out.
+      # scripts/agent/workflow-values.mjs lists the names and what each renders.
+      - name: Read the harness configuration
+        id: cfg
+        run: >-
+          node ./scripts/agent/workflow-values.mjs
+          app_slug docs_ref
+          verify_command verify_description verify_failure_hint
+          integration_warning integration_rerun_by generated_code_bullet
+          keep_reproducer_as disabled_test_forms
+          >> "$GITHUB_OUTPUT"
+
       # THE APP MAY NOT EXIST YET, and one repository variable turns every verb
       # on at once. `review` and `summarize` need no App — they post with
       # GITHUB_TOKEN — so a repository can enable those while the App is still
@@ -189,16 +204,20 @@ jobs:
       - name: Say so, and stop
         if: steps.app.outputs.configured != 'true'
         uses: actions/github-script@v7
+        env:
+          APP_SLUG: ${{ steps.cfg.outputs.app_slug }}
+          DOCS_REF: ${{ steps.cfg.outputs.docs_ref }}
         with:
           retries: 3
           script: |
+            const { APP_SLUG, DOCS_REF } = process.env;
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: context.payload.issue.number,
-              body: '⏸️ `@claude fix` needs the `yorkie-team-agent` GitHub App, which is not configured on '
+              body: '⏸️ `@claude fix` needs the `' + APP_SLUG + '` GitHub App, which is not configured on '
                 + 'this repository yet (`AGENT_APP_ID` / `AGENT_APP_PRIVATE_KEY`). It pushes a fix commit, and a `GITHUB_TOKEN` push does not re-trigger CI — so the round would land with nothing to review it.\n\n'
                 + '`@claude review` and `@claude summarize` work today; they post with `GITHUB_TOKEN` '
-                + 'and push nothing. See `docs/design/agent-command-verbs.md`.',
+                + 'and push nothing. See `' + DOCS_REF + '`.',
             });
 
       # Human-facing comments go through the App token so the reply comes from the
@@ -318,9 +337,9 @@ jobs:
       # verdict, which was refused one gate earlier — every time, for the whole
       # life of the carve-out.
       #
-      # `ci.yml` no longer filters `pull_request` at the workflow level, so a
-      # docs-only PR now produces a run (its `build` job skips instead), and the
-      # case the carve-out was written for does not exist. What is left in the
+      # `ci.yml` does not filter `pull_request` at the workflow level, so a
+      # docs-only PR produces a run like any other, and the case the carve-out
+      # was written for does not exist. What is left in the
       # no-run state is "this sha's CI run is not visible" — deleted by hand, or
       # aged past retention while its check runs survive — i.e. the conclusion
       # that gates the two pushing arms cannot be read at all.
@@ -504,32 +523,49 @@ jobs:
           ref: ${{ steps.pr.outputs.branch }}
           fetch-depth: 0
           token: ${{ steps.agent-token.outputs.token }} # persisted into .git/config; must be the narrow one
-      # The linter the fixer verifies with, installed from a version pinned HERE
-      # rather than by running the branch's `make tools`.
+      # The toolchain the fixer verifies with — this repository's own, defined in
+      # `.github/actions/agent-toolchain` — installed WITHOUT running anything
+      # the branch wrote.
       #
       # THE REASON IS THE TOKEN. From the checkout above, the workspace is the
       # UNTRUSTED PR branch and an App token is already in the environment, so
       # any setup step that executes branch-authored build instructions hands a
-      # credential to code the branch wrote. `make tools` is exactly that: five
-      # `go install` lines the PR can rewrite. This is the Go-shaped version of
-      # the `--ignore-scripts` rule the pipeline this was ported from applies to
-      # its package manager, and it fails in the same direction — the pin can go
-      # stale against the Makefile, which shows up as a lint disagreement, not as
-      # a leaked credential.
+      # credential to code the branch wrote. Two things follow.
       #
-      # Keep in sync with the Makefile's `tools` target.
-      - uses: actions/setup-go@v6
+      # THE ACTION IS MAIN'S, NOT THE BRANCH'S. `uses: ./…` reads an action from
+      # the workspace at the moment the step runs, and the workspace is the
+      # branch: `./.github/actions/agent-toolchain` would be whatever the pull
+      # request made of it, run with this job's tokens. So main's copy is
+      # checked out into a side directory and used from there.
+      # config-wiring.test.mjs refuses a local action from anywhere else.
+      #
+      # WHAT IT INSTALLS IS PINNED IN THAT FILE, not read from the branch's
+      # build files, and it saves no cache. The action's own comments say how
+      # this repository meets that; it fails in the safe direction — a pin that
+      # goes stale shows up as a disagreement with CI, not as a leaked
+      # credential.
+      #
+      # THE SIDE DIRECTORY STAYS until the job ends, unlike its siblings. The
+      # runner re-reads a local action's definition before it runs the action's
+      # post steps and fails the job if the file is gone, so it cannot be moved
+      # out of the workspace. It is listed in `.git/info/exclude` instead: git
+      # does not report it, and `git add -A` cannot commit it to a
+      # contributor's branch.
+      - name: Check out the toolchain action (trusted, from main)
         if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
+        uses: actions/checkout@v4
         with:
-          go-version: "1.26"
-          # NO CACHE. setup-go's post step would SAVE `~/go/pkg/mod` and the
-          # build cache after the agent ran, with whatever the agent left there,
-          # under a key the agent controls through `go.sum` — and `ci.yml` and the
-          # Docker publish restore by the same key on `main`.
-          cache: false
-      - name: Install the linter (pinned here, not read from the branch)
+          ref: main
+          path: .trusted-toolchain
+          sparse-checkout: .github/actions/agent-toolchain
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Set up the toolchain (main's definition, not the branch's)
         if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
+        uses: ./.trusted-toolchain/.github/actions/agent-toolchain
+      - name: Keep the toolchain action out of the fixer's commits
+        if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
+        run: echo '/.trusted-toolchain/' >> .git/info/exclude
 
       # Read the remote tip before the agent runs, so the step after it can tell
       # "fixed and pushed" from "ran and pushed nothing". The REMOTE, not local
@@ -692,21 +728,17 @@ jobs:
               reviewer"). Disagreement goes in a rebuttal; text in the tree is
               read by every later round as part of the change, and the report
               job pages on it.
-            - Run `make verify` ONCE at the end to confirm green — not after
-              every edit. It is `make lint`, the Apache licence-header check,
-              the `go fix` check and `go test ./...`, which is the whole of what
-              this job can verify. If the `go fix` check fails, run
-              `make modernize` rather than editing the idioms by hand.
-              Do NOT run `make test`: it needs a MongoDB this job does not stand
-              up, and the push below re-runs the full integration lane anyway.
+            - Run `${{ steps.cfg.outputs.verify_command }}` ONCE at the end to confirm green — not after
+              every edit. It is ${{ steps.cfg.outputs.verify_description }}, which is the whole of what
+              this job can verify.${{ steps.cfg.outputs.verify_failure_hint }}
+              ${{ steps.cfg.outputs.integration_warning }}, and the push below re-runs
+              ${{ steps.cfg.outputs.integration_rerun_by }} anyway.${{ steps.cfg.outputs.generated_code_bullet }}
             - NEVER DELETE A TEST THAT SHOWS A FINDING STILL REPRODUCES.
               If a test you wrote (or found) still fails, the finding is not
-              fixed. Go has no `it.fails`, so keep the test and make its first
-              statement `t.Skip("still reproduces: <finding>")`, with a comment
-              naming the finding, and report that item `--skipped` with the
-              reason. Do not claim it `--fixed`. The pipeline records every
-              test a fix round removes or switches off with
-              `t.Skip`/`t.Skipf`/`t.SkipNow`, and shows it to the next round's
+              fixed. ${{ steps.cfg.outputs.keep_reproducer_as }}, and report that item
+              `--skipped` with the reason. Do not claim it `--fixed`. The pipeline
+              records every test a fix round removes or
+              ${{ steps.cfg.outputs.disabled_test_forms }}, and shows it to the next round's
               adjudicator beside your claims: a skipped reproducer beside a
               `--skipped` claim is honest, beside a `--fixed` claim it is not.
 
@@ -1000,7 +1032,7 @@ jobs:
       # touched a file outside the PR's original diff (tests and docs excepted) or
       # added reviewer-directed text ("stop raising", "the panel re-raised it") to a
       # doc or task file. Warns, without paging, on tests that lost assertions and
-      # on a Go-only change to a replicated CRDT rule. Page, not strip: reverting
+      # on a one-sided change to a replicated rule (`fixGuard.*`). Page, not strip: reverting
       # from here needs a second push path, and the in-scope half may not build
       # without the stripped half. GITHUB_TOKEN, so the latch is one the gate
       # believes. NOT continue-on-error: a page that failed to post must red this
