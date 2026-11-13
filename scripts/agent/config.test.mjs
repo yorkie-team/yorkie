@@ -287,8 +287,12 @@ test("CLI: every failure exits 1 with a message and prints NOTHING to stdout", (
 
 const MODULES = readdirSync(HERE).filter((f) => f.endsWith(".mjs"));
 const source = (file) => readFileSync(path.join(HERE, file), "utf8");
+// Static `import … from "./x.mjs"` / `export … from`, and dynamic `import("./x.mjs")`.
 const localImports = (file) =>
-  [...source(file).matchAll(/^\s*(?:import|export)\b[^;]*?["'](\.\/[^"']+)["']/gm)]
+  [
+    ...source(file).matchAll(/^\s*(?:import|export)\b[^;]*?["'](\.\/[^"']+)["']/gm),
+    ...source(file).matchAll(/\bimport\s*\(\s*["'](\.\/[^"']+)["']/g),
+  ]
     .map((m) => path.normalize(m[1]))
     .filter((f) => MODULES.includes(f) || f.startsWith("fixtures"));
 
@@ -317,4 +321,20 @@ test("command.mjs does not reach the configuration", () => {
   // `command=`, which every consumer reads as "no verb in this comment".
   assert.equal(reachesConfig("command.mjs"), false);
   assert.deepEqual(localImports("command.mjs"), []);
+});
+
+test("every test that reaches the configuration runs against the fixture", () => {
+  const tests = MODULES.filter((f) => f.endsWith(".test.mjs"));
+  const reaching = tests.filter((f) => reachesConfig(f));
+  // Guard on the guard: an import walk that resolved nothing would pass.
+  assert.ok(reaching.length >= 10, `expected many tests to reach config.mjs, found ${reaching.length}`);
+  for (const file of reaching) {
+    const first = /^\s*import\b[^;]*?["']([^"']+)["']/m.exec(source(file));
+    assert.equal(
+      first?.[1],
+      "./fixtures/use-fixture-config.mjs",
+      `${file} reaches config.mjs, so its FIRST import must be ./fixtures/use-fixture-config.mjs — ` +
+        "otherwise it grades the code against this repository's values instead of the fixture's",
+    );
+  }
 });

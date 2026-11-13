@@ -1,5 +1,6 @@
 // The out-of-diff gate's wiring through the panel, the check body, the deferred
 // record and the round guard. The gate's own decisions are in out-of-diff.test.mjs.
+import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {

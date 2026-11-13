@@ -6,6 +6,7 @@
 // extraction that drifted in either direction goes red here rather than in a
 // number six weeks from now.
 
+import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { findingKey } from "./finding-key.mjs";

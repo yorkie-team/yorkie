@@ -1,3 +1,4 @@
+import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -79,28 +80,43 @@ test("weakenedAssertions: a net loss or a tautology in a test file warns", () =>
   assert.equal(w[1].tautologies, 1);
 });
 
-test("crdtRuleChanges: non-test Go under pkg/document/crdt only", () => {
+// Which paths hold a replicated rule is configuration
+// (`fixGuard.replicatedRuleGlobs` — `lib/rules/*.go` in the fixture).
+test("crdtRuleChanges: non-test files matching the configured globs only", () => {
   assert.deepEqual(crdtRuleChanges([
+    { filename: "lib/rules/tree.go" },
+    { filename: "lib/rules/tree_test.go" },
+    { filename: "lib/rules/sub/tree.go" },
+    { filename: "lib/rules/notes.md" },
+    { filename: "lib/document.go" },
+    { filename: "xlib/rules/tree.go" },
+    // A path another repository lists is nothing here.
     { filename: "pkg/document/crdt/tree.go" },
-    { filename: "pkg/document/crdt/tree_test.go" },
-    { filename: "pkg/document/document.go" },
-  ]), ["pkg/document/crdt/tree.go"]);
+  ]), ["lib/rules/tree.go"]);
+  for (const junk of [null, undefined, "x", [null, {}, { filename: 7 }]]) assert.deepEqual(crdtRuleChanges(junk), []);
 });
 
 test("lintRound: scope and reviewer text block; assertions and CRDT warn", () => {
   const files = [
     { filename: "server/packs/pushpull.go", status: "modified", patch: "+x" },
-    { filename: "pkg/document/crdt/root.go", status: "modified", patch: "+y" },
+    { filename: "lib/rules/root.go", status: "modified", patch: "+y" },
   ];
   const r = lintRound({ files, original: ORIGINAL });
   assert.equal(r.blocking, true);
-  assert.deepEqual(r.violations, ["pkg/document/crdt/root.go", "server/packs/pushpull.go"]);
-  assert.deepEqual(r.crdt, ["pkg/document/crdt/root.go"]);
-  const warnOnly = lintRound({ files: [{ filename: "pkg/document/crdt/root.go", patch: "+y" }], original: new Set(["pkg/document/crdt/root.go"]) });
+  assert.deepEqual(r.violations, ["lib/rules/root.go", "server/packs/pushpull.go"]);
+  assert.deepEqual(r.crdt, ["lib/rules/root.go"]);
+  const warnOnly = lintRound({ files: [{ filename: "lib/rules/root.go", patch: "+y" }], original: new Set(["lib/rules/root.go"]) });
   assert.equal(warnOnly.blocking, false);
   assert.equal(warnOnly.crdt.length, 1);
-  // A PR body pointing at the other SDK has made the parity question visible.
-  assert.equal(lintRound({ files: [{ filename: "pkg/document/crdt/root.go" }], original: new Set(["pkg/document/crdt/root.go"]), prBody: "JS: yorkie-js-sdk#1442" }).crdt.length, 0);
+  // The warning is the configured notice, word for word, then the paths.
+  const rendered = renderFixGuard(warnOnly);
+  assert.ok(rendered.includes("fixture-counterpart must apply the same rule"), rendered);
+  assert.ok(rendered.includes("- `lib/rules/root.go`"), rendered);
+  // A PR body pointing at the counterpart (`fixGuard.counterpartRepo`), in any
+  // case, has made the parity question visible. Any other repository's name has not.
+  const one = { files: [{ filename: "lib/rules/root.go" }], original: new Set(["lib/rules/root.go"]) };
+  assert.equal(lintRound({ ...one, prBody: "Other side: Fixture-Counterpart#1442" }).crdt.length, 0);
+  assert.equal(lintRound({ ...one, prBody: "Other side: some-other-repo#1442" }).crdt.length, 1);
 });
 
 test("lintRound: an unknown original scope enforces nothing and says so", () => {

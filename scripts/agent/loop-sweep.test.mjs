@@ -1,3 +1,4 @@
+import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -134,7 +135,7 @@ test("the sweep workflow runs main's script on a clock behind the kill switch", 
 
 test("usage window: a CI-side latch from the App or a maintainer also means a human owns the PR", async () => {
   const { isLatchComment } = await import("./loop-sweep.mjs");
-  const appCi = { id: 20, user: { type: "Bot", login: "yorkie-team-agent[bot]" }, created_at: ago(400), body: "<!-- agent-paged -->\n🛑 the CI fix produced no commit" };
+  const appCi = { id: 20, user: { type: "Bot", login: "fixture-agent[bot]" }, created_at: ago(400), body: "<!-- agent-paged -->\n🛑 the CI fix produced no commit" };
   const humanCi = { id: 21, user: { type: "User", login: "hackerwins" }, author_association: "MEMBER", created_at: ago(400), body: "<!-- agent-paged --> holding this" };
   const strangerCi = { id: 22, user: { type: "User", login: "mallory" }, author_association: "NONE", created_at: ago(400), body: "<!-- agent-paged -->" };
   assert.equal(isLatchComment(appCi), true);

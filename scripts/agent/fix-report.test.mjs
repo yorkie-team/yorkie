@@ -1,3 +1,4 @@
+import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readWorkflow, skipWithout } from "./workflow-presence.mjs";
@@ -33,7 +34,7 @@ import {
 } from "./rebuttal.mjs";
 
 /** The fix agent's identity, as the REST comments endpoint reports it. */
-const AGENT = { login: "yorkie-team-agent[bot]", type: "Bot" };
+const AGENT = { login: "fixture-agent[bot]", type: "Bot" };
 /** A comment from the agent. Reports from anyone else are refused — see below. */
 const agentComment = (body, over = {}) => ({ id: 1, user: AGENT, body, ...over });
 
@@ -414,7 +415,7 @@ test("collectFixReports: only the fix agent may file one", () => {
   assert.equal(accepted(AGENT), 1);
   assert.equal(accepted({ login: "harrykim8672", type: "User" }), 0);
   assert.equal(accepted({ login: "coderabbitai[bot]", type: "Bot" }), 0);
-  assert.equal(accepted({ login: "yorkie-team-agent[bot]", type: "User" }), 0);
+  assert.equal(accepted({ login: "fixture-agent[bot]", type: "User" }), 0);
   for (const u of [undefined, null, {}]) assert.equal(accepted(u), 0);
 });
 

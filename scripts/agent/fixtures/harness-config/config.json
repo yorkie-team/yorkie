@@ -18,7 +18,7 @@
   },
   "review": {
     "classRules": {
-      "code-adjacent": ["**/samples/**", "stack/**"],
+      "code-adjacent": ["**/fixtures/**", "stack/**"],
       "policy": ["build.config", "tools/lint.rules"]
     },
     "sourceGlobs": ["src/**", "lib/**"],
@@ -43,7 +43,7 @@
     }
   },
   "fixGuard": {
-    "replicatedRuleGlobs": ["lib/rules/*.src"],
+    "replicatedRuleGlobs": ["lib/rules/*.go"],
     "replicatedRuleNotice": "**Replicated rule changed on one side only (warning).** fixture-counterpart must apply the same rule. Link the matching change in the PR body, or say why none is needed:",
     "counterpartRepo": "fixture-counterpart"
   },
