@@ -158,10 +158,11 @@ request's branch in the workspace, so:
 
 The workflows cannot check the first three: the action is a different file in
 every repository. Each repository's `repo.test.mjs` pins them for its own
-action. Here it pins the linter version to the Makefile's `tools` target, the
-Go version to `go.mod`, `cache: false`, and that the action never runs
-`make tools`. `agent-scripts.yml` runs weekly as well as on change, because
-the Makefile and `go.mod` are not among the paths that start it.
+action. In yorkie, for example, it pins the linter version to the Makefile's
+`tools` target, the Go version to `go.mod`, `cache: false`, and that the
+action never runs `make tools`. `agent-scripts.yml` runs weekly as well as on
+change, because the files such a test reads (there, the Makefile and
+`go.mod`) are not among the paths that start it.
 
 ### Globs
 
