@@ -20,7 +20,7 @@
 // know exits non-zero rather than writing nothing — an output that was never
 // written reads as an empty string in an expression, and an empty string in a
 // prompt is a sentence with a hole in it that nothing reports.
-// `workflow-values-wiring.test.mjs` checks the other half statically: every
+// `workflow-values.test.mjs` checks the other half statically: every
 // `outputs.<name>` a workflow reads was asked for by the step it reads it from.
 //
 // EMPTY IS DECIDED HERE, NOT IN THE WORKFLOW. A required value that is blank
@@ -45,6 +45,10 @@ import { loadConfig } from "./config.mjs";
 /** `prefix + text + suffix` when the repository said something, else nothing. */
 const joined = (text, prefix, suffix = "") => (text.trim() === "" ? "" : `${prefix}${text.trim()}${suffix}`);
 
+/** " <warning>, and <the push> re-runs <what> anyway." — or nothing. */
+const integrationSentence = (c, thePush) =>
+  c.fixer.integrationWarning === "" ? "" : ` ${c.fixer.integrationWarning}, and ${thePush} re-runs ${c.fixer.integrationRerunBy} anyway.`;
+
 /**
  * Every value a workflow may ask for: where it comes from and how it is
  * rendered. Names are the output names, so they are lower_snake_case — a
@@ -67,15 +71,26 @@ export const VALUES = Object.freeze({
   verify_command: (c) => c.fixer.verifyCommand,
   verify_description: (c) => c.fixer.verifyDescription,
   verify_failure_hint: (c) => joined(c.fixer.verifyFailureHint, " "),
-  integration_warning: (c) => c.fixer.integrationWarning,
-  integration_rerun_by: (c) => c.fixer.integrationRerunBy,
+  /**
+   * A sentence of its own, or nothing: which suites a fixer must not run, and
+   * that the push runs them anyway. Two renderings, because the fix prompts
+   * go on to describe the push ("the push below") and the CI-fix prompt has
+   * already described it.
+   */
+  integration_sentence_before_push: (c) => integrationSentence(c, "the push below"),
+  integration_sentence: (c) => integrationSentence(c, "the push"),
+  ci_failure_note: (c) => joined(c.fixer.ciFailureNote, " "),
   /** A list item of its own, after the last one the workflow wrote. */
   generated_code_bullet: (c) => joined(c.fixer.generatedCodeNote, "\n- "),
-  /** The opening of a paragraph the workflow finishes. */
-  generated_code_lead: (c) => joined(c.fixer.generatedCodeNote, "", " "),
+  /**
+   * The issue-to-PR prompt's last paragraph, with the blank line that
+   * separates it from the one before: the generated-code rule, then what to
+   * do about an issue that needs generated code changed.
+   */
+  generated_code_paragraph: (c) => joined([c.fixer.generatedCodeNote, c.fixer.apiChangeNote].filter((s) => s !== "").join(" "), "\n\n"),
   keep_reproducer_as: (c) => c.fixer.keepReproducerAs,
   disabled_test_forms: (c) => c.fixer.disabledTestForms,
-  licence_scope: (c) => c.fixer.licenceScope,
+  licence_scope: (c) => joined(c.fixer.licenceScope, " "),
   todo_tracking: (c) => joined(c.fixer.todoTrackingLine, " "),
   implement_verify_step: (c) => c.fixer.implementVerifyStep,
   /** A clause between two commas: "edit the branch,<this> commit …". */
@@ -101,7 +116,17 @@ export const VALUES = Object.freeze({
  * before it and the sentence reads whole either way.
  */
 export const OPTIONAL = Object.freeze(
-  new Set(["verify_failure_hint", "generated_code_bullet", "generated_code_lead", "todo_tracking", "reply_verify_clause"]),
+  new Set([
+    "verify_failure_hint",
+    "integration_sentence_before_push",
+    "integration_sentence",
+    "ci_failure_note",
+    "generated_code_bullet",
+    "generated_code_paragraph",
+    "licence_scope",
+    "todo_tracking",
+    "reply_verify_clause",
+  ]),
 );
 
 /** The named values, in the order asked. Throws on anything it cannot answer. */

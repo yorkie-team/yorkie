@@ -100,6 +100,9 @@ const EXPECTED = {
   // (the fifth use is from a workspace that is still the default branch).
   toolchainUses: 5,
   toolchainCheckouts: 4,
+  // Side-directory checkouts made inside a workspace that holds a pull
+  // request's tree, each of which must clear its path first.
+  sideCheckoutsOverUntrustedWorkspace: 8,
   // `cp -R … scripts/agent …/agent-tools`, each with its configuration.
   stagingCopies: 4,
   // Places a harness script is run, and how many of them read the configuration.
@@ -291,6 +294,7 @@ function inspect(workflows) {
     routerCheckouts: 0,
     toolchainUses: 0,
     toolchainCheckouts: 0,
+    sideCheckoutsOverUntrustedWorkspace: 0,
     stagingCopies: 0,
     invocations: 0,
     configReadingInvocations: 0,
@@ -326,6 +330,8 @@ function inspect(workflows) {
       const side = new Map();
       const staged = { tools: null, config: null, exportedAtStep: -1 };
       let afterAgent = false;
+      // Workspace paths an `rm -rf` has cleared since the workspace last changed.
+      const cleared = new Set();
 
       const distrust = (why) => {
         if (workspace) workspace = { ...workspace, trusted: false, why };
@@ -387,6 +393,20 @@ function inspect(workflows) {
             }
             if (scripts !== "all" && patterns.includes(CONFIG)) flag(`fetches ${CONFIG} without the scripts that read it`);
           }
+
+          // A SIDE DIRECTORY INSIDE A PULL REQUEST'S TREE IS A PATH THE PULL
+          // REQUEST CHOSE THE CONTENTS OF. A symlink committed there is
+          // followed by the checkout, which empties whatever it points at —
+          // the staged scripts, say. So the path is removed first, in this
+          // job, after the tree that could have planted it was checked out.
+          if (target !== undefined && !target.startsWith(TEMP) && workspace && !workspace.trusted) {
+            counts.sideCheckoutsOverUntrustedWorkspace++;
+            if (!cleared.has(target)) {
+              flag(`checks out into ${target} inside an untrusted workspace without an \`rm -rf ${target}\` first; the branch may have planted a symlink there`);
+            }
+          }
+          if (target === undefined) cleared.clear();
+          else cleared.delete(target);
 
           if (target === undefined) {
             workspace = tree;
@@ -479,7 +499,12 @@ function inspect(workflows) {
             side.delete(moved[1]);
           }
           const removed = /^\s*(?:run:\s*)?rm -rf ((?:\.[\w.-]+\s*)+)$/.exec(line);
-          if (removed) for (const dir of removed[1].trim().split(/\s+/)) side.delete(dir);
+          if (removed) {
+            for (const dir of removed[1].trim().split(/\s+/)) {
+              side.delete(dir);
+              cleared.add(dir);
+            }
+          }
 
           // ---- the staging copy --------------------------------------------------
           const stage = /\bcp -R (\S*?)(scripts\/agent|\.github\/agent-harness) "([^"]+)"\s*$/.exec(line);
@@ -1031,6 +1056,26 @@ const MUTATIONS = [
         replaceOnce(t, `        uses: ./.trusted-toolchain/${TOOLCHAIN}\n`, `        uses: ./.trusted-toolchain/../${TOOLCHAIN}\n`)),
     expect: /agent-review-reply\.yml › reply: uses the local action/,
   },
+  {
+    name: "a side-directory checkout over a pull request's tree without clearing the path first",
+    files: () =>
+      edit("agent-fix.yml", (t) =>
+        replaceOnce(t, "      - name: Clear the path the toolchain action is checked out to\n", "      - name: Clear some other path\n").replace(
+          "        run: rm -rf .trusted-toolchain\n",
+          "        run: rm -rf .trusted-other\n",
+        )),
+    expect: /agent-fix\.yml › fix: checks out into \.trusted-toolchain inside an untrusted workspace without an `rm -rf \.trusted-toolchain` first/,
+  },
+  {
+    name: "the path is cleared before the pull request's checkout, not after it",
+    files: () =>
+      edit("agent-iterate-ci.yml", (t) => {
+        const clear = "      - name: Clear the path the trusted copy is checked out to\n        run: rm -rf .trusted-agent\n";
+        const anchor = "      - name: Generate the agent's narrow token\n";
+        return replaceOnce(replaceOnce(t, clear, ""), anchor, `${clear}${anchor}`);
+      }),
+    expect: /agent-iterate-ci\.yml › iterate: checks out into \.trusted-agent inside an untrusted workspace without an `rm -rf \.trusted-agent` first/,
+  },
   // …jobs the reader used to walk past.
   {
     name: "a job whose step list is indented differently from its neighbours",
@@ -1080,7 +1125,7 @@ test("each trust-weakening mutation of the real workflows fails the guard", () =
   }
   assert.deepEqual(failures, []);
   // Guard on the guard: the six that got through first, and their neighbours.
-  assert.ok(MUTATIONS.length >= 40, `expected the mutation cases, ran ${MUTATIONS.length}`);
+  assert.ok(MUTATIONS.length >= 42, `expected the mutation cases, ran ${MUTATIONS.length}`);
 });
 
 test("what is not a command is not flagged", () => {

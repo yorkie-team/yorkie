@@ -200,6 +200,12 @@ jobs:
       # here with no such guard, so a staging step allowed to silently succeed at
       # doing nothing would surface several steps later as a module-not-found
       # instead of failing here, where the cause is.
+      #
+      # THE PATH IS CLEARED FIRST: it is a name inside the branch's tree, and a
+      # symlink planted there would be followed by the checkout, which empties
+      # its target. `rm -rf` removes the link, not what it points at.
+      - name: Clear the path the trusted copy is checked out to
+        run: rm -rf .trusted-agent
       - uses: actions/checkout@v4
         with:
           ref: main
@@ -247,7 +253,7 @@ jobs:
           node "$RUNNER_TEMP/agent-tools/workflow-values.mjs"
           bot_logins allowed_bots ci_lane_reports last_resort_diagnosis
           verify_command verify_description verify_failure_hint
-          integration_warning integration_rerun_by generated_code_bullet
+          integration_sentence ci_failure_note generated_code_bullet
           >> "$GITHUB_OUTPUT"
 
       # GATED, and this is the step that makes the stand-down real. Everything
@@ -400,9 +406,15 @@ jobs:
       # panel's fix job and agent-fix.yml, which says why at length: the
       # workspace is the PR branch and an App token is in the environment, so
       # the action is main's copy, checked out into a side directory, and what
-      # it installs is pinned in that file rather than read from the branch. The
-      # directory stays until the job ends (the runner re-reads a local action
-      # before its post steps) and is excluded from git instead of removed.
+      # the action executes nothing the branch wrote. The path is cleared before
+      # the checkout (the branch could have planted a symlink there); the
+      # directory then stays until the job ends, because the runner re-reads a
+      # local action before its post steps, and is excluded from git instead of
+      # removed. That the agent can rewrite the file before the post phase is
+      # an accepted residual, argued in agent-fix.yml.
+      - name: Clear the path the toolchain action is checked out to
+        if: steps.guard.outputs.proceed == 'true'
+        run: rm -rf .trusted-toolchain
       - name: Check out the toolchain action (trusted, from main)
         if: steps.guard.outputs.proceed == 'true'
         uses: actions/checkout@v4
@@ -646,9 +658,7 @@ jobs:
               job pages on it.
             - Run `${{ steps.cfg.outputs.verify_command }}` ONCE at the end to confirm green before pushing —
               not after every edit. It is ${{ steps.cfg.outputs.verify_description }}, which is the whole
-              of what this job can verify.${{ steps.cfg.outputs.verify_failure_hint }}
-              ${{ steps.cfg.outputs.integration_warning }}, and the push re-runs
-              ${{ steps.cfg.outputs.integration_rerun_by }} anyway.${{ steps.cfg.outputs.generated_code_bullet }}
+              of what this job can verify.${{ steps.cfg.outputs.verify_failure_hint }}${{ steps.cfg.outputs.integration_sentence }}${{ steps.cfg.outputs.ci_failure_note }}${{ steps.cfg.outputs.generated_code_bullet }}
 
             Append a follow-up commit (do NOT force-push over history); the commit
             message must end with the trailer "Assisted-by: Claude Code

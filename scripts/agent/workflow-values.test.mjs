@@ -58,20 +58,36 @@ test("names are output names: lower_snake_case, readable back as `outputs.<name>
 });
 
 test("an optional value carries its own joining punctuation, and vanishes whole", (t) => {
-  // The fixture leaves all five empty.
-  for (const name of OPTIONAL) assert.equal(values([name], FIXTURE)[0][1], "", name);
+  // A repository with nothing to say in any of them: every one is empty.
+  const { config: bare } = configWith(t, (c) => {
+    c.fixer.integrationWarning = "";
+    c.fixer.integrationRerunBy = "";
+    c.fixer.licenceScope = "";
+  });
+  for (const name of OPTIONAL) assert.equal(values([name], bare)[0][1], "", name);
   const { config } = configWith(t, (c) => {
     c.fixer.verifyFailureHint = "If the lint fails, run the fixer.";
+    c.fixer.ciFailureNote = "If the failure is in one of them, let CI confirm.";
     c.fixer.generatedCodeNote = "Never edit gen/ by hand.";
-    c.fixer.todoTrackingLine = "Its second line is `Tracked as #N`.";
+    c.fixer.apiChangeNote = "If the issue needs it changed, say so and stop.";
+    c.fixer.todoTrackingLine = "Its second line is `Tracked as #__ISSUE_NUMBER__`.";
     c.fixer.replyVerifyInstruction = "run `fixture verify`";
   });
   const get = (name) => values([name], config)[0][1];
   assert.equal(get("verify_failure_hint"), " If the lint fails, run the fixer.");
+  assert.equal(get("integration_sentence_before_push"), " Do NOT run `fixture test-all`: it needs a stack this job does not stand up, and the push below re-runs it anyway.");
+  assert.equal(get("integration_sentence"), " Do NOT run `fixture test-all`: it needs a stack this job does not stand up, and the push re-runs it anyway.");
+  assert.equal(get("ci_failure_note"), " If the failure is in one of them, let CI confirm.");
   assert.equal(get("generated_code_bullet"), "\n- Never edit gen/ by hand.");
-  assert.equal(get("generated_code_lead"), "Never edit gen/ by hand. ");
-  assert.equal(get("todo_tracking"), " Its second line is `Tracked as #N`.");
+  assert.equal(get("generated_code_paragraph"), "\n\nNever edit gen/ by hand. If the issue needs it changed, say so and stop.");
+  assert.equal(get("licence_scope"), " A licence header on every new source file.");
+  assert.equal(get("todo_tracking"), " Its second line is `Tracked as #__ISSUE_NUMBER__`.");
   assert.equal(get("reply_verify_clause"), " run `fixture verify`,");
+  // Either half of the last paragraph alone is still a paragraph.
+  const { config: noteOnly } = configWith(t, (c) => {
+    c.fixer.apiChangeNote = "If the issue needs an API change, say so and stop.";
+  });
+  assert.equal(values(["generated_code_paragraph"], noteOnly)[0][1], "\n\nIf the issue needs an API change, say so and stop.");
 });
 
 test("the diff pathspecs are never empty, even with nothing to exclude", (t) => {
@@ -184,6 +200,9 @@ function asked(step) {
   return { names };
 }
 
+/** The `id:` of every step that runs `workflow-values.mjs`. */
+const READER_ID = "cfg";
+
 const JOBS = readJobs();
 
 /** `sites`: every read of a configured value. `problems`: each as a sentence. */
@@ -204,6 +223,7 @@ function inspectWiring(jobs) {
       readers++;
       const id = scalar(step.code, "id");
       if (!id) return problems.push(`${at}: a step runs workflow-values.mjs without an \`id:\`, so nothing can read what it wrote`);
+      if (id !== READER_ID) problems.push(`${at}: the step that runs workflow-values.mjs has id ${id}; it must be \`${READER_ID}\`, the one name a read of a configured value is recognised by`);
       if (ask.unredirected) return problems.push(`${at}: step ${id} runs workflow-values.mjs without \`>> "$GITHUB_OUTPUT"\``);
       for (const name of ask.names) {
         if (!Object.hasOwn(VALUES, name)) problems.push(`${at}: step ${id} asks for ${name}, which workflow-values.mjs does not know`);
@@ -252,7 +272,17 @@ function inspectWiring(jobs) {
     job.steps.forEach((step, index) => {
       for (const m of step.code.matchAll(new RegExp(`steps\\.([\\w-]+)\\.outputs\\.(${NAME.source})`, "g"))) {
         const reader = job.readers.get(m[1]);
-        if (!reader) continue; // some other step's output
+        if (!reader) {
+          // Some other step's output — unless it is spelt like a configured
+          // read. `cfg` is the id every reader carries, so `steps.cfg.outputs.*`
+          // in a job with no such step (a line moved between jobs, a
+          // `needs.route` rewritten by hand) is always empty.
+          if (m[1] === READER_ID) {
+            reads++;
+            problems.push(`${at}: reads steps.${READER_ID}.outputs.${m[2]}, but this job has no step that runs workflow-values.mjs — it is always empty`);
+          }
+          continue;
+        }
         reads++;
         reader.used.add(m[2]);
         if (!reader.names.has(m[2])) problems.push(`${at}: reads ${m[1]}.outputs.${m[2]}, which that step never asked for — it is always empty`);
@@ -289,7 +319,7 @@ test("every configured value a workflow reads was asked for, by a step that can 
 test("the wiring check inspected the sites it is expected to", () => {
   // A guard that finds nothing passes. Adding or removing a reader or a read
   // changes a count; that is the prompt to look at the new site.
-  assert.deepEqual({ readers: WIRING.readers, reads: WIRING.reads }, { readers: 11, reads: 62 });
+  assert.deepEqual({ readers: WIRING.readers, reads: WIRING.reads }, { readers: 11, reads: 60 });
 });
 
 test("no workflow names the repository's values itself", () => {
@@ -326,6 +356,9 @@ test("each way of reading a value that is not there fails the wiring check", () 
     ["a route output that is no longer exported", "agent-summarize.yml", (t) => t.replace("      bot_logins: ${{ steps.cfg.outputs.bot_logins }}\n", ""), /reads needs\.route\.outputs\.bot_logins, which job route does not export/],
     ["the reader made conditional under an unconditional read", "agent-fix.yml", (t) => t.replace("      - name: Read the harness configuration\n        id: cfg\n", "      - name: Read the harness configuration\n        id: cfg\n        if: steps.app.outputs.configured == 'true'\n"), /but the step that writes it runs only under/],
     ["the reader allowed to fail", "agent-iterate-ci.yml", (t) => t.replace("      - name: Read the harness configuration\n        id: cfg\n", "      - name: Read the harness configuration\n        id: cfg\n        continue-on-error: true\n"), /with continue-on-error/],
+    ["a read moved to a job that has no reader", "agent-fix.yml", (t) => t.replace("      - name: Collect the agent's output (untrusted data)\n", "      - name: stray\n        run: echo \"${{ steps.cfg.outputs.verify_command }}\"\n      - name: Collect the agent's output (untrusted data)\n"), /agent-fix\.yml › report: reads steps\.cfg\.outputs\.verify_command, but this job has no step that runs workflow-values\.mjs/],
+    ["`needs.route` rewritten as `steps.cfg` in a job with no reader", "agent-summarize.yml", (t) => t.replace("BOT_LOGINS: ${{ needs.route.outputs.bot_logins }}", "BOT_LOGINS: ${{ steps.cfg.outputs.bot_logins }}"), /agent-summarize\.yml › announce: reads steps\.cfg\.outputs\.bot_logins, but this job has no step that runs workflow-values\.mjs/],
+    ["a reader under another id", "agent-loop.yml", (t) => t.replace("        id: cfg\n", "        id: config\n"), /it must be `cfg`/],
     ["a value asked for and never read", "agent-summarize.yml", (t) => t.replace("workflow-values.mjs bot_logins >>", "workflow-values.mjs bot_logins repo_name >>"), /asks for repo_name and nothing reads it/],
   ];
   const failures = [];

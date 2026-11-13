@@ -168,7 +168,7 @@ jobs:
           node ./scripts/agent/workflow-values.mjs
           app_slug docs_ref
           verify_command verify_description verify_failure_hint
-          integration_warning integration_rerun_by generated_code_bullet
+          integration_sentence_before_push generated_code_bullet
           keep_reproducer_as disabled_test_forms
           >> "$GITHUB_OUTPUT"
 
@@ -539,11 +539,19 @@ jobs:
       # checked out into a side directory and used from there.
       # config-wiring.test.mjs refuses a local action from anywhere else.
       #
-      # WHAT IT INSTALLS IS PINNED IN THAT FILE, not read from the branch's
-      # build files, and it saves no cache. The action's own comments say how
-      # this repository meets that; it fails in the safe direction — a pin that
-      # goes stale shows up as a disagreement with CI, not as a leaked
-      # credential.
+      # THE PATH IS CLEARED FIRST. `.trusted-toolchain` is a name inside the
+      # branch's tree, so the branch can have put something there — a symlink
+      # out of the workspace, say, which the checkout would then follow and
+      # empty whatever it points at. `rm -rf` removes the link, not its target.
+      #
+      # WHAT THE ACTION MUST NOT DO is execute anything the branch wrote: no
+      # build file's install target, no package manager's lifecycle scripts or
+      # hooks. The tools it fetches itself are pinned in that file, and where a
+      # toolchain has to install the branch's dependencies it installs exactly
+      # what the lockfile names, with scripts off. It saves no cache. How this
+      # repository's action meets that is in the action's own comments and is
+      # pinned by `.github/agent-harness/repo.test.mjs`; nothing here can check
+      # it, because the action is different in every repository.
       #
       # THE SIDE DIRECTORY STAYS until the job ends, unlike its siblings. The
       # runner re-reads a local action's definition before it runs the action's
@@ -551,6 +559,16 @@ jobs:
       # out of the workspace. It is listed in `.git/info/exclude` instead: git
       # does not report it, and `git add -A` cannot commit it to a
       # contributor's branch.
+      #
+      # ACCEPTED RESIDUAL: the agent can rewrite that file before the post
+      # phase. The post steps that run are the ones recorded when the action
+      # first ran, not ones read back from the file, and an agent with an
+      # unrestricted shell can already rewrite the runner's own action cache —
+      # so this is no new reach. Nothing after the agent in this job holds a
+      # token worth having, which is the control that matters.
+      - name: Clear the path the toolchain action is checked out to
+        if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
+        run: rm -rf .trusted-toolchain
       - name: Check out the toolchain action (trusted, from main)
         if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         uses: actions/checkout@v4
@@ -730,16 +748,14 @@ jobs:
               job pages on it.
             - Run `${{ steps.cfg.outputs.verify_command }}` ONCE at the end to confirm green — not after
               every edit. It is ${{ steps.cfg.outputs.verify_description }}, which is the whole of what
-              this job can verify.${{ steps.cfg.outputs.verify_failure_hint }}
-              ${{ steps.cfg.outputs.integration_warning }}, and the push below re-runs
-              ${{ steps.cfg.outputs.integration_rerun_by }} anyway.${{ steps.cfg.outputs.generated_code_bullet }}
-            - NEVER DELETE A TEST THAT SHOWS A FINDING STILL REPRODUCES.
+              this job can verify.${{ steps.cfg.outputs.verify_failure_hint }}${{ steps.cfg.outputs.integration_sentence_before_push }}${{ steps.cfg.outputs.generated_code_bullet }}
+            - NEVER DELETE OR QUIETLY DISABLE A TEST THAT SHOWS A FINDING STILL REPRODUCES.
               If a test you wrote (or found) still fails, the finding is not
               fixed. ${{ steps.cfg.outputs.keep_reproducer_as }}, and report that item
               `--skipped` with the reason. Do not claim it `--fixed`. The pipeline
               records every test a fix round removes or
               ${{ steps.cfg.outputs.disabled_test_forms }}, and shows it to the next round's
-              adjudicator beside your claims: a skipped reproducer beside a
+              adjudicator beside your claims: a reproducer kept that way beside a
               `--skipped` claim is honest, beside a `--fixed` claim it is not.
 
             YOUR WALL IS ABOUT FIFTY MINUTES, and it is the credential's rather

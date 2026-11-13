@@ -341,7 +341,7 @@ jobs:
         run: |
           node ./.trusted-protection/scripts/agent/workflow-values.mjs \
             app_bot_login repo_name licence_scope todo_tracking \
-            implement_verify_step generated_code_lead >> "$GITHUB_OUTPUT"
+            implement_verify_step generated_code_paragraph >> "$GITHUB_OUTPUT"
           rm -rf .trusted-protection
 
       - name: Refuse if this issue already has an agent branch
@@ -481,9 +481,9 @@ jobs:
 
       # The toolchain the agent verifies with — this repository's own, defined in
       # `.github/actions/agent-toolchain`. Same untrusted-setup rule as every
-      # other token-bearing job here (agent-fix.yml says why at length): what it
-      # installs is pinned in that file rather than read from build files the
-      # working tree could rewrite, and it saves no cache.
+      # other token-bearing job here (agent-fix.yml says why at length): the
+      # action executes nothing the working tree wrote, the tools it fetches
+      # itself are pinned in that file, and it saves no cache.
       #
       # FROM THE WORKSPACE, unlike the fix jobs, because here the workspace is
       # still `main`: nothing but the checkout above has written to it, so
@@ -554,6 +554,16 @@ jobs:
         id: prep
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}
+          # This repository's words for the prompt, as DATA. They reach the
+          # template through the same placeholders as the issue number and are
+          # never spliced into this script: a configured line that happened to
+          # read `PROMPT` would otherwise end the heredoc and run what followed
+          # it as shell.
+          REPO_NAME: ${{ steps.cfg.outputs.repo_name }}
+          TODO_TRACKING: ${{ steps.cfg.outputs.todo_tracking }}
+          LICENCE_SCOPE: ${{ steps.cfg.outputs.licence_scope }}
+          IMPLEMENT_VERIFY_STEP: ${{ steps.cfg.outputs.implement_verify_step }}
+          GENERATED_CODE_PARAGRAPH: ${{ steps.cfg.outputs.generated_code_paragraph }}
         run: |
           set -euo pipefail
           case "$ISSUE_NUMBER" in
@@ -585,17 +595,17 @@ jobs:
           Authoritative process: follow CLAUDE.md and CONTRIBUTING.md exactly. Do
           NOT invent a parallel process.
 
-          Execute the standard ${{ steps.cfg.outputs.repo_name }} task workflow, in order:
+          Execute the standard __REPO_NAME__ task workflow, in order:
 
           1. PLAN: create docs/tasks/active/__TODAY__-<slug>-todo.md and its paired
-             -lessons.md. The todo starts with a `**Created**: YYYY-MM-DD` line.${{ steps.cfg.outputs.todo_tracking }}
+             -lessons.md. The todo starts with a `**Created**: YYYY-MM-DD` line.__TODO_TRACKING__
              If the change alters architecture, also create or update
              docs/design/<topic>.md from docs/design/TEMPLATE.md and add it to
              docs/design/README.md.
           2. BRANCH: the checkout is on `main`. Create a NEW branch
              `git checkout -b agent/__ISSUE_NUMBER__-<slug>` and do all work there
              — never commit on `main`.
-          3. IMPLEMENT: make the change. ${{ steps.cfg.outputs.licence_scope }}
+          3. IMPLEMENT: make the change.__LICENCE_SCOPE__
              Commit subject <= 70
              chars saying what changed, blank line, body wrapped at 80 saying why.
              Every commit message MUST end with the trailer
@@ -620,7 +630,7 @@ jobs:
              "Fixes #__ISSUE_NUMBER__" or an authorship disclosure; the workflow
              adds both, so that they are true by construction rather than by your
              remembering. Say what you could NOT verify — that part only you know.
-          5. ${{ steps.cfg.outputs.implement_verify_step }}
+          5. __IMPLEMENT_VERIFY_STEP__
           6. STOP. Do not run /self-review: it dispatches a reviewer subagent, and
              this run is granted no tool that can do that. Its own rules forbid
              substituting your own read of your own diff, and there is nobody here
@@ -652,12 +662,19 @@ jobs:
           Hard rules: never push to main; never merge; never approve; never edit
           .github/workflows/** (the App has no permission to push it, so the push
           would fail). Leave the PR a DRAFT — a human review is required before it
-          goes anywhere.
-
-          ${{ steps.cfg.outputs.generated_code_lead }}If the issue requires an API
-          change, say so on the issue and stop rather than working around it.
+          goes anywhere.__GENERATED_CODE_PARAGRAPH__
           PROMPT
           )
+          # The repository's words first, so that one of them may itself use a
+          # placeholder below (`Tracked as #__ISSUE_NUMBER__`). An optional one
+          # carries its own leading space or blank line and is empty when the
+          # repository has nothing to say. QUOTED, every one: bash 5.2 expands
+          # `&` in an unquoted replacement to the text it replaced.
+          TEMPLATE=${TEMPLATE//__REPO_NAME__/"$REPO_NAME"}
+          TEMPLATE=${TEMPLATE//__TODO_TRACKING__/"$TODO_TRACKING"}
+          TEMPLATE=${TEMPLATE//__LICENCE_SCOPE__/"$LICENCE_SCOPE"}
+          TEMPLATE=${TEMPLATE//__IMPLEMENT_VERIFY_STEP__/"$IMPLEMENT_VERIFY_STEP"}
+          TEMPLATE=${TEMPLATE//__GENERATED_CODE_PARAGRAPH__/"$GENERATED_CODE_PARAGRAPH"}
           TEMPLATE=${TEMPLATE//__ISSUE_NUMBER__/$ISSUE_NUMBER}
           TEMPLATE=${TEMPLATE//__ISSUE_FILE__/$RUNNER_TEMP\/issue.md}
           TEMPLATE=${TEMPLATE//__PR_FILE__/$RUNNER_TEMP\/pr.md}

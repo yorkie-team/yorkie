@@ -639,13 +639,38 @@ function promptBlocks(text) {
   return blocks;
 }
 
-/** The issue-to-PR prompt, which is a heredoc in a `run:` step. */
+/**
+ * The issue-to-PR prompt, which is a heredoc in a `run:` step. Configured
+ * values reach it as environment variables substituted for `__PLACEHOLDER__`s,
+ * so the same substitutions are made here: each quoted `TEMPLATE=` line, with
+ * its variable resolved through the step's `env:`.
+ */
 function heredocPrompt(text) {
   const start = text.indexOf("<<'PROMPT'\n");
   const end = text.indexOf("\n          PROMPT\n", start);
   assert.ok(start > 0 && end > start, "agent-implement.yml no longer builds its prompt in a `PROMPT` heredoc");
-  return [text.slice(start + "<<'PROMPT'\n".length, end)];
+  let prompt = text.slice(start + "<<'PROMPT'\n".length, end);
+  // No configured value may be spliced into the script itself.
+  assert.ok(!prompt.includes("${{"), "the issue-to-PR heredoc interpolates an expression; configured values must arrive through env");
+  // The step that builds the prompt, and nothing after it.
+  const stepAt = text.lastIndexOf("\n      - name: ", start);
+  const stepEnd = text.indexOf("\n      - name: ", start);
+  const step = text.slice(stepAt, stepEnd < 0 ? undefined : stepEnd);
+  const env = new Map([...step.matchAll(ENV_FROM_CONFIG)].map((m) => [m[1], m[2]]));
+  let substituted = 0;
+  for (const m of step.matchAll(QUOTED_SUBSTITUTION)) {
+    assert.ok(env.has(m[2]), `agent-implement.yml substitutes ${m[1]} with a variable its env does not set from the configuration`);
+    prompt = prompt.replaceAll(m[1], env.get(m[2]));
+    substituted++;
+  }
+  assert.equal(substituted, env.size, "every configured value in the step's env must be substituted into the prompt, quoted");
+  assert.ok(substituted >= 5, `expected the configured placeholders, found ${substituted}`);
+  return [prompt];
 }
+/** `NAME: ${{ steps.cfg.outputs.value }}` in a step's `env:`. */
+const ENV_FROM_CONFIG = /^\s+([A-Z_]+): (\$\{\{ steps\.cfg\.outputs\.[a-z_]+ \}\})\s*$/gm;
+/** A placeholder replaced by a QUOTED variable: unquoted, bash 5.2 expands `&` in it. */
+const QUOTED_SUBSTITUTION = /^\s+TEMPLATE=\$\{TEMPLATE\/\/(__[A-Z_]+__)\/"\$([A-Z_]+)"\}\s*$/gm;
 
 test("snapshot: every value the workflows read from the configuration", () => {
   const names = Object.keys(workflowValues.VALUES);
@@ -727,9 +752,11 @@ test("the commands the fixer prompts name are targets this repository has", () =
   assert.match(CONFIG.fixer.keepReproducerAs, /`t\.Skip\("still reproduces: <finding>"\)`/);
   assert.match(CONFIG.fixer.disabledTestForms, /`t\.Skip`\/`t\.Skipf`\/`t\.SkipNow`/);
   // Not configured, on purpose: a review reply names no verify command here,
-  // and the todo carries no tracking line.
+  // the todo carries no tracking line, and the CI-fix prompt says nothing
+  // more about a failing integration lane than that the push re-runs it.
   assert.equal(CONFIG.fixer.replyVerifyInstruction, "");
   assert.equal(CONFIG.fixer.todoTrackingLine, "");
+  assert.equal(CONFIG.fixer.ciFailureNote, "");
 });
 
 test("a release the agent App created publishes nothing", () => {

@@ -24,11 +24,14 @@
 # repository has. `repo.test.mjs` also reads files that are one repository's
 # own (a build file, a lint configuration) and a change to one of those does
 # not start this lane: a `paths:` filter cannot be read from configuration.
-# The test still runs on the next change that does, and on every push to
-# `main` that touches the paths below.
+# So it also runs WEEKLY, on `main`: a linter bumped in a build file, or a
+# toolchain version moved, is checked against the toolchain action's pins
+# within a week instead of at the next harness change.
 name: Agent Scripts
 
 on:
+  schedule:
+    - cron: "23 5 * * 1"
   push:
     branches: [main]
     paths:

@@ -148,6 +148,28 @@ const GLOBS = `globs in the harness dialect (${GLOB_DIALECT}), not blank, not pa
 const text = [(v) => isStr(v) && v.trim() !== "", "a non-empty string"];
 /** A string that may be empty: the repository has nothing to say here, on purpose. */
 const optionalText = [isStr, "a string (may be empty)"];
+
+// WHAT A WORKFLOW DROPS INTO A SENTENCE IT OWNS comes in two shapes, and a
+// value of the wrong shape renders as a sentence that is visibly broken
+// ("…line. , and a second line…") or quietly run on. Both are ONE LINE: the
+// value is spliced into a wrapped paragraph, and a line break in it would
+// start a list item or end a block the workflow did not mean to end.
+//
+//   fragment   part of a sentence the workflow finishes. Starts with a word,
+//              not punctuation; ends without `.`, `,`, `;`, `:`, `!` or `?`,
+//              because the workflow writes what follows.
+//   sentences  one or more whole sentences. Starts with a capital, a digit, a
+//              backtick or a quote; ends with `.`, `!` or `?` (a closing
+//              bracket, quote or backtick may follow).
+const oneLine = (v) => isStr(v) && v !== "" && v === v.trim() && !/[\r\n]/.test(v);
+const isFragment = (v) => oneLine(v) && !/^[,.;:!?)\]]/.test(v) && !/[.,;:!?]$/.test(v);
+const isSentences = (v) => oneLine(v) && /^[\p{Lu}\p{N}`"'(]/u.test(v) && /[.!?][)"'`\]]*$/.test(v);
+const FRAGMENT = "one line that continues a sentence: no leading punctuation, no trailing `.`, `,`, `;`, `:`, `!` or `?`";
+const SENTENCES = "one line of whole sentences: starts with a capital, a digit, a backtick or a quote, and ends with `.`, `!` or `?`";
+const fragment = [isFragment, FRAGMENT];
+const optionalFragment = [(v) => v === "" || isFragment(v), `empty, or ${FRAGMENT}`];
+const sentences = [isSentences, SENTENCES];
+const optionalSentences = [(v) => v === "" || isSentences(v), `empty, or ${SENTENCES}`];
 const list = [isList, `an array of ${ENTRIES} (may be empty)`];
 const nonEmptyList = [(v) => isList(v) && v.length > 0, `a non-empty array of ${ENTRIES}`];
 /** Names the first entry that is not a glob, and why. */
@@ -220,40 +242,50 @@ const SCHEMA = {
     diffExcludes: list,
   },
   // What the workflows tell a fixer, in this repository's words. Each value is
-  // dropped into a sentence the workflow owns (`workflow-values.mjs` says where),
-  // so each is a FRAGMENT with no trailing full stop unless it is whole
-  // sentences. An optional one may be empty: the sentence is then left out.
+  // dropped into a sentence the workflow owns; `workflow-values.mjs` renders
+  // them and the README shows every frame with its surrounding words. A
+  // FRAGMENT continues the workflow's sentence, SENTENCES stand on their own,
+  // and an optional one may be empty: its sentence is then left out whole.
   fixer: {
-    // The one command a fixer runs to confirm its change, and what it covers:
-    // "Run `<verifyCommand>` ONCE … It is <verifyDescription>, which is the
-    // whole of what this job can verify."
-    verifyCommand: text,
-    verifyDescription: text,
-    // Whole sentences: what to do when a particular part of it fails.
-    verifyFailureHint: optionalText,
-    // "<integrationWarning>, and the push re-runs <integrationRerunBy> anyway."
-    integrationWarning: text,
-    integrationRerunBy: text,
-    // Whole sentences: which generated code may not be edited by hand.
-    generatedCodeNote: optionalText,
+    // "Run `<verifyCommand>` ONCE at the end … It is <verifyDescription>,
+    // which is the whole of what this job can verify."
+    verifyCommand: fragment,
+    verifyDescription: fragment,
+    // Said after that: what to do when a particular part of it fails.
+    verifyFailureHint: optionalSentences,
+    // "<integrationWarning>, and the push re-runs <integrationRerunBy>
+    // anyway." Both or neither: a repository with no suite a fixer must keep
+    // away from leaves both empty and the sentence is not said.
+    integrationWarning: optionalFragment,
+    integrationRerunBy: optionalFragment,
+    // Said after that in the CI-fix prompt only: what to do when the failing
+    // lane is one the fixer may not run.
+    ciFailureNote: optionalSentences,
+    // Which generated code may not be edited by hand: a list item in the three
+    // fixer prompts, and the opening of the issue-to-PR prompt's last
+    // paragraph, where <apiChangeNote> follows it.
+    generatedCodeNote: optionalSentences,
+    apiChangeNote: optionalSentences,
     // "If a test … still fails, the finding is not fixed. <keepReproducerAs>,
-    // and report that item `--skipped` …"
-    keepReproducerAs: text,
+    // and report that item `--skipped` with the reason."
+    keepReproducerAs: fragment,
     // "…every test a fix round removes or <disabledTestForms>, and shows it…"
-    disabledTestForms: text,
-    // Whole sentences, in the issue-to-PR prompt: the licence-header rule,
-    // the todo's tracking line, and the body of its "verify" step.
-    licenceScope: text,
-    todoTrackingLine: optionalText,
-    implementVerifyStep: text,
+    disabledTestForms: fragment,
+    // In the issue-to-PR prompt: "3. IMPLEMENT: make the change.
+    // <licenceScope> Commit subject …"; "The todo starts with a `**Created**`
+    // line. <todoTrackingLine>"; and "5. <implementVerifyStep>". These three
+    // may use the prompt's own placeholders: `__ISSUE_NUMBER__`, `__TODAY__`,
+    // `__ISSUE_FILE__`, `__PR_FILE__`.
+    licenceScope: optionalSentences,
+    todoTrackingLine: optionalSentences,
+    implementVerifyStep: sentences,
     // "…edit the branch, <replyVerifyInstruction>, commit with the trailer…"
-    replyVerifyInstruction: optionalText,
+    replyVerifyInstruction: optionalFragment,
     // "…stopped after setup and before the agent started — <toolchainSteps>,
     // or fetching the issue."
-    toolchainSteps: text,
-    // Whole sentences: how to reproduce a CI failure locally, said when no
-    // diagnosis could be read at all.
-    lastResortDiagnosis: text,
+    toolchainSteps: fragment,
+    // "No failed-step log could be read for run N. <lastResortDiagnosis>"
+    lastResortDiagnosis: sentences,
   },
   tests: {
     rules: ruleSets,
@@ -318,6 +350,11 @@ function crossChecks(config, problems) {
   const appBot = `${config.repo.appSlug}[bot]`;
   if (!config.repo.appLogins.includes(appBot)) problems.push(`repo.appLogins must include ${JSON.stringify(appBot)}, the login of repo.appSlug`);
   if (!config.repo.botLogins.includes(appBot)) problems.push(`repo.botLogins must include ${JSON.stringify(appBot)}, the login of repo.appSlug`);
+  // Two halves of one sentence: either without the other renders as
+  // "…, and the push re-runs  anyway."
+  if ((config.fixer.integrationWarning === "") !== (config.fixer.integrationRerunBy === "")) {
+    problems.push("fixer.integrationWarning and fixer.integrationRerunBy must both be set or both be empty");
+  }
   const guard = config.fixGuard;
   if (guard.replicatedRuleGlobs.length > 0) {
     if (guard.replicatedRuleNotice.trim() === "") {

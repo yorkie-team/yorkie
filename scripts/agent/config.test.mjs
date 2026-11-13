@@ -146,7 +146,17 @@ test("loadConfig: a value of the wrong type throws, and no value is coerced", (t
     ["repo.appSlug", "Fixture Agent"],
     ["repo.appSlug", "fixture-agent[bot]"],
     ["fixer.verifyCommand", "   "],
-    ["fixer.integrationWarning", ""],
+    ["fixer.verifyCommand", "make verify\n"],
+    ["fixer.verifyDescription", "lint and tests."],
+    ["fixer.verifyDescription", "lint,\ntests"],
+    ["fixer.keepReproducerAs", ", keep it"],
+    ["fixer.integrationWarning", "Do NOT run it."],
+    ["fixer.todoTrackingLine", ", and a second line"],
+    ["fixer.todoTrackingLine", "its second line is this."],
+    ["fixer.todoTrackingLine", "Its second line is this"],
+    ["fixer.licenceScope", "A header on every file.\nAnd a comment."],
+    ["fixer.lastResortDiagnosis", "re-run it"],
+    ["fixer.ciFailureNote", "let CI confirm"],
     ["fixer.implementVerifyStep", 5],
     ["fixer.todoTrackingLine", null],
     ["fixer.verifyFailureHint", null],
@@ -211,11 +221,18 @@ test("loadConfig: the App's slug and its logins name one App", (t) => {
 });
 
 test("loadConfig: the optional fixer sentences may be empty, the others may not", (t) => {
-  for (const key of ["verifyFailureHint", "generatedCodeNote", "todoTrackingLine", "replyVerifyInstruction"]) {
+  for (const key of ["verifyFailureHint", "ciFailureNote", "generatedCodeNote", "apiChangeNote", "licenceScope", "todoTrackingLine", "replyVerifyInstruction"]) {
     const dir = scratch(t, (c) => withValue(c, `fixer.${key}`, ""));
     assert.equal(loadConfig(dir).fixer[key], "", key);
   }
-  for (const key of ["verifyCommand", "verifyDescription", "integrationWarning", "integrationRerunBy", "keepReproducerAs", "disabledTestForms", "licenceScope", "implementVerifyStep", "toolchainSteps", "lastResortDiagnosis"]) {
+  // The two halves of the "do not run" sentence: both, or neither.
+  const neither = scratch(t, (c) => withValue(withValue(c, "fixer.integrationWarning", ""), "fixer.integrationRerunBy", ""));
+  assert.equal(loadConfig(neither).fixer.integrationWarning, "");
+  for (const key of ["integrationWarning", "integrationRerunBy"]) {
+    const half = scratch(t, (c) => withValue(c, `fixer.${key}`, ""));
+    assert.throws(() => loadConfig(half), /fixer\.integrationWarning and fixer\.integrationRerunBy must both be set or both be empty/, key);
+  }
+  for (const key of ["verifyCommand", "verifyDescription", "keepReproducerAs", "disabledTestForms", "implementVerifyStep", "toolchainSteps", "lastResortDiagnosis"]) {
     const dir = scratch(t, (c) => withValue(c, `fixer.${key}`, ""));
     assert.throws(() => loadConfig(dir), (err) => err.message.includes(`fixer.${key} must be`), key);
   }

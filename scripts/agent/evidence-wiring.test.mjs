@@ -46,7 +46,9 @@ for (const file of ["agent-review-panel.yml", "agent-fix.yml"]) {
     // an expected-failure marker, a skip that names the finding). The rule,
     // and that the item is then reported skipped, is the workflow's;
     // test-removals.mjs records what was switched off for the adjudicator.
-    assert.match(WF(file), /NEVER DELETE A TEST THAT SHOWS A FINDING STILL REPRODUCES\./);
+    assert.match(WF(file), /NEVER DELETE OR QUIETLY DISABLE A TEST THAT SHOWS A FINDING STILL REPRODUCES\./);
+    // The closing line must not name one repository's form of "kept".
+    assert.match(WF(file), /a reproducer kept that way beside a\s+`--skipped` claim is honest/);
     assert.match(WF(file), /fixed\. \$\{\{ steps\.cfg\.outputs\.keep_reproducer_as \}\}, and report that item/);
     assert.match(WF(file), /report that item\s+`--skipped`/);
   });
