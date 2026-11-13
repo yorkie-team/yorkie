@@ -283,8 +283,8 @@ test("noveltyOf: the cache is consulted before any git work", async () => {
 // repo with an actual refactor in it and read the actual answers, so a change
 // that renders the gate inert (or demoting) cannot ship green.
 
-/** The checkout this test file lives in. */
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+/** This package's directory: nothing here reads or writes above it. */
+const PACKAGE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * git with a fixed identity, in an environment that cannot reach any repository
@@ -427,11 +427,14 @@ test("fixture git cannot escape, even with a hostile inherited environment", () 
   // decoration. GIT_INDEX_FILE is the sharp one — pinning GIT_DIR does NOT stop
   // it, and `git add` through it leaves the victim's index corrupt.
   //
-  // The fixture lives under .harness-reports/ (gitignored) rather than the
+  // The fixture lives under this package's node_modules/ rather than the
   // working tree proper, so it is still INSIDE a checkout — the condition that
   // makes discovery dangerous — without an interrupted run leaving a nested .git
-  // that `git add -A` would commit as a gitlink.
-  const scratch = path.join(REPO_ROOT, ".harness-reports");
+  // that `git add -A` would commit as a gitlink. node_modules, because it is
+  // the one directory here every repository already keeps out of git; a
+  // scratch directory at the repository's root would lean on that
+  // repository's own .gitignore.
+  const scratch = path.join(PACKAGE_DIR, "node_modules", ".harness-reports");
   mkdirSync(scratch, { recursive: true });
   const inside = mkdtempSync(path.join(scratch, "novelty-escape-"));
   const victim = makeVictim();

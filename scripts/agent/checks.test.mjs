@@ -1019,18 +1019,10 @@ test("agent-fix always answers the commenter, even when the gate step itself fai
     "...and the refusal must name the third cause, or an absent run reads as a stuck CI");
 });
 
-test("CI_WORKFLOW_PATH names a workflow file that actually exists", () => {
-  // The gate matches CI runs on this path instead of on the run's display name,
-  // which is what makes gate 1 unforgeable — a second file cannot claim the
-  // path. The cost is that a typo, or renaming ci.yml, silently makes the gate
-  // unsatisfiable for every PR: the workflow-scoped query would find nothing and read as
-  // "CI has not run". Assert the file is there, and that it is the one whose
-  // runs are named "CI".
-  const HERE = path.dirname(fileURLToPath(import.meta.url));
-  const abs = path.join(HERE, "..", "..", CI_WORKFLOW_PATH);
-  const src = readFileSync(abs, "utf8"); // throws if the path is wrong
-  assert.match(src, /^name:\s*CI\s*$/m, "ci.yml must still be the workflow whose runs are named CI");
-});
+// That the file CI_WORKFLOW_PATH names exists, is the workflow whose runs are
+// named "CI", and has no trigger that could race for a pull request's head is
+// a fact about the repository's own `ci.yml`. It is checked where the
+// repository's values are graded: `.github/agent-harness/repo.test.mjs`.
 
 
 
@@ -1170,43 +1162,6 @@ test("every workflow_run consumer CI can drive gates on the CI workflow's PATH",
   // and no workflow here holds a cross-repository credential, so there is
   // nothing of that shape left to guard. The loop above covers every installed
   // workflow_run consumer, which is the property that survives.
-});
-
-test("no two ci.yml triggers can race for the same PR head SHA", () => {
-  // THE INVARIANT `ciConclusion` RESTS ON — stated precisely, because an earlier
-  // revision of this test overclaimed it as "exactly one run per head SHA".
-  // That is false: closing and reopening a PR files a second `pull_request` run
-  // for the same commit. Newest-wins is CORRECT there, because the later run is
-  // a fresh execution of the same file at the same tree and supersedes the
-  // earlier one.
-  //
-  // What must not happen is two runs from DIFFERENT triggers for one PR head,
-  // where "newest" is arbitrary rather than superseding. `push` restricted to
-  // `main` never fires for a PR branch, and a `merge_group` run carries the
-  // speculative merge commit. Widen `push`, or add a trigger that fires on a PR
-  // head, and this fails — making the choice conscious instead of silent.
-  const HERE = path.dirname(fileURLToPath(import.meta.url));
-  const yml = readFileSync(path.join(HERE, "..", "..", CI_WORKFLOW_PATH), "utf8");
-  // To the next TOP-LEVEL key, whatever it is. Slicing to a named one (`permissions:`)
-  // silently ran to end-of-file in a workflow that declares none, and the "events"
-  // it then found were job names.
-  const from = yml.indexOf("\non:");
-  const rest = yml.slice(from + 1);
-  const nextKey = rest.slice(3).search(/^[a-z_]+:/m);
-  const on = rest.slice(0, nextKey < 0 ? undefined : nextKey + 3);
-  const code = on.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
-
-  const events = [...code.matchAll(/^ {2}([a-z_]+):/gm)].map((m) => m[1]);
-  assert.deepEqual(
-    events.sort(),
-    ["pull_request", "push"],
-    "a new CI trigger may fire for a PR head SHA — see ciConclusion before adding one",
-  );
-  assert.match(
-    code.slice(code.indexOf("push:"), code.indexOf("pull_request:")),
-    /branches: \[["']?main["']?\]/,
-    "push must stay restricted to main, or every PR branch push races pull_request",
-  );
 });
 
 test("ciConclusion: the newest run wins, and an unfinished one is 'not yet'", () => {
@@ -2305,6 +2260,7 @@ test("no agent module imports outside scripts/agent/, because its staging drops 
   // along — this is the assertion that should fail first, so the constraint
   // below gets revisited instead of being obeyed out of habit.
   const workflows = readdirSync(wfDir)
+    .filter((f) => f.startsWith("agent-"))
     .map((f) => readFileSync(path.join(wfDir, f), "utf8"))
     .join("\n");
   assert.match(workflows, /cp -R \S*scripts\/agent /, "no workflow copies the package out any more");
@@ -2337,7 +2293,7 @@ test("command.mjs imports nothing relative, because workflows check it out alone
   const HERE = path.dirname(fileURLToPath(import.meta.url));
   const wfDir = path.join(HERE, "..", "..", ".github", "workflows");
   const alone = readdirSync(wfDir).filter((f) =>
-    /sparse-checkout: scripts\/agent\/command\.mjs/.test(readFileSync(path.join(wfDir, f), "utf8")),
+    f.startsWith("agent-") && /sparse-checkout: scripts\/agent\/command\.mjs/.test(readFileSync(path.join(wfDir, f), "utf8")),
   );
   assert.ok(alone.length > 0, "no workflow checks command.mjs out on its own any more");
 

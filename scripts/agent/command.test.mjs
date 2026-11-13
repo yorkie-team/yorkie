@@ -135,8 +135,10 @@ test("pull_request_review_comment still has exactly one subscriber", () => {
   // BOTH SPELLINGS. GitHub accepts `.yaml`, and filtering to `.yml` is the
   // same blind spot this branch removed from the actionlint lane — a guard
   // with the defect it was written to catch.
+  // THE HARNESS'S WORKFLOWS, which are the ones that answer a mention. What
+  // else a repository runs on that event is its own business.
   const subscribers = readdirSync(WORKFLOW_DIR)
-    .filter((f) => f.endsWith(".yml") || f.endsWith(".yaml"))
+    .filter((f) => f.startsWith("agent-") && (f.endsWith(".yml") || f.endsWith(".yaml")))
     .filter((f) => /^\s*pull_request_review_comment:/m.test(readWorkflow(f)));
   assert.deepEqual(subscribers, ["agent-review-reply.yml"]);
 });
