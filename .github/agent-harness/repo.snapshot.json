@@ -3,6 +3,7 @@
     ".github/workflows/**",
     ".github/actions/**",
     ".github/CODEOWNERS",
+    ".github/agent-harness/**",
     "Makefile",
     ".golangci.yml",
     "codecov.yml",

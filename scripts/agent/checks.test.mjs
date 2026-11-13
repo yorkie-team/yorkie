@@ -1052,6 +1052,7 @@ test("CI_DEFINING_PATHS: the shared entries around the repository's configured o
     ".github/workflows/**",
     ".github/actions/**",
     ".github/CODEOWNERS",
+    ".github/agent-harness/**",
     ...configured,
     "scripts/setup.sh",
     "scripts/hooks/**",
@@ -1065,6 +1066,14 @@ test("CI_DEFINING_PATHS: the shared entries around the repository's configured o
     ".github/workflows/nested/whatever.yml",
     ".github/actions/setup/action.yml",
     ".github/CODEOWNERS",
+    // The harness configuration itself. It is read from the default branch,
+    // never from the branch under review, so a PR editing it changes nothing
+    // about its own run — but it holds this list, the review scopes and the
+    // bot allow-list, so a change to it is a change to the gates and must go
+    // to a human instead of promoting itself.
+    ".github/agent-harness/config.json",
+    ".github/agent-harness/coverage-note.md",
+    ".github/agent-harness/repo.test.mjs",
     // The fixture configuration's entries.
     "build.config",
     "deps.lock",
@@ -1092,9 +1101,9 @@ test("CI_DEFINING_PATHS: the shared entries around the repository's configured o
     // Another repository's CI definition is not this configuration's.
     "Makefile",
     "go.mod",
-    // The configuration itself is read from the default branch, never from the
-    // branch under review, so a PR editing it changes nothing about its own run.
-    ".github/agent-harness/config.json",
+    // The rest of `.github` is not swept in with it.
+    ".github/dependabot.yml",
+    ".github/agent-harness",
   ]) {
     assert.equal(definesCi(p), false, `${p} is code or prose under review, not the CI definition`);
   }

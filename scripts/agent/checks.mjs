@@ -98,7 +98,8 @@ export const CI_WORKFLOW_FILE = "ci.yml";
  * comment told the human reviewer the run had executed main's CI definition.
  *
  * TWO PARTS. The entries every repository shares are written here: the
- * workflows and actions, CODEOWNERS, and the local enforcement layer. What a
+ * workflows and actions, CODEOWNERS, the harness configuration itself, and
+ * the local enforcement layer. What a
  * particular repository's CI resolves through — its build files, its lint and
  * codegen configuration, its dependency graph, the scripts its lanes call —
  * is `ci.definingPaths` in the repository's harness configuration, and the
@@ -123,6 +124,12 @@ export const CI_DEFINING_PATHS = Object.freeze([
   ".github/workflows/**",
   ".github/actions/**",
   ".github/CODEOWNERS",
+  // The harness configuration. It is read from the default branch, so a
+  // branch editing it changes nothing about its own run — but it now holds
+  // this very list, the review scopes and the bot allow-list, so a change to
+  // it is a change to the gates and goes to a human rather than promoting
+  // itself.
+  ".github/agent-harness/**",
   ...get("ci.definingPaths"),
   // The local enforcement layer. `setup.sh` decides what `core.hooksPath` and
   // Claude Code's hook wiring point at, and the two hook directories are what

@@ -56,6 +56,9 @@ test("this file grades the configuration in its own directory", () => {
 // `coverage-note.md` that alters a gate, a prompt or a comment fails here until
 // the recording is updated in the same change, which puts the before and after
 // of every such edit in front of whoever reviews it.
+//
+// One entry is newer than the recording, and deliberate: `.github/agent-harness/**`
+// joined the CI-defining paths when this directory began to hold the gates.
 
 const SNAPSHOT = JSON.parse(readFileSync(path.join(HERE, "repo.snapshot.json"), "utf8"));
 
@@ -145,7 +148,7 @@ test("snapshot: what the test-removal record counts as a test, and as a case", (
 //
 // `ci.definingPaths`, entry by entry, with the reason each is on the list. The
 // harness adds the entries every repository shares (the workflows and actions,
-// CODEOWNERS, the hook layer) around these; this is what THIS repository's CI
+// CODEOWNERS, this directory, the hook layer) around these; this is what THIS repository's CI
 // resolves through. `config.json` cannot carry comments, so they live here, and
 // the test below fails if the two lists drift apart.
 //
@@ -374,9 +377,13 @@ test("classifyFile: this repository's lane configuration is policy, its fixtures
   assert.equal(panel.classifyFile(".golangci.yml"), "policy");
   assert.equal(panel.classifyFile("Makefile"), "policy");
   assert.equal(panel.classifyFile("api/buf.gen.yaml"), "policy");
-  // The configuration this file grades governs the agents too.
-  assert.equal(panel.classifyFile(".github/agent-harness/config.json"), "policy");
-  assert.equal(panel.classifyFile(".github/agent-harness/coverage-note.md"), "policy");
+  // The configuration this file grades governs the agents too: it is policy
+  // to the reviewers, and part of the CI definition to the ready gate, so a
+  // pull request that edits it is reviewed as policy and never promotes itself.
+  for (const file of ["config.json", "coverage-note.md", "repo.snapshot.json", "repo.test.mjs"]) {
+    assert.equal(panel.classifyFile(`.github/agent-harness/${file}`), "policy", file);
+    assert.equal(checks.definesCi(`.github/agent-harness/${file}`), true, file);
+  }
 
   // Data that behavior depends on is read as code.
   assert.equal(panel.classifyFile("server/backend/testdata/config.json"), "code-adjacent");
