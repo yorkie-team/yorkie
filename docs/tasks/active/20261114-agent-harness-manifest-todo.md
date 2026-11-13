@@ -37,9 +37,26 @@ A hand edit to the shared files fails CI in the repository that made it, and
 - [x] `npm test`, `npm run test:repo`, actionlint, `make verify`; the package
       suite on a copy of the other repository's tree, passing, then failing
       with the path named after one byte is changed
+- [x] Review round: the recorded commit must be on upstream's default branch
+      (asked of the repository, with retries, failing closed); `sync.mjs`
+      refuses a source off that branch, validates everything before its first
+      write, never deletes an untracked or ignored file, and never writes
+      through a symbolic link; line endings pinned by `.gitattributes`
 - [ ] A run of the upstream comparison on a runner, in a repository that is a
       copy
 - [ ] Review rounds on the pull request
+
+## Follow-ups (recorded, not done)
+
+- `agent-iterate-ci.yml` checks out the branch tip while acting on
+  `workflow_run.head_sha`, with no re-verification, and a push during the run
+  does not cancel it unless the new CI run also fails. Recommended: a neutral
+  skip when `git rev-parse HEAD` is not `head_sha`, before the toolchain, and
+  the same in the panel's fix job — after which the trust guard can require
+  toolchain-after-re-verification in all three jobs that act on a reviewed
+  commit.
+- The weekly "upstream has moved on" signal is a warning on a green run. An
+  adopting repository that wants to be told needs its own reminder.
 
 ## Not in this change
 
