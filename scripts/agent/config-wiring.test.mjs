@@ -86,6 +86,8 @@ const ENV = "AGENT_HARNESS_CONFIG_DIR";
 const TEMP = "$RUNNER_TEMP";
 const STAGED_TOOLS = `${TEMP}/agent-tools`;
 const STAGED_CONFIG = `${TEMP}/agent-harness`;
+/** The step that refuses a checkout whose head is not the commit that was reviewed. */
+const REVERIFY = /^\s*-? ?name: Re-verify the checked-out commit\b/;
 /** Where the fix-scope hook is installed: outside the workspace, named by `core.hooksPath`. */
 const HOOK_DIR = `${TEMP}/agent-hooks`;
 /** The one local action a workflow may use, as a path from a tree's root. */
@@ -107,6 +109,9 @@ const EXPECTED = {
   sideCheckoutsOverUntrustedWorkspace: 8,
   // Steps that install the fix-scope pre-push hook.
   scopeHooks: 3,
+  // Jobs that re-verify the commit they checked out, before which no
+  // toolchain may be set up.
+  reverifiedCheckouts: 1,
   // `cp -R … scripts/agent …/agent-tools`, each with its configuration.
   stagingCopies: 4,
   // Places a harness script is run, and how many of them read the configuration.
@@ -300,6 +305,7 @@ function inspect(workflows) {
     toolchainCheckouts: 0,
     sideCheckoutsOverUntrustedWorkspace: 0,
     scopeHooks: 0,
+    reverifiedCheckouts: 0,
     stagingCopies: 0,
     invocations: 0,
     configReadingInvocations: 0,
@@ -337,6 +343,10 @@ function inspect(workflows) {
       let afterAgent = false;
       // Workspace paths an `rm -rf` has cleared since the workspace last changed.
       const cleared = new Set();
+      // Has the step that re-verifies the checked-out commit run yet? Only asked
+      // in a job that has one.
+      const reverifyAt = job.steps.findIndex((s) => s.lines.some((l) => !isComment(l) && REVERIFY.test(l)));
+      if (reverifyAt >= 0) counts.reverifiedCheckouts++;
 
       const distrust = (why) => {
         if (workspace) workspace = { ...workspace, trusted: false, why };
@@ -444,6 +454,13 @@ function inspect(workflows) {
             continue;
           }
           counts.toolchainUses++;
+          // A toolchain action may install what the checked-out commit asks
+          // for. Where a job goes on to check that the commit is the one that
+          // was reviewed, that check comes first — or the dependencies of an
+          // unreviewed commit are installed before anything refuses it.
+          if (reverifyAt >= 0 && stepIndex < reverifyAt) {
+            flag("sets up the toolchain before re-verifying the checked-out commit; a commit pushed in between would have its dependencies installed before it is refused");
+          }
           const root = m[1] ?? "";
           const tree = root === "" ? workspace : side.get(root);
           const name = root || "the workspace";
@@ -1096,6 +1113,21 @@ const MUTATIONS = [
       }),
     expect: /agent-iterate-ci\.yml › iterate: checks out into \.trusted-agent inside an untrusted workspace without an `rm -rf \.trusted-agent` first/,
   },
+  // …the toolchain: not before the checked-out commit is known to be the reviewed one.
+  {
+    name: "the toolchain is set up before the checked-out commit is re-verified",
+    files: () =>
+      edit("agent-fix.yml", (t) => {
+        const from = t.indexOf("      - name: Clear the path the toolchain action is checked out to\n");
+        const end = "        run: echo '/.trusted-toolchain/' >> .git/info/exclude\n";
+        const to = t.indexOf(end, from) + end.length;
+        const anchor = "      - name: Re-verify the checked-out commit is the one the panel reviewed\n";
+        assert.ok(from > 0 && to > from && t.indexOf(anchor) > 0 && t.indexOf(anchor) < from, "mutation anchors not found in the expected order");
+        const steps = t.slice(from, to);
+        return replaceOnce(t.slice(0, from) + t.slice(to), anchor, `${steps}${anchor}`);
+      }),
+    expect: /agent-fix\.yml › fix: sets up the toolchain before re-verifying the checked-out commit/,
+  },
   // …the fix-scope hook: installed where git will actually look.
   {
     name: "the scope hook is written to `.git/hooks`, which `core.hooksPath` bypasses",
@@ -1170,7 +1202,7 @@ test("each trust-weakening mutation of the real workflows fails the guard", () =
   }
   assert.deepEqual(failures, []);
   // Guard on the guard: the six that got through first, and their neighbours.
-  assert.ok(MUTATIONS.length >= 46, `expected the mutation cases, ran ${MUTATIONS.length}`);
+  assert.ok(MUTATIONS.length >= 47, `expected the mutation cases, ran ${MUTATIONS.length}`);
 });
 
 test("what is not a command is not flagged", () => {
