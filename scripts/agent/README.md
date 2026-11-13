@@ -37,7 +37,7 @@ else as JSON).
 | `repo.appSlug` | workflows: decline messages, `allowed_bots`, the App's own marker | wired |
 | `repo.botLogins` | `rounds.mjs`, `metrics.mjs`, `set-state.mjs`; workflows: the gate, throttle and page allow-lists | wired |
 | `repo.appLogins` | `rebuttal.mjs` | wired |
-| `docs.commandVerbsRef` | `branch-protection.mjs`, `workflow-presence.mjs`; workflows: decline messages | wired |
+| `docs.commandVerbsRef` | `branch-protection.mjs`, `workflow-presence.mjs`; workflows: decline messages, where a path is shown in a code span and an `http(s)` URL is left bare so it stays a link | wired |
 | `ci.definingPaths` | `checks.mjs` | wired |
 | `ci.gateLabel`, `ci.handoffSummary` | `checks.mjs`, for `mark-ready.mjs` | wired |
 | `ci.laneReports` | `agent-iterate-ci.yml`: whether the CI-fix arm downloads and renders lane reports before the log tail | wired |
@@ -47,7 +47,7 @@ else as JSON).
 | `review.diffExcludes` | the three reviewed-diff steps (panel, panel delta, on-demand) | wired |
 | `fixer.*` | the agents' prompts and two messages — see "What the prompts say" below | wired |
 | `tests.rules`, `tests.go.*` | `test-removals.mjs`, `fix-guard.mjs` | wired |
-| `fixGuard.replicatedRuleGlobs`, `fixGuard.replicatedRuleNotice`, `fixGuard.counterpartRepo` | `fix-guard.mjs` | wired |
+| `fixGuard.replicatedRuleGlobs`, `fixGuard.replicatedRuleNotice`, `fixGuard.counterpartRepo` | `fix-guard.mjs`. `counterpartRepo` is `owner/name`; a PR body silences the warning by referring to it as `owner/name`, `owner/name#12`, `name#12` or a github.com link, never by merely containing the name | wired |
 | `redact.extraPatterns` | — | not wired yet |
 | `ask.permittedMcpTools` | — | not wired yet |
 
@@ -84,6 +84,7 @@ brackets is then left out whole.
 | `apiChangeNote` | sentences, optional | issue-to-PR, the last paragraph: "[`<generatedCodeNote>` `<apiChangeNote>`]" — either alone is still a paragraph | If the issue requires an API change, say so on the issue and stop rather than working around it. |
 | `keepReproducerAs` | fragment | fix, panel-fix: "If a test you wrote (or found) still fails, the finding is not fixed. `<keepReproducerAs>`, and report that item `--skipped` with the reason." | Go has no `it.fails`, so keep the test and make its first statement `t.Skip("still reproduces: <finding>")`, with a comment naming the finding |
 | `disabledTestForms` | fragment | the same item: "The pipeline records every test a fix round removes or `<disabledTestForms>`, and shows it to the next round's adjudicator…" | switches off with `t.Skip`/`t.Skipf`/`t.SkipNow` |
+| `commitNote` | sentences, optional | fix, panel-fix, CI-fix, after the push rules: "…revert the listed files and skip or dispute that finding.[ `<commitNote>`]". Say what this repository asks of a commit message. Do not say a hook checks it unless one is active in a fresh checkout: the harness points `core.hooksPath` at its own scope hook | Commit messages follow this repository's convention: subject <= 70 characters, a blank line, body wrapped at 80. |
 | `licenceScope` | sentences, optional | issue-to-PR: "3. IMPLEMENT: make the change.[ `<licenceScope>`] Commit subject <= 70 chars…" | Apache 2.0 licence header on every new Go file; every package needs a package comment. |
 | `todoTrackingLine` | sentences, optional | issue-to-PR: "The todo starts with a `**Created**: YYYY-MM-DD` line.[ `<todoTrackingLine>`]" | empty |
 | `implementVerifyStep` | sentences | issue-to-PR, the whole of step 5: "5. `<implementVerifyStep>`". Say what to run, what not to run, and that CI runs the rest | LET CI VERIFY — do NOT run `make test`, `make test-complex`, `make bench` or `make coverage`: … |
@@ -204,6 +205,15 @@ repository that adopts the harness follows them:
   permission and checks `main` out with the ambient token, which can read a
   public repository and nothing else. A private repository would have to
   grant that job `contents: read`.
+- `agent-scripts.yml` triggers on the harness's own paths and weekly. It
+  cannot trigger on a repository's lane files (a `paths:` filter is not
+  configurable), so drift between the toolchain action — and anything it
+  ships, such as a copied `.npmrc` — and the files only `repo.test.mjs` reads
+  is found within a week, not on the pull request that causes it.
+- The fix-scope pre-push hook is advisory. It is installed in
+  `$RUNNER_TEMP/agent-hooks` with `core.hooksPath` pointed at it, which
+  replaces whatever hooks the checkout would otherwise run, and the agent can
+  point the path elsewhere. The report job's scope check is the gate.
 - CI's lane reports, where `ci.laneReports` is true, are an artifact named
   `ci-lane-reports` rendered by `scripts/ci/summarize-ci.mjs`.
 - The issue-to-PR prompt names `CLAUDE.md`, `CONTRIBUTING.md`, `docs/tasks/`,
