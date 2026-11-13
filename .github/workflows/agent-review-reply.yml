@@ -230,7 +230,11 @@ jobs:
         with:
           ref: main
           path: .trusted-cred
-          sparse-checkout: scripts/agent
+          # The scripts and the configuration they read, from the same ref: a
+          # script resolves `.github/agent-harness` beside its own checkout.
+          sparse-checkout: |
+            scripts/agent
+            .github/agent-harness
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
@@ -376,7 +380,11 @@ jobs:
         if: always()
         with:
           ref: main
-          sparse-checkout: scripts/agent
+          # The scripts and the configuration they read, from the same ref: a
+          # script resolves `.github/agent-harness` beside its own checkout.
+          sparse-checkout: |
+            scripts/agent
+            .github/agent-harness
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - uses: actions/setup-node@v4

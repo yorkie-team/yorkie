@@ -210,8 +210,11 @@ jobs:
           # must not be the BRANCH's copy of that script — the branch is what
           # the fixer is about to be pointed at, and this step still holds a
           # GITHUB_TOKEN that can comment and label.
+          # `.github/agent-harness` is the configuration `scripts/agent`
+          # reads, taken from the same ref as the scripts.
           sparse-checkout: |
             scripts/agent
+            .github/agent-harness
             scripts/ci
             scripts/direct-run.mjs
           sparse-checkout-cone-mode: false
@@ -219,6 +222,11 @@ jobs:
       - name: Stage the trusted agent scripts (pre-fixer)
         run: |
           cp -R .trusted-agent/scripts/agent "${{ runner.temp }}/agent-tools"
+          # The copy above has no parent directories, so the scripts cannot
+          # find `.github/agent-harness` beside themselves. Stage main's
+          # configuration next to them and name it for every later step.
+          cp -R .trusted-agent/.github/agent-harness "${{ runner.temp }}/agent-harness"
+          echo "AGENT_HARNESS_CONFIG_DIR=${{ runner.temp }}/agent-harness" >> "$GITHUB_ENV"
           # The whole `scripts` subtree as a second copy, rather than moving
           # the steps below onto it: `agent-tools` is named in a dozen places
           # in this file and in its siblings, and `summarize-ci.mjs` resolves
@@ -672,7 +680,11 @@ jobs:
         if: always()
         with:
           ref: main
-          sparse-checkout: scripts/agent
+          # The scripts and the configuration they read, from the same ref: a
+          # script resolves `.github/agent-harness` beside its own checkout.
+          sparse-checkout: |
+            scripts/agent
+            .github/agent-harness
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - uses: actions/setup-node@v4

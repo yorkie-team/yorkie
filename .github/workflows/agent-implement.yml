@@ -265,7 +265,11 @@ jobs:
         if: steps.app.outputs.configured == 'true'
         uses: actions/checkout@v4
         with:
-          sparse-checkout: scripts/agent
+          # The scripts and the configuration they read, from the same ref: a
+          # script resolves `.github/agent-harness` beside its own checkout.
+          sparse-checkout: |
+            scripts/agent
+            .github/agent-harness
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
@@ -410,6 +414,12 @@ jobs:
         run: |
           set -euo pipefail
           cp -R scripts/agent "$RUNNER_TEMP/agent-tools"
+          # The copy above has no parent directories, so the scripts cannot
+          # find `.github/agent-harness` beside themselves. Stage the
+          # configuration next to them, before the agent can write to the
+          # workspace, and name it for every later step.
+          cp -R .github/agent-harness "$RUNNER_TEMP/agent-harness"
+          echo "AGENT_HARNESS_CONFIG_DIR=$RUNNER_TEMP/agent-harness" >> "$GITHUB_ENV"
           npm ci --no-audit --no-fund --ignore-scripts --prefix "$RUNNER_TEMP/agent-tools"
 
       - uses: actions/setup-go@v6
@@ -711,7 +721,11 @@ jobs:
         if: always() && needs.implement.outputs.staged == 'success'
         with:
           ref: main
-          sparse-checkout: scripts/agent
+          # The scripts and the configuration they read, from the same ref: a
+          # script resolves `.github/agent-harness` beside its own checkout.
+          sparse-checkout: |
+            scripts/agent
+            .github/agent-harness
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - uses: actions/setup-node@v4

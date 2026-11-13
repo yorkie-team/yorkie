@@ -571,7 +571,11 @@ jobs:
         with:
           ref: main
           path: .trusted
-          sparse-checkout: scripts/agent
+          # The scripts and the configuration they read, from the same ref: a
+          # script resolves `.github/agent-harness` beside its own checkout.
+          sparse-checkout: |
+            scripts/agent
+            .github/agent-harness
           sparse-checkout-cone-mode: false
           persist-credentials: false # no token in .trusted/.git/config (reviewer cwd)
 
@@ -2035,7 +2039,14 @@ jobs:
       # branch from being unable to file one.
       - name: Stage the trusted agent scripts
         if: steps.guard.outputs.proceed == 'true'
-        run: cp -R ./scripts/agent "${{ runner.temp }}/agent-tools"
+        run: |
+          cp -R ./scripts/agent "${{ runner.temp }}/agent-tools"
+          # The copy above has no parent directories, so the scripts cannot
+          # find `.github/agent-harness` beside themselves. Stage main's
+          # configuration next to them, while the workspace is still main,
+          # and name it for every later step.
+          cp -R ./.github/agent-harness "${{ runner.temp }}/agent-harness"
+          echo "AGENT_HARNESS_CONFIG_DIR=${{ runner.temp }}/agent-harness" >> "$GITHUB_ENV"
 
       # WHICH CREDENTIAL THE FIXER GETS, and whether one exists at all — PROVEN,
       # not inferred.
@@ -2566,7 +2577,11 @@ jobs:
         if: always()
         with:
           ref: main
-          sparse-checkout: scripts/agent
+          # The scripts and the configuration they read, from the same ref: a
+          # script resolves `.github/agent-harness` beside its own checkout.
+          sparse-checkout: |
+            scripts/agent
+            .github/agent-harness
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - uses: actions/setup-node@v4

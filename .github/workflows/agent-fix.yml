@@ -472,7 +472,14 @@ jobs:
       # branch cannot produce a malformed record that the panel silently ignores.
       - name: Stage the trusted agent scripts
         if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
-        run: cp -R ./scripts/agent "${{ runner.temp }}/agent-tools"
+        run: |
+          cp -R ./scripts/agent "${{ runner.temp }}/agent-tools"
+          # The copy above has no parent directories, so the scripts cannot
+          # find `.github/agent-harness` beside themselves. Stage main's
+          # configuration next to them, while the workspace is still main,
+          # and name it for every later step.
+          cp -R ./.github/agent-harness "${{ runner.temp }}/agent-harness"
+          echo "AGENT_HARNESS_CONFIG_DIR=${{ runner.temp }}/agent-harness" >> "$GITHUB_ENV"
 
       # Resolve the branch AFTER eligibility: fix-eligible already refused forks
       # and unknown head repos, so by here this is a same-repo branch we may push.
@@ -846,7 +853,11 @@ jobs:
         if: always()
         with:
           ref: main
-          sparse-checkout: scripts/agent
+          # The scripts and the configuration they read, from the same ref: a
+          # script resolves `.github/agent-harness` beside its own checkout.
+          sparse-checkout: |
+            scripts/agent
+            .github/agent-harness
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - uses: actions/setup-node@v4
