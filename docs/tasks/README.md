@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-10
+updated: 2026-11-14
 ---
 
 # Tasks Index
@@ -20,6 +20,8 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Move the harness's repository-specific values into configuration (2026-11-13) | [20261113-agent-harness-config-todo.md](./active/20261113-agent-harness-config-todo.md) | [20261113-agent-harness-config-lessons.md](./active/20261113-agent-harness-config-lessons.md) |
+| Deactivate a client whose attached document is gone (2026-11-10) | [20261110-deactivate-missing-document-todo.md](./active/20261110-deactivate-missing-document-todo.md) | [20261110-deactivate-missing-document-lessons.md](./active/20261110-deactivate-missing-document-lessons.md) |
 | Read the sessions summary through rl_session_daily by name (2026-10-24) | [20261024-session-summary-rollup-hint-todo.md](./active/20261024-session-summary-rollup-hint-todo.md) | [20261024-session-summary-rollup-hint-lessons.md](./active/20261024-session-summary-rollup-hint-lessons.md) |
 | Merge-moved children sit in arrival order (2026-09-24) | [20260924-merge-moved-child-order-todo.md](./active/20260924-merge-moved-child-order-todo.md) | - |
 | Install the `@claude` command surface, in four phases (2026-09-22) | [20260922-agent-command-verbs-todo.md](./active/20260922-agent-command-verbs-todo.md) | [20260922-agent-command-verbs-lessons.md](./active/20260922-agent-command-verbs-lessons.md) |
