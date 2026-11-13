@@ -26,9 +26,10 @@
 # not start this lane: a `paths:` filter cannot be read from configuration.
 # So it also runs WEEKLY, on `main`: a linter bumped in a build file, or a
 # toolchain version moved, is checked against the toolchain action's pins
-# within a week instead of at the next harness change. The weekly run is also
-# when a repository that copied these files learns that the repository they
-# came from has moved on (the last step of the `test` job).
+# within a week instead of at the next harness change. The weekly run also
+# warns a repository that copied these files when the repository they came
+# from has moved on (the last step of the `test` job); the issue that tells
+# its people so is `agent-upstream-notify.yml`'s, which can write one.
 name: Agent Scripts
 
 on:

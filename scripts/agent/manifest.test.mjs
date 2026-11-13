@@ -333,6 +333,8 @@ test("checkUpstream: a copy of upstream's default branch at the recorded commit 
     // The default branch is asked for, never assumed.
     assert.deepEqual(seen, [API, COMPARE, PINNED, HEAD]);
     assert.match(r.lines.join("\n"), /This copy is org\/repo at 0123456789abcdef0123456789abcdef01234567, on trunk/);
+    // …and handed on, for the notifier to ask where it is now.
+    assert.equal(r.branch, "trunk");
   }
 });
 

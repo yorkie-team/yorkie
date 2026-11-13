@@ -300,7 +300,7 @@ it. What it leaves to a person, and prints:
 
 **Required in every copy's `repo.test.mjs`: pin the upstream.** The core
 cannot know which repository is the origin. A copy whose `upstream.json` was
-edited to `{ "repository": null }` would pass all three checks below, because
+edited to `{ "repository": null }` would pass every check below, because
 that is what the origin's says. Only the repository's own test can refuse it:
 
 ```js
@@ -325,24 +325,22 @@ otherwise rewrite every line ending. `sync.mjs` warns when they are missing;
 modes are not in the manifest: no shared file is executable, and each is run
 through `node`.
 
-Three checks keep a copy honest. Each catches what the one before cannot:
+Three checks keep a copy honest, each catching what the one before cannot,
+and a fourth tells it when it has fallen behind:
 
 | Check | Where it runs | What it catches |
 |---|---|---|
 | The tree matches `MANIFEST.sha256` | `npm test` (`manifest.test.mjs`); `node manifest.mjs verify` | A core file edited, added or removed by hand. It names the path. Regenerating the manifest gets past it |
 | The manifest's digest is the one `upstream.json` records | `npm test`, in a copy only | A regenerated manifest. Getting past it takes an edit to `upstream.json`, which is visible in review and is a CI-defining path |
 | The recorded commit is on the recorded repository's default branch, and the manifest there is the recorded one | `agent-scripts.yml`, on change and weekly (`npm run check:upstream`) | An `upstream.json` edited to agree with a drifted copy, or pointed at a commit upstream never merged. It fails when upstream cannot be asked, after retrying a transient refusal. It also warns, without failing, when upstream's default branch has a newer core |
+| Upstream's default branch has the manifest this copy recorded | `agent-upstream-notify.yml`, weekly and on dispatch (`upstream-notify.mjs`) | A copy that is honest and behind. It opens one issue, rewrites it when upstream moves again, and closes it when the copy matches. It fails, and touches no issue, when the check above would fail |
 
 In the repository the core is written in, `upstream.json` is
 `{ "repository": null }`, only the first check applies, and a change to the
 core is finished with `node scripts/agent/manifest.mjs build`. The third
-check then prints which repository is claiming to be the origin, so a copy
-that makes the claim is at least visible in its log.
-
-"Upstream has moved on" is a warning annotation on a run that is otherwise
-green. Nobody is notified of it: it is seen by whoever opens that run. A
-repository that wants to be told when it falls behind needs a reminder of its
-own; the harness does not send one.
+and fourth then print which repository is claiming to be the origin, so a
+copy that makes the claim is at least visible in its log, and do nothing
+else.
 
 Which files are the core is decided by rule, not by asking git, because the
 first check has to work in a tree with no `.git`: everything under
@@ -350,9 +348,54 @@ first check has to work in a tree with no `.git`: everything under
 anything dot-named. So an untracked file left in this directory fails the
 first check as "added".
 
-The third check uses the job's read-only token against `api.github.com`. That
-reads a public upstream. A private one would need a credential the workflow
-does not take.
+The third check and the notifier use the job's own token against
+`api.github.com`. That reads a public upstream. A private one would need a
+credential neither workflow takes.
+
+### Being told a copy is behind
+
+"Upstream has moved on" is not a failure — a copy that is behind is still the
+copy it says it is — so the third check only warns, on a run nobody opens.
+`agent-upstream-notify.yml` says it where people look. Weekly, and whenever a
+maintainer dispatches it, `upstream-notify.mjs` compares the recorded digest
+with the manifest at the head of upstream's default branch:
+
+| The copy | An open sync issue | What the run does |
+|---|---|---|
+| is the origin (`repository: null`) | — | Says so. Nothing else |
+| fails the third check, or upstream's head cannot be read | — | Fails. No issue is opened, changed or closed: a wrong record is a different problem from "upstream moved", and a red weekly run is the right signal for it |
+| is behind | none | Opens one, labelled `agent:harness-sync` |
+| is behind | for the same recorded commit and upstream head | Nothing |
+| is behind | for an older one | Rewrites its body. No comment |
+| matches | one or more | One comment on each, then closes it |
+| matches | none | Nothing |
+
+The issue gives the recorded commit, upstream's head, a link comparing the
+two and the two commands to run. It notifies and nothing more: there is no
+sync pull request, because a sync ends in configuration edits and a test run
+that only the adopting repository can judge. `node
+scripts/agent/upstream-notify.mjs --dry-run` prints the decision and the
+issue body and sends only `GET`s.
+
+The job holds `contents: read` and `issues: write`, uses its own
+`github.token`, and is started by the schedule or a dispatch only — it is a
+workflow of its own so that no pull request or push can start it. The trust
+guard below holds those three things. If the token may not create the label,
+the issue is opened without it; its title starts with `[agent:harness-sync]`
+either way.
+
+Which issue is "the" issue is decided by author and marker, never by title or
+label: it must be open, authored by `github-actions[bot]`, and have the
+marker comment as the first line of its body. An issue anyone else opens with
+that marker is ignored, so it can be neither rewritten nor closed by this
+job. Everything written into the issue is a value that was validated as an
+`owner/name`, a 40-character commit id or a sha256 the script computed;
+nothing upstream wrote (a commit message, a branch name) is copied in.
+
+It does not run in a repository where Actions or scheduled workflows are
+off, and GitHub stops a public repository's schedules after 60 days without
+activity. Upstream's head moving without the core changing rewrites the
+issue's body (the comparison link) at most once a week, silently.
 
 ## Tests
 
@@ -362,6 +405,7 @@ npm ci
 npm test              # the package, against fixtures/harness-config
 npm run test:repo     # the repository's values in .github/agent-harness
 npm run check:upstream  # the copy against the repository it names (network)
+node upstream-notify.mjs --dry-run  # what the weekly notifier would do (network, GETs only)
 ```
 
 `npm test` sets `AGENT_HARNESS_CONFIG_DIR` to the fixture configuration for
@@ -389,6 +433,11 @@ step. A checkout with no `ref:` is trusted only in a workflow that cannot be
 started by `workflow_dispatch` or a pull request event. A checkout into a side
 directory of a workspace that holds a pull request's tree must be preceded by
 an `rm -rf` of that path: the branch could have committed a symlink there.
+
+A job that runs `upstream-notify.mjs` is held to more, because it writes
+issues: its workflow may be started by `schedule` and `workflow_dispatch`
+only, the job's own `permissions:` must be exactly `contents: read` and
+`issues: write`, and nothing in it may name a secret.
 
 ### What this guard does not see
 

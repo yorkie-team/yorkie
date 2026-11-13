@@ -26,6 +26,10 @@
 //      cannot simply be edited to agree with a drifted copy. It also says, as
 //      a warning, when upstream's default branch has moved on.
 //
+// A fourth thing is not a check of the copy at all: `upstream-notify.mjs`
+// opens an issue in a copy whose upstream has a newer core, so that the
+// warning above is not the only place it is said.
+//
 // WHICH FILES, WITHOUT ASKING GIT. `verify` runs wherever `npm test` does,
 // which includes a copy of a tree with no `.git` at all, so "tracked" is
 // decided by rule rather than by `git ls-files`: under this package, every
@@ -302,6 +306,7 @@ export function adoptionProblem(root) {
  *
  * `fetchText(url)` resolves to `{ status, text }`. `self` is the repository
  * this is running in, when known; `sleep(ms)` is the pause between retries.
+ * A copy that passes also gets `branch`, upstream's default branch.
  */
 export async function checkUpstream({ upstream, localDigest, fetchText, self = "", sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   if (upstream.repository === null) {
@@ -326,20 +331,7 @@ export async function checkUpstream({ upstream, localDigest, fetchText, self = "
   };
   const CLOSED = "The copy cannot be compared, so this check fails rather than passes.";
 
-  /** One GET with retries. Returns `{ status, text }` or `{ error }`. */
-  const get = async (url) => {
-    let last = {};
-    for (let attempt = 0; attempt < RETRY_DELAYS_MS.length + 1; attempt++) {
-      if (attempt > 0) await sleep(RETRY_DELAYS_MS[attempt - 1]);
-      try {
-        last = await fetchText(url);
-        if (last.status !== 429 && !(last.status >= 500 && last.status <= 599)) return last;
-      } catch (err) {
-        last = { error: err.message };
-      }
-    }
-    return last;
-  };
+  const get = (url) => getWithRetry(url, fetchText, sleep);
   const unreachable = (url, r) =>
     r.error !== undefined
       ? `Could not fetch ${url}: ${r.error} (after ${RETRY_DELAYS_MS.length + 1} attempts). ${CLOSED}`
@@ -389,6 +381,9 @@ export async function checkUpstream({ upstream, localDigest, fetchText, self = "
     return fail(`${repository} at ${commit} has manifest digest ${upstreamDigest}; ${UPSTREAM_PATH} records ${recorded}. The record does not describe that commit.`);
   }
   lines.push(`This copy is ${repository} at ${commit}, on ${branch} (manifest digest ${recorded}).`);
+  // `branch` is handed back for `upstream-notify.mjs`, which goes on to ask
+  // where that branch is now.
+  const passed = { ok: true, lines, warnings, branch };
 
   // 4.
   const behind = `this copy is behind. Sync with \`node scripts/agent/sync.mjs --from <checkout>\`.`;
@@ -399,14 +394,33 @@ export async function checkUpstream({ upstream, localDigest, fetchText, self = "
   } catch (err) {
     warnings.push(`Could not tell whether ${repository} has moved on: ${err.message}.`);
   }
-  return { ok: true, lines, warnings };
+  return passed;
 }
 
 /** Pauses before the second, third and fourth attempt at a fetch that must not be skipped. */
 export const RETRY_DELAYS_MS = Object.freeze([1000, 3000, 9000]);
 
+/**
+ * One GET through `fetchText`, retrying a transient refusal (429, 5xx, a
+ * network error). Returns `{ status, text }`, or `{ error }` when every
+ * attempt threw.
+ */
+export async function getWithRetry(url, fetchText, sleep) {
+  let last = {};
+  for (let attempt = 0; attempt < RETRY_DELAYS_MS.length + 1; attempt++) {
+    if (attempt > 0) await sleep(RETRY_DELAYS_MS[attempt - 1]);
+    try {
+      last = await fetchText(url);
+      if (last.status !== 429 && !(last.status >= 500 && last.status <= 599)) return last;
+    } catch (err) {
+      last = { error: err.message };
+    }
+  }
+  return last;
+}
+
 /** `fetchText` over the GitHub API: raw content, the ambient token if there is one. */
-async function githubFetchText(url) {
+export async function githubFetchText(url) {
   const headers = { Accept: "application/vnd.github.raw+json", "User-Agent": "harness-manifest-check", "X-GitHub-Api-Version": "2022-11-28" };
   // The job's own read token, when present: it reads any public repository and
   // lifts the unauthenticated rate limit, which shared runner addresses
