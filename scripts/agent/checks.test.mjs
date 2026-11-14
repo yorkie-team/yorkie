@@ -2137,7 +2137,33 @@ async function implementBoundaryProblems(text) {
   if (noApp && noApp.job !== finish) problems.add(`the App-missing reply is posted from job ${noApp.job.name}, not finish`);
   if (noApp && noApp.job.permissions?.issues !== "write") problems.add("the App-missing reply's job cannot comment on an issue");
 
-  // 5. Finish runs main's scripts from a checkout that keeps no credential,
+  // 5. Nothing is spliced into code. `finish` reads what the implement job, on
+  // the runner the agent had, left behind; the dispatcher's issue number is
+  // free text. Both reach a script through `env:` only.
+  for (const j of [implement, finish]) {
+    for (const s of j.steps) {
+      if (/\$\{\{/.test(`${s.run ?? ""}\n${s.script ?? ""}`)) problems.add(`${j.name} "${s.name ?? s.id}" splices an expression into its script`);
+    }
+  }
+  // The dispatcher's issue number is checked as a number before any step
+  // takes it, in each job, and a failed check stops what would use it.
+  const NUMERIC = /case "\$(ISSUE(?:_NUMBER)?)" in\n\s*''\|\*\[!0-9\]\*\) [^\n]*exit 1 ;;/;
+  for (const j of [implement, finish]) {
+    const checkAt = j.steps.findIndex((s) => NUMERIC.test(s.run ?? "") && !s.failOpen);
+    const firstUse = j.steps.findIndex((s, i) => i !== checkAt && /github\.event\.inputs\.issue_number/.test(s.text));
+    if (checkAt < 0) problems.add(`${j.name} never checks that the issue number is a number`);
+    else if (firstUse >= 0 && firstUse < checkAt) problems.add(`${j.name} "${j.steps[firstUse].name ?? j.steps[firstUse].id}" takes the issue number before it is checked`);
+  }
+  {
+    const checkAt = finish.steps.findIndex((s) => NUMERIC.test(s.run ?? ""));
+    const mint = finish.steps.findIndex((s) => s.id === "app-token");
+    const need = (j, k) => (j === "implement" ? ({ admitted: "true", configured: "true", staged: "success" })[k] ?? "" : "");
+    if (checkAt >= 0 && mint >= 0 && implRun(finish, { event: "workflow_dispatch", need, fails: checkAt }).outcome[mint] !== "skipped") {
+      problems.add("finish mints its token, and uses the issue number, after the number failed its check");
+    }
+  }
+
+  // 6. Finish runs main's scripts from a checkout that keeps no credential,
   // and nothing in it lets what it downloaded steer a later step.
   const checkouts = finish.steps.filter((s) => /^actions\/checkout@/.test(s.uses ?? ""));
   if (checkouts.length !== 1) problems.add(`finish has ${checkouts.length} checkouts`);
@@ -2222,6 +2248,11 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     finish_persists: [FINISH_CO, FINISH_CO.replace("persist-credentials: false", "persist-credentials: true")],
     finish_runs_output: [SUMMARY, '          node "$RUNNER_TEMP/agent-output/x.mjs" \\\n'],
     finish_github_env: [SUMMARY, `          echo "NODE_OPTIONS=x" >> "$GITHUB_ENV"\n${SUMMARY}`],
+    // what crosses into a script, and when the issue number is trusted
+    finish_splices_output: ["            const agentOutcome = process.env.AGENT_OUTCOME;", "            const agentOutcome = '${{ needs.implement.outputs.agent }}';"],
+    implement_splices_issue: ["            const issue = Number(process.env.ISSUE_NUMBER);", "            const issue = Number(context.payload.issue?.number || '${{ github.event.inputs.issue_number }}');"],
+    implement_number_unchecked: [`          case "$ISSUE_NUMBER" in\n            ''|*[!0-9]*) echo "Invalid issue number: '$ISSUE_NUMBER'" >&2; exit 1 ;;\n          esac\n\n      - name: Is`, "          true\n\n      - name: Is"],
+    finish_mint_ignores_check: ["        if: always() && needs.implement.outputs.staged == 'success' && steps.issue.outcome == 'success'\n", "        if: always() && needs.implement.outputs.staged == 'success'\n"],
   };
   for (const [name, edit] of Object.entries(edits)) {
     let edited;

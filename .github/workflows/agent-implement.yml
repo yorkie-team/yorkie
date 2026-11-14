@@ -175,6 +175,17 @@ jobs:
         id: admitted
         run: echo "admitted=true" >> "$GITHUB_OUTPUT"
 
+      # THE DISPATCHER'S ISSUE NUMBER IS TEXT, checked before any step uses it.
+      # The comment's comes from the event payload and is a number already.
+      # Every step below takes it through `env:`, never spliced into a script.
+      - name: Check the issue number
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}
+        run: |
+          case "$ISSUE_NUMBER" in
+            ''|*[!0-9]*) echo "Invalid issue number: '$ISSUE_NUMBER'" >&2; exit 1 ;;
+          esac
+
       # WITHOUT THE APP THIS VERB CANNOT DO ITS ONE JOB — it pushes a branch and
       # opens a PR, neither of which GITHUB_TOKEN can do in a way that
       # re-triggers CI. The switch is one repository variable for every verb, so
@@ -346,11 +357,12 @@ jobs:
         uses: actions/github-script@v7
         env:
           APP_BOT_LOGIN: ${{ steps.cfg.outputs.app_bot_login }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}
         with:
           retries: 3
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
-            const issue = Number(context.payload.issue?.number || '${{ github.event.inputs.issue_number }}');
+            const issue = Number(process.env.ISSUE_NUMBER);
             const { owner, repo } = context.repo;
             const prs = await github.paginate(github.rest.pulls.list, {
               owner, repo, state: 'open', per_page: 100,
@@ -839,9 +851,22 @@ jobs:
           name: claude-execution-output
           path: ${{ runner.temp }}/agent-output
 
+      # The same check the implement job made, made again: this job takes
+      # nothing from that one on trust that it can check for itself. Every
+      # step that uses the number holds the token minted below.
+      - name: Check the issue number
+        id: issue
+        if: always() && needs.implement.outputs.staged == 'success'
+        env:
+          ISSUE: ${{ github.event.issue.number || github.event.inputs.issue_number }}
+        run: |
+          case "$ISSUE" in
+            ''|*[!0-9]*) echo "Invalid issue number: '$ISSUE'" >&2; exit 1 ;;
+          esac
+
       - name: Generate GitHub App token
         id: app-token
-        if: always() && needs.implement.outputs.staged == 'success'
+        if: always() && needs.implement.outputs.staged == 'success' && steps.issue.outcome == 'success'
         uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ secrets.AGENT_APP_ID }}
@@ -1014,6 +1039,11 @@ jobs:
           # terms below rather than printing a hole.
           APP_SLUG: ${{ needs.implement.outputs.app_slug }}
           TOOLCHAIN_STEPS: ${{ needs.implement.outputs.toolchain_steps }}
+          # The implement job's step outcomes, as data. Nothing from that job,
+          # whose runner the agent had, is spliced into this script.
+          AGENT_OUTCOME: ${{ needs.implement.outputs.agent }}
+          STAGED: ${{ needs.implement.outputs.staged }}
+          PROTECTION: ${{ needs.implement.outputs.protection }}
         with:
           retries: 3
           # GITHUB_TOKEN, NOT THE APP TOKEN, and that is the point. Both secrets
@@ -1031,8 +1061,8 @@ jobs:
           script: |
             const issue = context.payload.issue.number;
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const agentOutcome = '${{ needs.implement.outputs.agent }}';
-            const staged = '${{ needs.implement.outputs.staged }}' === 'success';
+            const agentOutcome = process.env.AGENT_OUTCOME;
+            const staged = process.env.STAGED === 'success';
             const app = process.env.APP_SLUG ? `\`${process.env.APP_SLUG}\` GitHub App` : 'agent GitHub App';
             const toolchainSteps = process.env.TOOLCHAIN_STEPS || 'the toolchain setup';
             // `failure` and `skipped` are different answers. The gate REFUSING
@@ -1041,7 +1071,7 @@ jobs:
             // dead credential, not an unprotected branch. Collapsing both into
             // `!== 'success'` told a rotated private key that `main` needed
             // branch protection it already had.
-            const protection = '${{ needs.implement.outputs.protection }}';
+            const protection = process.env.PROTECTION;
             const cause = protection === 'failure' ? 'protection'
               : protection === 'cancelled' ? 'cancelled'
               : protection !== 'success' ? 'credential'
