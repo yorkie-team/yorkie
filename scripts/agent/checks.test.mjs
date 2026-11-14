@@ -1910,6 +1910,9 @@ test("agent-implement's no-PR report finds the acknowledgement under the login t
   assert.equal(await posts([ackBy(login), report]), 0, "a report already made since the acknowledgement must not be repeated");
   // A report marker is believed only from this step's own login.
   assert.equal(await posts([ackBy(login), { ...report, user: { login } }]), 1, "a marker under the App's login must not suppress the report");
+  // An "On it" from anyone else is not an acknowledgement: it must not open a
+  // window that hides the report already made since the real one.
+  assert.equal(await posts([ackBy(login), report, ackBy("someone")]), 0, "a look-alike acknowledgement must not reopen the window");
 });
 
 // --- agent-implement's trust boundary, run rather than read ---------------------
@@ -2134,6 +2137,13 @@ async function implementBoundaryProblems(text) {
     const asked = m.lines.map((l) => /^\s+permission-([a-z-]+):\s*(\S+)/.exec(l)).filter(Boolean).map((x) => `${x[1]}: ${x[2]}`);
     if (asked.join() !== "contents: write") problems.add(`the agent's own token asks for ${asked.join(", ") || "the installation's full scope"}, not contents: write alone`);
   }
+  // The pre-agent token's scopes, exactly: it reads protection and answers on
+  // the issue, and never holds `contents: write` (the boundary table says so).
+  for (const m of mints.filter((m) => m.id === "app-token")) {
+    const asked = m.lines.map((l) => /^\s+permission-([a-z-]+):\s*(\S+)/.exec(l)).filter(Boolean).map((x) => `${x[1]}: ${x[2]}`).sort();
+    const want = ["administration: read", "contents: read", "issues: write", "pull-requests: read"];
+    if (asked.join() !== want.join()) problems.add(`the pre-agent token asks for ${asked.join(", ")}, not ${want.join(", ")}`);
+  }
   const wide = mints.filter((m) => m.id !== narrow).map((m) => {
     const at = m.id ? st.findIndex((s) => /installation\/token/.test(s.run ?? "") && (s.ghToken ?? "") === `\${{ steps.${m.id}.outputs.token }}`) : -1;
     return { mint: m, mintAt: st.indexOf(m), revokeAt: at };
@@ -2237,7 +2247,11 @@ async function implementBoundaryProblems(text) {
   // takes it, in each job, and a failed check stops what would use it.
   const NUMERIC = /case "\$(ISSUE(?:_NUMBER)?)" in\n\s*''\|\*\[!0-9\]\*\) [^\n]*exit 1 ;;/;
   for (const j of [implement, finish]) {
-    const checkAt = j.steps.findIndex((s) => NUMERIC.test(s.run ?? "") && !s.failOpen);
+    // The check is of the number the steps use, not of whatever its env says.
+    const checkAt = j.steps.findIndex((s) => {
+      const m = NUMERIC.exec(s.run ?? "");
+      return m && !s.failOpen && implKey(s.lines, 10, m[1]) === "${{ github.event.issue.number || github.event.inputs.issue_number }}";
+    });
     const firstUse = j.steps.findIndex((s, i) => i !== checkAt && /github\.event\.inputs\.issue_number/.test(s.text));
     if (checkAt < 0) problems.add(`${j.name} never checks that the issue number is a number`);
     else if (firstUse >= 0 && firstUse < checkAt) problems.add(`${j.name} "${j.steps[firstUse].name ?? j.steps[firstUse].id}" takes the issue number before it is checked`);
@@ -2363,6 +2377,8 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     agent_token_widened: ["          permission-contents: write # commit and push the branch, and nothing else\n", "          permission-contents: write # commit and push the branch, and nothing else\n          permission-issues: write\n"],
     verify_warns_only: ["core.setFailed(`@${actor} lacks write access", "core.warning(`@${actor} lacks write access"],
     verify_fail_open_expression: [VERIFY, VERIFY.replace("        uses:", "        continue-on-error: ${{ true }}\n        uses:")],
+    pre_agent_token_widened: ["          permission-issues: write # answer on the issue\n", "          permission-issues: write # answer on the issue\n          permission-pull-requests: write\n          permission-contents: write\n"],
+    number_check_of_a_constant: (t) => t.replace("      - name: Check the issue number\n        env:\n          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}\n", "      - name: Check the issue number\n        env:\n          ISSUE_NUMBER: 1\n"),
     revoke_through_another_shell: [REVOKE_RUN, `        shell: true {0}\n${REVOKE_RUN}`],
     revoke_elsewhere: [REVOKE_RUN, `        working-directory: /tmp\n${REVOKE_RUN}`],
     key_in_a_run_step: [SETUP_NODE, `      - name: Mint by hand\n        env:\n          KEY: \${{ secrets.AGENT_APP_PRIVATE_KEY }}\n        run: node -e 1\n${SETUP_NODE}`],
