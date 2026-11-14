@@ -2141,7 +2141,8 @@ async function implementBoundaryProblems(text) {
   // The agent's own condition names no status function: the implicit
   // `success()` is what stops it after a failed revocation, and any explicit
   // one (`always()`, `cancelled()`, even `success() || …`) can start it past one.
-  if (/\b(?:always|success|failure|cancelled)\s*\(\s*\)/.test(st[agentAt].if ?? "")) problems.add(`the agent step's condition names a status function: ${st[agentAt].if}`);
+  // Case-insensitive: expression function names are.
+  if (/\b(?:always|success|failure|cancelled)\s*\(\s*\)/i.test(st[agentAt].if ?? "")) problems.add(`the agent step's condition names a status function: ${st[agentAt].if}`);
   if (!mints.some((m) => m.id === "app-token")) return ["the pre-agent mint is missing"];
   for (const m of mints.filter((m) => m.id === narrow)) {
     const asked = m.lines.map((l) => /^\s+permission-([a-z-]+):\s*(\S+)/.exec(l)).filter(Boolean).map((x) => `${x[1]}: ${x[2]}`);
@@ -2405,7 +2406,8 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     verify_fail_open_expression: [VERIFY, VERIFY.replace("        uses:", "        continue-on-error: ${{ true }}\n        uses:")],
     pre_agent_token_widened: ["          permission-issues: write # answer on the issue\n", "          permission-issues: write # answer on the issue\n          permission-pull-requests: write\n          permission-contents: write\n"],
     pre_agent_token_contents_write: ["          permission-issues: write # answer on the issue\n", "          permission-issues: write # answer on the issue\n          permission-contents: write\n"],
-    revoke_extra_env: ["          GH_TOKEN: ${{ steps.app-token.outputs.token }}\n        run: gh api -X DELETE installation/token\n", "          GH_TOKEN: ${{ steps.app-token.outputs.token }}\n          GH_HOST: example.invalid\n        run: gh api -X DELETE installation/token\n"],
+    // Anchored on the step, not on neighbouring lines, so an ordinary key added to it does not move the anchor.
+    revoke_extra_env: (t) => t.replace(/( {6}- name: Revoke the pre-agent token\n(?: {8}.*\n)*? {10}GH_TOKEN: [^\n]*\n)/, "$1          GH_HOST: example.invalid\n"),
     number_check_of_a_constant: (t) => t.replace("      - name: Check the issue number\n        env:\n          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}\n", "      - name: Check the issue number\n        env:\n          ISSUE_NUMBER: 1\n"),
     revoke_through_another_shell: [REVOKE_RUN, `        shell: true {0}\n${REVOKE_RUN}`],
     revoke_elsewhere: [REVOKE_RUN, `        working-directory: /tmp\n${REVOKE_RUN}`],
@@ -2441,7 +2443,7 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
       "      agent: ${{ steps.agent.outcome }}\n      app_slug: ${{ needs.route.outputs.app_slug }}\n",
     ],
     reporter_slug_through_implement: ["          APP_SLUG: ${{ needs.route.outputs.app_slug }}\n          TOOLCHAIN_STEPS", "          APP_SLUG: ${{ needs.implement.outputs.app_slug }}\n          TOOLCHAIN_STEPS"],
-    finish_without_route: ["    needs: [route, implement]\n", "    needs: [implement]\n"],
+    finish_without_route: (t) => t.replace(/^( {2}finish:\n {4}needs: )\[[^\]]*\]$/m, "$1[implement]"),
     reporter_posts_outcome: ["${agentOutcome === 'failure' ? 'failed' : 'ended'}", "${agentOutcome}"],
     reporter_slug_unchecked: ["            const app = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '') ? `\\`${process.env.APP_SLUG}\\` GitHub App` : 'agent GitHub App';", "            const app = `\\`${process.env.APP_SLUG}\\` GitHub App`;"],
     no_app_slug_unchecked: ["            const APP = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '')\n              ? '`' + process.env.APP_SLUG + '` GitHub App' : 'agent GitHub App';", "            const APP = '`' + process.env.APP_SLUG + '` GitHub App';"],
@@ -2472,11 +2474,17 @@ test("agent-implement's trust boundary accepts ordinary edits", skipWithout("age
     revoke_gets_an_id: [REVOKE, `${REVOKE}        id: revoke\n`],
     revoke_gets_a_timeout: [REVOKE, `${REVOKE}        timeout-minutes: 2\n`],
     pre_agent_token_reads_more: ["          permission-issues: write # answer on the issue\n", "          permission-issues: write # answer on the issue\n          permission-metadata: read\n"],
-    finish_needs_reordered: ["    needs: [route, implement]\n", "    needs: [implement, route]\n"],
+    finish_needs_reordered: (t) => t.replace(/^( {2}finish:\n {4}needs: )\[([^,\]]+), ([^\]]+)\]$/m, "$1[$3, $2]"),
   };
-  for (const [name, [from, to]] of Object.entries(edits)) {
-    assert.equal(text.split(from).length, 2, `${name}: the anchor is not unique`);
-    assert.deepEqual(await implementBoundaryProblems(text.replace(from, to)), [], `${name} was refused`);
+  for (const [name, edit] of Object.entries(edits)) {
+    let edited;
+    if (typeof edit === "function") edited = edit(text);
+    else {
+      assert.equal(text.split(edit[0]).length, 2, `${name}: the anchor is not unique`);
+      edited = text.replace(edit[0], edit[1]);
+    }
+    assert.notEqual(edited, text, `${name} changed nothing`);
+    assert.deepEqual(await implementBoundaryProblems(edited), [], `${name} was refused`);
   }
 });
 
