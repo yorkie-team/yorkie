@@ -1941,7 +1941,9 @@ function implJobs(text) {
       if: implKey(ls, 8, "if"),
       uses: implKey(ls, 8, "uses"),
       run: implKey(ls, 8, "run"),
-      failOpen: implKey(ls, 8, "continue-on-error") === "true",
+      // Anything but a literal `false` may evaluate true at run time, an
+      // expression included, so it counts as letting a failure through.
+      failOpen: ![undefined, "false"].includes(implKey(ls, 8, "continue-on-error")),
       githubToken: implKey(ls, 10, "github-token"),
       ghToken: implKey(ls, 10, "GH_TOKEN"),
       script: implKey(ls, 10, "script"),
@@ -2007,9 +2009,32 @@ function implRun(job, { event, configured = true, fails = -1, need = () => "", f
 }
 
 const IMPL_WRITES = /\bgithub\.rest\.\w+\.(?:create|update|delete|add|remove|set|lock|merge)\w*\(/;
+const IMPL_REVOKE = "gh api -X DELETE installation/token";
+const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+
+/**
+ * Which repository roles the write-access check's script fails the step for,
+ * by running it. A throw fails a github-script step as surely as `setFailed`.
+ */
+async function implRefusedRoles(script) {
+  const refused = [];
+  for (const permission of ["admin", "maintain", "write", "triage", "read", "none"]) {
+    let failed = false;
+    const core = { setFailed: () => { failed = true; }, info() {}, notice() {}, warning() {}, error() {}, setOutput() {} };
+    const github = { rest: { repos: { getCollaboratorPermissionLevel: async () => ({ data: { permission } }) } } };
+    const context = { payload: { comment: { user: { login: "someone" } } }, repo: { owner: "o", repo: "r" } };
+    try {
+      await new AsyncFunction("github", "context", "core", script)(github, context, core);
+    } catch {
+      failed = true;
+    }
+    if (failed) refused.push(permission);
+  }
+  return refused;
+}
 
 /** Every way agent-implement.yml leaves its trust boundary, as sentences; empty when it holds. */
-function implementBoundaryProblems(text) {
+async function implementBoundaryProblems(text) {
   const problems = new Set();
   const jobs = implJobs(text);
   const implement = jobs.get("implement");
@@ -2017,12 +2042,35 @@ function implementBoundaryProblems(text) {
   if (!implement || !finish) return ["no implement or no finish job"];
   const st = implement.steps;
   const agentAt = st.findIndex((s) => /^anthropics\/claude-code-action@/.test(s.uses ?? ""));
-  const revokeAt = st.findIndex((s) => /\bgh api -X DELETE installation\/token\b/.test(s.run ?? "") && /steps\.app-token\.outputs\.token/.test(s.ghToken ?? ""));
-  const mintAt = st.findIndex((s) => s.id === "app-token");
   const verifyAt = st.findIndex((s) => /getCollaboratorPermissionLevel/.test(s.script ?? ""));
   const admittedAt = st.findIndex((s) => s.id === "admitted");
-  if (agentAt < 0 || mintAt < 0 || verifyAt < 0) return ["the agent step, the pre-agent mint or the write-access check is missing"];
-  if (revokeAt < 0) problems.add("nothing revokes the pre-agent token");
+  if (agentAt < 0 || verifyAt < 0) return ["the agent step or the write-access check is missing"];
+  // EVERY App token minted before the agent is either the agent's own narrow
+  // one or revoked before it starts. Not only `app-token`: a second mint added
+  // beside it lives into the agent's runtime through its action's post step.
+  const narrow = /steps\.([\w-]+)\.outputs\.token/.exec(st[agentAt].text.match(/^\s+github_token:.*$/m)?.[0] ?? "")?.[1];
+  const mints = st.slice(0, agentAt).filter((s) => /^actions\/create-github-app-token@/.test(s.uses ?? ""));
+  if (!mints.some((m) => m.id === "app-token")) return ["the pre-agent mint is missing"];
+  for (const m of mints.filter((m) => m.id === narrow)) {
+    const asked = m.lines.map((l) => /^\s+permission-([a-z-]+):\s*(\S+)/.exec(l)).filter(Boolean).map((x) => `${x[1]}: ${x[2]}`);
+    if (asked.join() !== "contents: write") problems.add(`the agent's own token asks for ${asked.join(", ") || "the installation's full scope"}, not contents: write alone`);
+  }
+  const wide = mints.filter((m) => m.id !== narrow).map((m) => {
+    const at = m.id ? st.findIndex((s) => /installation\/token/.test(s.run ?? "") && (s.ghToken ?? "") === `\${{ steps.${m.id}.outputs.token }}`) : -1;
+    return { mint: m, mintAt: st.indexOf(m), revokeAt: at };
+  });
+  for (const { mint, revokeAt } of wide) {
+    const name = mint.id ?? mint.name ?? "an unnamed mint";
+    if (revokeAt < 0) problems.add(`nothing revokes ${name} before the agent`);
+    // The one command, so its exit status is the revocation's: an `|| true`, a
+    // second command or a token swapped in through the shell all hide a failure.
+    else if (String(st[revokeAt].run).trim() !== IMPL_REVOKE) problems.add(`the revocation of ${name} runs \`${String(st[revokeAt].run).trim()}\`, not \`${IMPL_REVOKE}\` alone`);
+  }
+  // The write-access check must FAIL the step for a role below write, or
+  // every commenter is admitted; it is run here, not read.
+  const refused = await implRefusedRoles(st[verifyAt].script ?? "");
+  if (refused.join() !== "triage,read,none") problems.add(`the write-access check fails the step for [${refused.join(", ")}], not for exactly the roles below write`);
+  if (st[verifyAt].failOpen) problems.add("the write-access check is continue-on-error, so a refusal admits");
   const allSteps = [...jobs.values()].flatMap((j) => j.steps.map((s) => ({ job: j, s })));
   const noApp = allSteps.find(({ s }) => /needs the `' \+ APP_SLUG \+ '` GitHub App/.test(s.script ?? ""));
   const reporter = finish.steps.find((s) => s.name === "Report a run that ended without a PR");
@@ -2050,15 +2098,18 @@ function implementBoundaryProblems(text) {
         const when = `when ${failing} fails (${event}, App ${configured ? "configured" : "missing"})`;
         const run = implRun(implement, { event, configured, fails });
         const o = run.outcome;
-        // 2. Fail-closed revocation: the agent starts only after it succeeded.
-        if (o[agentAt] !== "skipped") {
-          if (revokeAt < 0 || revokeAt > agentAt || o[revokeAt] !== "success") {
-            problems.add(`the agent starts with the pre-agent token's revocation ${revokeAt < 0 ? "absent" : revokeAt > agentAt ? "after it" : o[revokeAt]} ${when}`);
+        for (const { mint, mintAt, revokeAt } of wide) {
+          const name = mint.id ?? mint.name;
+          // 2. Fail-closed revocation: the agent starts only after it succeeded.
+          if (o[agentAt] !== "skipped" && o[mintAt] === "success") {
+            if (revokeAt < 0 || revokeAt > agentAt || o[revokeAt] !== "success") {
+              problems.add(`the agent starts with ${name}'s revocation ${revokeAt < 0 ? "absent" : revokeAt > agentAt ? "after it" : o[revokeAt]} ${when}`);
+            }
           }
-        }
-        // ...and a token that was minted is revoked whatever failed after it.
-        if (o[mintAt] === "success" && fails !== revokeAt && (revokeAt < 0 || o[revokeAt] === "skipped")) {
-          problems.add(`the pre-agent token is left live ${when}`);
+          // ...and a token that was minted is revoked whatever failed after it.
+          if (o[mintAt] === "success" && fails !== revokeAt && (revokeAt < 0 || o[revokeAt] === "skipped")) {
+            problems.add(`${name} is left live ${when}`);
+          }
         }
         // 3. Admission: `finish` runs exactly for a commenter the check admitted.
         const refused = event === "issue_comment" && fails === verifyAt;
@@ -2109,16 +2160,19 @@ function implementBoundaryProblems(text) {
   return [...problems];
 }
 
-test("agent-implement's token, revocation and finish gate hold when its conditions are run", skipWithout("agent-implement.yml"), () => {
-  assert.deepEqual(implementBoundaryProblems(WF("agent-implement.yml")), []);
+test("agent-implement's token, revocation and finish gate hold when its conditions are run", skipWithout("agent-implement.yml"), async () => {
+  assert.deepEqual(await implementBoundaryProblems(WF("agent-implement.yml")), []);
 });
 
-test("agent-implement's trust boundary refuses each named loosening", skipWithout("agent-implement.yml"), () => {
+test("agent-implement's trust boundary refuses each named loosening", skipWithout("agent-implement.yml"), async () => {
   const text = WF("agent-implement.yml");
   const REVOKE = "      - name: Revoke the pre-agent token\n        if: always() && steps.app-token.outcome == 'success'\n";
   const AGENT = "      - name: Run Claude Code\n        if: steps.app.outputs.configured == 'true'\n";
   const ADMIT = '      - name: Record that the commenter was admitted\n        id: admitted\n        run: echo "admitted=true" >> "$GITHUB_OUTPUT"\n';
   const PERMS = "    permissions:\n      contents: read # the trusted checkout of the protection check\n";
+  const REVOKE_RUN = "        run: gh api -X DELETE installation/token\n";
+  const SETUP_NODE = "      - uses: actions/setup-node@v4\n        if: steps.app.outputs.configured == 'true'\n";
+  const VERIFY = "        if: github.event_name == 'issue_comment'\n        uses: actions/github-script@v7\n        with:\n          retries: 3\n          script: |\n            const actor";
   const FINISH_IF = "    if: always() && needs.implement.outputs.admitted == 'true'\n";
   const REPORTER = "        if: always() && github.event_name == 'issue_comment' && needs.implement.outputs.configured == 'true'\n";
   const FINISH_CO = "          sparse-checkout-cone-mode: false\n          persist-credentials: false\n      - uses: actions/setup-node@v4\n        if: always() && needs.implement.outputs.staged == 'success'\n";
@@ -2141,6 +2195,13 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     ambient_comment_in_implement: [ADMIT, `${ADMIT}${NO_APP_IN_IMPLEMENT}`],
     // (b) the revocation
     revoke_fail_open: [REVOKE, `${REVOKE}        continue-on-error: true\n`],
+    revoke_fail_open_expression: [REVOKE, `${REVOKE}        continue-on-error: \${{ true }}\n`],
+    revoke_or_true: [REVOKE_RUN, "        run: gh api -X DELETE installation/token || true\n"],
+    revoke_through_another_variable: [REVOKE_RUN, "        run: GH_TOKEN=$GITHUB_TOKEN gh api -X DELETE installation/token\n"],
+    second_mint_unrevoked: [SETUP_NODE, `      - name: Extra token\n        id: extra-token\n        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0\n        with:\n          app-id: \${{ secrets.AGENT_APP_ID }}\n          private-key: \${{ secrets.AGENT_APP_PRIVATE_KEY }}\n          permission-issues: write\n${SETUP_NODE}`],
+    agent_token_widened: ["          permission-contents: write # commit and push the branch, and nothing else\n", "          permission-contents: write # commit and push the branch, and nothing else\n          permission-issues: write\n"],
+    verify_warns_only: ["core.setFailed(`@${actor} lacks write access", "core.warning(`@${actor} lacks write access"],
+    verify_fail_open_expression: [VERIFY, VERIFY.replace("        uses:", "        continue-on-error: ${{ true }}\n        uses:")],
     revoke_never: [REVOKE, "      - name: Revoke the pre-agent token\n        if: false\n"],
     revoke_only_with_the_agent: [REVOKE, "      - name: Revoke the pre-agent token\n        if: steps.app.outputs.configured == 'true'\n"],
     revoke_removed: (t) => t.replace(/ {6}- name: Revoke the pre-agent token\n(?: {8}.*\n)+/, ""),
@@ -2170,7 +2231,7 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
       edited = text.replace(edit[0], edit[1]);
     }
     assert.notEqual(edited, text, `${name} changed nothing`);
-    assert.ok(implementBoundaryProblems(edited).length > 0, `${name} was accepted`);
+    assert.ok((await implementBoundaryProblems(edited)).length > 0, `${name} was accepted`);
   }
 });
 
