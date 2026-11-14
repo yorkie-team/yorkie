@@ -1,6 +1,13 @@
 import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
 import {
   isTestFile, countCases, testRemovals, serializeTestRemovals, collectTestRemovals, aggregateCommits, roundCommits,
   renderTestRemovals, TEST_REMOVALS_MARKER, capRoundCommits, describeRemoval, ROUND_COMMIT_CAP,
@@ -576,6 +583,44 @@ test("countCases: `todo`/`skip` keys outside a case's options are not disablemen
   ]) assert.equal(countCases(patch).optionsOff, undefined, patch);
 });
 
+test("countCases: `.only` anywhere in the chain, and Jest's prefixed `.each` forms, are focuses", () => {
+  for (const line of [
+    "+  test.only.each([[1], [2]])('row %i', (n) => {",
+    "+  it.only.each`\n",
+    "+describe.only.each([[1]])('suite %i', () => {",
+    "+fdescribe.each([[1]])('suite %i', () => {",
+    "+  fit.each([[1]])('row %i', (n) => {",
+  ]) assert.equal(countCases(line).focused, 1, line);
+  // `fit.each(` is a case too, as `test.each(` is.
+  assert.equal(countCases("+  fit.each([[1]])('row %i', (n) => {").added, 1);
+  // The documented trade-off: a string-titled call to a helper named `fit`
+  // reads as a focused case. Kept, because `fit('title', fn)` is the Jest form.
+  assert.deepEqual(countCases("+  fit('container', 10);"), { removed: 0, added: 1, suitesOff: 0, focused: 1 });
+});
+
+test("countCases: a node:test `{ skip }` option on a suite switches the suite off", () => {
+  assert.deepEqual(countCases("-describe('x', () => {\n+describe('x', { skip: true }, () => {"), { removed: 0, added: 0, suitesOff: 1 });
+  assert.equal(countCases("+describe('x', { todo: 'later' }, () => {").suitesOff, 1);
+  // Wrapped by a formatter, like a case's.
+  assert.equal(countCases("+describe(\n+  'a suite with a long enough title',\n+  { skip: !process.env.CI },\n+  () => {").suitesOff, 1);
+  // An already-skipped suite retitled is not a new switch-off.
+  assert.equal(countCases("-describe('a', { skip: true }, () => {\n+describe('b', { skip: true }, () => {").suitesOff, 0);
+});
+
+test("countCases: an option whose value is falsy switches nothing off", () => {
+  for (const value of ["false", "0", "''", '""', "null", "undefined"]) {
+    assert.equal(countCases(`+test('x', { skip: ${value} }, () => {`).optionsOff, undefined, value);
+    assert.equal(countCases(`+describe('x', { skip: ${value} }, () => {`).suitesOff, 0, value);
+    assert.equal(countCases(`+  test(\n+    'x',\n+    { todo: ${value} },\n+    async () => {`).optionsOff, undefined, `wrapped ${value}`);
+  }
+  // Anything that may be truthy counts: a literal, a reason, an expression,
+  // and a falsy key beside a truthy one.
+  for (const value of ["true", "1", "'flaky'", "!process.env.CI", "isWindows && 'no symlinks'"]) {
+    assert.equal(countCases(`+test('x', { skip: ${value} }, () => {`).optionsOff, 1, value);
+  }
+  assert.equal(countCases("+test('x', { skip: false, todo: 'later' }, () => {").optionsOff, 1);
+});
+
 test("the JavaScript switches stay out of Go and Rust files", () => {
   // A Go comment or string that reads like a focus or an option is not one,
   // and a Go or Rust record carries neither key.
@@ -624,4 +669,110 @@ test("capRoundCommits: commits past the cap are flagged, never silently dropped"
   assert.match(body, new RegExp(`more than ${ROUND_COMMIT_CAP} commits; only the first ${ROUND_COMMIT_CAP} were read`));
   // A truncated record with nothing seen is still believable: it says the round was not fully read.
   assert.equal(collectTestRemovals([bot(body)])[0].truncated, true);
+});
+
+// --- the new rules on real-looking rounds ------------------------------------
+//
+// Hunks as `git diff` prints them, context included, so the evidence that the
+// new switches fire is not only "the old corpora did not change". The same
+// rounds, as a patch file, were run through the record before and after this
+// change: before, all three records were empty.
+const ROUND_FILES = new Map([
+  ["packages/sdk/test/unit/document/tree_split_test.ts", [
+    "@@ -40,7 +40,7 @@ describe('Tree.split', () => {",
+    "     assert.equal(doc.toSortedJSON(), '{\"t\":{\"type\":\"doc\"}}');",
+    "   });",
+    " ",
+    "-  it('splits a paragraph at the caret', async () => {",
+    "+  it.only('splits a paragraph at the caret', async () => {",
+    "     const doc = new Document<{ t: Tree }>('test-doc');",
+    "     doc.update((root) => {",
+    "       root.t = new Tree({ type: 'doc', children: [] });",
+  ].join("\n")],
+  ["scripts/agent/rounds.test.mjs", [
+    "@@ -88,9 +88,13 @@ test(\"findingSimilarity: identical summaries are 1\", () => {",
+    "   assert.equal(findingSimilarity(a, a), 1);",
+    " });",
+    " ",
+    "-test(\"isPagedLatchComment: a maintainer by hand still latches\", () => {",
+    "-  assert.equal(isPagedLatchComment(byMaintainer), true);",
+    "-});",
+    "+test(",
+    "+  \"isPagedLatchComment: a maintainer by hand still latches\",",
+    "+  { todo: \"still reproduces: the maintainer latch is ignored\" },",
+    "+  () => {",
+    "+    assert.equal(isPagedLatchComment(byMaintainer), true);",
+    "+  },",
+    "+);",
+    " ",
+    " test(\"summaryTokens: drops stop words\", () => {",
+  ].join("\n")],
+  ["packages/react/src/useDoc.spec.tsx", [
+    "@@ -12,7 +12,7 @@ import { useDoc } from './useDoc';",
+    " ",
+    "-describe('useDoc', () => {",
+    "+describe('useDoc', { skip: !process.env.YORKIE_RPC }, () => {",
+    "   it('attaches on mount', async () => {",
+    "     const { result } = renderHook(() => useDoc('d'), { wrapper });",
+    "     await waitFor(() => expect(result.current.loading).toBe(false));",
+    "@@ -30,6 +30,6 @@ describe('useDoc', () => {",
+    "   });",
+    " ",
+    "-  it('detaches on unmount', async () => {",
+    "+  it('detaches on unmount', { skip: false }, async () => {",
+    "     const { unmount } = renderHook(() => useDoc('d'), { wrapper });",
+    "     unmount();",
+  ].join("\n")],
+]);
+
+test("a round that focuses a case, gives one a todo, and gates a suite is recorded all three ways", () => {
+  const file = (name) => ({ filename: name, status: "modified", patch: ROUND_FILES.get(name) });
+  const commits = [
+    { sha: "c1", parents: [{}], files: [file("packages/sdk/test/unit/document/tree_split_test.ts"), file("scripts/agent/rounds.test.mjs")] },
+    { sha: "c2", parents: [{}], files: [file("packages/react/src/useDoc.spec.tsx")] },
+  ];
+  assert.deepEqual(aggregateCommits(commits), [
+    { file: "packages/sdk/test/unit/document/tree_split_test.ts", deleted: false, removed: 1, added: 1, suitesOff: 0, focused: 1 },
+    { file: "scripts/agent/rounds.test.mjs", deleted: false, removed: 1, added: 1, suitesOff: 0, optionsOff: 1 },
+    // The suite's `skip` is an expression and counts; the case's `{ skip: false }` does not.
+    { file: "packages/react/src/useDoc.spec.tsx", deleted: false, removed: 1, added: 1, suitesOff: 1 },
+  ]);
+});
+
+test("CLI: a round of more than the cap posts a record that says it was truncated", (t) => {
+  // `gh` is a stub on PATH that answers the four reads the CLI makes and keeps
+  // what it is asked to post. 51 of the PR's own commits, each adding a focus.
+  const dir = mkdtempSync(path.join(tmpdir(), "test-removals-cli-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const n = ROUND_COMMIT_CAP + 1;
+  const shas = Array.from({ length: n }, (_, i) => i.toString(16).padStart(40, "c"));
+  writeFileSync(path.join(dir, "shas.json"), JSON.stringify(shas));
+  const posted = path.join(dir, "posted.md");
+  const gh = path.join(dir, "gh");
+  writeFileSync(gh, `#!${process.execPath}
+const fs = require("node:fs");
+const shas = JSON.parse(fs.readFileSync(${JSON.stringify(path.join(dir, "shas.json"))}, "utf8"));
+const args = process.argv.slice(2).join(" ");
+const file = { filename: "packages/x/a.test.ts", status: "modified", patch: "@@ -1 +1 @@\\n-  it('a', () => {\\n+  it.only('a', () => {" };
+if (args.startsWith("pr comment")) fs.writeFileSync(${JSON.stringify(posted)}, fs.readFileSync(0, "utf8"));
+else if (args.includes("--jq {status")) console.log(JSON.stringify({ status: "ahead", behind: 0 }));
+else if (args.includes("/compare/")) for (const sha of shas) console.log(JSON.stringify({ sha, n: 1 }));
+else if (args.includes("/pulls/")) for (const sha of shas) console.log(JSON.stringify(sha));
+else if (args.includes("/commits/")) console.log(JSON.stringify(file));
+else process.exit(1);
+`);
+  chmodSync(gh, 0o755);
+  const before = "a".repeat(40);
+  const after = "b".repeat(40);
+  const run = spawnSync(process.execPath, [path.join(HERE, "test-removals.mjs"), "post", "7", "--before", before, "--after", after], {
+    encoding: "utf8",
+    env: { ...process.env, PATH: `${dir}${path.delimiter}${process.env.PATH}` },
+  });
+  assert.equal(run.status, 0, run.stderr);
+  assert.ok(existsSync(posted), `nothing was posted: ${run.stderr}`);
+  const [rec] = collectTestRemovals([bot(readFileSync(posted, "utf8"))]);
+  assert.equal(rec.truncated, true);
+  // Only the first ROUND_COMMIT_CAP commits were read, and each one's focus is netted into one file.
+  assert.deepEqual(rec.removals, [{ file: "packages/x/a.test.ts", deleted: false, removed: ROUND_COMMIT_CAP, added: ROUND_COMMIT_CAP, suitesOff: 0, focused: ROUND_COMMIT_CAP }]);
+  assert.match(readFileSync(posted, "utf8"), /only the first 50 were read/);
 });

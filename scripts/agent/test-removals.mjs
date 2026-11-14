@@ -258,23 +258,43 @@ const isGo = (file) => GO_RULES && /\.go$/.test(str(file));
 // one is not a removal. `.skip`, `.todo`, `.skipIf(…)`, `.runIf(…)` and Jest's
 // `xit`/`xtest` may not run: a case rewritten to one stops matching, which
 // counts it removed.
-const CASE = /^[-+]\s*(?:(?:it|test)(?:\.(?:only|each|concurrent|fails|failing|sequential|for))*\s*[(`]|fit\s*\(\s*['"`])/;
+const CASE = /^[-+]\s*(?:(?:it|test)(?:\.(?:only|each|concurrent|fails|failing|sequential|for))*\s*[(`]|fit\s*\(\s*['"`]|fit(?:\.\w+)+\s*[(`])/;
 // A suite that may not run. Counted apart from cases and never netted against
 // added ones: one `describe.skip` silences every case under it without those
 // lines changing, so "one suite off, one case added" must still be reported.
 // Jest's `xdescribe` is the same switch spelled as a prefix.
 const SUITE_OFF = /^[-+]\s*(?:describe(?:\.\w+)*\.(?:skip|todo|skipIf|runIf)|xdescribe(?:\.\w+)*)\s*[(`]/;
-// A FOCUS: the focused case runs, and every sibling silently stops. Jest has
+// A FOCUS: the focused case runs, and every sibling silently stops. `.only`
+// anywhere in the chain (`test.only.each(`, `it.only.each\``), and Jest's
+// prefixed spellings with or without one (`fdescribe.each(`, `fit.each(`). Jest has
 // no CI guard (`CI=true jest --ci` reports "1 skipped, 1 passed", exit 0), and
 // a repository need not lint for it. Vitest rejects `.only` under CI, but
 // counting it everywhere costs nothing. Counted apart from cases and netted
 // only against itself, like a suite switched off.
-const FOCUS = /^[-+]\s*(?:(?:it|test|describe)(?:\.\w+)*\.only|fdescribe|fit(?=\s*\(\s*['"`]))\s*[(`]/;
+const FOCUS = /^[-+]\s*(?:(?:it|test|describe)(?:\.\w+)*\.only(?:\.\w+)*|fdescribe(?:\.\w+)*|fit(?:\.\w+)+|fit(?=\s*\(\s*['"`]))\s*[(`]/;
 // node:test's OPTION form, `test("x", { todo: … }, fn)` / `{ skip: … }`: the
 // case is skipped, or still runs and a failure no longer fails the suite. It is
 // the form a node:test file has instead of `.fails`, so a newly added one is
-// evidence, netted only against lines that already carried it.
-const OPTION_OFF = /,\s*\{[^}]*\b(?:todo|skip)\s*:/;
+// evidence, netted only against lines that already carried it. On a suite,
+// `describe("x", { skip: … }, fn)`, it switches the suite off. The object is
+// the first argument after the title; `optionOn` reads its keys.
+const OPTION_OBJECT = /,\s*(\{[^}]*)/;
+const SUITE_OPEN = /^[-+]\s*describe(?:\.\w+)*\s*\(/;
+// A `todo` / `skip` key and the value up to the next `,` or `}`.
+const OPTION_ENTRY = /(?:^|[{,])\s*(?:todo|skip)\s*:\s*([^,}]*)/g;
+// The values that leave the case running: node:test reads the option as
+// truthy or not, so `false`, `0`, an empty string, `null` and `undefined`
+// switch nothing off. Anything else — `true`, a reason string, an expression
+// such as `!process.env.CI` — may, and counts.
+const OPTION_FALSY = /^(?:false|0|''|""|``|null|undefined|void 0)$/;
+
+/** Does this text carry a `todo` / `skip` key whose value may be truthy? */
+function optionOn(text) {
+  for (const m of str(text).matchAll(OPTION_ENTRY)) {
+    if (!OPTION_FALSY.test(m[1].trim())) return true;
+  }
+  return false;
+}
 // The same option once a formatter has WRAPPED the call: a long title and an
 // option overflow the line, and Prettier puts the opener, the title, the
 // options and the callback on lines of their own, the object itself broken
@@ -291,8 +311,8 @@ const OPTION_OFF = /,\s*\{[^}]*\b(?:todo|skip)\s*:/;
 // a quote, then the object — so a `test.each` table, a look-alike call or an
 // object in the body never counts (`wrappedOptions`).
 const WRAPPED_OPENER = /^\s*(?:it|test)(?:\.(?:only|concurrent|fails|failing|sequential))*\s*\(\s*$/;
+const WRAPPED_SUITE_OPENER = /^\s*describe(?:\.only)?\s*\(\s*$/;
 const WRAPPED_TITLE = /^\s*['"`]/;
-const OPTION_KEY = /(?:^|[{,])\s*(?:todo|skip)\s*:/;
 
 /**
  * Options on WRAPPED case calls that a patch adds and removes. Each side of the
@@ -304,7 +324,8 @@ const OPTION_KEY = /(?:^|[{,])\s*(?:todo|skip)\s*:/;
  * which nets to zero like the one-line form.
  */
 function wrappedOptions(patch) {
-  const out = { added: 0, removed: 0 };
+  // `suiteAdded` / `suiteRemoved`: the same option on a wrapped `describe(`.
+  const out = { added: 0, removed: 0, suiteAdded: 0, suiteRemoved: 0 };
   const sides = { "+": { phase: 0 }, "-": { phase: 0 } };
   for (const line of str(patch).split("\n")) {
     if (line.startsWith("---") || line.startsWith("+++")) continue;
@@ -321,7 +342,8 @@ function wrappedOptions(patch) {
       const changed = mark === side;
       const hit = () => {
         if (changed && !st.counted) {
-          out[side === "+" ? "added" : "removed"]++;
+          const plus = side === "+";
+          out[st.suite ? (plus ? "suiteAdded" : "suiteRemoved") : (plus ? "added" : "removed")]++;
           st.counted = true;
         }
       };
@@ -332,7 +354,7 @@ function wrappedOptions(patch) {
         st.phase = 0;
         st.counted = false;
         if (/^\s*\{.*\}\s*,?\s*$/.test(text)) {
-          if (OPTION_KEY.test(text)) hit();
+          if (optionOn(text)) hit();
           continue;
         }
         if (/^\s*\{\s*$/.test(text)) {
@@ -343,14 +365,17 @@ function wrappedOptions(patch) {
       } else if (st.phase === 3) {
         // One key per line at the object's own depth; a nested object's keys
         // are not the case's options.
-        if (st.depth === 0 && /^\s*(?:todo|skip)\s*:/.test(text)) hit();
+        if (st.depth === 0 && optionOn(text)) hit();
         const opens = (text.match(/[{[(]/g) ?? []).length;
         const closes = (text.match(/[}\])]/g) ?? []).length;
         st.depth += opens - closes;
         if (st.depth < 0) st.phase = 0;
         continue;
       }
-      if (WRAPPED_OPENER.test(text)) st.phase = 1;
+      if (WRAPPED_OPENER.test(text) || WRAPPED_SUITE_OPENER.test(text)) {
+        st.phase = 1;
+        st.suite = WRAPPED_SUITE_OPENER.test(text);
+      }
     }
   }
   return out;
@@ -410,6 +435,7 @@ function tally(patch, { file = "", status = "" } = {}) {
   if (!go && JS_RULES) {
     const wrapped = wrappedOptions(patch);
     optNet += wrapped.added - wrapped.removed;
+    offNet += wrapped.suiteAdded - wrapped.suiteRemoved;
   }
   for (const line of str(patch).split("\n")) {
     if (line.startsWith("---") || line.startsWith("+++")) continue;
@@ -431,8 +457,12 @@ function tally(patch, { file = "", status = "" } = {}) {
         offNet += sign;
         continue;
       }
+      if (SUITE_OPEN.test(line)) {
+        if (optionOn(OPTION_OBJECT.exec(line)?.[1])) offNet += sign;
+        continue;
+      }
       if (!CASE.test(line)) continue;
-      if (OPTION_OFF.test(line)) optNet += sign;
+      if (optionOn(OPTION_OBJECT.exec(line)?.[1])) optNet += sign;
     } else {
       continue;
     }
