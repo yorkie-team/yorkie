@@ -1,7 +1,9 @@
 import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkPassed, allRequiredPassed, ciRunDecision, ciConclusion, ciRunToRerun, ciRunToAwait, definesCi, CHECK_PRODUCER_APP_SLUG, CI_DEFINING_PATHS, CI_WORKFLOW_PATH, CI_WORKFLOW_FILE, DEFAULT_REVIEW_CHECKS } from "./checks.mjs";
@@ -482,6 +484,102 @@ test("the no-commit page fires on a timed-out fixer, and only where `stalled` wo
   // would page on every clean run.
   assert.match(yml, /^ {4}outputs:\n {6}conclusion: /m,
     "the ci job must declare `conclusion`, or the guard above pages on every clean run");
+});
+
+// The no-commit decision is two shell steps in `fix-report` — the one that reads
+// the head after the fix and says whether it `advanced`, and the page, which
+// runs only when it did not — and every supersede the page must stay quiet for
+// is a branch in them. So run them. `gh` and `node` are stubs on PATH; the
+// outcome is whether the `<!-- agent-review-paged -->` latch was posted.
+// wafflebase#1099 is the row that motivated the REVIEWED check: a push landed
+// between the panel and the fixer, so BEFORE == AFTER, and the concurrency
+// cancel read as a timed-out fixer.
+test("the no-commit page stays quiet for every supersede, and pages otherwise", () => {
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const yml = readFileSync(path.join(HERE, "..", "..", ".github", "workflows", "agent-review-panel.yml"), "utf8");
+  const script = (name) => {
+    const at = yml.indexOf(`- name: ${name}\n`);
+    assert.ok(at > 0, `no step named ${name}`);
+    const rest = yml.slice(at);
+    const step = rest.slice(0, rest.slice(1).search(/\n {6}- (name|uses):/) + 1);
+    assert.match(step, /run: \|\n/, `${name} has no run block`);
+    return step.slice(step.indexOf("run: |\n") + "run: |\n".length).split("\n").map((l) => l.replace(/^ {10}/, "")).join("\n");
+  };
+  const readAfter = script("Read the branch head after the fix");
+  const page = script("Page if the fix produced no commit");
+  // The page's `if:` is the other half of the decision: it runs only when the
+  // head did not advance (and the fixer ran — the truth table above).
+  assert.match(yml, /- name: Page if the fix produced no commit\n {8}if: >-\n {10}always\(\) &&\n {10}steps\.after\.outputs\.advanced != 'true' &&/,
+    "the page must run only when the head did not advance");
+
+  const dir = mkdtempSync(path.join(tmpdir(), "page-step-"));
+  try {
+    const bin = path.join(dir, "bin");
+    mkdirSync(bin);
+    const stub = (name, sh) => {
+      writeFileSync(path.join(bin, name), `#!/bin/sh\n${sh}\n`);
+      chmodSync(path.join(bin, name), 0o755);
+    };
+    const log = path.join(dir, "calls");
+    const out = path.join(dir, "output");
+    stub("gh", [
+      'case "$*" in',
+      `  *git/ref/heads/*) [ -n "$STUB_AFTER" ] && printf '%s\\n' "$STUB_AFTER" || exit 1;;`,
+      `  *actions/runs?head_sha=*) [ "$STUB_CI_RUNS" = fail ] && exit 1; printf '%s\\n' "$STUB_CI_RUNS";;`,
+      `  *actions/runs/*) printf '%s\\n' "$STUB_NOW_ATTEMPT";;`,
+      `  *) echo "gh $*" >> "${log}"; cat >> "${log}";;`,
+      "esac",
+    ].join("\n"));
+    stub("node", `echo "node $*" >> "${log}"`);
+
+    const bash = (code, env) => {
+      const r = spawnSync("bash", ["-e", "-c", code], {
+        env: {
+          PATH: `${bin}:${process.env.PATH}`, GITHUB_OUTPUT: out, GITHUB_SERVER_URL: "https://github.com",
+          GITHUB_REPOSITORY: "o/r", GITHUB_RUN_ID: "7", ...env,
+        },
+        encoding: "utf8",
+      });
+      assert.equal(r.status, 0, r.stderr);
+    };
+    let posted = "";
+    const run = ({ before, after, reviewed, outcome, ciAttempt = "1", nowAttempt = "1", ciRuns = "1" }) => {
+      writeFileSync(log, "");
+      writeFileSync(out, "");
+      bash(readAfter, { BRANCH: "b", BEFORE: before, STUB_AFTER: after });
+      const got = Object.fromEntries(readFileSync(out, "utf8").trim().split("\n").map((l) => l.split("=")));
+      if (got.advanced === "true") return false;
+      bash(page, {
+        PR: "1", BEFORE: before, AFTER: got.sha, REVIEWED: reviewed, FIXER_OUTCOME: outcome,
+        CI_RUN_ID: "9", CI_ATTEMPT: ciAttempt, STUB_NOW_ATTEMPT: nowAttempt, STUB_CI_RUNS: ciRuns,
+      });
+      posted = readFileSync(log, "utf8");
+      return posted.includes("<!-- agent-review-paged -->");
+    };
+
+    for (const [why, args, pages] of [
+      ["the fixer pushed", { before: "aaa", after: "bbb", reviewed: "aaa", outcome: "success" }, false],
+      ["the fixer pushed, then hit the wall", { before: "aaa", after: "bbb", reviewed: "aaa", outcome: "cancelled" }, false],
+      ["another push landed before the fixer started (wafflebase#1099)", { before: "bbb", after: "bbb", reviewed: "aaa", outcome: "cancelled" }, false],
+      ["another push landed, fixer gave up", { before: "bbb", after: "bbb", reviewed: "aaa", outcome: "success" }, false],
+      ["a CI re-run superseded the round", { before: "aaa", after: "aaa", reviewed: "aaa", outcome: "cancelled", nowAttempt: "2" }, false],
+      ["the fixer produced nothing", { before: "aaa", after: "aaa", reviewed: "aaa", outcome: "success" }, true],
+      ["the fixer hit the wall with nothing pushed", { before: "aaa", after: "aaa", reviewed: "aaa", outcome: "cancelled" }, true],
+      ["the head could not be read", { before: "aaa", after: "", reviewed: "aaa", outcome: "cancelled" }, true],
+      ["the reviewed commit is unknown", { before: "aaa", after: "aaa", reviewed: "", outcome: "success" }, true],
+      // The other push started no CI (`[skip ci]`, a GITHUB_TOKEN push): no
+      // fresher round exists, and the sweep does not restart `agent:fixing`.
+      ["another push landed and started no CI", { before: "bbb", after: "bbb", reviewed: "aaa", outcome: "cancelled", ciRuns: "0" }, true],
+      ["another push landed, its CI could not be read", { before: "bbb", after: "bbb", reviewed: "aaa", outcome: "success", ciRuns: "fail" }, true],
+    ]) {
+      assert.equal(run(args), pages, `${why}: expected ${pages ? "a page" : "no page"}`);
+    }
+    // And the page says why no round followed.
+    run({ before: "bbbbbbbbbbbb", after: "bbbbbbbbbbbb", reviewed: "aaaaaaaaaaaa", outcome: "success", ciRuns: "0" });
+    assert.match(posted, /moved to `bbbbbbbbb` \(not the `aaaaaaaaa` this round reviewed\) by another push, and no CI run was found/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 // --- "@claude fix": routing, gate order, and reporting ----------------------

@@ -2882,7 +2882,8 @@ jobs:
       #
       # A CONCURRENCY SUPERSEDE DOES NOT PAGE. The `active` group is only claimed
       # by a fresh `ci.yml` workflow_run, which requires a push — so a superseded
-      # round has always advanced the head. Data, not job status.
+      # round has always moved the head: during the fix (`advanced`), or before
+      # the fix job read BEFORE (the REVIEWED check below). Data, not job status.
       - name: Page if the fix produced no commit
         if: >-
           always() &&
@@ -2902,7 +2903,38 @@ jobs:
           ACTIONS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CI_RUN_ID: ${{ github.event.workflow_run.id }}
           CI_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          # The commit this round reviewed.
+          REVIEWED: ${{ github.event.workflow_run.head_sha }}
         run: |
+          # SOMEBODY ELSE PUSHED. The head left the commit this round reviewed,
+          # but not during the fix: it moved before the fix job read BEFORE, so
+          # BEFORE already equals AFTER and `advanced` cannot tell. That push
+          # starts its own CI and its own panel round (whose run is what usually
+          # cancels this one, through the `active` concurrency group), so a
+          # fresher round owns this PR. Paging here would latch
+          # `<!-- agent-review-paged -->` and freeze that round instead
+          # (wafflebase#1099: a push landed just before the fixer started, and
+          # the fixer was paged as timed out 25 seconds into its run). An empty
+          # AFTER or REVIEWED is not evidence of a push, and pages.
+          #
+          # ONLY IF THAT PUSH STARTED CI. A push that starts none — `[skip ci]`
+          # in its message, or one made with a workflow's GITHUB_TOKEN — starts
+          # no round either, and nothing else would notice: the PR stays on
+          # `agent:fixing`, and the out-of-run sweep (loop-sweep.mjs) restarts
+          # only PRs left on `agent:reviewing`. So a CI run for AFTER must
+          # exist, or this pages. If the push started one, it exists by now:
+          # GitHub creates it within seconds of the push, and the push came
+          # before the fix job read BEFORE, a whole fix round ago. An unread
+          # list is not evidence of a run, and pages.
+          MOVED=""
+          if [ -n "$AFTER" ] && [ -n "$REVIEWED" ] && [ "$AFTER" != "$REVIEWED" ]; then
+            CI_RUNS="$(GH_TOKEN="$ACTIONS_TOKEN" gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$AFTER&per_page=100" --jq '[.workflow_runs[] | select(.path == ".github/workflows/ci.yml")] | length' 2>/dev/null || true)"
+            if [ -n "$CI_RUNS" ] && [ "$CI_RUNS" != "0" ]; then
+              echo "Branch head moved off the reviewed commit ($REVIEWED → $AFTER) by another push, and CI is running for it — a fresher round owns this PR. Not paging."
+              exit 0
+            fi
+            MOVED=" The branch head moved to \`${AFTER:0:9}\` (not the \`${REVIEWED:0:9}\` this round reviewed) by another push, and no CI run was found for it, so no fresher round will pick this PR up either."
+          fi
           # A CI RE-RUN IS THE ONE SUPERSEDE THAT LEAVES THE HEAD UNCHANGED, so
           # the head check cannot see it — and a page written through it is worse
           # than silence. The page body carries `<!-- agent-review-paged -->`,
@@ -2938,7 +2970,7 @@ jobs:
           fi
           printf '%s\n' \
             '<!-- agent-review-paged -->' \
-            "🛑 The fix agent did not advance the branch head, so the requested changes were not applied and the loop cannot re-trigger itself (no push → no new CI → no new panel). $CAUSE **A human should take over** on this PR." \
+            "🛑 The fix agent did not advance the branch head, so the requested changes were not applied and the loop cannot re-trigger itself (no push → no new CI → no new panel). $CAUSE$MOVED **A human should take over** on this PR." \
             '' \
             "Where to look: [this run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) → job \`fix\`, step \"Address panel findings\"; a fixer transcript, when one was captured, is in the \`claude-fix-execution-output\` artifact (its upload warns instead of failing when the fixer died before writing one)." \
             '' \

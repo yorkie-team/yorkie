@@ -1,9 +1,12 @@
 import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
+import { FIXTURE_CONFIG_DIR } from "./fixtures/use-fixture-config.mjs";
 import {
   askStructured,
   assertAllowedTools,
@@ -88,6 +91,50 @@ test("assertAllowedTools: refuses MCP tool names", () => {
   for (const t of ["mcp__server__exec", "mcp__workspace__bash", "mcp__*"]) {
     assert.throws(() => assertAllowedTools([t]), /is not permitted/, `${t} must be refused`);
   }
+});
+
+test("the fixture permits no MCP tool, so every MCP name is refused", async () => {
+  const { PERMITTED_MCP_TOOLS } = await import("./ask.mjs");
+  assert.deepEqual(PERMITTED_MCP_TOOLS, []);
+});
+
+test("ask.permittedMcpTools: the allow-list is the repository's, matched exactly", (t) => {
+  // Under a configuration that names two in-process tools: those two are
+  // granted, by exact name only, and reach the session through `mcpServers`
+  // and `allowedTools`, never through `tools`.
+  const dir = mkdtempSync(path.join(tmpdir(), "harness-ask-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  cpSync(FIXTURE_CONFIG_DIR, dir, { recursive: true });
+  const config = JSON.parse(readFileSync(path.join(dir, "config.json"), "utf8"));
+  config.ask.permittedMcpTools = ["mcp__fixture__run", "mcp__fixture__ui"];
+  writeFileSync(path.join(dir, "config.json"), JSON.stringify(config));
+  const module = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), "ask.mjs")).href;
+  const body = `
+    import * as ask from ${JSON.stringify(module)};
+    const refused = (t) => { try { ask.assertAllowedTools(["Read", t]); return false; } catch { return true; } };
+    const options = ask.buildSessionOptions({
+      systemPrompt: "s", model: "m", repo: "/r", schema: {}, allowedTools: ["Read", "mcp__fixture__run"],
+      mcpServers: { fixture: {} },
+    });
+    console.log(JSON.stringify({
+      permitted: ask.PERMITTED_MCP_TOOLS,
+      granted: ask.assertAllowedTools(["Read", "mcp__fixture__run", "mcp__fixture__ui"]),
+      refused: ["mcp__fixture__exec", "mcp__fixture__*", "mcp__fixture", "mcp__fixture__run ", "mcp__other__run"].map(refused),
+      tools: options.tools,
+      allowedTools: options.allowedTools,
+    }));`;
+  const run = spawnSync(process.execPath, ["--input-type=module", "-e", body], {
+    encoding: "utf8",
+    env: { ...process.env, AGENT_HARNESS_CONFIG_DIR: dir },
+  });
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(JSON.parse(run.stdout), {
+    permitted: ["mcp__fixture__run", "mcp__fixture__ui"],
+    granted: ["Read", "mcp__fixture__run", "mcp__fixture__ui"],
+    refused: [true, true, true, true, true],
+    tools: ["Read"],
+    allowedTools: ["Read", "mcp__fixture__run"],
+  });
 });
 
 test("assertAllowedTools: refuses non-canonical spellings rather than repairing them", () => {

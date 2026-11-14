@@ -1,6 +1,12 @@
 import "./fixtures/use-fixture-config.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { FIXTURE_CONFIG_DIR } from "./fixtures/use-fixture-config.mjs";
 
 import {
   redactSecrets,
@@ -10,6 +16,8 @@ import {
   classifyInfraError,
   publicInfraReason,
   INFRA_CODES,
+  EXTRA_PATTERNS,
+  compileExtraPattern,
 } from "./redact.mjs";
 import { MAX_SLOTS } from "./token-pool.mjs";
 import { classifyResult } from "./ask.mjs";
@@ -398,4 +406,126 @@ test("redaction still does not swallow ordinary identifiers", () => {
   // is why the field name is required rather than the shape.
   const text = "commit 3Zx9KpQmRt7VnWsYbLdFgH on branch agent/fix-tree-split, run 12345678";
   assert.equal(redactSecrets(text, { extra: [] }), text);
+});
+
+// --- a repository's own credential shapes (`redact.extraPatterns`) --------------
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const PREFIXED = String.raw`\bwfb_[A-Za-z0-9_-]+`;
+
+/** Run `body` (an ES module's text) with `redact.extraPatterns` set to `patterns`. */
+function underPatterns(t, patterns, body) {
+  const dir = mkdtempSync(path.join(tmpdir(), "harness-redact-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  cpSync(FIXTURE_CONFIG_DIR, dir, { recursive: true });
+  const config = JSON.parse(readFileSync(path.join(dir, "config.json"), "utf8"));
+  config.redact.extraPatterns = patterns;
+  writeFileSync(path.join(dir, "config.json"), JSON.stringify(config));
+  const module = pathToFileURL(path.join(HERE, "redact.mjs")).href;
+  const run = spawnSync(process.execPath, ["--input-type=module", "-e", `import * as redact from ${JSON.stringify(module)};\n${body}`], {
+    encoding: "utf8",
+    env: { ...process.env, AGENT_HARNESS_CONFIG_DIR: dir },
+  });
+  assert.equal(run.status, 0, run.stderr);
+  return run.stdout;
+}
+
+test("the fixture names no extra pattern, so a prefixed product key is left to the other layers", () => {
+  // The core's own behaviour, unchanged: no shape rule for any product's keys.
+  // A short prefixed key below the entropy floor passes, exactly as before the
+  // key was read; a repository that wants it masked says so in its config.
+  assert.deepEqual(EXTRA_PATTERNS, []);
+  assert.equal(redactSecrets("key wfb_live_abc123 rejected", { extra: [] }), "key wfb_live_abc123 rejected");
+});
+
+test("extraPatterns: masks the repository's shape whole, as an API key, and leaves the prose", () => {
+  const patterns = [compileExtraPattern(PREFIXED)];
+  const cases = [
+    ["error: wfb_live_AbCdEf123456 rejected", "error: <REDACTED_API_KEY> rejected"],
+    ["key wfb_zzz999aaa", "key <REDACTED_API_KEY>"],
+    // The continuation the built-in shapes carry: a key broken by stray spaces.
+    ["key wfb_live_AbC   dEf12345678 rest", "key <REDACTED_API_KEY> rest"],
+    // Not part of a longer word: `\b` is the repository's to write, and it did.
+    ["xwfb_live_AbCdEf123456", "xwfb_live_AbCdEf123456"],
+  ];
+  for (const [input, want] of cases) {
+    assert.equal(redactSecrets(input, { extra: [], extraPatterns: patterns }), want, input);
+  }
+});
+
+test("extraPatterns: an entry changes only the text it matches", () => {
+  // Every string the counterweight test above keeps intact is kept intact with
+  // a pattern on, and every built-in label is the same: the pattern adds a mask,
+  // it never removes or relabels one.
+  const patterns = [compileExtraPattern(PREFIXED)];
+  const corpus = [
+    "commit ffbee7272a882e305161b6deb4367432cdd522fa failed to apply",
+    "run 8163e7ad-d653-4f7c-b7c9-0857a0a86759 timed out after 900s",
+    "Header 'Authorization' has invalid value: sk-ant-oat01-AbC dEf123456",
+    "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc123signature",
+    "token ghp_AbCdEfGhIjKlMnOpQrStUv1234 and secret_key: 3Zx9KpQmRt7VnWsYbLdFgH",
+  ];
+  for (const text of corpus) {
+    assert.equal(redactSecrets(text, { extra: [], extraPatterns: patterns }), redactSecrets(text, { extra: [] }), text);
+  }
+});
+
+test("extraPatterns: a pattern for a key's prefix masks the whole key, past every later layer", () => {
+  // The layers after this one treat a value starting `<REDACTED` as done, so a
+  // label over only the prefix would publish the rest of the key: worse than
+  // no pattern at all, where Bearer and the field names would have caught it.
+  const patterns = [compileExtraPattern(String.raw`\bwfb_[a-z]+`)];
+  const cases = [
+    ["Bearer wfb_abcd1234efgh5678", "Bearer <REDACTED_API_KEY>"],
+    ["password: wfb_abcd1234efgh", "password: <REDACTED_API_KEY>"],
+    ['{"key":"wfb_abcd1234","n":1}', '{"key":"<REDACTED_API_KEY>","n":1}'],
+    ["see xwfb_abcd1234 here", "see xwfb_abcd1234 here"],
+  ];
+  for (const [input, want] of cases) {
+    assert.equal(redactSecrets(input, { extra: [], extraPatterns: patterns }), want, input);
+  }
+  // Without the pattern, the same texts lose the key to the later layers —
+  // the pattern never makes the result leak more.
+  for (const [input] of cases.slice(0, 2)) {
+    assert.ok(!/1234/.test(redactSecrets(input, { extra: [] })), input);
+  }
+});
+
+test("extraPatterns: a key past the first window of a long token is still found", () => {
+  const patterns = [compileExtraPattern(PREFIXED)];
+  const long = `${"x".repeat(1000)}.wfb_AbCd1234efgh.${"y".repeat(10)}`;
+  const out = redactSecrets(long, { extra: [], extraPatterns: patterns });
+  assert.ok(!out.includes("wfb_AbCd1234efgh"), "the key leaked");
+  assert.ok(out.includes("<REDACTED_API_KEY>"));
+});
+
+test("extraPatterns: the cost of masking is bounded by the window, not by the text", () => {
+  // The worst shape the loader admits — one varying quantifier and four `?` —
+  // over 100 KB in one token and in many: well under a second each here, where
+  // `(a+)+$` (refused by the loader) would not finish at all.
+  const patterns = [compileExtraPattern(String.raw`a?a?a?a?\w+!`)];
+  for (const text of ["a".repeat(100_000), `${"a".repeat(255)} `.repeat(400)]) {
+    const t0 = Date.now();
+    redactSecrets(text, { extra: [], extraPatterns: patterns });
+    assert.ok(Date.now() - t0 < 5_000, `took ${Date.now() - t0} ms`);
+  }
+});
+
+test("extraPatterns: a zero-length match writes no label", () => {
+  // The loader refuses a source that matches "", but `(?=x)` matches the
+  // empty string only before an `x`, which it cannot rule out. The mask skips
+  // a match with no material in it rather than labelling a position.
+  const patterns = [compileExtraPattern("(?=wfb)")];
+  assert.equal(redactSecrets("a wfb b", { extra: [], extraPatterns: patterns }), "a wfb b");
+});
+
+test("extraPatterns: the module reads them from the configuration", (t) => {
+  const out = underPatterns(
+    t,
+    [PREFIXED, String.raw`\bacme-[a-z0-9]{12}\b`],
+    'console.log(JSON.stringify([redact.EXTRA_PATTERNS.length, redact.redactSecrets("a wfb_live_AbCdEf123456 b acme-0123456789ab c", { extra: [] })]));',
+  );
+  assert.deepEqual(JSON.parse(out), [2, "a <REDACTED_API_KEY> b <REDACTED_API_KEY> c"]);
+  // And none means none.
+  assert.deepEqual(JSON.parse(underPatterns(t, [], "console.log(JSON.stringify(redact.EXTRA_PATTERNS.length));")), 0);
 });

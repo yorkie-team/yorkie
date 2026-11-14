@@ -561,6 +561,8 @@ function unionRemovals(records) {
         removed: Math.max(n(cur.removed), n(r?.removed)),
         added: Math.max(n(cur.added), n(r?.added)),
         suitesOff: Math.max(n(cur.suitesOff), n(r?.suitesOff)),
+        ...(Math.max(n(cur.focused), n(r?.focused)) ? { focused: Math.max(n(cur.focused), n(r?.focused)) } : {}),
+        ...(Math.max(n(cur.optionsOff), n(r?.optionsOff)) ? { optionsOff: Math.max(n(cur.optionsOff), n(r?.optionsOff)) } : {}),
         ...(cur.unreadable === true || r?.unreadable === true ? { unreadable: true } : {}),
       });
     }

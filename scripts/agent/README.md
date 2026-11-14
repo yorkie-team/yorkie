@@ -50,8 +50,8 @@ else as JSON).
 | `fixer.*` | the agents' prompts and two messages — see "What the prompts say" below | wired |
 | `tests.rules`, `tests.go.*`, `tests.cargo.*` | `test-removals.mjs`, `fix-guard.mjs`. `tests.go` is required exactly when `go` is named and `tests.cargo` exactly when `cargo` is; either block without its rule set is refused | wired |
 | `fixGuard.replicatedRuleGlobs`, `fixGuard.replicatedRuleNotice`, `fixGuard.counterpartRepos` | `fix-guard.mjs`. `counterpartRepos` is a list of `owner/name`; a PR body silences the warning by referring to any one of them as `owner/name`, `owner/name#12`, `name#12` or a github.com link, never by merely containing the name | wired |
-| `redact.extraPatterns` | — | not wired yet |
-| `ask.permittedMcpTools` | — | not wired yet |
+| `redact.extraPatterns` | `redact.mjs`: masked as `<REDACTED_API_KEY>` in every published text | wired |
+| `ask.permittedMcpTools` | `ask.mjs`: the in-process MCP tools a session may be granted | wired |
 
 Every key is required except the two marked optional. Those only add to a
 list this package already has, so leaving one out means "the built-in entries
@@ -64,9 +64,31 @@ there takes every file it matches that no other class claimed away from the
 code lenses: `"**"` is refused, and a repository's `repo.test.mjs` should pin
 that a source file still classifies as `code`.
 
-The two keys marked "not wired yet" are required by the schema and read by
-nothing; editing one changes nothing. `repo.appSlug` must agree with the
-logins: `<slug>[bot]` has to be in both `repo.appLogins` and `repo.botLogins`.
+`repo.appSlug` must agree with the logins: `<slug>[bot]` has to be in both
+`repo.appLogins` and `repo.botLogins`.
+
+Two keys let a repository widen something the core keeps closed, and both are
+`[]` unless the repository has a reason:
+
+- `redact.extraPatterns` holds the shapes of the product's own credentials,
+  which the core has no rule for: a key that is a bare identifier gives a
+  pattern nothing to tell it apart by, so only a prefixed shape belongs here.
+  Each entry is the source of a JavaScript regular expression, without slashes
+  or flags (`"\\bacme_[A-Za-z0-9_-]+"`), compiled with `g`. It is run over one
+  whitespace-separated token at a time, in windows of 256 characters, and a
+  match is masked whole and widened to the run of key characters around it,
+  so a pattern for a key's prefix still masks the whole key; a key broken by a
+  stray space is followed as the built-in shapes follow one. The loader
+  refuses an entry that does not compile, matches whitespace or matches at
+  zero width (`\b`, a lone lookaround), and one whose matching cost is not
+  bounded: a repeating quantifier on a group holding a quantifier or an
+  alternation, more than one quantifier whose count varies (besides `?`),
+  more than four `?`, or a back-reference.
+- `ask.permittedMcpTools` names the in-process MCP tools — written in the
+  repository, run in the session's own process — that a session may be
+  granted. Each is an exact `mcp__<server>__<tool>`: the loader refuses a
+  wildcard, a bare server (which would grant all of its tools) and a
+  permission rule. Every other MCP name stays refused.
 
 `fixGuard.counterpartRepos` was `fixGuard.counterpartRepo`, one `owner/name`
 string, until a rule turned up with two other homes (an SDK that ports from

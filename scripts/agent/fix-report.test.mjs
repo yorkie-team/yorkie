@@ -746,3 +746,15 @@ test("readFixReports: every removal record for a head is unioned per file, never
   const [bare] = readFixReports("1426", { api: () => [report, empty] });
   assert.equal(bare.testRemovals, undefined);
 });
+
+test("readFixReports: a focus or an option one record saw survives a union with one that did not", () => {
+  const report = agentComment(serializeFixReport({ ...REC, head: "6915bc6a7" }));
+  const rec = (removals) => ({ id: 9, user: PIPELINE, body: renderTestRemovals({ head: "6915bc6a7", after: "e6900da64", removals }) });
+  const plain = rec([{ file: "test/a.test.ts", deleted: false, removed: 1, added: 0 }]);
+  const switched = rec([{ file: "test/a.test.ts", deleted: false, removed: 1, added: 1, focused: 1, optionsOff: 2 }]);
+  for (const order of [[plain, switched], [switched, plain]]) {
+    const [got] = readFixReports("1426", { api: () => [report, ...order] });
+    assert.equal(got.testRemovals[0].focused, 1);
+    assert.equal(got.testRemovals[0].optionsOff, 2);
+  }
+});

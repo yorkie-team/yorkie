@@ -185,7 +185,24 @@ test("loadConfig: a value of the wrong type throws, and no value is coerced", (t
     ["fixGuard.counterpartRepos", ["a/b", ""]],
     ["fixer.commitNote", "subject under 70"],
     ["redact.extraPatterns", null],
+    ["redact.extraPatterns", ["("]],
+    ["redact.extraPatterns", ["a*"]],
+    ["redact.extraPatterns", ["(?:)"]],
+    ["redact.extraPatterns", ["x|"]],
+    ["redact.extraPatterns", ["/wfb_[a-z]+/g"]],
+    ["redact.extraPatterns", ["(a+)+$"]],
+    ["redact.extraPatterns", ["Key: [a-z0-9]{20}"]],
+    ["redact.extraPatterns", [String.raw`\b`]],
+    ["redact.extraPatterns", ["(?=wfb)"]],
     ["ask.permittedMcpTools", [null]],
+    ["ask.permittedMcpTools", ["Read"]],
+    ["ask.permittedMcpTools", ["mcp__fixture"]],
+    ["ask.permittedMcpTools", ["mcp__fixture__*"]],
+    ["ask.permittedMcpTools", ["mcp__*"]],
+    ["ask.permittedMcpTools", ["mcp__fixture__run(x)"]],
+    ["ask.permittedMcpTools", ["mcp__a__b__c"]],
+    ["ask.permittedMcpTools", ["mcp__fixture___run"]],
+    ["ask.permittedMcpTools", ["MCP__fixture__run"]],
   ];
   for (const [key, value] of wrong) {
     const dir = scratch(t, (c) => withValue(c, key, value));
@@ -193,6 +210,47 @@ test("loadConfig: a value of the wrong type throws, and no value is coerced", (t
       () => loadConfig(dir),
       (err) => err.message.includes(`${key} must be`),
       `${key} = ${JSON.stringify(value)} must be refused`,
+    );
+  }
+});
+
+test("loadConfig: the two allow-lists take what their readers can use, and say which entry is not", (t) => {
+  const fine = scratch(t, (c) => {
+    c.redact.extraPatterns = [
+      String.raw`\bwfb_[A-Za-z0-9_-]+`,
+      String.raw`\bacme-[a-z0-9]{12}\b`,
+      String.raw`\bsk_(?:live_|test_)?[A-Za-z0-9]{20,40}`,
+      String.raw`\bk(?:-[a-z]{4}){3}`,
+    ];
+    c.ask.permittedMcpTools = ["mcp__wafflebase__run", "mcp__wafflebase__ui", "mcp__my-server__do_it"];
+    return c;
+  });
+  const loaded = loadConfig(fine);
+  assert.equal(loaded.redact.extraPatterns.length, 4);
+  assert.deepEqual([...loaded.ask.permittedMcpTools], ["mcp__wafflebase__run", "mcp__wafflebase__ui", "mcp__my-server__do_it"]);
+
+  const cases = [
+    ["redact.extraPatterns", "(", /does not compile/],
+    ["redact.extraPatterns", "a*", /zero width/],
+    ["redact.extraPatterns", "/wfb_/", /without the slashes or flags/],
+    ["redact.extraPatterns", "(a+)+$", /nests one quantifier inside another/],
+    ["redact.extraPatterns", "(a|ab)*x", /quantifier on an alternation/],
+    ["redact.extraPatterns", String.raw`\w*\w*!`, /2 quantifiers whose count varies/],
+    ["redact.extraPatterns", "a?b?c?d?e?f", /at most four/],
+    ["redact.extraPatterns", String.raw`(\w)\1x`, /back-reference/],
+    ["redact.extraPatterns", "Key: [a-z0-9]{20}", /matches whitespace/],
+    ["redact.extraPatterns", String.raw`key\s[a-z]+`, /matches whitespace/],
+    ["redact.extraPatterns", String.raw`\b`, /zero width/],
+    ["redact.extraPatterns", "(?<=k)", /zero width/],
+    ["redact.extraPatterns", "x?", /zero width/],
+    ["ask.permittedMcpTools", "mcp__fixture__*", /is not one/],
+  ];
+  for (const [key, bad, why] of cases) {
+    const dir = scratch(t, (c) => withValue(c, key, ["ok", bad].filter((x) => key !== "ask.permittedMcpTools" || x !== "ok")));
+    assert.throws(
+      () => loadConfig(dir),
+      (err) => err.message.includes(`${key} must be`) && err.message.includes(JSON.stringify(bad)) && why.test(err.message),
+      `${key} must refuse ${bad} and say why`,
     );
   }
 });

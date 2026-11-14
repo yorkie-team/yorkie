@@ -101,7 +101,7 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileGlob, get, TEST_RULE_SETS } from "./config.mjs";
-import { isCargoGoverned, isCargoUnitTestByName, isTestFile, roundCommits, fixerHead, safePath } from "./test-removals.mjs";
+import { isCargoGoverned, isCargoUnitTestByName, isTestFile, roundCommits, fixerHead, safePath, ROUND_COMMIT_CAP } from "./test-removals.mjs";
 import { declaresTestModule, patchLines, testOnlyChange, testRegionLines } from "./cargo-rules.mjs";
 import { frozenShaFrom } from "./review-surface.mjs";
 import { PAGED_LATCH } from "./rounds.mjs";
@@ -455,8 +455,13 @@ export function lintRound({ files = [], original = null, prBody = "", unjudged =
   };
 }
 
-/** How many of a round's commits the report job reads. A round with more is not judged whole, and pages. */
-export const ROUND_COMMIT_CAP = 50;
+/**
+ * How many of a round's commits the report job reads. A round with more is not
+ * judged whole, and pages. The same cap as the test-removal record's, which
+ * says it read only part of such a round: one number, so the two never
+ * disagree about where a round was cut.
+ */
+export { ROUND_COMMIT_CAP };
 
 /**
  * The round's commits that are NOT ordinary — in the compare, in the pull

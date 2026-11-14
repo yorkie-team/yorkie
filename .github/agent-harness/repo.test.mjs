@@ -25,6 +25,25 @@ const WORKFLOWS = path.join(ROOT, ".github", "workflows");
 // static import would be evaluated before this line.
 process.env.AGENT_HARNESS_CONFIG_DIR = HERE;
 
+/**
+ * `git` in the repository's root. Several tests here grade the configuration
+ * against what git TRACKS, so a copy of the tree without `.git` cannot answer
+ * them: say that, rather than surfacing git's own "not a git repository".
+ * Failing, not skipping: a skipped check is a passed check to whoever reads
+ * the summary.
+ */
+function git(args, opts = {}) {
+  try {
+    execFileSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd: ROOT, stdio: "ignore" });
+  } catch {
+    throw new Error(
+      `test:repo reads what git tracks, and ${ROOT} is not a git checkout (or git is not installed). ` +
+        "Run it in a clone of the repository.",
+    );
+  }
+  return execFileSync("git", args, { cwd: ROOT, encoding: "utf8", ...opts });
+}
+
 const agent = (file) => import(path.join(AGENT, file));
 const checks = await agent("checks.mjs");
 const panel = await agent("review-panel.mjs");
@@ -105,6 +124,17 @@ test("snapshot: the bot identities each reader believes", () => {
   assert.deepEqual([...metrics.LEDGER_AUTHOR_LOGINS], SNAPSHOT.LEDGER_AUTHOR_LOGINS);
   assert.deepEqual([...setState.LATCH_AUTHOR_LOGINS], SNAPSHOT.LATCH_AUTHOR_LOGINS);
   assert.deepEqual([...rebuttal.REBUTTAL_AUTHOR_LOGINS], SNAPSHOT.REBUTTAL_AUTHOR_LOGINS);
+});
+
+test("this repository grants no MCP tool and masks no product key shape of its own", async () => {
+  // yorkie implements no in-process MCP tool, and its project keys are bare
+  // identifiers a shape rule cannot tell from a sha (layer 4's field names
+  // catch them; see redact.test.mjs). Both lists stay empty, so the session
+  // grant and the redaction are exactly the core's own.
+  const { PERMITTED_MCP_TOOLS } = await agent("ask.mjs");
+  const { EXTRA_PATTERNS } = await agent("redact.mjs");
+  assert.deepEqual([...PERMITTED_MCP_TOOLS], []);
+  assert.deepEqual([...EXTRA_PATTERNS], []);
 });
 
 test("snapshot: the branch-protection decline message", () => {
@@ -284,7 +314,7 @@ test("every configured path and glob matches a file this repository tracks", () 
     // the codegen gate regenerates from — is refused and reviewed as policy.
     "api/buf.gen.yaml": ["ci.definingPaths", "review.classRules.policy"],
   };
-  const tracked = execFileSync("git", ["ls-files"], { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
+  const tracked = git(["ls-files"], { maxBuffer: 64 * 1024 * 1024 })
     .split("\n")
     .filter(Boolean);
   assert.ok(tracked.length > 500, `expected the repository's files, git listed ${tracked.length}`);
@@ -318,7 +348,7 @@ test("every configured path and glob matches a file this repository tracks", () 
   // `review.diffExcludes` are git pathspecs, so git is asked.
   for (const spec of CONFIG.review.diffExcludes) {
     checked++;
-    const hit = execFileSync("git", ["ls-files", "--", spec], { cwd: ROOT, encoding: "utf8" }).trim();
+    const hit = git(["ls-files", "--", spec]).trim();
     assert.ok(hit !== "", `review.diffExcludes: ${spec} matches no tracked file`);
   }
   // Guards on the guard: the lists were walked, and RESERVED holds nothing stale.
@@ -353,7 +383,7 @@ test("every file the issue-to-PR prompt names exists here", async () => {
   assert.deepEqual(missingImplementPaths(ROOT), []);
   // …and each is TRACKED, not merely on this machine's disk.
   for (const entry of IMPLEMENT_PROMPT_PATHS) {
-    const tracked = execFileSync("git", ["ls-files", "--", entry.path], { cwd: ROOT, encoding: "utf8" }).trim();
+    const tracked = git(["ls-files", "--", entry.path]).trim();
     assert.ok(tracked !== "", `${entry.path} exists here but git does not track it`);
   }
 });
@@ -368,7 +398,7 @@ test("no checkout converts the shared files' line endings", () => {
   // …and git reads it that way, where git is there to ask.
   if (!existsSync(path.join(ROOT, ".git"))) return;
   for (const rel of ["scripts/agent/config.mjs", "scripts/agent/lenses/lenses.json", ".github/workflows/agent-fix.yml"]) {
-    const out = execFileSync("git", ["check-attr", "text", "--", rel], { cwd: ROOT, encoding: "utf8" });
+    const out = git(["check-attr", "text", "--", rel]);
     assert.match(out, /: text: unset\s*$/, `${rel}: ${out.trim()}`);
   }
 });
