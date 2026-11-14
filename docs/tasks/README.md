@@ -21,6 +21,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 | Task | Todo | Lessons |
 |---|---|---|
 | Make the agent workflows read the repository's values from configuration (2026-11-14) | [20261114-agent-harness-workflows-todo.md](./active/20261114-agent-harness-workflows-todo.md) | [20261114-agent-harness-workflows-lessons.md](./active/20261114-agent-harness-workflows-lessons.md) |
+| Tell a copy of the shared agent harness when it is behind (2026-11-14) | [20261114-agent-harness-notify-todo.md](./active/20261114-agent-harness-notify-todo.md) | [20261114-agent-harness-notify-lessons.md](./active/20261114-agent-harness-notify-lessons.md) |
 | Detect drift in copies of the shared agent harness (2026-11-14) | [20261114-agent-harness-manifest-todo.md](./active/20261114-agent-harness-manifest-todo.md) | [20261114-agent-harness-manifest-lessons.md](./active/20261114-agent-harness-manifest-lessons.md) |
 | Move the harness's repository-specific values into configuration (2026-11-13) | [20261113-agent-harness-config-todo.md](./active/20261113-agent-harness-config-todo.md) | [20261113-agent-harness-config-lessons.md](./active/20261113-agent-harness-config-lessons.md) |
 | Deactivate a client whose attached document is gone (2026-11-10) | [20261110-deactivate-missing-document-todo.md](./active/20261110-deactivate-missing-document-todo.md) | [20261110-deactivate-missing-document-lessons.md](./active/20261110-deactivate-missing-document-lessons.md) |

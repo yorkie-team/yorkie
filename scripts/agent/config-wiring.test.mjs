@@ -64,6 +64,15 @@
 // step with `working-directory:`, a `cd`, or through `npm run` is refused
 // outright rather than resolved, apart from the one job listed below.
 //
+// A JOB THAT WRITES ISSUES ON A CLOCK IS HELD TO MORE. `upstream-notify.mjs`
+// runs with `issues: write`. Being run from the default branch's tree is
+// necessary and not enough: the job that runs it must be one no pull request
+// or push can start, must hold `contents: read` and `issues: write` and
+// nothing else, and must name no secret — and, because a step added beside
+// that token is as good as a new script, the workflow is held to its whole
+// shape: one job, three steps, each line of each on a list. See
+// `notifierProblems`.
+//
 // IT ASSERTS HOW MANY SITES IT INSPECTED. A guard that depends on where things
 // are — a step shape, an indentation, a path spelling — passes vacuously the
 // day the shape changes and it finds nothing. Adding or removing a site changes
@@ -96,7 +105,7 @@ const TOOLCHAIN = ".github/actions/agent-toolchain";
 // The counts. Each is the number of sites of one kind in the workflows today.
 const EXPECTED = {
   // Sparse checkouts of the scripts directory from the default branch.
-  trustedSparseCheckouts: 18,
+  trustedSparseCheckouts: 19,
   // Route jobs that check out `command.mjs` alone. They read no configuration;
   // the others bring the whole package and hand configured values on.
   routerCheckouts: 2,
@@ -115,12 +124,14 @@ const EXPECTED = {
   // `cp -R … scripts/agent …/agent-tools`, each with its configuration.
   stagingCopies: 4,
   // Places a harness script is run, and how many of them read the configuration.
-  invocations: 113,
-  configReadingInvocations: 89,
+  invocations: 114,
+  configReadingInvocations: 90,
   // …by the kind of tree each runs from.
-  fromWorkspace: 65,
+  fromWorkspace: 66,
   fromSideDirectory: 27,
   fromStagedCopy: 21,
+  // Jobs that run the upstream notifier, each held to `notifierProblems`.
+  notifierJobs: 1,
 };
 
 /**
@@ -145,6 +156,13 @@ const DIRECTORY_CHANGE_ALLOWED = new Set(["agent-scripts.yml › test"]);
  * a workflow that can be dispatched names `main` on every checkout it trusts.
  */
 const TRUSTED_DEFAULT_REF_EVENTS = new Set(["issue_comment", "workflow_run", "schedule"]);
+
+/** The script that opens, rewrites and closes the sync issue. */
+const NOTIFIER = "upstream-notify.mjs";
+/** The only events that may start a job that runs it: a clock, and a maintainer. */
+const NOTIFIER_EVENTS = new Set(["schedule", "workflow_dispatch"]);
+/** Everything that job may hold. */
+const NOTIFIER_PERMISSIONS = { contents: "read", issues: "write" };
 
 /** `ref:` values that name the default branch outright. */
 const TRUSTED_REFS = new Set(["main", "refs/heads/main", "${{ github.event.repository.default_branch }}"]);
@@ -290,6 +308,145 @@ const ACCEPTED_FORMS =
   "the pre-push hook's own export line and its argument, or the prefix " +
   "`AGENT_HARNESS_CONFIG_DIR=$RUNNER_TEMP/agent-harness node $RUNNER_TEMP/agent-tools/<script>`";
 
+/**
+ * A job's own `permissions:` block as `{ scope: level }`, or a string saying
+ * why it could not be read as one (absent, or a scalar such as `write-all`).
+ */
+function jobPermissions(job) {
+  const head = job.head.filter((l) => !isBlank(l)).map(normalise);
+  const at = head.findIndex((l) => /^\s*permissions:/.test(l));
+  if (at < 0) return "it has no `permissions:` of its own, so it holds whatever the workflow or the repository grants";
+  const value = /^\s*permissions:\s*(.*?)\s*$/.exec(head[at])[1];
+  if (value !== "") return `its \`permissions:\` is ${value}, not a list of scopes`;
+  const found = {};
+  for (const line of head.slice(at + 1)) {
+    if (indentOf(line) <= indentOf(head[at])) break;
+    const m = /^\s*([a-z-]+):\s*(\S+)\s*$/.exec(line);
+    if (!m) return `its \`permissions:\` has a line this guard cannot read: ${line.trim()}`;
+    found[m[1]] = m[2];
+  }
+  return found;
+}
+
+/** The notifier's invocation, as the one line its step may run. */
+const NOTIFIER_RUN = `run: node ${SCRIPTS}/${NOTIFIER}`;
+/**
+ * THE THREE STEPS A NOTIFIER JOB HAS, and every line each may contain (after
+ * comments and the leading `- ` are dropped). An allow-list, because the job
+ * holds a token that can write and the thing to refuse is "anything else":
+ * a fourth step, an install, a credential left in `.git/config`, a token
+ * from somewhere other than the job itself.
+ */
+const NOTIFIER_STEPS = [
+  {
+    what: "the checkout",
+    is: (lines) => lines.some((l) => /^uses: actions\/checkout@/.test(l)),
+    allowed: [
+      /^uses: actions\/checkout@v\d+$/,
+      /^with:$/,
+      /^ref: (.+)$/,
+      /^sparse-checkout: \|$/,
+      /^scripts\/agent$/,
+      /^\.github\/agent-harness$/,
+      /^sparse-checkout-cone-mode: false$/,
+      /^persist-credentials: false$/,
+    ],
+    required: ["persist-credentials: false"],
+  },
+  {
+    what: "the Node setup",
+    is: (lines) => lines.some((l) => /^uses: actions\/setup-node@/.test(l)),
+    allowed: [/^uses: actions\/setup-node@v\d+$/, /^with:$/, /^node-version: ["']?[\d.x]+["']?$/],
+    required: [],
+  },
+  {
+    what: "the script",
+    is: (lines) => lines.includes(NOTIFIER_RUN),
+    allowed: [/^name: .+$/, /^env:$/, /^GH_TOKEN: \$\{\{ github\.token \}\}$/, new RegExp(`^${NOTIFIER_RUN.replace(/[.\/]/g, "\\$&")}$`)],
+    required: [NOTIFIER_RUN],
+  },
+];
+
+/**
+ * What is wrong with a job that runs the upstream notifier, as sentences.
+ * The notifier writes issues, so the job is one that PULL-REQUEST-CONTROLLED
+ * CODE CAN NEVER BE IN: started by a clock or a maintainer only, holding two
+ * permissions, and naming no secret. (That its checkout is the default
+ * branch's is the walk's ordinary rule, and `workflow_dispatch` is not an
+ * event whose default ref it believes — so the checkout must say `main`.)
+ *
+ * AND THE WORKFLOW AROUND IT IS HELD TO ITS SHAPE. The three rules above are
+ * about the job that runs the script; none of them sees a second job in the
+ * same file, or a fourth step in this one, and either runs in a workflow a
+ * clock starts with a token nobody is watching. So: the workflow grants
+ * nothing by default, has this job and no other, the job has exactly the
+ * three steps of `NOTIFIER_STEPS`, and nothing in the file reads a secret, a
+ * variable, or an action that is not GitHub's own checkout or setup-node.
+ */
+function notifierProblems(job, wf) {
+  const problems = [];
+  const stray = job.events.filter((e) => !NOTIFIER_EVENTS.has(e));
+  if (job.events.length === 0 || stray.length > 0) {
+    problems.push(`runs ${NOTIFIER}, which writes issues, in a workflow that ${stray.join(", ") || "no readable event"} can start; only ${[...NOTIFIER_EVENTS].join(" and ")} may`);
+  }
+  const held = jobPermissions(job);
+  if (typeof held === "string") problems.push(`runs ${NOTIFIER}, but ${held}`);
+  else if (JSON.stringify(Object.entries(held).sort()) !== JSON.stringify(Object.entries(NOTIFIER_PERMISSIONS).sort())) {
+    const show = (o) => Object.entries(o).map(([k, v]) => `${k}: ${v}`).join(", ") || "none";
+    problems.push(`runs ${NOTIFIER} holding ${show(held)}; it may hold exactly ${show(NOTIFIER_PERMISSIONS)}`);
+  }
+
+  // --- the workflow: nothing granted by default, and no other job.
+  const code = (lines) => lines.filter((l) => !isBlank(l)).map((l) => normalise(l).trimEnd());
+  if (!code(wf.preamble).includes("permissions: {}")) {
+    problems.push(`runs ${NOTIFIER} in a workflow without a top-level \`permissions: {}\`; a job added beside it would inherit whatever the repository grants`);
+  }
+  const others = wf.jobs.filter((j) => j !== job).map((j) => j.name);
+  if (others.length > 0) {
+    problems.push(`runs ${NOTIFIER} in a workflow that has other jobs (${others.join(", ")}); the notifier's workflow holds one job, so that nothing else runs on its clock`);
+  }
+
+  // --- nothing from outside the job: no secret, no variable, no other action.
+  // (`secrets.GITHUB_TOKEN` is spelt `github.token` here, so that the rule is
+  // one a reader can check by eye: the words do not appear.)
+  const everything = code([...wf.preamble, ...wf.jobs.flatMap((j) => [...j.head, ...j.steps.flatMap((st) => st.lines)])]);
+  for (const [word, what] of [["secrets", "a secret"], ["vars", "a repository variable"]]) {
+    const line = everything.find((l) => new RegExp(`\\b${word}\\b`).test(l));
+    if (line) problems.push(`runs ${NOTIFIER} in a workflow that names ${what} (\`${line.trim().slice(0, 80)}\`); the job's own \`github.token\` is all it may use`);
+  }
+  for (const line of everything) {
+    const m = /^\s*(?:- )?uses:\s*["']?([^\s"'#]+)/.exec(line);
+    if (m && !/^actions\/(?:checkout|setup-node)@/.test(m[1])) {
+      problems.push(`runs ${NOTIFIER} in a workflow that uses ${m[1]}; only actions/checkout and actions/setup-node may run beside a token that can write`);
+    }
+  }
+
+  // --- the steps: these three, in this order, and each line of each on its list.
+  const steps = job.steps.map((st) => code(st.lines).map((l) => l.trim().replace(/^- /, "")));
+  const kinds = steps.map((lines) => NOTIFIER_STEPS.find((k) => k.is(lines)));
+  steps.forEach((lines, i) => {
+    const kind = kinds[i];
+    if (!kind) {
+      problems.push(`runs ${NOTIFIER} in a job with a step that is none of the three it may have (\`${(lines[0] ?? "").slice(0, 80)}\`); the checkout, the Node setup and the script are all that run beside its token`);
+      return;
+    }
+    for (const line of lines) {
+      if (!kind.allowed.some((re) => re.test(line))) problems.push(`runs ${NOTIFIER} in a job whose step for ${kind.what} has a line it may not have: \`${line.slice(0, 80)}\``);
+    }
+    for (const line of kind.required) {
+      if (!lines.includes(line)) problems.push(`runs ${NOTIFIER} in a job whose step for ${kind.what} lacks \`${line}\``);
+    }
+    const ref = /^ref: (.+)$/.exec(lines.find((l) => l.startsWith("ref: ")) ?? "");
+    if (kind === NOTIFIER_STEPS[0] && !(ref && TRUSTED_REFS.has(ref[1]))) {
+      problems.push(`runs ${NOTIFIER} in a job whose checkout does not name the default branch (\`ref: ${ref ? ref[1] : "<none>"}\`)`);
+    }
+  });
+  if (kinds.length !== NOTIFIER_STEPS.length || kinds.some((k, i) => k !== NOTIFIER_STEPS[i])) {
+    problems.push(`runs ${NOTIFIER} in a job with ${steps.length} steps (${kinds.map((k) => (k ? k.what : "something else")).join(", ")}); it has exactly three: ${NOTIFIER_STEPS.map((k) => k.what).join(", ")}`);
+  }
+  return problems;
+}
+
 const GIT_SWITCH = /\bgit((?:\s+-[Cc]\s+\S+)*)\s+(?:checkout|switch|fetch|pull|merge|reset|restore|worktree|clone|apply|am|cherry-pick|rebase|stash)(?![\w-])/;
 
 /**
@@ -312,6 +469,7 @@ function inspect(workflows) {
     fromWorkspace: 0,
     fromSideDirectory: 0,
     fromStagedCopy: 0,
+    notifierJobs: 0,
     jobs: 0,
     files: 0,
   };
@@ -341,6 +499,7 @@ function inspect(workflows) {
       const side = new Map();
       const staged = { tools: null, config: null, exportedAtStep: -1 };
       let afterAgent = false;
+      let notifies = false;
       // Workspace paths an `rm -rf` has cleared since the workspace last changed.
       const cleared = new Set();
       // Has the step that re-verifies the checked-out commit run yet? Only asked
@@ -611,6 +770,7 @@ function inspect(workflows) {
             if (!run && !hookArg) continue;
 
             counts.invocations++;
+            if (script === NOTIFIER) notifies = true;
             const reads = READS_CONFIG.has(script);
             if (reads) counts.configReadingInvocations++;
             if (!MODULES.includes(script)) flag(`runs ${script}, which is not a module of this package`);
@@ -664,6 +824,11 @@ function inspect(workflows) {
           distrust("the agent ran in this job and owns the workspace");
         }
       });
+
+      if (notifies) {
+        counts.notifierJobs++;
+        for (const problem of notifierProblems(job, wf)) flag(problem);
+      }
     }
   }
   return { problems, counts };
@@ -738,6 +903,8 @@ const replaceOnce = (text, anchor, replacement) => {
   assert.equal(text.split(anchor).length - 1, 1, `mutation anchor not found exactly once: ${anchor.slice(0, 60)}`);
   return text.replace(anchor, () => replacement);
 };
+const NOTIFY_FILE = "agent-upstream-notify.yml";
+const NOTIFY_STEP = "      - name: Open, update or close the sync issue\n";
 const EXPORT_LINE = '          echo "AGENT_HARNESS_CONFIG_DIR=${{ runner.temp }}/agent-harness" >> "$GITHUB_ENV"\n';
 
 const MUTATIONS = [
@@ -1153,6 +1320,148 @@ const MUTATIONS = [
       edit("agent-fix.yml", (t) => replaceOnce(t, '          EFFECTIVE="$(git rev-parse --path-format=absolute --git-path hooks)"\n', '          EFFECTIVE="$HOOKS"\n')),
     expect: /agent-fix\.yml › fix: installs a pre-push hook without checking where git will read hooks from/,
   },
+  // …the upstream notifier: a job with `issues: write` that no pull request may be in.
+  {
+    name: "the notifier's workflow can also be started by a pull request",
+    files: () => edit(NOTIFY_FILE, (t) => replaceOnce(t, "  workflow_dispatch:\n", "  workflow_dispatch:\n  pull_request:\n")),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs, which writes issues, in a workflow that pull_request can start/,
+  },
+  {
+    name: "the notifier's workflow can also be started by a push",
+    files: () => edit(NOTIFY_FILE, (t) => replaceOnce(t, "  workflow_dispatch:\n", "  workflow_dispatch:\n  push:\n    branches: [main]\n")),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs, which writes issues, in a workflow that push can start/,
+  },
+  {
+    name: "the notifier's job gains `contents: write`",
+    files: () => edit(NOTIFY_FILE, (t) => replaceOnce(t, "      contents: read #", "      contents: write #")),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs holding contents: write, issues: write; it may hold exactly contents: read, issues: write/,
+  },
+  {
+    name: "the notifier's job gains a third permission",
+    files: () => edit(NOTIFY_FILE, (t) => replaceOnce(t, "      issues: write #", "      pull-requests: write\n      issues: write #")),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs holding .*pull-requests: write/,
+  },
+  {
+    name: "the notifier's job drops its own `permissions:` and inherits",
+    files: () =>
+      edit(NOTIFY_FILE, (t) => {
+        const from = t.indexOf("    permissions:\n      contents: read #");
+        const to = t.indexOf("    steps:\n", from);
+        assert.ok(from > 0 && to > from, "mutation anchors not found in the expected order");
+        return t.slice(0, from) + t.slice(to);
+      }),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs, but it has no `permissions:` of its own/,
+  },
+  {
+    name: "the notifier's job is given `write-all`",
+    files: () =>
+      edit(NOTIFY_FILE, (t) => {
+        const from = t.indexOf("    permissions:\n      contents: read #");
+        const to = t.indexOf("    steps:\n", from);
+        assert.ok(from > 0 && to > from, "mutation anchors not found in the expected order");
+        return `${t.slice(0, from)}    permissions: write-all\n${t.slice(to)}`;
+      }),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs, but its `permissions:` is write-all/,
+  },
+  {
+    name: "the notifier checks out a pull request's ref",
+    files: () => edit(NOTIFY_FILE, (t) => replaceOnce(t, "          ref: main\n", "          ref: ${{ github.event.pull_request.head.sha }}\n")),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs from the workspace, which is not trusted at that step: its ref is/,
+  },
+  {
+    name: "the notifier checks out the dispatcher's ref, not `main`",
+    files: () => edit(NOTIFY_FILE, (t) => replaceOnce(t, "          ref: main\n", "")),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs from the workspace, which is not trusted at that step: it has no ref, and the workflow runs on workflow_dispatch/,
+  },
+  {
+    name: "the notifier is handed a secret",
+    files: () => edit(NOTIFY_FILE, (t) => replaceOnce(t, "          GH_TOKEN: ${{ github.token }}\n", "          GH_TOKEN: ${{ secrets.AGENT_PAT }}\n")),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs in a workflow that names a secret/,
+  },
+  {
+    name: "the notifier is handed a token from a repository variable",
+    files: () => edit(NOTIFY_FILE, (t) => replaceOnce(t, "          GH_TOKEN: ${{ github.token }}\n", "          GH_TOKEN: ${{ vars.AGENT_PAT }}\n")),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs in a workflow that names a repository variable \(`GH_TOKEN: \$\{\{ vars\.AGENT_PAT \}\}`\)/,
+  },
+  {
+    name: "a sibling job in the notifier's workflow inherits permissions and calls the API",
+    files: () => addJob(NOTIFY_FILE, `  also:
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh api -X POST "repos/$GH_REPO/issues" -f title=hello
+`),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs in a workflow that has other jobs \(also\)/,
+  },
+  {
+    name: "a sibling job in the notifier's workflow takes wider permissions",
+    files: () => addJob(NOTIFY_FILE, `  also:
+    runs-on: ubuntu-latest
+    permissions: write-all
+    steps:
+      - run: gh api -X PUT "repos/$GH_REPO/contents/x" -f message=x -f content=eA==
+`),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs in a workflow that has other jobs \(also\)/,
+  },
+  {
+    name: "the notifier's workflow stops granting nothing by default",
+    files: () => edit(NOTIFY_FILE, (t) => replaceOnce(t, "\npermissions: {}\n", "\npermissions: write-all\n")),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs in a workflow without a top-level `permissions: \{\}`/,
+  },
+  {
+    name: "a third-party action is added to the notifier's job",
+    files: () => edit(NOTIFY_FILE, (t) => replaceOnce(t, NOTIFY_STEP, `      - uses: some-org/some-action@main\n${NOTIFY_STEP}`)),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs in a workflow that uses some-org\/some-action@main/,
+  },
+  {
+    name: "a `curl | sh` step is added to the notifier's job",
+    files: () => edit(NOTIFY_FILE, (t) => replaceOnce(t, NOTIFY_STEP, `      - run: curl -fsSL https://example.com/install | sh\n${NOTIFY_STEP}`)),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs in a job with a step that is none of the three it may have \(`run: curl -fsSL https:\/\/example\.com\/install \| sh`\)/,
+  },
+  {
+    name: "an install step is added to the notifier's job",
+    files: () => edit(NOTIFY_FILE, (t) => replaceOnce(t, NOTIFY_STEP, `      - run: npm --prefix scripts/agent ci\n${NOTIFY_STEP}`)),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs in a job with a step that is none of the three it may have \(`run: npm --prefix scripts\/agent ci`\)/,
+  },
+  {
+    name: "a second command is added to the notifier's own step",
+    files: () =>
+      edit(NOTIFY_FILE, (t) =>
+        replaceOnce(t, "        run: node scripts/agent/upstream-notify.mjs\n", "        run: |\n          node scripts/agent/upstream-notify.mjs\n          gh issue list\n")),
+    // No longer the one-line invocation, so no longer the script's step at all.
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs in a job with a step that is none of the three it may have/,
+  },
+  {
+    name: "the notifier's checkout leaves the token in `.git/config`",
+    files: () => edit(NOTIFY_FILE, (t) => replaceOnce(t, "          persist-credentials: false\n", "          persist-credentials: true\n")),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs in a job whose step for the checkout has a line it may not have: `persist-credentials: true`/,
+  },
+  {
+    name: "the notifier's checkout drops `persist-credentials` altogether",
+    files: () => edit(NOTIFY_FILE, (t) => replaceOnce(t, "          persist-credentials: false\n", "")),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs in a job whose step for the checkout lacks `persist-credentials: false`/,
+  },
+  {
+    name: "the notifier's checkout is given a token of its own",
+    files: () => edit(NOTIFY_FILE, (t) => replaceOnce(t, "          persist-credentials: false\n", "          persist-credentials: false\n          token: ${{ github.token }}\n")),
+    expect: /agent-upstream-notify\.yml › notify: runs upstream-notify\.mjs in a job whose step for the checkout has a line it may not have: `token:/,
+  },
+  {
+    name: "the notifier is moved into the test lane, which pull requests start",
+    files: () =>
+      addJob("agent-scripts.yml", `  notify:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - run: node scripts/agent/upstream-notify.mjs
+`),
+    expect: /agent-scripts\.yml › notify: runs upstream-notify\.mjs, which writes issues, in a workflow that push, pull_request can start/,
+  },
   // …jobs the reader used to walk past.
   {
     name: "a job whose step list is indented differently from its neighbours",
@@ -1202,7 +1511,7 @@ test("each trust-weakening mutation of the real workflows fails the guard", () =
   }
   assert.deepEqual(failures, []);
   // Guard on the guard: the six that got through first, and their neighbours.
-  assert.ok(MUTATIONS.length >= 47, `expected the mutation cases, ran ${MUTATIONS.length}`);
+  assert.ok(MUTATIONS.length >= 68, `expected the mutation cases, ran ${MUTATIONS.length}`);
 });
 
 test("what is not a command is not flagged", () => {

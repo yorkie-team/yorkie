@@ -1,0 +1,95 @@
+# Tells a repository that COPIED the shared harness files when the repository
+# they were copied from has newer ones (scripts/agent/upstream-notify.mjs).
+#
+# `agent-scripts.yml` already notices, weekly, and says so as a warning on a
+# green run — which nobody opens. This opens ONE issue instead, rewrites it
+# when upstream moves again, and closes it when the copy has caught up. It
+# only notifies: a person runs `sync.mjs`. There is no sync pull request and
+# no token beyond this job's own.
+#
+# THE SAME FILE IN EVERY REPOSITORY, so what it does is decided by
+# `.github/agent-harness/upstream.json`, not by an `if:` on a repository
+# name. Where that says `repository: null` — the repository the files are
+# written in — the script says so and exits 0.
+#
+# A WORKFLOW OF ITS OWN, not a job in `agent-scripts.yml`, because of what
+# starts that one. It runs on `pull_request` and `push`, on the pull
+# request's own tree, and is safe there because it holds `contents: read` and
+# nothing else. A job with `issues: write` beside it would be kept off those
+# events by one `if:` line and one `ref:` line, in a file whose other job
+# exists to run untrusted code. Here the trigger list is the boundary: no
+# pull request and no push can start this workflow at all. The trust guard
+# (`config-wiring.test.mjs`) holds that, and holds this file to its shape:
+# one job, these three steps and no other, the two permissions, no secret
+# and no variable. A step added here runs beside a token that can write.
+#
+# NOT BEHIND THE `AGENT_PIPELINE_ENABLED` SWITCH. That switch stops agents
+# acting on pull requests. A copy falls behind whether or not the agents are
+# running, and this calls no model and touches no pull request.
+name: Agent Upstream Notify
+
+on:
+  schedule:
+    # Weekly, shortly after the `agent-scripts.yml` run that checks the same
+    # record, so a wrong record shows up red in both on the same morning.
+    - cron: "41 5 * * 1"
+  # To ask now rather than on Monday. No inputs: there is nothing to choose.
+  workflow_dispatch:
+
+# One at a time: two overlapping runs could both find no issue and both open
+# one.
+concurrency:
+  group: agent-upstream-notify
+  cancel-in-progress: false
+
+permissions: {}
+
+# The script calls the REST API itself and reads the repository's name from
+# the runner. This is for a `gh` step nobody has written yet: the checkout is
+# sparse, and every workflow that runs a harness script names the repository
+# here rather than leave `gh` to work it out from a tree.
+env:
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    # Longer than the script's own budget (`BUDGET_MS`, eight minutes), so a
+    # slow upstream ends in the script's message and not in a cancellation.
+    timeout-minutes: 10
+    permissions:
+      contents: read # the default branch's scripts/agent and upstream.json
+      issues: write # the one issue, its label, and the closing comment
+    steps:
+      # `ref: main`, stated: `workflow_dispatch` runs on whichever ref the
+      # dispatcher picked, and this job holds a write token. It must never run
+      # a branch's copy of the script, or read a branch's `upstream.json`.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          # The script and the record it reads, from the same commit.
+          sparse-checkout: |
+            scripts/agent
+            .github/agent-harness
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      # No `npm ci`: the script and the two modules it imports use Node's
+      # standard library only, so nothing is installed into a job that can
+      # write.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+      # The job's own token. It reads the upstream repository (public
+      # contents, for the rate limit) and writes this repository's issues; it
+      # is sent to api.github.com only. `github-actions[bot]` is also the one
+      # author the script will edit or close an issue by, so no other
+      # identity may open it.
+      #
+      # A failure here is deliberate when the record is wrong — the recorded
+      # commit is not on upstream's default branch, or upstream cannot be
+      # asked. That is not "upstream moved", so no issue is opened and the
+      # run is red.
+      - name: Open, update or close the sync issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/agent/upstream-notify.mjs
