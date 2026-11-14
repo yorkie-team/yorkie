@@ -77,6 +77,7 @@ const WITH_REPRODUCER = edit(
   "    #[test]\n    #[ignore = \"still reproduces: merge drops the smaller count\"]\n    fn merge_is_commutative() {\n        assert_eq!(1 + 1, 2);\n    }\n\n    #[test]\n    fn merge_keeps",
 );
 const PRODUCT_CHANGED = edit(COUNTER, "self.counts.values().sum()", "self.counts.values().copied().sum()");
+const NESTED = "pub mod inner {\n    pub fn two() -> u8 {\n        debug_assert!(true);\n        2\n    }\n\n    #[cfg(test)]\n    mod tests {\n        #[test]\n        fn is_two() {\n            assert_eq!(super::two(), 2);\n        }\n    }\n}\n";
 const SMUGGLED = `${COUNTER}\n#[cfg(any(test, feature = "internal"))]\nmod extra {\n    pub fn reachable_in_release() {}\n}\n`;
 
 test("with the cargo rules: which Rust files are tests as a whole, and which cargo runs by name", (t) => {
@@ -422,8 +423,9 @@ test("with the cargo rules: the assertion lint reads Rust idioms, in test files 
         "+    assert!(true);", "+    assert!(true, \"always\");", "+    assert!(!false);", "+    debug_assert!(true);",
         "+    assert_eq!(1, 1);", "+    assert_eq!(a.b, a.b, \"same\");", "+    assert_eq!(true, true);",
         "+    assert_ne!(true, false);", "+    assert_ne!(false, true);", "+    assert_matches!(r, _);",
+        "+    assert_eq!(root.to_json(), root.to_json());", "+    assert_eq!(f(), f());", "+    assert_eq!(a.get(1), a.get(1), \"same\");",
         // Not tautologies.
-        "+    assert!(truth);", "+    assert_eq!(a, a.b);", "+    assert_eq!(a.len(), b.len());", "+    assert_eq!(a, b);", "+    assert_ne!(a, false);", "+    assert_matches!(r, Ok(_));",
+        "+    assert!(truth);", "+    assert_eq!(a, a.b);", "+    assert_eq!(a.len(), b.len());", "+    assert_eq!(a, b);", "+    assert_ne!(a, false);", "+    assert_matches!(r, Ok(_));", "+    assert_eq!(a.get(1), a.get(2));", "+    assert_eq!(f(), g());",
       ),
     }]],
     // A SOURCE file, with its contents: only what is inside a test region.
@@ -434,15 +436,21 @@ test("with the cargo rules: the assertion lint reads Rust idioms, in test files 
     productAssertUnread: ["fix-guard", "weakenedAssertions", [modified(t, src, COUNTER, productAssertGone, { contents: false })]],
     inlineUnread: ["fix-guard", "weakenedAssertions", [modified(t, src, COUNTER, gutted, { contents: false })]],
     unlexable: ["fix-guard", "weakenedAssertions", [{ filename: src, patch: "@@ -1 +1 @@\n-assert!(x);", contents: { before: "\"", after: "\"" } }]],
+    // A test module NESTED in another module is test code to the lint,
+    // though the scope rule does not accept it as a region.
+    nested: ["fix-guard", "weakenedAssertions", [modified(t, src, NESTED, edit(NESTED, "            assert_eq!(super::two(), 2);\n", ""))]],
+    nestedProduct: ["fix-guard", "weakenedAssertions", [modified(t, src, NESTED, edit(NESTED, "        debug_assert!(true);\n", ""))]],
     // The other rule set's files keep their own idioms, and only theirs.
     js: ["fix-guard", "weakenedAssertions", [{ filename: "scripts/agent/a.test.mjs", patch: patch("-  expect(a).toBe(b);", "-  assert_eq!(a, b);", "+  expect(true).toBe(true);") }]],
   });
   assert.deepEqual(got.file, [{ file: "crates/core/tests/merge.rs", removed: 7, added: 1, tautologies: 0 }]);
   assert.deepEqual(got.notAssertions, []);
   assert.deepEqual(got.todo, [{ file: "crates/core/tests/merge.rs", removed: 2, added: 0, tautologies: 0 }]);
-  assert.deepEqual(got.tautologies, [{ file: "crates/core/src/counter_tests.rs", removed: 0, added: 16, tautologies: 10 }]);
+  assert.deepEqual(got.tautologies, [{ file: "crates/core/src/counter_tests.rs", removed: 0, added: 21, tautologies: 13 }]);
   assert.deepEqual(got.inline, [{ file: src, removed: 2, added: 1, tautologies: 1 }]);
   assert.deepEqual(got.productAssert, [], "an assertion in product code is not a test's");
+  assert.deepEqual(got.nested, [{ file: src, removed: 1, added: 0, tautologies: 0 }]);
+  assert.deepEqual(got.nestedProduct, []);
   assert.deepEqual(got.productAssertUnread, [{ file: src, removed: 1, added: 0, tautologies: 0 }]);
   assert.deepEqual(got.inlineUnread, [{ file: src, removed: 2, added: 1, tautologies: 1 }]);
   assert.deepEqual(got.unlexable, [{ file: src, removed: 1, added: 0, tautologies: 0 }]);

@@ -292,7 +292,8 @@ const TAUTOLOGY_BY_RULES = {
   cargo: [
     "\\b(?:debug_)?assert!\\s*\\(\\s*(?:true|!\\s*false)\\s*[,)]",
     // The same operand on both sides: `assert_eq!(1, 1)`, `assert_eq!(a.b, a.b)`.
-    "\\b(?:debug_)?assert_eq!\\s*\\(\\s*(?<same>[\\w.:&]+)\\s*,\\s*\\k<same>\\s*[,)]",
+    // A call counts as an operand: `assert_eq!(f(), f())`, `assert_eq!(a.b(x), a.b(x))`.
+    "\\b(?:debug_)?assert_eq!\\s*\\(\\s*(?<same>(?:[\\w.:&]|\\([^(),]*\\))+)\\s*,\\s*\\k<same>\\s*[,)]",
     "\\b(?:debug_)?assert_ne!\\s*\\(\\s*(?:true\\s*,\\s*false|false\\s*,\\s*true)\\s*[,)]",
     // A pattern that matches anything.
     "\\bassert_matches!\\s*\\(.*,\\s*_\\s*[,)]",
@@ -345,8 +346,10 @@ const RUST_TAUTOLOGY = rulePattern(TAUTOLOGY_BY_RULES, CARGO_RULES ? ["cargo"] :
  */
 function rustTestLines(f) {
   const lines = patchLines(f.patch).filter((l) => l.sign !== " ");
-  const before = testRegionLines(f.contents?.before);
-  const after = testRegionLines(f.contents?.after);
+  // At any depth: a `#[cfg(test)]` module nested in another module is test
+  // code to a lint, though it is not a region the scope rule accepts.
+  const before = testRegionLines(f.contents?.before, { anyDepth: true });
+  const after = testRegionLines(f.contents?.after, { anyDepth: true });
   const located = before && after && lines.every((l) => (l.sign === "+" ? l.newLine : l.oldLine) > 0);
   const kept = located ? lines.filter((l) => (l.sign === "+" ? after(l.newLine) : before(l.oldLine))) : lines;
   return {

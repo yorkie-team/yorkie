@@ -96,15 +96,30 @@ whether or not its path says "test":
 |---|---|
 | A case | The test attribute: `#[test]`, `#[tokio::test]`, `#[tokio::test(…)]` and any `path::test`, `#[rstest]`, `#[…_test]`. Not `#[test_case(…)]` rows, `#[bench]`, tests a macro or a loop generates, or doc-tests |
 | Switched off in place | `#[ignore]`, with or without a reason, on one line or several; `#[cfg_attr(…, ignore)]`; `#[should_panic]` added to a test that was already there (with a new test it is that test's design) |
-| Gated | A `#[cfg(…)]` other than `cfg(test)` added on a test, on a test module, or anywhere in a test file. In a file that is new, only a predicate nothing satisfies (`any()`, `false`) |
-| Out of reach | A removed `mod <name>;` line when the name says test (`tests`, `*_tests`) or the line above is `#[cfg(test)]`: the file is still there and no longer compiled |
+| Gated | A `#[cfg(…)]` other than `cfg(test)` added on a test, on a test module, or anywhere in a test file, on one line or broken over several; an inner `#![cfg(…)]` added as the first line inside a test module. In a file that is new, only a predicate nothing satisfies (`any()`, `false`) |
+| Out of reach | A removed `mod <name>;` line when the name says test (`tests`, `*_tests`) or the line above is `#[cfg(test)]`: the file is still there and no longer compiled. A `#[path = "…"]` added to, or changed on, a test module that was already declared |
 | Doc-tests | A doc-comment fence switched from running to `ignore`, `no_run`, `compile_fail`, `should_panic` or a language that is not Rust. A new example that never ran is not counted |
 | In a `Cargo.toml` | `test`, `doctest`, `harness` or `autotests` set to `false` (not under `[[bench]]` or `[[example]]`), and an entry taken off `[workspace] members` |
 | Renamed away | An integration-test target renamed to where cargo does not look |
 
-Not seen, and to be left to the test-adequacy lens: a test that returns early
-(the idiom for "skip when the server is not there"), and one whose assertions
-were taken out — though the fix guard's assertion lint warns about the second.
+**What the record does not see.** It reads the lines a patch adds and
+removes, so a test can be switched off in ways that add no line it knows.
+These are left to the test-adequacy lens, which is the only reader of them:
+
+- a test that leaves before it asserts: `if true { return Ok(()); }`, a
+  check of an environment variable (the idiom for "skip when the server is
+  not there"), `std::process::exit(0)`;
+- tests wrapped in a macro that expands to nothing, or moved into a nested
+  module under a gate — no `#[test]` line is removed;
+- a test function renamed, where CI selects tests by name;
+- an assertion that can no longer fail without being a literal tautology:
+  `assert!(x || true)`, or an expected value changed to match the wrong
+  output. The assertion lint warns when assertions are removed outright, and
+  on `assert!(true)`, `assert_eq!(x, x)`, `assert_eq!(f(), f())`;
+- in a `Cargo.toml`: `[features]` and default features, `required-features`
+  or `path` on a `[[test]]`, and `[workspace] exclude`. What stands behind
+  these is not the record: a manifest is a CI-defining path, so a pull
+  request that touches one is never promoted automatically.
 
 **What a fix round may change.** A fix round may touch the pull request's
 original files, test files and docs. A Rust reproducer usually belongs in
@@ -144,6 +159,26 @@ directory names that open a path in other languages do not apply to them:
   `mod name_tests;` is part of the library, and one nobody declares is
   nothing yet. Unread means out of scope.
 
+Three things about this reading that a maintainer should know, because the
+rule is a gate:
+
+- **A test region can change what product code does under test.** A
+  `#[cfg(test)] #[macro_use] mod` may define a macro named like one the
+  product uses — `debug_assert!`, say — and shadow it for the rest of the
+  file, in test builds only. Nothing outside the region changed, and a
+  release build is the same, so this is in scope; but the product code then
+  runs differently under `cargo test` than it ships. It is accepted, and it
+  is what a reviewer of a fix round's test module should look for.
+- **Own-line comments directly above a test region belong to it**, however
+  many blank lines lie between, so a fix round can reword them.
+- **False refusals**, each of which pages: a test region placed directly
+  after an inner attribute (`#![allow(…)]` at the top of a file) or after
+  any other attribute; a `#[test]` function outside a test module; a test
+  module inside another module; an operator re-spaced so that two
+  punctuation characters touch or part (`Vec<Vec<T>>` to `Vec<Vec<T> >`); a
+  `tests/build.rs`, which is a real test target and is named like a build
+  script.
+
 Two layouts the check does not follow, to be listed in
 `tests.cargo.testOnlyFileGlobs` once a person has looked: a test module
 reached through `#[path = "…"]`, and files in a directory that is itself a
@@ -166,7 +201,8 @@ diff."
 
 The assertion lint reads `.rs` lines with the Rust idioms only (every
 `…assert…!` macro, `panic!`, `unreachable!`), in test files and, in a source
-file, in its test regions. The replicated-rule warning skips a commit that
+file, in its test modules — for the lint, at any depth, so a
+`#[cfg(test)]` module nested in another module is read too. The replicated-rule warning skips a commit that
 changed only the tests inside a rule file.
 
 **Configuration**, required when `cargo` is named:

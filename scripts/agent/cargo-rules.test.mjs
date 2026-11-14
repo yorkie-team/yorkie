@@ -427,6 +427,46 @@ test("cargoTally: a cfg gate counts on a test, and anywhere in a test file", () 
   assert.equal(cargoTally("+#[cfg(any())]\n+#[test]\n+fn x() {", { status: "added" }).newFile, true);
 });
 
+test("cargoTally: an inner cfg at the top of a test module, a cfg over several lines, a repointed path", () => {
+  // ONE added line, and every test in the module is gone from every lane.
+  assert.deepEqual(counts(cargoTally(" #[cfg(test)]\n mod tests {\n+    #![cfg(any())]\n     use super::*;")).gates, ["any()"]);
+  assert.deepEqual(counts(cargoTally(" mod merge_tests {\n \n+    #![cfg(feature = \"slow\")]")).gates, ['feature = "slow"'], "by the module's name, over a blank line");
+  assert.deepEqual(counts(cargoTally(" #[cfg(test)]\n mod scenarios {\n+    #![cfg(unix)]")).gates, ["unix"], "by the cfg(test) above");
+  assert.deepEqual(counts(cargoTally(" mod network {\n+    #![cfg(unix)]")).gates, [], "a product module's inner gate");
+  assert.deepEqual(counts(cargoTally("+#![cfg(unix)]\n mod tests {")).gates, [], "above the module it is the FILE's gate");
+  assert.deepEqual(counts(cargoTally(" mod tests {\n+    #![cfg(test)]")).gates, []);
+  // The attribute broken over lines, as rustfmt leaves a long one.
+  const broken = ["-#[cfg(test)]", "+#[cfg(all(", "+    test,", "+    not(test)", "+))]", " mod tests {"].join("\n");
+  assert.deepEqual(counts(cargoTally(broken)).gates, ["all(test, not(test))"]);
+  assert.deepEqual(counts(cargoTally(["+#[cfg(any(", '+    feature = "a",', '+    feature = "b",', "+))]", " #[test]", " fn x() {"].join("\n"))).gates, ['any(feature = "a", feature = "b",)']);
+  assert.deepEqual(counts(cargoTally(["+#[cfg(any(", "+    unix,", "+))]", " pub fn product() {"].join("\n"))).gates, [], "on product code");
+  assert.deepEqual(counts(cargoTally(["+#[cfg(all(", "+    test,", "+))]", " mod tests {"].join("\n"))).gates, ["all(test,)"]);
+  // Broken the same way on both sides nets out, as one line does.
+  assert.deepEqual(counts(cargoTally(["-#[cfg(all(", "-    unix,", "-))]", "+#[cfg(all(", "+    unix,", "+))]", " #[test]", " fn x() {"].join("\n"))).gates, []);
+  // An attribute that never closes in the hunk is not guessed at.
+  assert.deepEqual(counts(cargoTally("+#[cfg(all(\n+    test,\n mod tests {")).gates, []);
+  // `#[path]` put on a test module that was already declared.
+  assert.deepEqual(counts(cargoTally(' #[cfg(test)]\n+#[path = "history/empty_tests.rs"]\n mod depth_tests;')).gates, ["path history/empty_tests.rs for mod depth_tests"]);
+  assert.deepEqual(counts(cargoTally('-#[path = "a_tests.rs"]\n+#[path = "b_tests.rs"]\n mod tests;')).gates, ["path b_tests.rs for mod tests"]);
+  assert.deepEqual(counts(cargoTally('-#[cfg(test)]\n-mod depth_tests;\n+#[cfg(test)]\n+#[path = "empty.rs"]\n+mod depth_tests;')).gates, ["path empty.rs for mod depth_tests"], "the declaration rewritten whole");
+  // Written with a NEW declaration, it is where the new module lives.
+  assert.deepEqual(counts(cargoTally('+#[cfg(test)]\n+#[path = "reissue_tests.rs"]\n+mod tests;')).gates, []);
+  assert.deepEqual(counts(cargoTally(' #[cfg(test)]\n-#[path = "a_tests.rs"]\n mod tests;')).gates, [], "taken off");
+  assert.deepEqual(counts(cargoTally('+#[path = "platform/unix.rs"]\n mod platform;')).gates, [], "a product module");
+  assert.equal(cargoNeverRuns("path x.rs for mod tests"), false, "not counted in a file that is new");
+});
+
+test("testRegions with anyDepth: nested test modules, for the lints only", () => {
+  const src = "mod outer {\n    pub fn p() {}\n    #[cfg(test)]\n    mod tests {\n        fn t() {}\n    }\n}\n#[cfg(test)]\nmod tests {}\n";
+  assert.equal(testRegions(src).regions.length, 1, "the scope question sees the top level only");
+  assert.deepEqual(testRegions(src, { anyDepth: true }).regions.map((r) => [r.startLine, r.endLine]), [[3, 6], [8, 9]]);
+  const inside = testRegionLines(src, { anyDepth: true });
+  assert.deepEqual([2, 3, 5, 6, 7, 8].map(inside), [false, true, true, true, false, true]);
+  assert.equal(testRegionLines(src)(5), false);
+  // The product is still judged at the top level: the nested module is product to the scope rule.
+  assert.equal(testOnlyChange(src, src.replace("fn t() {}", "fn t() { let _ = 1; }")), false);
+});
+
 test("cargoTally: a removed test-module declaration is a suite out of reach", () => {
   // The file `counter_tests.rs` still exists and still looks tested.
   assert.deepEqual(counts(cargoTally(" mod counter;\n-#[cfg(test)]\n-mod counter_tests;\n mod merge;")).gates, ["mod counter_tests"]);

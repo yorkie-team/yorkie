@@ -357,8 +357,13 @@ function regionAt(toks, at) {
  * `{ tokens, regions }` for a Rust source file, or `null` when it does not lex
  * or its brackets do not balance. `regions` are the top-level test regions, in
  * order, as token index ranges and 1-based line ranges, both inclusive.
+ *
+ * `anyDepth` also takes a `#[cfg(test)]` module nested in another item. That
+ * is for the LINTS, which ask "is this line test code" and warn: a nested
+ * test module is test code to them. It is never for the scope question,
+ * where whatever encloses the module may be a macro.
  */
-export function testRegions(src) {
+export function testRegions(src, { anyDepth = false } = {}) {
   const tokens = rustTokens(src);
   if (!tokens) return null;
   const regions = [];
@@ -369,7 +374,7 @@ export function testRegions(src) {
     if (Object.hasOwn(OPEN, tok.t)) stack.push(OPEN[tok.t]);
     else if (CLOSE.has(tok.t)) {
       if (stack.pop() !== tok.t) return null;
-    } else if (tok.t === "#" && stack.length === 0) {
+    } else if (tok.t === "#" && (anyDepth || stack.length === 0)) {
       const region = regionAt(tokens, i);
       if (region) {
         regions.push(region);
@@ -434,9 +439,9 @@ export function declaresTestModule(src, name) {
   return true;
 }
 
-/** A predicate over 1-based line numbers: is this line inside a test region? `null` when the file does not lex. */
-export function testRegionLines(src) {
-  const parsed = testRegions(src);
+/** A predicate over 1-based line numbers: is this line inside a test region? `null` when the file does not lex. `{ anyDepth: true }` counts nested test modules, for the lints. */
+export function testRegionLines(src, options = {}) {
+  const parsed = testRegions(src, options);
   if (!parsed) return null;
   return (line) => parsed.regions.some((r) => r.startLine <= line && line <= r.endLine);
 }
@@ -500,6 +505,11 @@ const IGNORE = /^\s*#\[(?:ignore\b|cfg_attr\(.*\bignore\b)/;
 // goes green without the code changing.
 const SHOULD_PANIC = /^\s*#\[should_panic\b/;
 const CFG = /^\s*#(!?)\[cfg\((.*)\)\]\s*$/;
+// The same attribute broken over lines: `#[cfg(all(` … `))]`.
+const CFG_OPEN = /^\s*#(!?)\[cfg\((.*)$/;
+const CFG_CLOSE = /^(.*)\)\]\s*$/;
+const PATH_ATTR = /^\s*#\[path\s*=\s*"([^"]*)"\s*\]/;
+const MOD_OPEN = /^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w+)\s*\{\s*$/;
 const CFG_TEST = /^\s*#\[cfg\(\s*test\s*\)\]/;
 const MOD_DECL = /^\s*(#\[cfg\(\s*test\s*\)\]\s*)?(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w+)\s*;/;
 const ITEM = /^\s*(?:pub(?:\([^)]*\))?\s+)?(?:(?:async|const|unsafe|default|extern(?:\s+"[^"]*")?)\s+)*(fn|mod|struct|enum|union|trait|impl|type|static|use|macro_rules!)\b\s*(\w+)?/;
@@ -524,7 +534,7 @@ export const cargoNeverRuns = (expr) => /^(?:mod|member) /.test(expr) || NEVER_T
  * `fn`/`mod` line below — so it is as good as the patch's context is.
  */
 function attributeRun(lines, k) {
-  const seen = { cases: new Set(), cfgTest: false, item: "", name: "" };
+  const seen = { cases: new Set(), cfgTest: false, item: "", name: "", itemSign: "" };
   const note = (line) => {
     if (CASE.test(line.text)) seen.cases.add(line.sign);
     if (CFG_TEST.test(line.text)) seen.cfgTest = true;
@@ -540,6 +550,7 @@ function attributeRun(lines, k) {
     if (item) {
       seen.item = item[1];
       seen.name = item[2] ?? "";
+      seen.itemSign = lines[i].sign;
       break;
     }
     if (lines[i].text.trim() === "}") break;
@@ -571,6 +582,7 @@ export function cargoTally(patch, { status = "", testFile = false } = {}) {
   let removed = 0, added = 0, offNet = 0;
   const builds = { "+": new Set(), "-": new Set() };
   const fences = { "+": { off: 0, runs: 0 }, "-": { off: 0, runs: 0 } };
+  const consumed = new Set();
   lines.forEach((line, k) => {
     if (line.sign === " ") return;
     const sign = line.sign === "+" ? 1 : -1;
@@ -592,17 +604,54 @@ export function cargoTally(patch, { status = "", testFile = false } = {}) {
       offNet += sign;
       return;
     }
-    const cfg = CFG.exec(line.text);
+    if (consumed.has(k)) return;
+    let cfg = CFG.exec(line.text);
+    let last = k;
+    if (!cfg && CFG_OPEN.test(line.text) && !line.text.includes(")]")) {
+      // An attribute over several lines of the same sign, up to its `)]`.
+      const parts = [CFG_OPEN.exec(line.text)[2]];
+      for (let i = k + 1; i < lines.length && i <= k + 12 && lines[i].sign === line.sign && lines[i].hunk === line.hunk; i++) {
+        const close = CFG_CLOSE.exec(lines[i].text);
+        parts.push(close ? close[1] : lines[i].text);
+        if (close) {
+          cfg = [null, CFG_OPEN.exec(line.text)[1], parts.join(" ")];
+          last = i;
+          break;
+        }
+      }
+      if (cfg) for (let i = k + 1; i <= last; i++) consumed.add(i);
+    }
     if (cfg) {
-      const expr = cfg[2].trim();
+      const expr = cfg[2].replace(/\s+/g, " ").replace(/\( /g, "(").replace(/ \)/g, ")").trim();
       if (expr === "test") return;
       if (!testFile) {
-        if (cfg[1] === "!") return;
-        const run = attributeRun(lines, k);
-        const onTest = run.cases.size > 0 || run.cfgTest || (run.item === "mod" && TEST_MODULE_NAME.test(run.name));
+        let onTest;
+        if (cfg[1] === "!") {
+          // An inner attribute gates what ENCLOSES it. As the first line of
+          // a test module, one added line switches the whole module off.
+          let up = k - 1;
+          while (up >= 0 && lines[up].hunk === line.hunk && lines[up].text.trim() === "") up--;
+          const open = up >= 0 && lines[up].hunk === line.hunk ? MOD_OPEN.exec(lines[up].text) : null;
+          onTest = !!open && (TEST_MODULE_NAME.test(open[1]) || (up > 0 && lines[up - 1].hunk === line.hunk && CFG_TEST.test(lines[up - 1].text)));
+        } else {
+          const run = attributeRun(lines, last);
+          onTest = run.cases.size > 0 || run.cfgTest || (run.item === "mod" && TEST_MODULE_NAME.test(run.name));
+        }
         if (!onTest) return;
       }
       builds[line.sign].add(expr);
+      return;
+    }
+    // `#[path = "…"]` on a test module that was already declared: the
+    // module now means another file, and the old one is no longer compiled.
+    // Written with a NEW declaration it is just where that module lives.
+    const repoint = PATH_ATTR.exec(line.text);
+    if (repoint) {
+      const run = attributeRun(lines, k);
+      if (run.item !== "mod" || !(run.cfgTest || TEST_MODULE_NAME.test(run.name))) return;
+      const existing = run.itemSign !== "+" || lines.some((l) => l.hunk === line.hunk && l.sign === "-" && MOD_DECL.exec(l.text)?.[2] === run.name);
+      if (!existing) return;
+      builds[line.sign].add(`path ${repoint[1]} for mod ${run.name}`);
       return;
     }
     const mod = MOD_DECL.exec(line.text);
