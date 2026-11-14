@@ -166,18 +166,25 @@ export const AUTH = [
   /invalid[ _-]?(api[ _-]?key|token|credential)/i,
   /expired[ _-]?(token|credential)/i,
   /not[ _-]?authenticated/i,
-  /permission[ _-]?denied/i,
+  // Not a filesystem error. A failed probe is classified from the CLI's stderr
+  // tail, where the runner's own EACCES/EPERM ("EACCES: permission denied,
+  // mkdir …") or a shell's "/path: Permission denied" can appear; read as auth,
+  // a passing fault there would refuse every slot and page the PR.
+  /(?<!(?:E(?:ACCES|PERM)|\/[^\s:]*): )permission[ _-]?denied/i,
   // What an unauthenticated Agent SDK says: "Not logged in · Please run /login".
   /not[ _-]?logged[ _-]?in/i,
   /please run \/login/i,
-  /\/login\b/,
+  // The bare command only: not a URL's or a file's path (`…/oauth/login`,
+  // `/app/login.js`), which a network error or a stack frame can carry.
+  /(?<![\w./-])\/login(?![\w/-]|\.\w)/,
 ];
 
 /**
  * "quota" | "auth" | "unknown" for a probe that did not answer.
  *
- * A "refused" answer here pauses the PR behind the paged latch until a human
- * reruns it, so only a refusal that STAYS refused counts: a closed usage window
+ * A "refused" answer from every slot pages the PR and pauses it until
+ * loop-sweep retries NO_LIVE_CREDENTIAL (60 minutes at the earliest) or a
+ * human reruns it, so only a refusal that STAYS refused counts: a closed usage window
  * (until it resets) or a rejected credential. A plain 429, "rate limit",
  * "overloaded" or "capacity" is transient — on an API-wide blip every slot would
  * read as dead and the PR would latch for nothing — so it is `unknown`, which
@@ -238,7 +245,7 @@ export function probeEnv(token, home) {
   return { PATH: process.env.PATH ?? "", HOME: home, CLAUDE_CONFIG_DIR: home, CLAUDE_CODE_OAUTH_TOKEN: token };
 }
 
-function sdkCheck(query, model, token, timeoutMs = 30_000) {
+export function sdkCheck(query, model, token, timeoutMs = 30_000) {
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), timeoutMs);
   const home = mkdtempSync(path.join(tmpdir(), "probe-"));
@@ -261,7 +268,10 @@ function sdkCheck(query, model, token, timeoutMs = 30_000) {
         failure = `${m.subtype ?? ""} ${m.api_error_status ?? ""} ${m.result ?? ""}`;
       }
     } catch (err) {
-      failure = abort.signal.aborted ? "timeout" : String(err?.message ?? err);
+      // Keep a result message the session already sent: the CLI can exit
+      // non-zero after it, and the exit error alone carries only stderr.
+      const thrown = abort.signal.aborted ? "timeout" : String(err?.message ?? err);
+      failure = failure === "(no result message)" ? thrown : `${failure} ${thrown}`;
     } finally {
       clearTimeout(timer);
       rmSync(home, { recursive: true, force: true });
