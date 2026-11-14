@@ -37,6 +37,7 @@ import { fileURLToPath } from "node:url";
 // scripts/agent/node_modules ABSENT, so a module that statically pulled in the
 // Agent SDK would take this whole file down with it (ask.test.mjs enforces this).
 import { classifyResult } from "./ask.mjs";
+import { get } from "./config.mjs";
 import { redactSecrets } from "./redact.mjs";
 import { emitBestEffortWarning } from "./guard-verdict.mjs";
 
@@ -1187,12 +1188,11 @@ function cmdEffort(args) {
 }
 
 /**
- * Bot identities whose comments may carry a metric ledger. A literal copy of
- * `rounds.mjs::PAGE_AUTHOR_LOGINS` rather than an import: this module is the one
- * `rounds.mjs`-adjacent reader that must stay importable on its own, and
- * `metrics.test.mjs` pins the two lists equal.
+ * Bot identities whose comments may carry a metric ledger: the same
+ * `repo.botLogins` list `rounds.mjs::PAGE_AUTHOR_LOGINS` is, read from the
+ * harness configuration by both. `metrics.test.mjs` pins the two equal.
  */
-export const LEDGER_AUTHOR_LOGINS = Object.freeze(["github-actions[bot]", "yorkie-team-agent[bot]"]);
+export const LEDGER_AUTHOR_LOGINS = get("repo.botLogins");
 
 function cmdSummarize(args) {
   const pr = args.pr;

@@ -1,3 +1,4 @@
+import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -70,7 +71,7 @@ test("records round-trip, and only github-actions[bot] is believed", () => {
   assert.deepEqual(collectTestRemovals([bot(body)]), [{ head: "6915bc6a7", after: "e6900da64", removals: rec.removals.map((r) => ({ ...r, suitesOff: 0 })) }]);
   // The fixer's own identity (it can comment through the fix-report path) and a
   // human are not the pipeline: refused.
-  assert.deepEqual(collectTestRemovals([bot(body, "yorkie-team-agent[bot]")]), []);
+  assert.deepEqual(collectTestRemovals([bot(body, "fixture-agent[bot]")]), []);
   assert.deepEqual(collectTestRemovals([{ ...bot(body), user: { login: "github-actions[bot]", type: "User" } }]), []);
   assert.deepEqual(collectTestRemovals([bot("<!-- agent-fix-tests {nope} -->")]), []);
   // A file name cannot close the record.
@@ -179,10 +180,10 @@ test("roundCommits: only the PR's own non-merge commits in the round", () => {
   assert.deepEqual(roundCommits(compare, null), []);
 });
 
-// GO. yorkie's product tests — the ones the fixer edits — are Go. The JS rules
+// GO. Where a repository's product tests — the ones the fixer edits — are Go. The JS rules
 // above stay for the harness's own `scripts/agent/*.test.mjs`.
 
-test("isTestFile: yorkie's Go test layouts", () => {
+test("isTestFile: the Go test layouts", () => {
   for (const f of [
     "pkg/document/crdt/tree_test.go",
     "test/integration/tree_test.go",
@@ -289,19 +290,24 @@ test("aggregateCommits (Go): a reproducer committed then deleted in the round is
   assert.match(body, /`pkg\/a_test\.go`: 1 test\(s\) or suite\(s\) switched off/);
 });
 
-// REVIEW of the port. yorkie keeps the bodies of its database and RPC suites in
-// shared `testcases/testcases.go` files (not `_test.go`): `func RunXxxTest(`
-// with the signature on the following lines, called from thin `_test.go`
-// wrappers. A skip or a deleted subtest there is a test switched off.
-test("isTestFile (Go): shared suite bodies under a testcases/ directory are test files", () => {
-  for (const f of ["server/backend/database/testcases/testcases.go", "server/rpc/testcases/testcases.go"]) {
+// A repository may keep suite bodies in shared files that are not `_test.go`:
+// `func RunXxxTest(` with the signature on the following lines, called from
+// thin `_test.go` wrappers. Which directories hold them is configuration
+// (`tests.go.sharedSuiteDirs` — `sharedsuites` in the fixture). A skip or a
+// deleted subtest there is a test switched off.
+test("isTestFile (Go): shared suite bodies under a configured directory are test files", () => {
+  for (const f of ["server/backend/database/sharedsuites/suites.go", "server/rpc/sharedsuites/suites.go", "sharedsuites/a/b.go"]) {
     assert.equal(isTestFile(f), true, f);
   }
-  assert.equal(isTestFile("server/backend/database/testcase.go"), false);
+  assert.equal(isTestFile("server/backend/database/sharedsuite.go"), false);
+  assert.equal(isTestFile("server/backend/database/xsharedsuites/suites.go"), false, "the directory name is matched whole");
+  assert.equal(isTestFile("server/backend/database/sharedsuites/notes.txt"), false, "only Go files");
+  // A directory the configuration does not name is not a shared suite.
+  assert.equal(isTestFile("server/rpc/testcases/testcases.go"), false);
 });
 
-test("testRemovals (Go): a skip or a deleted subtest in testcases.go is reported, and so is a deleted Run* body", () => {
-  const file = "server/backend/database/testcases/testcases.go";
+test("testRemovals (Go): a skip or a deleted subtest in a shared suite is reported, and so is a deleted Run* body", () => {
+  const file = "server/backend/database/sharedsuites/suites.go";
   assert.deepEqual(testRemovals([{ filename: file, status: "modified",
     patch: " func RunFindDocInfoTest(\n \tt *testing.T,\n+\tt.Skip(\"still reproduces: #42\")" }]),
   [{ file, deleted: false, removed: 0, added: 0, suitesOff: 1 }]);
@@ -309,9 +315,9 @@ test("testRemovals (Go): a skip or a deleted subtest in testcases.go is reported
     patch: "-\tt.Run(\"find by key\", func(t *testing.T) {\n-\t\trequire.NoError(t, err)" }]),
   [{ file, deleted: false, removed: 1, added: 0, suitesOff: 0 }]);
   // A whole shared body deleted: `func RunXxx(` is the case line there.
-  assert.deepEqual(testRemovals([{ filename: "server/rpc/testcases/testcases.go", status: "modified",
+  assert.deepEqual(testRemovals([{ filename: "server/rpc/sharedsuites/suites.go", status: "modified",
     patch: "-func RunAttachAndDetachDocumentTest(\n-\tt *testing.T," }]),
-  [{ file: "server/rpc/testcases/testcases.go", deleted: false, removed: 1, added: 0, suitesOff: 0 }]);
+  [{ file: "server/rpc/sharedsuites/suites.go", deleted: false, removed: 1, added: 0, suitesOff: 0 }]);
 });
 
 // D2 tells the Go fixer to WRITE skips. A skip added in one commit and taken
@@ -348,9 +354,13 @@ test("testRemovals (Go): renames that stay *_test.go but leave the runner's reac
     { filename: "pkg/crdt/.text_test.go", previous_filename: "pkg/crdt/text_test.go", status: "renamed", patch: "" },
     { filename: "pkg/crdt/gc_windows_test.go", previous_filename: "pkg/crdt/gc_test.go", status: "renamed", patch: "" },
     { filename: "pkg/crdt/rht_386_test.go", previous_filename: "pkg/crdt/rht_test.go", status: "renamed", patch: "" },
-    // Still in reach on CI (linux/amd64): a move, not a removal.
+    // CI's platform is configuration (`tests.go.ciPlatform` — linux/arm64 in
+    // the fixture), so another architecture is out of reach like another OS.
+    { filename: "pkg/crdt/heap_amd64_test.go", previous_filename: "pkg/crdt/heap_test.go", status: "renamed", patch: "" },
+    // Still in reach on CI: a move, not a removal.
     { filename: "pkg/crdt/splay_linux_test.go", previous_filename: "pkg/crdt/splay_test.go", status: "renamed" },
-    { filename: "pkg/crdt/llrb_amd64_test.go", previous_filename: "pkg/crdt/llrb_test.go", status: "renamed" },
+    { filename: "pkg/crdt/llrb_arm64_test.go", previous_filename: "pkg/crdt/llrb_test.go", status: "renamed" },
+    { filename: "pkg/crdt/trie_linux_arm64_test.go", previous_filename: "pkg/crdt/trie_test.go", status: "renamed" },
   ]);
   assert.deepEqual(got.map((r) => [r.file, r.deleted]), [
     ["pkg/crdt/tree_test.go", true],
@@ -358,6 +368,7 @@ test("testRemovals (Go): renames that stay *_test.go but leave the runner's reac
     ["pkg/crdt/text_test.go", true],
     ["pkg/crdt/gc_test.go", true],
     ["pkg/crdt/rht_test.go", true],
+    ["pkg/crdt/heap_test.go", true],
   ]);
 });
 

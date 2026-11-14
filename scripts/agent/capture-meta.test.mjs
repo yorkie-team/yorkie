@@ -1,3 +1,4 @@
+import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -50,7 +51,7 @@ test("buildCaptureMeta: the exact payload a collector will read, field for field
   // that a consumer can be written against a fixed shape, so an ADDED field is a
   // schema change and has to be a deliberate one.
   assert.deepEqual(buildCaptureMeta(GATING), {
-    schema: "yorkie/stage-capture-meta@1",
+    schema: "fixture-repo/stage-capture-meta@1",
     pr: 669,
     headSha: HEAD,
     baseSha: BASE,
@@ -63,7 +64,7 @@ test("buildCaptureMeta: the exact payload a collector will read, field for field
     lenses: ["correctness", "security"],
     capturedAt: "2026-08-04T07:53:22Z",
   });
-  assert.equal(CAPTURE_META_SCHEMA, "yorkie/stage-capture-meta@1");
+  assert.equal(CAPTURE_META_SCHEMA, "fixture-repo/stage-capture-meta@1");
 });
 
 test("buildCaptureMeta: NO config_hash, and no field a consumer must guess at", () => {

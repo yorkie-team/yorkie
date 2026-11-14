@@ -416,7 +416,11 @@ jobs:
         if: steps.rerun.outputs.engaged == 'true'
         continue-on-error: true
         with:
-          sparse-checkout: scripts/agent
+          # The scripts and the configuration they read, from the same ref: a
+          # script resolves `.github/agent-harness` beside its own checkout.
+          sparse-checkout: |
+            scripts/agent
+            .github/agent-harness
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - name: Update loop status (rerun)

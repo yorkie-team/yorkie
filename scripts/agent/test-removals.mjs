@@ -27,21 +27,27 @@
 // WHAT IT CANNOT SEE, stated because #1426 is the case that motivated it and is
 // one it would NOT have caught: there the test was written and deleted in the
 // working tree and never committed, so no commit ever held it. Only COMMITTED
-// tests are visible. The fixer prompt's rule — keep a reproducing test behind
-// a `t.Skip` that names the finding, never delete it — is the only guard for
+// tests are visible. The fixer prompt's rule — keep a reproducing test, switched
+// off in place with the finding named, never delete it — is the only guard for
 // the uncommitted case. A
 // force-push that dropped commits is flagged (`rewritten`) rather than hidden:
 // the dropped commits are gone from the API too.
 //
-// TWO LANGUAGES. yorkie's product tests are Go — `_test.go` files, top-level
-// `func TestXxx(t *testing.T)` / `func FuzzXxx(f *testing.F)` cases, `t.Run`
-// subtests, and `t.Skip`/`t.Skipf`/`t.SkipNow` as the way a case is switched
-// off — and the fixer edits Go. The harness's own tests are JavaScript
-// (`scripts/agent/*.test.mjs`, `it(`/`test(`). `countCases` picks the rules by
-// the file's extension. Go has no `it.fails`: a reproducer the fixer could not
-// fix is kept behind a `t.Skip`, so on the Go side a skip IS recorded — beside
-// a `--skipped` claim that is the honest record, beside a `--fixed` one it is
-// the contradiction the adjudicator is shown it to catch.
+// RULES PER LANGUAGE. What a test file, a case and a switched-off case look
+// like depends on the language, and which languages a repository's tests are
+// written in is `tests.rules` in its harness configuration:
+//   - `go`: `_test.go` files, top-level `func TestXxx(t *testing.T)` /
+//     `func FuzzXxx(f *testing.F)` cases, `t.Run` subtests, and
+//     `t.Skip`/`t.Skipf`/`t.SkipNow` as the way a case is switched off. Go has
+//     no `it.fails`: a reproducer the fixer could not fix is kept behind a
+//     `t.Skip`, so a skip IS recorded — beside a `--skipped` claim that is the
+//     honest record, beside a `--fixed` one it is the contradiction the
+//     adjudicator is shown it to catch. `tests.go` carries the two things the
+//     rules cannot know: which directories hold shared suite bodies, and the
+//     platform CI runs on.
+//   - `vitest`: `*.test.*` / `*.spec.*` files with `it(`/`test(` cases — the
+//     shape of this package's own tests too.
+// `countCases` picks between the enabled sets by the file's extension.
 //
 // Usage:
 //   node test-removals.mjs post <pr> --before <sha> --after <sha> [--head <sha>]
@@ -56,6 +62,7 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { get } from "./config.mjs";
 
 export const TEST_REMOVALS_MARKER = "<!-- agent-fix-tests ";
 export const TEST_REMOVALS_VERSION = 1;
@@ -75,14 +82,21 @@ export function safePath(file) {
   return str(file).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/`/g, "'").slice(0, 300);
 }
 
+// Which rule sets are on, and what the Go set needs to be told. Read once, at
+// import: a configuration without these throws here rather than letting every
+// file fall through to "not a test", which would record nothing, silently.
+const RULES = get("tests.rules");
+const GO_RULES = RULES.includes("go");
+const JS_RULES = RULES.includes("vitest");
+const GO_CONFIG = GO_RULES ? get("tests.go") : null;
+
 /**
- * This repo's test layouts: `test/` trees, `__tests__/`, `*_test.go`, Go files
- * under a `testcases/` directory, and `*.test.*` / `*.spec.*` / `*_test.*` JS
- * files.
+ * The test layouts: `test/` trees and `__tests__/` in any language; with the Go
+ * rules, `*_test.go` and Go files under a shared-suite directory; with the JS
+ * rules, `*.test.*` / `*.spec.*` / `*_test.*` files.
  *
- * `testcases/` because yorkie keeps the bodies of its database and RPC suites
- * in shared, non-`_test.go` files (`server/backend/database/testcases/`,
- * `server/rpc/testcases/`) that thin `_test.go` wrappers call. Decided by the
+ * A shared-suite directory (`tests.go.sharedSuiteDirs`) holds suite bodies in
+ * non-`_test.go` files that thin `_test.go` wrappers call. Decided by the
  * PATH, not by whether the patch shows `*testing.T`: whether a signature is in
  * a hunk's context depends on how much context the diff carries, and the
  * record must not change with it.
@@ -92,18 +106,23 @@ export function isTestFile(file) {
   return /(^|\/)(test|tests|__tests__)\//.test(f) || isSharedGoSuite(f) || isRunnableTest(f);
 }
 
-/** A shared Go suite body: a `.go` file under a `testcases/` directory. */
+const SHARED_GO_SUITE = (GO_CONFIG?.sharedSuiteDirs ?? []).map(
+  (dir) => new RegExp(`(^|/)${dir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/(.*/)?[^/]*\\.go$`),
+);
+
+/** A shared Go suite body: a `.go` file under a configured shared-suite directory. */
 function isSharedGoSuite(file) {
-  return /(^|\/)testcases\/(.*\/)?[^/]*\.go$/.test(str(file));
+  const f = str(file);
+  return SHARED_GO_SUITE.some((re) => re.test(f));
 }
 
-// What `go test ./...` on CI (linux/amd64) skips by NAME: a path element named
+// What `go test ./...` on CI's platform skips by NAME: a path element named
 // `testdata` or starting with `_` or `.`, and a `_GOOS`/`_GOARCH` (or
 // `_GOOS_GOARCH`) suffix for another platform.
 const GOOS = new Set(["aix", "android", "darwin", "dragonfly", "freebsd", "hurd", "illumos", "ios", "js", "linux", "nacl", "netbsd", "openbsd", "plan9", "solaris", "wasip1", "windows", "zos"]);
 const GOARCH = new Set(["386", "amd64", "amd64p32", "arm", "armbe", "arm64", "arm64be", "loong64", "mips", "mipsle", "mips64", "mips64le", "mips64p32", "mips64p32le", "ppc", "ppc64", "ppc64le", "riscv", "riscv64", "s390", "s390x", "sparc", "sparc64", "wasm"]);
-const CI_GOOS = "linux";
-const CI_GOARCH = "amd64";
+const CI_GOOS = GO_CONFIG?.ciPlatform.goos;
+const CI_GOARCH = GO_CONFIG?.ciPlatform.goarch;
 
 function goTestInReach(file) {
   const parts = file.split("/");
@@ -124,11 +143,11 @@ function goTestInReach(file) {
 /** A file the runners pick up by NAME (`*_test.go` in reach of `go test` on CI; `*.test.*`, `*.spec.*`, `*_test.*` in JS), wherever it lives. */
 export function isRunnableTest(file) {
   const f = str(file);
-  if (/_test\.go$/.test(f)) return goTestInReach(f);
-  return /[._](test|spec)\.[cm]?[jt]sx?$/.test(f);
+  if (GO_RULES && /_test\.go$/.test(f)) return goTestInReach(f);
+  return JS_RULES && /[._](test|spec)\.[cm]?[jt]sx?$/.test(f);
 }
 
-const isGo = (file) => /\.go$/.test(str(file));
+const isGo = (file) => GO_RULES && /\.go$/.test(str(file));
 
 // JavaScript (the harness's own tests). An ACTIVE case declaration at the start
 // of a diff line: `it`/`test` with any
@@ -152,7 +171,7 @@ const SUITE_OFF = /^[-+]\s*describe(?:\.\w+)*\.(?:skip|todo|skipIf|runIf)\s*[(`]
 // does not run them, so they cannot show that a finding reproduces. Rows of a
 // table-driven test are not seen — a known gap, stated rather than guessed at.
 const GO_CASE = /^[-+]func\s+(?:Test|Fuzz)(?![a-z])\w*\s*\(\s*\w+\s+\*testing\.[TF]\s*\)/;
-// In a shared suite body (`testcases/`), a top-level `func RunXxx(` is the case:
+// In a shared suite body (a configured directory), a top-level `func RunXxx(` is the case:
 // gofmt breaks its signature over the following lines, so the parameter type
 // is not on the line to check.
 const GO_SHARED_CASE = /^[-+]func\s+Run[A-Z0-9_]\w*\s*\(/;
@@ -205,12 +224,14 @@ function tally(patch, { file = "", status = "" } = {}) {
         continue;
       }
       if (!GO_CASE.test(line) && !GO_SUBTEST.test(line) && !(shared && GO_SHARED_CASE.test(line))) continue;
-    } else {
+    } else if (JS_RULES) {
       if (SUITE_OFF.test(line)) {
         offNet += sign;
         continue;
       }
       if (!CASE.test(line)) continue;
+    } else {
+      continue;
     }
     if (sign < 0) removed++;
     else added++;

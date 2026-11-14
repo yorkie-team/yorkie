@@ -1,0 +1,56 @@
+{
+  "repo": {
+    "name": "fixture-repo",
+    "botLogins": ["github-actions[bot]", "fixture-agent[bot]"],
+    "appLogins": ["fixture-agent[bot]", "app/fixture-agent"]
+  },
+  "docs": {
+    "commandVerbsRef": "fixture-docs/command-verbs.md"
+  },
+  "ci": {
+    "definingPaths": ["build.config", "deps.lock", "tools/ci/**", "tools/*.sh"],
+    "gateLabel": "fixture lint, fixture suites",
+    "handoffSummary": [
+      "- ✅ CI is green (the fixture lint and the fixture suites) for this exact head",
+      "  SHA, and the branch changes none of the paths that define what CI does."
+    ],
+    "laneReports": false
+  },
+  "review": {
+    "classRules": {
+      "code-adjacent": ["**/fixtures/**", "stack/**"],
+      "policy": ["build.config", "tools/lint.rules"]
+    },
+    "sourceGlobs": ["src/**", "lib/**"],
+    "sharedPrimitivesNote": "This fixture keeps its shared primitives in `lib/`.",
+    "diffExcludes": ["gen/**"]
+  },
+  "fixer": {
+    "verifyCommand": "fixture verify",
+    "verifyDescription": "the fixture lint and the fixture unit suites",
+    "forbiddenCommands": "`fixture test-all`",
+    "targetedTestHint": "`fixture test <path>`",
+    "generatedCodeNote": "",
+    "keepReproducerAs": "a skipped case that names the finding",
+    "licenceScope": "every new source file",
+    "todoTrackingLine": ""
+  },
+  "tests": {
+    "rules": ["go", "vitest"],
+    "go": {
+      "sharedSuiteDirs": ["sharedsuites"],
+      "ciPlatform": { "goos": "linux", "goarch": "arm64" }
+    }
+  },
+  "fixGuard": {
+    "replicatedRuleGlobs": ["lib/rules/*.go"],
+    "replicatedRuleNotice": "**Replicated rule changed on one side only (warning).** fixture-counterpart must apply the same rule. Link the matching change in the PR body, or say why none is needed:",
+    "counterpartRepo": "fixture-counterpart"
+  },
+  "redact": {
+    "extraPatterns": []
+  },
+  "ask": {
+    "permittedMcpTools": []
+  }
+}

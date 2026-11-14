@@ -1,3 +1,4 @@
+import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -86,7 +87,8 @@ test("reviewingLensIds: only lenses that will actually review, from the REAL man
   // `lens-state-gap` every round, so nothing would ever narrow and nothing would
   // say why. So this must track `appliesWhen` exactly — asserted here on the two
   // concrete directions rather than by re-deriving it, which would be tautological.
-  const code = reviewingLensIds(manifest, ["pkg/document/crdt/tree.go"]);
+  // `src/**` is source in the fixture configuration (`review.sourceGlobs`).
+  const code = reviewingLensIds(manifest, ["src/document/tree.go"]);
   const docs = reviewingLensIds(manifest, ["docs/tasks/active/20260912-x-todo.md"]);
 
   // Wildcard lenses run on everything, so both sets are non-empty.
@@ -102,7 +104,7 @@ test("reviewingLensIds: only lenses that will actually review, from the REAL man
     assert.ok(!docs.includes(id), `${id} must not be required to have reviewed a docs-only change`);
   }
   assert.ok(docs.includes("docs"), "the docs lens must review a markdown change");
-  assert.ok(!code.includes("docs"), "the docs lens must not be required for a .go-only change");
+  assert.ok(!code.includes("docs"), "the docs lens must not be required for a code-only change");
   // Both are strict subsets, so neither direction silently degenerates to "all".
   for (const [name, set] of [["code", code], ["docs", docs]]) {
     assert.ok(set.length < manifest.length, `${name} should be a strict subset, got ${set.join(",")}`);

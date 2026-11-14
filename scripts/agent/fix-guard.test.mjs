@@ -1,3 +1,4 @@
+import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -79,28 +80,43 @@ test("weakenedAssertions: a net loss or a tautology in a test file warns", () =>
   assert.equal(w[1].tautologies, 1);
 });
 
-test("crdtRuleChanges: non-test Go under pkg/document/crdt only", () => {
+// Which paths hold a replicated rule is configuration
+// (`fixGuard.replicatedRuleGlobs` — `lib/rules/*.go` in the fixture).
+test("crdtRuleChanges: non-test files matching the configured globs only", () => {
   assert.deepEqual(crdtRuleChanges([
+    { filename: "lib/rules/tree.go" },
+    { filename: "lib/rules/tree_test.go" },
+    { filename: "lib/rules/sub/tree.go" },
+    { filename: "lib/rules/notes.md" },
+    { filename: "lib/document.go" },
+    { filename: "xlib/rules/tree.go" },
+    // A path another repository lists is nothing here.
     { filename: "pkg/document/crdt/tree.go" },
-    { filename: "pkg/document/crdt/tree_test.go" },
-    { filename: "pkg/document/document.go" },
-  ]), ["pkg/document/crdt/tree.go"]);
+  ]), ["lib/rules/tree.go"]);
+  for (const junk of [null, undefined, "x", [null, {}, { filename: 7 }]]) assert.deepEqual(crdtRuleChanges(junk), []);
 });
 
 test("lintRound: scope and reviewer text block; assertions and CRDT warn", () => {
   const files = [
     { filename: "server/packs/pushpull.go", status: "modified", patch: "+x" },
-    { filename: "pkg/document/crdt/root.go", status: "modified", patch: "+y" },
+    { filename: "lib/rules/root.go", status: "modified", patch: "+y" },
   ];
   const r = lintRound({ files, original: ORIGINAL });
   assert.equal(r.blocking, true);
-  assert.deepEqual(r.violations, ["pkg/document/crdt/root.go", "server/packs/pushpull.go"]);
-  assert.deepEqual(r.crdt, ["pkg/document/crdt/root.go"]);
-  const warnOnly = lintRound({ files: [{ filename: "pkg/document/crdt/root.go", patch: "+y" }], original: new Set(["pkg/document/crdt/root.go"]) });
+  assert.deepEqual(r.violations, ["lib/rules/root.go", "server/packs/pushpull.go"]);
+  assert.deepEqual(r.crdt, ["lib/rules/root.go"]);
+  const warnOnly = lintRound({ files: [{ filename: "lib/rules/root.go", patch: "+y" }], original: new Set(["lib/rules/root.go"]) });
   assert.equal(warnOnly.blocking, false);
   assert.equal(warnOnly.crdt.length, 1);
-  // A PR body pointing at the other SDK has made the parity question visible.
-  assert.equal(lintRound({ files: [{ filename: "pkg/document/crdt/root.go" }], original: new Set(["pkg/document/crdt/root.go"]), prBody: "JS: yorkie-js-sdk#1442" }).crdt.length, 0);
+  // The warning is the configured notice, word for word, then the paths.
+  const rendered = renderFixGuard(warnOnly);
+  assert.ok(rendered.includes("fixture-counterpart must apply the same rule"), rendered);
+  assert.ok(rendered.includes("- `lib/rules/root.go`"), rendered);
+  // A PR body pointing at the counterpart (`fixGuard.counterpartRepo`), in any
+  // case, has made the parity question visible. Any other repository's name has not.
+  const one = { files: [{ filename: "lib/rules/root.go" }], original: new Set(["lib/rules/root.go"]) };
+  assert.equal(lintRound({ ...one, prBody: "Other side: Fixture-Counterpart#1442" }).crdt.length, 0);
+  assert.equal(lintRound({ ...one, prBody: "Other side: some-other-repo#1442" }).crdt.length, 1);
 });
 
 test("lintRound: an unknown original scope enforces nothing and says so", () => {
@@ -259,4 +275,63 @@ test("scopeAnchor: the dispatch ledger wins; without one the round's starting he
   assert.equal(scopeAnchor(ledger, before), frozen);
   assert.equal(scopeAnchor([], before), before, "no ledger (CI-fix arm, @claude fix) still has a scope");
   assert.equal(scopeAnchor([], "not-a-sha"), "");
+});
+
+// Which idioms count as an assertion, and which files count as tests, follow
+// `tests.rules`. The module reads the configuration once at import, so the
+// other setting is exercised in a child process with its own configuration.
+test("with the Go rules off, Go idioms are not assertions and Go files are not tests", async (t) => {
+  const { spawnSync } = await import("node:child_process");
+  const { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const path = (await import("node:path")).default;
+  const { fileURLToPath } = await import("node:url");
+  const { FIXTURE_CONFIG_DIR } = await import("./fixtures/use-fixture-config.mjs");
+  const here = path.dirname(fileURLToPath(import.meta.url));
+
+  const dir = mkdtempSync(path.join(tmpdir(), "harness-rules-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  cpSync(FIXTURE_CONFIG_DIR, dir, { recursive: true });
+  const config = JSON.parse(readFileSync(path.join(dir, "config.json"), "utf8"));
+  config.tests = { rules: ["vitest"] };
+  writeFileSync(path.join(dir, "config.json"), JSON.stringify(config));
+
+  const probe = `
+    const fg = await import(${JSON.stringify(path.join(here, "fix-guard.mjs"))});
+    const tr = await import(${JSON.stringify(path.join(here, "test-removals.mjs"))});
+    const lost = "-\\trequire.NoError(t, err)\\n-\\tt.Fatal(err)\\n-  expect(a).toBe(b)\\n+  expect(true).toBe(true)";
+    console.log(JSON.stringify({
+      goTest: tr.isTestFile("pkg/a_test.go"),
+      sharedSuite: tr.isTestFile("server/sharedsuites/a.go"),
+      jsTest: tr.isTestFile("src/a.test.ts"),
+      weakened: fg.weakenedAssertions([{ filename: "src/a.test.ts", patch: lost }]),
+      goCases: tr.countCases("-func TestA(t *testing.T) {\\n+\\tt.Skip(\\"x\\")", { file: "pkg/a_test.go", status: "modified" }),
+    }));`;
+  const run = (configDir) =>
+    spawnSync(process.execPath, ["--input-type=module", "-e", probe], {
+      encoding: "utf8",
+      env: { ...process.env, AGENT_HARNESS_CONFIG_DIR: configDir },
+    });
+
+  const off = run(dir);
+  assert.equal(off.status, 0, off.stderr);
+  assert.deepEqual(JSON.parse(off.stdout), {
+    goTest: false,
+    sharedSuite: false,
+    jsTest: true,
+    // Only the `expect(` line is an assertion: one removed, one added (a tautology).
+    weakened: [{ file: "src/a.test.ts", removed: 1, added: 1, tautologies: 1 }],
+    goCases: { removed: 0, added: 0, suitesOff: 0 },
+  });
+
+  // …and with both on (the fixture), the same input counts the Go idioms too.
+  const on = run(FIXTURE_CONFIG_DIR);
+  assert.equal(on.status, 0, on.stderr);
+  assert.deepEqual(JSON.parse(on.stdout), {
+    goTest: true,
+    sharedSuite: true,
+    jsTest: true,
+    weakened: [{ file: "src/a.test.ts", removed: 3, added: 1, tautologies: 1 }],
+    goCases: { removed: 1, added: 0, suitesOff: 1 },
+  });
 });

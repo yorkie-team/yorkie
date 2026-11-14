@@ -5,9 +5,7 @@ the *right change*, not whether the code is line-by-line correct.
 - **Spec-conformance:** does the diff actually satisfy the originating issue's
   `outcome` + `acceptance` criteria (provided below)? Flag missing behavior or
   unrequested scope creep.
-- **Duplication / reuse:** does it reinvent something that already exists? This
-  repo layers JSON-like → CRDT → Common, and the shared primitives live in
-  `pkg/`. Use Read/Grep/Glob to check for an existing package before accepting
+- **Duplication / reuse:** does it reinvent something that already exists? {{config:review.sharedPrimitivesNote}} Use Read/Grep/Glob to check for an existing package before accepting
   a new one.
 - **Scope & approach fit:** over- or under-engineered vs the issue and the
   relevant `docs/design/<topic>.md` **Non-Goals**; wrong layer/abstraction.

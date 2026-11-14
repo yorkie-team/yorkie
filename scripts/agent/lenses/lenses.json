@@ -40,15 +40,7 @@
     "gating": "blocking",
     "needsIssueSpec": true,
     "appliesWhen": [
-      "pkg/**",
-      "server/**",
-      "client/**",
-      "admin/**",
-      "cluster/**",
-      "cmd/**",
-      "api/**",
-      "internal/**",
-      "test/**",
+      "$config:review.sourceGlobs",
       "scripts/**",
       "docs/design/**"
     ],
@@ -68,15 +60,7 @@
     "gating": "blocking",
     "needsIssueSpec": false,
     "appliesWhen": [
-      "pkg/**",
-      "server/**",
-      "client/**",
-      "admin/**",
-      "cluster/**",
-      "cmd/**",
-      "api/**",
-      "internal/**",
-      "test/**",
+      "$config:review.sourceGlobs",
       "scripts/**"
     ],
     "scopeClasses": [
@@ -94,15 +78,7 @@
     "gating": "blocking",
     "needsIssueSpec": false,
     "appliesWhen": [
-      "pkg/**",
-      "server/**",
-      "client/**",
-      "admin/**",
-      "cluster/**",
-      "cmd/**",
-      "api/**",
-      "internal/**",
-      "test/**",
+      "$config:review.sourceGlobs",
       "scripts/**"
     ],
     "scopeClasses": [

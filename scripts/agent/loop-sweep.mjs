@@ -109,7 +109,7 @@ function parseMarker(body, marker) {
 /**
  * Is this comment a latch — review-side OR CI-side — from an author the rest of
  * the pipeline believes? The CI-side `<!-- agent-paged -->` is written by the
- * CI-fix arm with the App token (`yorkie-team-agent[bot]`) and can be written by
+ * CI-fix arm with the App token (the agent App's bot login) and can be written by
  * a maintainer by hand; `set-state.mjs`, `agent-rerun.yml` and
  * `agent-iterate-ci.yml` all trust those authors, so the sweep must too. Trusting
  * only the workflow bot here would read a real non-usage page as "no latch" and

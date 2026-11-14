@@ -14,6 +14,10 @@
 # `.github/workflows/` at run time, so a change to any workflow can break them.
 # Scoping this to `scripts/agent/**` would leave exactly the drift the guards
 # exist to catch outside the lane that runs them.
+#
+# `.github/agent-harness/**` is the repository's own configuration for these
+# scripts and the test that grades it; a change there runs this lane for the
+# same reason a change to the scripts does.
 name: Agent Scripts
 
 on:
@@ -21,11 +25,13 @@ on:
     branches: [main]
     paths:
       - "scripts/agent/**"
+      - ".github/agent-harness/**"
       - ".github/workflows/**"
   pull_request:
     branches: [main]
     paths:
       - "scripts/agent/**"
+      - ".github/agent-harness/**"
       - ".github/workflows/**"
 
 # Read-only: this job needs the tree and nothing else. No model is called here —
@@ -69,6 +75,14 @@ jobs:
 
       - name: Test
         run: npm test
+        working-directory: scripts/agent
+
+      # The suite above grades the harness code against a fixture configuration,
+      # so it says nothing about the values this repository actually runs on.
+      # This one reads `.github/agent-harness/` itself. A separate step, so a
+      # failure names which half broke.
+      - name: Test this repository's harness configuration
+        run: npm run test:repo
         working-directory: scripts/agent
 
   # THE TEST SUITE CANNOT CATCH THIS CLASS, AND ONE OF THEM SHIPPED.

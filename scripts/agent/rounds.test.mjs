@@ -1,3 +1,4 @@
+import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -53,10 +54,11 @@ test("the gate job's literal copy of the latch matches the module", skipWithout(
   );
   // The author allow-list is half the rule; a copy that drifted to a smaller set
   // would silently stop honouring a real page, and a larger one re-opens the
-  // spoof this check exists to close.
-  for (const login of PAGE_AUTHOR_LOGINS) {
-    assert.ok(PANEL_WORKFLOW.includes(`'${login}'`), `gate job must trust ${login}`);
-  }
+  // spoof this check exists to close. WHICH logins those are is the
+  // repository's configuration, so the copy is compared with it where the
+  // repository's own values are graded (`.github/agent-harness/repo.test.mjs`);
+  // here, only that the copy exists to be compared.
+  assert.match(PANEL_WORKFLOW, /const PAGE_AUTHOR_LOGINS = \[.+\];/, "gate job must carry an author allow-list");
   assert.ok(
     PANEL_WORKFLOW.includes("const isPagedLatchComment = (c) =>"),
     "gate job must author-check the latch, not match the marker alone",
@@ -388,13 +390,13 @@ test("rerunPointFrom: a maintainer's @claude rerun moves the floor", () => {
 test("isRerunCommand: A BOT CAN NEVER RESET ITS OWN BOUND", () => {
   // The reason this reads the maintainer's COMMAND and not the workflow's result
   // marker. agent-rerun.yml posts with the App token, so the trusted identity would
-  // be yorkie-team-agent[bot] — the same identity the fixer and implementer post their
+  // be fixture-agent[bot] — the same identity the fixer and implementer post their
   // own free-form comments under (the self-review comment on every agent PR). A
   // marker keyed on bot login let the party bounded by MAX_REVIEW_ROUNDS grant
   // itself unlimited attempts, by accident or by injection from the diff it reads.
   //
   // Structural, not a secret: no App can present as a non-Bot.
-  for (const login of ["yorkie-team-agent[bot]", "github-actions[bot]", "coderabbitai[bot]"]) {
+  for (const login of ["fixture-agent[bot]", "github-actions[bot]", "coderabbitai[bot]"]) {
     for (const assoc of ["OWNER", "MEMBER", "COLLABORATOR", "CONTRIBUTOR"]) {
       assert.equal(
         isRerunCommand(human("@claude rerun", { user: { login, type: "Bot" }, author_association: assoc })),
@@ -403,7 +405,7 @@ test("isRerunCommand: A BOT CAN NEVER RESET ITS OWN BOUND", () => {
       );
     }
   }
-  assert.equal(rerunPointFrom([human("@claude rerun", { user: { login: "yorkie-team-agent[bot]", type: "Bot" } })]), null);
+  assert.equal(rerunPointFrom([human("@claude rerun", { user: { login: "fixture-agent[bot]", type: "Bot" } })]), null);
 });
 
 test("isRerunCommand: a stranger cannot reset it either; junk never throws", () => {
@@ -609,7 +611,7 @@ test("a BOT is refused before any permission lookup", () => {
   // bound; a resolver must never be able to override it.
   let asked = 0;
   const c = {
-    user: { login: "yorkie-team-agent[bot]", type: "Bot" },
+    user: { login: "fixture-agent[bot]", type: "Bot" },
     author_association: "OWNER",
     body: "@claude rerun",
     created_at: "2026-08-06T00:00:00Z",
@@ -689,11 +691,11 @@ test("an unknown round or cap degrades to a bare line, never 'undefined'", () =>
 });
 
 test("the fixer's OWN identity cannot write a dispatch record", () => {
-  // THE point of the narrower author gate. `yorkie-team-agent[bot]` is a trusted
+  // THE point of the narrower author gate. `fixture-agent[bot]` is a trusted
   // paged-latch author AND the App identity the fix agent posts under, so
   // accepting it would let the party bounded by MAX_REVIEW_ROUNDS plant the
   // record that decides which counting rule applies to it.
-  const fixerAuthored = dispatch({ user: { login: "yorkie-team-agent[bot]", type: "Bot" } });
+  const fixerAuthored = dispatch({ user: { login: "fixture-agent[bot]", type: "Bot" } });
   assert.equal(parseFixDispatchComment(fixerAuthored), null);
 });
 

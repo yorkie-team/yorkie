@@ -1,3 +1,4 @@
+import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
@@ -5,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkPassed, allRequiredPassed, ciRunDecision, ciConclusion, ciRunToRerun, ciRunToAwait, definesCi, CHECK_PRODUCER_APP_SLUG, CI_DEFINING_PATHS, CI_WORKFLOW_PATH, CI_WORKFLOW_FILE, DEFAULT_REVIEW_CHECKS } from "./checks.mjs";
 import { hasWorkflow, skipWithout } from "./workflow-presence.mjs";
+import { get } from "./config.mjs";
 
 // `DEFAULT_REVIEW_CHECKS` is the ONE lens list in the repo that does not derive
 // itself from lenses.json, so it is the one that silently rots when a lens is
@@ -1023,54 +1025,6 @@ test("agent-fix always answers the commenter, even when the gate step itself fai
     "...and the refusal must name the third cause, or an absent run reads as a stuck CI");
 });
 
-test("ci.yml files a run for every PR, so a docs-only PR reaches the pipeline", () => {
-  // THE PROPERTY THE WHOLE AUTONOMOUS ARM RESTS ON, and it is about the run
-  // EXISTING, not about what runs inside it.
-  //
-  // `agent-review-panel.yml` and `agent-iterate-ci.yml` both trigger on
-  // `workflow_run` of `ci.yml`. A workflow skipped by a trigger-level
-  // `paths-ignore` files NO RUN, so there is no event, so neither fires — and a
-  // PR confined to markdown sat outside the loop entirely: `@claude loop`
-  // labelled it and nothing happened, `mark-ready.mjs`'s gate could never go
-  // green, and `@claude fix`'s docs-only carve-out above was written for a state
-  // `fix-eligible.mjs` had already refused. Moving the filter onto the `build`
-  // JOB keeps the cost saving (no Go lane, no MongoDB, no `-race` suite) and
-  // gives the pipeline its event back.
-  //
-  // Asserted here rather than left to review because it is a ONE-LINE
-  // regression: re-adding `paths-ignore:` under `pull_request` restores every
-  // symptom above and changes nothing a reviewer of that diff would see run.
-  const HERE = path.dirname(fileURLToPath(import.meta.url));
-  const yml = readFileSync(path.join(HERE, "..", "..", CI_WORKFLOW_PATH), "utf8");
-
-  const on = yml.slice(yml.indexOf("\non:"), yml.indexOf("\nenv:"));
-  const pr = on.slice(on.indexOf("  pull_request:"));
-  assert.ok(pr.startsWith("  pull_request:"), "ci.yml must still trigger on pull_request");
-  assert.ok(
-    !/^ {4}paths(-ignore)?:/m.test(pr.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n")),
-    "ci.yml must not filter `pull_request` at the workflow level — a filtered-out PR files no run, "
-    + "and the review panel and the CI-fix arm both trigger on one",
-  );
-
-  // ...and the filter that replaced it must keep failing toward RUNNING. The
-  // only positive pattern is `**`, so a path nothing mentions still builds; the
-  // rest are negations. A positive list here would silently skip CI on any new
-  // directory, which is the failure this shape exists to make impossible.
-  const step = yml.slice(yml.indexOf("id: code-changed"));
-  const filters = step.slice(step.indexOf("build:"), step.indexOf("\n\n"));
-  const patterns = [...filters.matchAll(/^ {14}- '(.+)'$/gm)].map((m) => m[1]);
-  assert.ok(patterns.length >= 2, "could not read the build filter's patterns from ci.yml");
-  assert.equal(patterns[0], "**", "the build filter's only positive pattern must be `**`");
-  for (const p of patterns.slice(1)) {
-    assert.ok(p.startsWith("!"), `the build filter must be \`**\` plus negations only; found '${p}'`);
-  }
-  // Without `every`, dorny/paths-filter ORs the patterns per file: a lone
-  // `README.md` matches `**` and the filter is true, so the negations do
-  // nothing and the step is a no-op that looks like a filter.
-  assert.match(step.slice(0, 400), /predicate-quantifier: every/,
-    "the build filter needs `predicate-quantifier: every`, or its negations are inert");
-});
-
 test("CI_WORKFLOW_PATH names a workflow file that actually exists", () => {
   // The gate matches CI runs on this path instead of on the run's display name,
   // which is what makes gate 1 unforgeable — a second file cannot claim the
@@ -1087,49 +1041,49 @@ test("CI_WORKFLOW_PATH names a workflow file that actually exists", () => {
 
 
 
-test("CI_DEFINING_PATHS covers the surface CI's behaviour is read from", () => {
-  // Gate 1b refuses a PR that supplies any part of the CI definition.
-  //
-  // NO SECOND LIST TO MIRROR HERE, and that is a fact about this repository
-  // rather than an omission. Upstream asserts this list is a superset of its
-  // `harness.config.json` `ciConfig`, which exists because a changed path there
-  // can SHRINK a CI run — so a PR editing it could grade its own homework. This
-  // repository's `build` filter is `'**'` plus negations naming documentation
-  // paths, and `definesCi` refuses a PR that edits `ci.yml` at all, so a branch
-  // cannot widen those negations to exempt its own code; the tag-gated jobs it
-  // can narrow (bench, complex-test, load-test) are not what a gate reads. The
-  // property the upstream mirror protects is structurally absent, so what is
-  // left to assert is that the matcher classifies the real surface.
+test("CI_DEFINING_PATHS: the shared entries around the repository's configured ones", () => {
+  // Gate 1b refuses a PR that supplies any part of the CI definition. The list
+  // has two sources: the entries every repository shares, written in
+  // checks.mjs, and the repository's own (`ci.definingPaths`) from its harness
+  // configuration — the fixture's, here. A repository's real surface is graded
+  // by its own `.github/agent-harness/repo.test.mjs`.
+  const configured = get("ci.definingPaths");
+  assert.deepEqual([...CI_DEFINING_PATHS], [
+    ".github/workflows/**",
+    ".github/actions/**",
+    ".github/CODEOWNERS",
+    ".github/agent-harness/**",
+    ...configured,
+    "scripts/setup.sh",
+    "scripts/hooks/**",
+    ".githooks/**",
+  ]);
+  assert.ok(configured.length > 0, "the fixture configuration lists no CI-defining path");
+  assert.ok(Object.isFrozen(CI_DEFINING_PATHS), "a caller must not be able to shorten the refusal surface");
+
   for (const p of [
     ".github/workflows/ci.yml",
     ".github/workflows/nested/whatever.yml",
     ".github/actions/setup/action.yml",
     ".github/CODEOWNERS",
-    // The lanes: `ci.yml` runs `make lint` and `make build`, and what those do
-    // lives here.
-    "Makefile",
-    ".golangci.yml",
-    "codecov.yml",
-    "go.mod",
-    "go.sum",
-    "buf.gen.yaml",
-    "buf.work.yaml",
-    "api/buf.yaml",
-    "api/buf.gen.yaml",
-    "build/docker/docker-compose.yml",
-    "build/docker/sharding/docker-compose.yml",
-    "scripts/ci/parse-bench.js",
-    "scripts/verify-doc-links.mjs",
-    // The module both verify scripts import their "am I the entry point?"
-    // predicate from. Editing it alone makes docs.yml's two gates exit 0
-    // without checking anything, so it defines CI's behaviour exactly as much
-    // as the scripts that import it.
-    "scripts/direct-run.mjs",
-    // The entire body of ci.yml's `modernize` lane, reached through the
-    // Makefile's `verify-modernize` target and through `make verify` on push.
-    "scripts/go-fix.sh",
-    // The tag set `make lint` and `go-fix.sh` both run under.
-    "scripts/go-build-tags.sh",
+    // The harness configuration itself. It is read from the default branch,
+    // never from the branch under review, so a PR editing it changes nothing
+    // about its own run — but it holds this list, the review scopes and the
+    // bot allow-list, so a change to it is a change to the gates and must go
+    // to a human instead of promoting itself.
+    ".github/agent-harness/config.json",
+    ".github/agent-harness/coverage-note.md",
+    ".github/agent-harness/repo.test.mjs",
+    // The fixture configuration's entries.
+    "build.config",
+    "deps.lock",
+    "tools/ci/run.sh",
+    "tools/ci/lanes/unit.sh",
+    "tools/lint.sh",
+    // The local enforcement layer.
+    "scripts/setup.sh",
+    "scripts/hooks/install.mjs",
+    ".githooks/pre-push",
   ]) {
     assert.equal(definesCi(p), true, `${p} defines what CI does and must be refused by gate 1b`);
   }
@@ -1137,15 +1091,23 @@ test("CI_DEFINING_PATHS covers the surface CI's behaviour is read from", () => {
   // ...and does not swallow the code under review. A gate that refuses every PR
   // is the same outage as one that refuses none, arrived at from the other side.
   for (const p of [
-    "pkg/document/crdt/tree.go",
-    "server/backend/database/mongo/client.go",
-    "test/integration/document_test.go",
-    "api/yorkie/v1/resources.proto",
+    "src/document/tree.go",
+    "lib/store/client.go",
+    "tools/nested/lint.sh", // `*` does not span a separator
+    "tools/lint.sh.bak", // anchored at the end
+    "sub/build.config", // anchored at the start
     "docs/design/tree.md",
     "README.md",
+    // Another repository's CI definition is not this configuration's.
+    "Makefile",
+    "go.mod",
+    // The rest of `.github` is not swept in with it.
+    ".github/dependabot.yml",
+    ".github/agent-harness",
   ]) {
     assert.equal(definesCi(p), false, `${p} is code or prose under review, not the CI definition`);
   }
+  for (const junk of [null, undefined, "", 7, {}]) assert.equal(definesCi(junk), false);
 });
 
 test("every workflow_run consumer CI can drive gates on the CI workflow's PATH", () => {
@@ -2106,51 +2068,6 @@ test("no agent is handed a token that can approve a pull request", () => {
     "these tokens are reachable by an agent and carry contents+pull-requests write:\n  " +
       offenders.join("\n  "),
   );
-});
-
-test("a release the agent App created publishes nothing", () => {
-  // `contents: write` IS ONE PERMISSION COVERING COMMITS AND RELEASES. The token
-  // a fix agent holds to push a branch can therefore publish a release, and
-  // `docker-publish.yml` answers `release: published` with `secrets: inherit` —
-  // Docker Hub credentials. GitHub offers no narrower grant, so the escape
-  // closes at the consumer or not at all.
-  const HERE = path.dirname(fileURLToPath(import.meta.url));
-  const dir = path.join(HERE, "..", "..", ".github", "workflows");
-  const onRelease = readdirSync(dir)
-    .filter((f) => f.endsWith(".yml"))
-    .filter((f) => {
-      const code = readFileSync(path.join(dir, f), "utf8").split("\n").filter((l) => !/^\s*#/.test(l));
-      const on = code.slice(0, code.findIndex((l) => /^jobs:/.test(l)));
-      return on.some((l) => /^\s+release:\s*$/.test(l));
-    });
-  assert.ok(onRelease.length > 0, "no release-triggered workflow found — this guard would be vacuous");
-  for (const file of onRelease) {
-    const wf = readFileSync(path.join(dir, file), "utf8");
-    assert.match(
-      wf,
-      /github\.event\.release\.author\.login != 'yorkie-team-agent\[bot\]'/,
-      `${file} runs on a published release and would run for one the agent App created`,
-    );
-  }
-  // THE SAME CREDENTIALS, REACHED THROUGH A MERGE. `contents: write` also merges
-  // a PR a human already approved, which is a push to `main` authored by the
-  // App — and a push-triggered workflow that inherits secrets answers it the
-  // same way. Every such workflow must refuse the App as the actor.
-  const onPushInherit = readdirSync(dir)
-    .filter((f) => f.endsWith(".yml"))
-    .filter((f) => {
-      const code = readFileSync(path.join(dir, f), "utf8").split("\n").filter((l) => !/^\s*#/.test(l));
-      const on = code.slice(0, code.findIndex((l) => /^jobs:/.test(l)));
-      return on.some((l) => /^\s+push:\s*$/.test(l)) && code.some((l) => /^\s+secrets: inherit\s*$/.test(l));
-    });
-  assert.ok(onPushInherit.includes("docker-publish-latest.yml"), "the push-triggered publisher must be found");
-  for (const file of onPushInherit) {
-    assert.match(
-      readFileSync(path.join(dir, file), "utf8"),
-      /github\.actor != 'yorkie-team-agent\[bot\]'/,
-      `${file} inherits secrets on a push and would run for one the agent App made by merging`,
-    );
-  }
 });
 
 test("the trusted job posts disputes before the report it counts them in", () => {

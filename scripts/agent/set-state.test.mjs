@@ -1,3 +1,4 @@
+import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -127,7 +128,7 @@ test("LATCH_AUTHOR_LOGINS matches the latch's own trusted authors exactly", () =
   // `reconcile` reads the paged markers to derive `agent:blocked`, and the latch
   // dominates every other signal. A wider list here than rounds.mjs trusts would
   // let a comment this module believes stamp a state the latch itself would have
-  // refused. The copy is literal because this module is a CLI that must stay
-  // importable on its own; this test is what keeps the two in step.
+  // refused. Both read `repo.botLogins` from the harness configuration; this
+  // test is what keeps the two in step if either ever stops.
   assert.deepEqual([...LATCH_AUTHOR_LOGINS], [...PAGE_AUTHOR_LOGINS]);
 });

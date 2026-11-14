@@ -61,7 +61,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
-          sparse-checkout: scripts/agent
+          # The scripts and the configuration they read, from the same ref: a
+          # script resolves `.github/agent-harness` beside its own checkout.
+          sparse-checkout: |
+            scripts/agent
+            .github/agent-harness
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - uses: actions/setup-node@v4

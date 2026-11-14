@@ -1,3 +1,4 @@
+import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -881,7 +882,7 @@ test("isOwnComment: a comment that merely QUOTES a marker is not ours", () => {
   // `<!-- agent-metrics-summary -->` while explaining the harness's comment
   // surfaces; `summarize` ran five seconds later and deleted the review. Nothing
   // failed — safeDeleteComment is best-effort — so the comment just vanished.
-  const bot = { login: "yorkie-team-agent[bot]", type: "Bot" };
+  const bot = { login: "fixture-agent[bot]", type: "Bot" };
   const review = {
     user: bot,
     body: "<!-- agent-review:abc -->\n## Review\nThe doc enumerates every surface: "
@@ -961,7 +962,7 @@ test("an agent-written execution log cannot put a marker into a trusted comment"
   const { parseExecution, sumExecutions, serializeRecord, parseMetricComment, renderFixEffort } =
     await import("./metrics.mjs");
   const { isPagedLatchComment, PAGED_LATCH } = await import("./rounds.mjs");
-  const APP = { type: "Bot", login: "yorkie-team-agent[bot]" };
+  const APP = { type: "Bot", login: "fixture-agent[bot]" };
   const evil = [{
     type: "result",
     subtype: "success",
