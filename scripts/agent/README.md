@@ -285,7 +285,7 @@ brackets is then left out whole.
 | `todoTrackingLine` | sentences, optional | issue-to-PR: "The todo starts with a `**Created**: YYYY-MM-DD` line.[ `<todoTrackingLine>`]" | empty |
 | `implementVerifyStep` | sentences | issue-to-PR, the whole of step 5: "5. `<implementVerifyStep>`". Say what to run, what not to run, and that CI runs the rest | LET CI VERIFY — do NOT run `make test`, `make test-complex`, `make bench` or `make coverage`: … |
 | `replyVerifyInstruction` | fragment, optional | review-reply: "Act on it if it is right: edit the branch,[ `<replyVerifyInstruction>`,] commit with the trailer…" | empty |
-| `toolchainSteps` | fragment | the issue-to-PR job's report: "This run stopped after setup and before the agent started — `<toolchainSteps>`, or fetching the issue." | the Go toolchain, the linter install |
+| `toolchainSteps` | fragment | the issue-to-PR job's report: "This run stopped after setup and before the agent started — `<toolchainSteps>`, fetching the issue, or revoking the pre-agent token." | the Go toolchain, the linter install |
 | `lastResortDiagnosis` | sentences | CI-fix, when nothing could be read: "No failed-step log could be read for run N. `<lastResortDiagnosis>`" | Re-run the failing lane locally: `make verify` (…), then `make build`. |
 
 The three issue-to-PR values may use that prompt's own placeholders, which
@@ -401,10 +401,14 @@ repository that adopts the harness follows them:
 
 - The default branch is `main`. Workflows check trusted code out with
   `ref: main`, and the scripts' base-branch arguments default to it.
-- The repository is public. The issue-to-PR job holds no `contents`
-  permission and checks `main` out with the ambient token, which can read a
-  public repository and nothing else. A private repository would have to
-  grant that job `contents: read`.
+- The issue-to-PR job's own token holds `contents: read` and nothing else,
+  which reads `main` in a private repository as well as a public one. It is
+  read-only because the agent runs in that job and the token reaches it.
+  Every write there goes through an App token; the two comments that must
+  not depend on the App (the "App is not configured" reply and the no-PR
+  report) are posted by its `finish` job, which runs only for a commenter
+  the write-access check admitted. The pre-agent App token is revoked before
+  the agent starts, and if the revocation fails the agent does not start.
 - `agent-scripts.yml` triggers on the harness's own paths and weekly. It
   cannot trigger on a repository's lane files (a `paths:` filter is not
   configurable), so drift between the toolchain action — and anything it

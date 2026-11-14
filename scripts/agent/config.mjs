@@ -497,7 +497,7 @@ const SCHEMA = {
     // "…edit the branch, <replyVerifyInstruction>, commit with the trailer…"
     replyVerifyInstruction: optionalFragment,
     // "…stopped after setup and before the agent started — <toolchainSteps>,
-    // or fetching the issue."
+    // fetching the issue, or revoking the pre-agent token."
     toolchainSteps: fragment,
     // "No failed-step log could be read for run N. <lastResortDiagnosis>"
     lastResortDiagnosis: sentences,

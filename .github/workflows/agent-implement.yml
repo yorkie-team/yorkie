@@ -118,22 +118,26 @@ jobs:
       cancel-in-progress: false
     environment: agent
     permissions:
-      # WHAT THE AMBIENT TOKEN'S ONLY CONSUMERS NEED, which is much less than
-      # what this job does. Every step that creates a branch, pushes, opens the
-      # PR or comments on it now carries an App token explicitly; the ambient
-      # `GITHUB_TOKEN` is left to three steps — the write-access check, the
-      # "App is not configured" reply, and the run reporter — which comment on an
-      # ISSUE and list pull requests.
+      # READ-ONLY, BECAUSE THE AGENT RUNS IN THIS JOB. Every write here goes
+      # through an App token minted for it, and every comment that must not
+      # depend on the App — the "App is not configured" reply and the run
+      # reporter — is posted by the `finish` job. What is left for the ambient
+      # `GITHUB_TOKEN` is the write-access check and the trusted checkout.
       #
-      # It is not spare capacity. `actions/checkout` persists whatever token it
-      # is given, and one that is given none persists THIS one — so a wide job
-      # grant is a second way for an agent to reach approve-and-merge.
-      issues: write # comment on the issue
-      pull-requests: read # pulls.list, to find the PR this run opened
+      # Read-only is the point, not tidiness. The job token outlives every step
+      # that names it: `actions/checkout` persists it when given no token, and
+      # its post step, which the runner runs after the agent in this same job,
+      # carries it. A token that could comment here would let the agent post as
+      # `github-actions[bot]`, the author the no-PR reporter's dedupe trusts.
+      contents: read # the trusted checkout of the protection check
     # For the `finish` job, from steps that ran BEFORE the agent — see
     # agent-fix.yml's handoff step for why nothing later in this job counts.
     # `agent` is the runner's own outcome for that step.
     outputs:
+      # Whether the commenter passed the write-access check, from a step that
+      # runs only after it passed (or on a dispatch, where it does not apply).
+      # `finish` runs on this and nothing looser.
+      admitted: ${{ steps.admitted.outputs.admitted }}
       configured: ${{ steps.app.outputs.configured }}
       protection: ${{ steps.protection.outcome }}
       staged: ${{ steps.stage.outcome }}
@@ -162,12 +166,22 @@ jobs:
               core.setFailed(`@${actor} lacks write access (permission: ${data.permission}); refusing to run.`);
             }
 
+      # REACHED ONLY WHEN THE CHECK ABOVE PASSED, or did not apply on a
+      # dispatch: no `if:`, so the runner's implicit `success()` skips it after
+      # a refusal. `finish` keys on this output rather than on anything later,
+      # so a refused commenter gets no comment of any kind, and a later step
+      # gaining a condition of its own cannot widen who reaches `finish`.
+      - name: Record that the commenter was admitted
+        id: admitted
+        run: echo "admitted=true" >> "$GITHUB_OUTPUT"
+
       # WITHOUT THE APP THIS VERB CANNOT DO ITS ONE JOB — it pushes a branch and
       # opens a PR, neither of which GITHUB_TOKEN can do in a way that
       # re-triggers CI. The switch is one repository variable for every verb, so
       # "pipeline on, App not yet created" is a real state; unguarded, the mint
       # below fails the STEP and the commenter sees a red X with a token error
-      # instead of an answer.
+      # instead of an answer. The answer itself is posted by the `finish` job,
+      # whose `GITHUB_TOKEN` may comment; this job's may not.
       - name: Is the GitHub App configured?
         id: app
         env:
@@ -186,28 +200,6 @@ jobs:
             echo "configured=false" >> "$GITHUB_OUTPUT"
             echo "::notice::AGENT_APP_ID or AGENT_APP_PRIVATE_KEY is unset; @claude fix on an issue needs the GitHub App."
           fi
-
-      - name: Say so, and stop
-        if: steps.app.outputs.configured != 'true' && github.event_name == 'issue_comment'
-        # This step exists to turn a misconfiguration into a sentence. A locked
-        # issue must not turn it back into a red X with an API error in it.
-        continue-on-error: true
-        uses: actions/github-script@v7
-        env:
-          # From `route`, which ran: this step is `issue_comment` only.
-          APP_SLUG: ${{ needs.route.outputs.app_slug }}
-        with:
-          retries: 3
-          script: |
-            const { APP_SLUG } = process.env;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.payload.issue.number,
-              body: '⏸️ `@claude fix` needs the `' + APP_SLUG + '` GitHub App, which is not configured on '
-                + 'this repository — it pushes a branch and opens a pull request, and `GITHUB_TOKEN` can do '
-                + 'neither in a way that re-triggers CI.\n\nOn a pull request, `@claude review` and '
-                + '`@claude summarize` work today; they post with `GITHUB_TOKEN` and need no App.',
-            });
 
       - name: Generate GitHub App token
         if: steps.app.outputs.configured == 'true'
@@ -721,13 +713,21 @@ jobs:
       # job the agent is about to run in — its post step revokes it only at job
       # end, and the agent can reach that step's environment. Revoking it here
       # makes it worthless by the time anything untrusted runs.
+      #
+      # FAIL-CLOSED. No `continue-on-error`: a revocation that fails fails the
+      # job, and the agent step below, whose condition names no status
+      # function, is skipped by the runner's implicit `success()`. A token that
+      # may still be live is never left beside the agent. `always()` only so it
+      # is revoked on the paths where an earlier step failed too; the agent
+      # does not run on those.
       - name: Revoke the pre-agent token
         if: always() && steps.app-token.outcome == 'success'
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: gh api -X DELETE installation/token
 
+      # NO `always()` OR `!cancelled()` HERE: the implicit `success()` is what
+      # keeps the agent from starting after a failed revocation.
       - name: Run Claude Code
         if: steps.app.outputs.configured == 'true'
         id: agent
@@ -768,20 +768,53 @@ jobs:
   # PR came of the run. A fresh runner, main's scripts, and the wide App token
   # minted here — the agent job never mints it after the agent starts.
   #
-  # `always()`, keyed on the App check: the no-PR reporter must survive every
-  # failure it reports, including the protection gate refusing and the job
-  # being cancelled. Everything that opens or edits a PR is further gated on
-  # staging having succeeded, which is what "the agent may have run" means.
+  # `always()`, keyed on the commenter having been ADMITTED by the write-access
+  # check: the no-PR reporter must survive every failure it reports, including
+  # the protection gate refusing and the job being cancelled, and a commenter
+  # the check refused gets nothing at all. Inside, the "App is not configured"
+  # reply and the reporter are keyed on the App check, and everything that
+  # opens or edits a PR on staging having succeeded, which is what "the agent
+  # may have run" means.
   finish:
     needs: [implement]
-    if: always() && needs.implement.outputs.configured == 'true'
+    if: always() && needs.implement.outputs.admitted == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
-      issues: write # the no-PR report (GITHUB_TOKEN)
+      # The two comments the agent's job may not post, because its token is
+      # read-only: the "App is not configured" reply and the no-PR report.
+      issues: write
       pull-requests: read # pulls.list, to find the PR this run opened
     steps:
+      # A misconfiguration, turned into a sentence. A locked issue must not
+      # turn it back into a red X with an API error in it. `== 'false'`, not
+      # `!= 'true'`: an empty value means the check never ran (a cancelled
+      # run), and that is not a missing App.
+      - name: Say the App is not configured
+        if: >-
+          always() &&
+          needs.implement.outputs.configured == 'false' &&
+          github.event_name == 'issue_comment'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          # From `route` by way of `implement`'s outputs: this step is
+          # `issue_comment` only, where `route` ran.
+          APP_SLUG: ${{ needs.implement.outputs.app_slug }}
+        with:
+          retries: 3
+          script: |
+            const { APP_SLUG } = process.env;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: '⏸️ `@claude fix` needs the `' + APP_SLUG + '` GitHub App, which is not configured on '
+                + 'this repository — it pushes a branch and opens a pull request, and `GITHUB_TOKEN` can do '
+                + 'neither in a way that re-triggers CI.\n\nOn a pull request, `@claude review` and '
+                + '`@claude summarize` work today; they post with `GITHUB_TOKEN` and need no App.',
+            });
+
       - uses: actions/checkout@v4
         if: always() && needs.implement.outputs.staged == 'success'
         with:
@@ -960,13 +993,18 @@ jobs:
       # A reporter keyed on anything downstream of a failure cannot report that
       # failure. The only safe key is upstream of every gate.
       #
+      # The JOB is keyed on admission, which is upstream of the App check, so
+      # the step names the App check itself: with no App the reply above has
+      # already said so, and every outcome below would read `skipped` and be
+      # reported as a dead credential.
+      #
       # It then says which one it was, from the outcomes rather than from a
       # guess: `protection` refused, or something between there and staging
       # broke, or the agent ran and opened nothing. Naming the wrong cause is
       # its own defect — the previous revision told a `npm ci` failure that
       # `main` was unprotected.
       - name: Report a run that ended without a PR
-        if: always() && github.event_name == 'issue_comment'
+        if: always() && github.event_name == 'issue_comment' && needs.implement.outputs.configured == 'true'
         continue-on-error: true
         uses: actions/github-script@v7
         env:
@@ -1086,10 +1124,10 @@ jobs:
               key = 'presetup';
               // Between staging and the agent: the toolchain setup
               // (`fixer.toolchainSteps` names its parts), the issue fetch, the
-              // prompt build. The branch below cites the execution transcript,
+              // prompt build, and the revocation that fails closed. The branch below cites the execution transcript,
               // and none of these produce one.
               why = `🛑 This run stopped after setup and before the agent started — ${toolchainSteps}, `
-                + `or fetching the issue. See the [run](${runUrl}); there is no agent `
+                + `fetching the issue, or revoking the pre-agent token. See the [run](${runUrl}); there is no agent `
                 + 'transcript because nothing ran. `@claude fix` is worth trying again.';
             } else {
               key = 'agent';
