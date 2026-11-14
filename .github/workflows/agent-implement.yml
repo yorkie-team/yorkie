@@ -58,8 +58,10 @@ jobs:
       command: ${{ steps.route.outputs.command }}
       # This repository's words for two messages that are posted when the
       # `implement` job could not get as far as a checkout of its own: the
-      # App's name, and what its toolchain setup consists of.
+      # App's name, and what its toolchain setup consists of. And the App's
+      # login, which the no-PR report finds the "On it" reply by.
       app_slug: ${{ steps.cfg.outputs.app_slug }}
+      app_bot_login: ${{ steps.cfg.outputs.app_bot_login }}
       toolchain_steps: ${{ steps.cfg.outputs.toolchain_steps }}
     steps:
       - uses: actions/checkout@v4
@@ -74,7 +76,7 @@ jobs:
           persist-credentials: false
       - name: Read the harness configuration
         id: cfg
-        run: node scripts/agent/workflow-values.mjs app_slug toolchain_steps >> "$GITHUB_OUTPUT"
+        run: node scripts/agent/workflow-values.mjs app_slug app_bot_login toolchain_steps >> "$GITHUB_OUTPUT"
       - name: Route command
         id: route
         env:
@@ -147,6 +149,7 @@ jobs:
       # `workflow_dispatch`, where `route` does not run and the reporter does
       # not either.
       app_slug: ${{ needs.route.outputs.app_slug }}
+      app_bot_login: ${{ needs.route.outputs.app_bot_login }}
       toolchain_steps: ${{ needs.route.outputs.toolchain_steps }}
     steps:
       # The association check above is a pre-filter on a field the payload
@@ -1039,6 +1042,8 @@ jobs:
           # terms below rather than printing a hole.
           APP_SLUG: ${{ needs.implement.outputs.app_slug }}
           TOOLCHAIN_STEPS: ${{ needs.implement.outputs.toolchain_steps }}
+          # Who posts the "On it" reply: the App, whose token that step holds.
+          APP_BOT_LOGIN: ${{ needs.implement.outputs.app_bot_login }}
           # The implement job's step outcomes, as data. Nothing from that job,
           # whose runner the agent had, is spliced into this script.
           AGENT_OUTCOME: ${{ needs.implement.outputs.agent }}
@@ -1179,9 +1184,16 @@ jobs:
               // that came after the newest acknowledgement, not against the
               // whole history — otherwise the second run that fails the same way
               // leaves the issue claiming it is still working.
+              //
+              // TWO AUTHORS, on purpose. The acknowledgement is posted with the
+              // App token, so it is found under the App's login; a report
+              // marker is believed only from this step's own login. Finding the
+              // acknowledgement under `github-actions[bot]` found nothing, and
+              // the dedupe ran over the whole history after all.
               const mine = (c) => AUTHORS.includes((c.user || {}).login);
+              const acked = (c) => Boolean(process.env.APP_BOT_LOGIN) && (c.user || {}).login === process.env.APP_BOT_LOGIN;
               const lastAck = prior.reduce(
-                (at, c, i) => (mine(c) && /🤖 On it — implementing this issue/.test(String(c.body ?? '')) ? i : at),
+                (at, c, i) => (acked(c) && /🤖 On it — implementing this issue/.test(String(c.body ?? '')) ? i : at),
                 -1,
               );
               const since = lastAck >= 0 ? prior.slice(lastAck) : prior;

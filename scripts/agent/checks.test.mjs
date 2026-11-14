@@ -1861,6 +1861,58 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
   assert.ok(keys.length >= 6, `expected a key per report branch, found ${keys.length}`);
 });
 
+test("agent-implement's no-PR report finds the acknowledgement under the login that posts it", skipWithout("agent-implement.yml"), async () => {
+  // THE ACKNOWLEDGEMENT-AWARE DEDUPE NEVER SAW AN ACKNOWLEDGEMENT. "On it" is
+  // posted with the App token, so its author is the App's login; the report
+  // looked for it under `github-actions[bot]`, found nothing, and deduped
+  // against the whole history — so a second run that failed the same way
+  // left "On it" standing, the case the dedupe was written for.
+  const { VALUES } = await import("./workflow-values.mjs");
+  const { loadConfig } = await import("./config.mjs");
+  const login = VALUES.app_bot_login(loadConfig());
+  const jobs = implJobs(WF("agent-implement.yml"));
+  const route = jobs.get("route");
+  const implement = jobs.get("implement");
+  const finish = jobs.get("finish");
+
+  // Who posts the acknowledgement: a token minted from the App, so the login
+  // the configuration names.
+  const ack = implement.steps.find((s) => /🤖 On it — implementing this issue/.test(s.script ?? ""));
+  assert.ok(ack, "no acknowledgement step");
+  const tokenId = /^\$\{\{\s*steps\.([\w-]+)\.outputs\.token\s*\}\}$/.exec(ack.githubToken ?? "")?.[1];
+  assert.ok(tokenId, `the acknowledgement posts with ${ack.githubToken ?? "the job token"}, not an App token`);
+  const mint = implement.steps.find((s) => s.id === tokenId);
+  assert.match(mint?.uses ?? "", /^actions\/create-github-app-token@/, "the acknowledgement's token is not the App's");
+
+  // Where the report learns that login: route's configuration read, passed
+  // through implement, into the report's env.
+  const reporter = finish.steps.find((s) => s.name === "Report a run that ended without a PR");
+  assert.equal(implKey(reporter.lines, 10, "APP_BOT_LOGIN"), "${{ needs.implement.outputs.app_bot_login }}");
+  assert.equal(implement.outputs.app_bot_login, "${{ needs.route.outputs.app_bot_login }}");
+  assert.equal(route.outputs.app_bot_login, "${{ steps.cfg.outputs.app_bot_login }}");
+  assert.match(route.steps.find((s) => s.id === "cfg")?.run ?? "", /workflow-values\.mjs\b[^\n]*\bapp_bot_login\b/);
+
+  // And what it does with it, run against threads.
+  const MARKER = "<!-- agent-implement-no-pr:agent -->";
+  const report = { user: { login: "github-actions[bot]" }, body: `${MARKER}\n🛑 earlier report` };
+  const ackBy = (who) => ({ user: { login: who }, body: "🤖 On it — implementing this issue. [Run](x)" });
+  const posts = async (thread) => {
+    let posted = 0;
+    const github = {
+      rest: { pulls: { list: "pulls" }, issues: { listComments: "comments", createComment: async () => { posted++; } } },
+      paginate: async (what) => (what === "comments" ? thread : []),
+    };
+    const context = { payload: { issue: { number: 7 } }, repo: { owner: "o", repo: "r" }, serverUrl: "https://x", runId: 1 };
+    const env = { APP_SLUG: "app", TOOLCHAIN_STEPS: "t", APP_BOT_LOGIN: login, AGENT_OUTCOME: "success", STAGED: "success", PROTECTION: "success" };
+    await new AsyncFunction("github", "context", "core", "process", reporter.script)(github, context, { warning() {} }, { env });
+    return posted;
+  };
+  assert.equal(await posts([report, ackBy(login)]), 1, "a new run's acknowledgement after an old report must be answered");
+  assert.equal(await posts([ackBy(login), report]), 0, "a report already made since the acknowledgement must not be repeated");
+  // A report marker is believed only from this step's own login.
+  assert.equal(await posts([ackBy(login), { ...report, user: { login } }]), 1, "a marker under the App's login must not suppress the report");
+});
+
 // --- agent-implement's trust boundary, run rather than read ---------------------
 //
 // THREE PROPERTIES THAT ARE ABOUT WHEN THINGS RUN, so they are checked by
