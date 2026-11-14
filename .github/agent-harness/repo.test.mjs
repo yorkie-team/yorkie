@@ -39,6 +39,7 @@ const protection = await agent("branch-protection.mjs");
 const reviewScope = await agent("review-scope.mjs");
 const { compileGlob, loadConfig } = await agent("config.mjs");
 const workflowValues = await agent("workflow-values.mjs");
+const manifest = await agent("manifest.mjs");
 
 const CONFIG = loadConfig();
 
@@ -330,6 +331,31 @@ test("every configured path and glob matches a file this repository tracks", () 
     assert.equal(named(body), true, body);
   }
   assert.equal(named("Fixes yorkie-team/yorkie#2100"), false, "this repository's own name is not the counterpart's");
+});
+
+test("this is the repository the shared files are written in", () => {
+  // `upstream.json` says so with `repository: null`. A copy records the
+  // repository and commit it was synced from instead, and the package's own
+  // suite then holds it to that manifest; here, the manifest is whatever
+  // `node scripts/agent/manifest.mjs build` last wrote, and the suite only
+  // requires that it matches the tree.
+  const upstream = JSON.parse(readFileSync(path.join(HERE, "upstream.json"), "utf8"));
+  assert.deepEqual(upstream, { repository: null });
+});
+
+test("no checkout converts the shared files' line endings", () => {
+  // The manifest is over bytes. With `core.autocrlf` on and no attribute, git
+  // rewrites every line ending on checkout and each shared file then hashes
+  // differently. The package cannot set this for a repository: `.gitattributes`
+  // at the root is the repository's own file.
+  const lines = readFileSync(path.join(ROOT, ".gitattributes"), "utf8").split("\n").map((l) => l.trim());
+  for (const line of manifest.GITATTRIBUTES_LINES) assert.ok(lines.includes(line), `.gitattributes must contain \`${line}\``);
+  // …and git reads it that way, where git is there to ask.
+  if (!existsSync(path.join(ROOT, ".git"))) return;
+  for (const rel of ["scripts/agent/config.mjs", "scripts/agent/lenses/lenses.json", ".github/workflows/agent-fix.yml"]) {
+    const out = execFileSync("git", ["check-attr", "text", "--", rel], { cwd: ROOT, encoding: "utf8" });
+    assert.match(out, /: text: unset\s*$/, `${rel}: ${out.trim()}`);
+  }
 });
 
 // --- what the harness assumes of this repository's CI workflow --------------------------

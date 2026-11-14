@@ -12,13 +12,14 @@ only through `config.mjs`, and one composite action,
 
 ## Configuration
 
-`.github/agent-harness/` holds three things:
+`.github/agent-harness/` holds four things:
 
 | File | What it is |
 |---|---|
 | `config.json` | Every repository-specific value. Validated on load: a missing key, an unknown key or a value of the wrong shape throws. |
 | `coverage-note.md` | What the mechanical lanes prove, told to every lens. Loaded as `review.mechanicalCoverageNote`. |
-| `repo.test.mjs` | Grades the two files above against this repository (`npm run test:repo`). |
+| `repo.test.mjs` | Grades the two files above, and the toolchain action, against the repository (`npm run test:repo`). |
+| `upstream.json` | Where the shared files came from: `{ "repository": null }` in the repository they are written in, and the repository, commit and manifest digest in one that copied them. See "Adopting and syncing". |
 
 `config.mjs` finds the directory beside the checkout it is running from
 (`<root>/scripts/agent` reads `<root>/.github/agent-harness`). A copy of the
@@ -237,13 +238,130 @@ repository that adopts the harness follows them:
   outside it: workflows check it out or copy it without its parent directory.
   `command.mjs` imports nothing at all, because route jobs check it out alone.
 
+## Adopting and syncing
+
+The shared half — the core — is every file in this directory and every
+`.github/workflows/agent-*.yml`. It is written in one repository and copied,
+unchanged, into the others. `MANIFEST.sha256` lists it: one `<sha256>  <path>`
+line per file.
+
+A repository that runs the harness owns exactly these, and a sync never
+touches them (bar the last, which it writes):
+
+| File | |
+|---|---|
+| `.github/agent-harness/config.json` | the values |
+| `.github/agent-harness/coverage-note.md` | what CI proves |
+| `.github/agent-harness/repo.test.mjs`, and whatever it records | the tests of the two above and of the toolchain action |
+| `.github/actions/agent-toolchain/` | the toolchain action and anything it ships |
+| `.github/agent-harness/upstream.json` | which repository and commit the core was copied from |
+
+To adopt the harness, or to take a newer core, from a local checkout of the
+repository the core is written in:
+
+```sh
+node scripts/agent/sync.mjs --from ../path/to/upstream-checkout
+# first adoption, when there is no copy to run it from:
+node ../path/to/upstream-checkout/scripts/agent/sync.mjs --from ../path/to/upstream-checkout --to .
+```
+
+A copy is synced from the upstream's default branch, and only from it. The
+commit a sync records is looked up there by the copy's CI, which refuses one
+that is not on that branch — a pull request's head exists in the upstream
+repository whether or not it was ever merged. So `sync.mjs` refuses a source
+whose `HEAD` is not contained in its `origin/<default branch>` as last
+fetched (`git fetch origin` first). `--allow-unmerged` lets a local trial
+through and warns that the copy's CI will fail until it is synced again.
+
+It checks everything before it writes anything, and refuses when:
+
+- the source's tree does not match the source's manifest, has uncommitted
+  changes under the core, is itself a copy, or is off its default branch;
+- the destination has, under the core, a modified or staged file, a file git
+  does not track (ignored ones count: git could not give it back), or a
+  symbolic link or other non-regular file at or on the way to any path it
+  would write.
+
+Then it writes every file the manifest lists, deletes the tracked core files
+the source no longer has, writes `upstream.json` (the source's repository,
+its `HEAD`, the manifest's digest), and runs the new core's configuration
+loader against the existing `config.json`, printing each key the new schema
+requires and each it no longer knows. Only a filesystem error can stop it
+part-way; every file touched was tracked and unmodified, so
+`git restore --staged --worktree -- scripts/agent .github/workflows` undoes
+it. What it leaves to a person, and prints:
+
+1. the configuration edits, and the toolchain action on a first adoption;
+2. the upstream pin below;
+3. `git add scripts/agent .github/workflows .github/agent-harness`, and only
+   then `npm ci && npm test && npm run test:repo` in `scripts/agent` — the
+   suite compares the manifest with what git tracks, so it fails on files
+   that were copied and not yet added.
+
+**Required in every copy's `repo.test.mjs`: pin the upstream.** The core
+cannot know which repository is the origin. A copy whose `upstream.json` was
+edited to `{ "repository": null }` would pass all three checks below, because
+that is what the origin's says. Only the repository's own test can refuse it:
+
+```js
+test("the shared files are a copy of owner/name", () => {
+  const upstream = JSON.parse(readFileSync(path.join(HERE, "upstream.json"), "utf8"));
+  assert.equal(upstream.repository, "owner/name");
+});
+```
+
+The origin pins `{ repository: null }` the same way.
+
+**Required in every repository's root `.gitattributes`:**
+
+```
+scripts/agent/** -text
+.github/workflows/agent-*.yml -text
+```
+
+The manifest is over bytes, and a checkout with `core.autocrlf` on would
+otherwise rewrite every line ending. `sync.mjs` warns when they are missing;
+`manifest.mjs verify` names line endings when that is what changed. File
+modes are not in the manifest: no shared file is executable, and each is run
+through `node`.
+
+Three checks keep a copy honest. Each catches what the one before cannot:
+
+| Check | Where it runs | What it catches |
+|---|---|---|
+| The tree matches `MANIFEST.sha256` | `npm test` (`manifest.test.mjs`); `node manifest.mjs verify` | A core file edited, added or removed by hand. It names the path. Regenerating the manifest gets past it |
+| The manifest's digest is the one `upstream.json` records | `npm test`, in a copy only | A regenerated manifest. Getting past it takes an edit to `upstream.json`, which is visible in review and is a CI-defining path |
+| The recorded commit is on the recorded repository's default branch, and the manifest there is the recorded one | `agent-scripts.yml`, on change and weekly (`npm run check:upstream`) | An `upstream.json` edited to agree with a drifted copy, or pointed at a commit upstream never merged. It fails when upstream cannot be asked, after retrying a transient refusal. It also warns, without failing, when upstream's default branch has a newer core |
+
+In the repository the core is written in, `upstream.json` is
+`{ "repository": null }`, only the first check applies, and a change to the
+core is finished with `node scripts/agent/manifest.mjs build`. The third
+check then prints which repository is claiming to be the origin, so a copy
+that makes the claim is at least visible in its log.
+
+"Upstream has moved on" is a warning annotation on a run that is otherwise
+green. Nobody is notified of it: it is seen by whoever opens that run. A
+repository that wants to be told when it falls behind needs a reminder of its
+own; the harness does not send one.
+
+Which files are the core is decided by rule, not by asking git, because the
+first check has to work in a tree with no `.git`: everything under
+`scripts/agent` except the manifest, anything inside a `node_modules`, and
+anything dot-named. So an untracked file left in this directory fails the
+first check as "added".
+
+The third check uses the job's read-only token against `api.github.com`. That
+reads a public upstream. A private one would need a credential the workflow
+does not take.
+
 ## Tests
 
 ```sh
 cd scripts/agent
 npm ci
-npm test            # the package, against fixtures/harness-config
-npm run test:repo   # this repository's values in .github/agent-harness
+npm test              # the package, against fixtures/harness-config
+npm run test:repo     # the repository's values in .github/agent-harness
+npm run check:upstream  # the copy against the repository it names (network)
 ```
 
 `npm test` sets `AGENT_HARNESS_CONFIG_DIR` to the fixture configuration for

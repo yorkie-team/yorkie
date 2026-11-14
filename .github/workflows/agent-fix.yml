@@ -523,12 +523,40 @@ jobs:
           ref: ${{ steps.pr.outputs.branch }}
           fetch-depth: 0
           token: ${{ steps.agent-token.outputs.token }} # persisted into .git/config; must be the narrow one
+      # Read the remote tip before the agent runs, so the step after it can tell
+      # "fixed and pushed" from "ran and pushed nothing". The REMOTE, not local
+      # HEAD: a fixer that commits locally but never pushes has changed nothing
+      # anyone else can see.
+      # FINDING THE GATE CANNOT CATCH ON ITS OWN: `fix-eligible` proved that sha
+      # `steps.eligible.outputs.head` carries the verdict, but the checkout above
+      # takes the branch TIP — and minutes pass between the two (app token,
+      # placeholder, brief). An author pushing in that window would
+      # have the fixer edit and push on top of a commit the panel never reviewed,
+      # which is precisely what the precondition exists to prevent. Re-check after
+      # the checkout, and refuse rather than fix the wrong tree.
+      #
+      # BEFORE THE TOOLCHAIN, not after it. A repository's toolchain action may
+      # install the branch's dependencies; run first, it would install those of
+      # a commit pushed in that window — one nobody reviewed — before this step
+      # had the chance to refuse it. config-wiring.test.mjs holds the order.
+      - name: Re-verify the checked-out commit is the one the panel reviewed
+        if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
+        env:
+          EXPECTED: ${{ steps.eligible.outputs.head }}
+        run: |
+          ACTUAL="$(git rev-parse HEAD)"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::The branch moved after the eligibility check (expected $EXPECTED, got $ACTUAL). A commit landed while this run was starting, so the panel's verdict no longer describes this code. Re-run @claude fix once the new panel round has posted." >&2
+            exit 1
+          fi
+          echo "Head still $ACTUAL — the panel's verdict describes this tree."
+
       # The toolchain the fixer verifies with — this repository's own, defined in
       # `.github/actions/agent-toolchain` — installed WITHOUT running anything
       # the branch wrote.
       #
-      # THE REASON IS THE TOKEN. From the checkout above, the workspace is the
-      # UNTRUSTED PR branch and an App token is already in the environment, so
+      # THE REASON IS THE TOKEN. Since the branch checkout above, the workspace is
+      # the UNTRUSTED PR branch and an App token is already in the environment, so
       # any setup step that executes branch-authored build instructions hands a
       # credential to code the branch wrote. Two things follow.
       #
@@ -584,29 +612,6 @@ jobs:
       - name: Keep the toolchain action out of the fixer's commits
         if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
         run: echo '/.trusted-toolchain/' >> .git/info/exclude
-
-      # Read the remote tip before the agent runs, so the step after it can tell
-      # "fixed and pushed" from "ran and pushed nothing". The REMOTE, not local
-      # HEAD: a fixer that commits locally but never pushes has changed nothing
-      # anyone else can see.
-      # FINDING THE GATE CANNOT CATCH ON ITS OWN: `fix-eligible` proved that sha
-      # `steps.eligible.outputs.head` carries the verdict, but the checkout above
-      # takes the branch TIP — and minutes pass between the two (app token,
-      # placeholder, brief, toolchain setup). An author pushing in that window would
-      # have the fixer edit and push on top of a commit the panel never reviewed,
-      # which is precisely what the precondition exists to prevent. Re-check after
-      # the checkout, and refuse rather than fix the wrong tree.
-      - name: Re-verify the checked-out commit is the one the panel reviewed
-        if: steps.eligible.outputs.eligible == 'true' && steps.ci-clear.outputs.clear == 'true'
-        env:
-          EXPECTED: ${{ steps.eligible.outputs.head }}
-        run: |
-          ACTUAL="$(git rev-parse HEAD)"
-          if [ "$ACTUAL" != "$EXPECTED" ]; then
-            echo "::error::The branch moved after the eligibility check (expected $EXPECTED, got $ACTUAL). A commit landed while this run was starting, so the panel's verdict no longer describes this code. Re-run @claude fix once the new panel round has posted." >&2
-            exit 1
-          fi
-          echo "Head still $ACTUAL — the panel's verdict describes this tree."
 
       - name: Record branch head before fix
         id: before-fix
