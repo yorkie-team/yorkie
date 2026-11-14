@@ -1808,7 +1808,8 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
   // and that job must wait for the implement job whose outcomes it reads.
   const headers = [...wf.matchAll(/\n {2}([A-Za-z0-9_-]+):\n/g)].filter((m) => m.index < at);
   assert.equal(headers.at(-1)?.[1], "finish", "the reporter must live in the finish job");
-  assert.match(wf, /^ {2}finish:\n {4}needs: \[route, implement\]$/m, "the finish job must run after implement, and read route's words");
+  const needs = (/^ {2}finish:\n {4}needs: \[([^\]]*)\]$/m.exec(wf)?.[1] ?? "").split(",").map((x) => x.trim()).sort();
+  assert.deepEqual(needs, ["implement", "route"], "the finish job must run after implement, and read route's words");
 
   // NOTHING MAY RETURN EXCEPT THESE TWO LINES. An early
   // `if (steps.X.outcome !== 'success') return;` inside the script reinstates
@@ -2144,12 +2145,18 @@ async function implementBoundaryProblems(text) {
     const asked = m.lines.map((l) => /^\s+permission-([a-z-]+):\s*(\S+)/.exec(l)).filter(Boolean).map((x) => `${x[1]}: ${x[2]}`);
     if (asked.join() !== "contents: write") problems.add(`the agent's own token asks for ${asked.join(", ") || "the installation's full scope"}, not contents: write alone`);
   }
-  // The pre-agent token's scopes, exactly: it reads protection and answers on
-  // the issue, and never holds `contents: write` (the boundary table says so).
+  // The pre-agent token writes nothing but issue comments. It never holds
+  // `contents: write` (the boundary table says so) or `pull-requests: write`
+  // (the approving half of the approve-and-merge pair). Reads are free: a new
+  // one is an ordinary change, not a guard edit.
   for (const m of mints.filter((m) => m.id === "app-token")) {
-    const asked = m.lines.map((l) => /^\s+permission-([a-z-]+):\s*(\S+)/.exec(l)).filter(Boolean).map((x) => `${x[1]}: ${x[2]}`).sort();
-    const want = ["administration: read", "contents: read", "issues: write", "pull-requests: read"];
-    if (asked.join() !== want.join()) problems.add(`the pre-agent token asks for ${asked.join(", ")}, not ${want.join(", ")}`);
+    const asked = m.lines.map((l) => /^\s+permission-([a-z-]+):\s*(\S+)/.exec(l)).filter(Boolean);
+    if (asked.length === 0) problems.add("the pre-agent token asks for the installation's full scope");
+    for (const [, scope, level] of asked) {
+      if (level === "read" || (scope === "issues" && level === "write")) continue;
+      const why = { contents: ", which the design says it never holds", "pull-requests": ", the approving half of approve-and-merge" }[scope] ?? "";
+      problems.add(`the pre-agent token asks for ${scope}: ${level}${why}; it may write issues and read anything`);
+    }
   }
   const wide = mints.filter((m) => m.id !== narrow).map((m) => {
     const at = m.id ? st.findIndex((s) => /installation\/token/.test(s.run ?? "") && (s.ghToken ?? "") === `\${{ steps.${m.id}.outputs.token }}`) : -1;
@@ -2162,13 +2169,18 @@ async function implementBoundaryProblems(text) {
     // second command or a token swapped in through the shell all hide a failure.
     else if (String(st[revokeAt].run).trim() !== IMPL_REVOKE) problems.add(`the revocation of ${name} runs \`${String(st[revokeAt].run).trim()}\`, not \`${IMPL_REVOKE}\` alone`);
     if (revokeAt >= 0) {
-      // ITS KEYS, EXACTLY. `shell:` can turn the command into an argument of
-      // something else, `working-directory:` and extra `env:` change what it
-      // runs against; each leaves the step green and the token live.
+      // THE KEYS THAT CHANGE WHAT RUNS, refused. `shell:` can turn the command
+      // into an argument of something else, `working-directory:` and an extra
+      // `env:` change what it runs against, `continue-on-error:` and `uses:`
+      // stop it being this command's exit status at all; each leaves the step
+      // green and the token live. `id:`, `timeout-minutes:` and the like are
+      // ordinary and fail closed.
       const r = st[revokeAt];
-      const keys = r.lines.map((l) => /^(?: {6}- | {8})([\w-]+):/.exec(l)?.[1]).filter(Boolean).sort();
+      const keys = r.lines.map((l) => /^(?: {6}- | {8})([\w-]+):/.exec(l)?.[1]).filter(Boolean);
       const env = r.lines.map((l) => /^ {10}([\w-]+):/.exec(l)?.[1]).filter(Boolean);
-      if (keys.join() !== "env,if,name,run" || env.join() !== "GH_TOKEN") problems.add(`the revocation of ${name} has keys [${keys.join(", ")}] and env [${env.join(", ")}], not exactly name, if, env: GH_TOKEN and run`);
+      const denied = keys.filter((k) => ["shell", "working-directory", "continue-on-error", "uses", "with"].includes(k));
+      if (denied.length) problems.add(`the revocation of ${name} sets ${denied.join(", ")}`);
+      if (env.join() !== "GH_TOKEN") problems.add(`the revocation of ${name} has env [${env.join(", ")}], not GH_TOKEN alone`);
     }
   }
   // The write-access check must FAIL the step for a role below write, or
@@ -2285,7 +2297,7 @@ async function implementBoundaryProblems(text) {
       if (!OUTCOMES.has(k)) problems.add(`finish "${s.name ?? s.id}" reads ${k} from implement`);
     }
   }
-  if (!finish.needs.includes("route")) problems.add("finish does not need route, so the repository's words would have to come through implement");
+  if ([...finish.needs].sort().join() !== "implement,route") problems.add(`finish needs [${finish.needs.join(", ")}], not route and implement: the repository's words come from route`);
   // Run the two comments with each value from `implement` set to text that
   // must never be posted, and the App slug set to a forged marker.
   const SENTINEL = "SENTINEL-FROM-IMPLEMENT";
@@ -2389,6 +2401,8 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     verify_warns_only: ["core.setFailed(`@${actor} lacks write access", "core.warning(`@${actor} lacks write access"],
     verify_fail_open_expression: [VERIFY, VERIFY.replace("        uses:", "        continue-on-error: ${{ true }}\n        uses:")],
     pre_agent_token_widened: ["          permission-issues: write # answer on the issue\n", "          permission-issues: write # answer on the issue\n          permission-pull-requests: write\n          permission-contents: write\n"],
+    pre_agent_token_contents_write: ["          permission-issues: write # answer on the issue\n", "          permission-issues: write # answer on the issue\n          permission-contents: write\n"],
+    revoke_extra_env: ["          GH_TOKEN: ${{ steps.app-token.outputs.token }}\n        run: gh api -X DELETE installation/token\n", "          GH_TOKEN: ${{ steps.app-token.outputs.token }}\n          GH_HOST: example.invalid\n        run: gh api -X DELETE installation/token\n"],
     number_check_of_a_constant: (t) => t.replace("      - name: Check the issue number\n        env:\n          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}\n", "      - name: Check the issue number\n        env:\n          ISSUE_NUMBER: 1\n"),
     revoke_through_another_shell: [REVOKE_RUN, `        shell: true {0}\n${REVOKE_RUN}`],
     revoke_elsewhere: [REVOKE_RUN, `        working-directory: /tmp\n${REVOKE_RUN}`],
@@ -2443,6 +2457,23 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     }
     assert.notEqual(edited, text, `${name} changed nothing`);
     assert.ok((await implementBoundaryProblems(edited)).length > 0, `${name} was accepted`);
+  }
+});
+
+test("agent-implement's trust boundary accepts ordinary edits", skipWithout("agent-implement.yml"), async () => {
+  // A guard that refuses every change is one a maintainer learns to edit
+  // around. These are ordinary and fail closed, so each must pass as it is.
+  const text = WF("agent-implement.yml");
+  const REVOKE = "      - name: Revoke the pre-agent token\n        if: always() && steps.app-token.outcome == 'success'\n";
+  const edits = {
+    revoke_gets_an_id: [REVOKE, `${REVOKE}        id: revoke\n`],
+    revoke_gets_a_timeout: [REVOKE, `${REVOKE}        timeout-minutes: 2\n`],
+    pre_agent_token_reads_more: ["          permission-issues: write # answer on the issue\n", "          permission-issues: write # answer on the issue\n          permission-metadata: read\n"],
+    finish_needs_reordered: ["    needs: [route, implement]\n", "    needs: [implement, route]\n"],
+  };
+  for (const [name, [from, to]] of Object.entries(edits)) {
+    assert.equal(text.split(from).length, 2, `${name}: the anchor is not unique`);
+    assert.deepEqual(await implementBoundaryProblems(text.replace(from, to)), [], `${name} was refused`);
   }
 });
 
