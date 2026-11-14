@@ -24,6 +24,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Disable GC on Attach](disable-gc-on-attach.md): Per-attachment opt-out from VV exchange and `minVV` tracking for GC-free workloads
 - [Garbage Collection](garbage-collection.md): Removing tombstones in CRDT
 - [Garbage Collection for Text Type](gc-for-text-type.md): Garbage collection for text type CRDT
+- [Insertion Origins for Text and Tree](insertion-origins.md): Keep concurrent runs contiguous with a right origin, and keep collected tombstones as skeletons
 - [GC Registration on Set Conflict](gc-registration-on-set-conflict.md): Fix missing GC registration when new element loses LWW conflict
 - [Pre-Attach Ticket Re-issue](pre-attach-ticket-reissue.md): Re-issue the tickets a document minted before its first attach to the client's actor, so pre-attach elements get a unique `createdAt`
 - [Tree](tree.md): Tree data structure for tree-based rich text editor

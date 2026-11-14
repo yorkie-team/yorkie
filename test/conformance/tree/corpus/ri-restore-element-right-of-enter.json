@@ -2,7 +2,7 @@
   "v": 2,
   "id": "ri-restore-element-right-of-enter",
   "issues": ["yorkie#2222"],
-  "status": { "go": "known-fail", "js": "known-fail" },
+  "status": { "go": "pass", "js": "known-fail" },
   "note": "TestTreeUndoRemoteIdentityReconcile/restore element right of pending enter (tree_undo_remote_identity_reconcile_test.go). In both SDKs the off run holds every expect, but the minvv run ends elsewhere (I4).",
   "replicas": 2,
   "delivery": "exchange",

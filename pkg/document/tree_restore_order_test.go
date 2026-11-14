@@ -353,7 +353,15 @@ func TestTreeRestoreOrphansNodeUnderTombstonedParent(t *testing.T) {
 	collect(t, d1, "d1 first collection", vector)
 	collect(t, d2, "d2 first collection", vector)
 	require.Equal(t, "<r><p>ad</p></r>", treeXML(t, d1))
-	require.Equal(t, 4, treeCRDT(t, d1).NodeLen(), "the removed text should be purged, not tombstoned")
+	// Collected: gone, or kept as a content-less skeleton when skeleton GC is
+	// on -- either way the undo below takes the purged-node path.
+	live := 0
+	for _, n := range treeCRDT(t, d1).Nodes() {
+		if !n.IsSkeleton() {
+			live++
+		}
+	}
+	require.Equal(t, 4, live, "the removed text should be collected, not just tombstoned")
 
 	// d2 removes the enclosing <p> and d1 hears about it before undoing.
 	require.NoError(t, d2.Update(func(r *json.Object, _ *presence.Presence) error {

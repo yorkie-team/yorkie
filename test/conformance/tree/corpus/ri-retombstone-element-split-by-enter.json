@@ -2,7 +2,7 @@
   "v": 2,
   "id": "ri-retombstone-element-split-by-enter",
   "issues": ["yorkie#2222"],
-  "status": { "go": "known-error", "js": "known-error" },
+  "status": { "go": "pass", "js": "known-error" },
   "note": "TestTreeUndoRemoteIdentityReconcile/retombstone element split by pending enter (tree_undo_remote_identity_reconcile_test.go). In both SDKs the off run holds every expect, but the minvv run throws (Go panics with \"node not found\"; JS: \"cannot find node of CRDTTreePos while applying a remote TreeEditOperation\").",
   "replicas": 2,
   "delivery": "exchange",

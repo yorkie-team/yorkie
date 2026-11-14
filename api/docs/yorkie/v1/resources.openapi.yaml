@@ -56,6 +56,9 @@ components:
         Wrapper message for `bool`.
 
          The JSON representation for `BoolValue` is JSON `true` and `false`.
+
+         Not recommended for use in new APIs, but still useful for legacy APIs and
+         has no plan to be removed.
       properties:
         value:
           additionalProperties: false
@@ -70,6 +73,9 @@ components:
         Wrapper message for `int32`.
 
          The JSON representation for `Int32Value` is JSON number.
+
+         Not recommended for use in new APIs, but still useful for legacy APIs and
+         has no plan to be removed.
       properties:
         value:
           additionalProperties: false
@@ -84,6 +90,9 @@ components:
         Wrapper message for `int64`.
 
          The JSON representation for `Int64Value` is JSON string.
+
+         Not recommended for use in new APIs, but still useful for legacy APIs and
+         has no plan to be removed.
       properties:
         value:
           additionalProperties: false
@@ -100,6 +109,9 @@ components:
         Wrapper message for `string`.
 
          The JSON representation for `StringValue` is JSON string.
+
+         Not recommended for use in new APIs, but still useful for legacy APIs and
+         has no plan to be removed.
       properties:
         value:
           additionalProperties: false
@@ -208,6 +220,9 @@ components:
         Wrapper message for `uint64`.
 
          The JSON representation for `UInt64Value` is JSON string.
+
+         Not recommended for use in new APIs, but still useful for legacy APIs and
+         has no plan to be removed.
       properties:
         value:
           additionalProperties: false
@@ -1186,6 +1201,33 @@ components:
           description: ""
           title: from
           type: object
+        hasOrigin:
+          additionalProperties: false
+          description: |-
+            Insertion context for the two-origin placement rule.
+             has_origin distinguishes "no origin" from "right origin = end".
+          title: has_origin
+          type: boolean
+        originLeft:
+          $ref: '#/components/schemas/yorkie.v1.TextNodeID'
+          additionalProperties: false
+          description: ""
+          title: origin_left
+          type: object
+        originRight:
+          $ref: '#/components/schemas/yorkie.v1.TextNodeID'
+          additionalProperties: false
+          description: ""
+          title: origin_right
+          type: object
+        originRightAtFrom:
+          additionalProperties: false
+          description: |-
+            origin_left is omitted when it equals from (the usual case); the
+             receiver derives it. origin_right_at_from marks a right origin that is
+             the character at from itself.
+          title: origin_right_at_from
+          type: boolean
         parentCreatedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
@@ -1484,6 +1526,20 @@ components:
           additionalProperties: false
           description: ""
           title: from
+          type: object
+        hasOrigin:
+          additionalProperties: false
+          description: |-
+            Right insertion origin of the contents. The left origin
+             is the from position itself, so only the right is carried. has_origin
+             distinguishes "no origin" from "right origin = end of the parent".
+          title: has_origin
+          type: boolean
+        originRight:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: ""
+          title: origin_right
           type: object
         parentCreatedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
@@ -2154,6 +2210,13 @@ components:
           description: ""
           title: attributes
           type: object
+        hasOrigin:
+          additionalProperties: false
+          description: |-
+            Field 6 is taken by removal_events in yorkie-js-sdk; the origin fields
+             start at 7 to stay wire-compatible with it.
+          title: has_origin
+          type: boolean
         id:
           $ref: '#/components/schemas/yorkie.v1.TextNodeID'
           additionalProperties: false
@@ -2165,6 +2228,28 @@ components:
           additionalProperties: false
           description: ""
           title: ins_prev_id
+          type: object
+        originFlags:
+          additionalProperties: false
+          description: |-
+            Bits for origins that are the node's neighbours in the encoded order,
+             whose IDs are then omitted: 1 = left is the end of the previous node,
+             2 = left is this node itself (a split continuation), 4 = right is the
+             next node, 8 = right is the previous node's right origin (a run typed
+             forward shares one right origin).
+          title: origin_flags
+          type: integer
+        originLeft:
+          $ref: '#/components/schemas/yorkie.v1.TextNodeID'
+          additionalProperties: false
+          description: ""
+          title: origin_left
+          type: object
+        originRight:
+          $ref: '#/components/schemas/yorkie.v1.TextNodeID'
+          additionalProperties: false
+          description: ""
+          title: origin_right
           type: object
         removalEvents:
           additionalProperties: false
@@ -2188,6 +2273,15 @@ components:
           description: ""
           title: removed_at
           type: object
+        skeletonLen:
+          additionalProperties: false
+          description: |-
+            skeleton_len > 0 marks a garbage-collected tombstone kept only for its
+             position: value and attributes are dropped, the ID range
+             [id.offset, id.offset + skeleton_len) and the origins are kept so
+             insertion origins that name it resolve the same on every replica.
+          title: skeleton_len
+          type: integer
         value:
           additionalProperties: false
           description: ""
@@ -2289,6 +2383,16 @@ components:
           description: ""
           title: depth
           type: integer
+        hasOrigin:
+          additionalProperties: false
+          description: |-
+            Insertion origins for the two-origin placement rule.
+             has_origin distinguishes "no origin" (legacy node) from an origin whose
+             left is the start of the parent (origin_left unset) or whose right is
+             the end of the parent (origin_right unset). Fields 1-10 match
+             yorkie-js-sdk main; 11-14 are free there.
+          title: has_origin
+          type: boolean
         id:
           $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
           additionalProperties: false
@@ -2326,12 +2430,33 @@ components:
              concurrent merge. It points to the source parent's ID.
           title: merged_from
           type: object
+        originLeft:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: ""
+          title: origin_left
+          type: object
+        originRight:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: ""
+          title: origin_right
+          type: object
         removedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
           description: ""
           title: removed_at
           type: object
+        skeletonLen:
+          additionalProperties: false
+          description: |-
+            skeleton_len > 0 marks a garbage-collected tombstone kept in its parent's
+             child list only for its position: its value, attributes and subtree are
+             gone. For a text node it is the UTF-16 length of the ID range it still
+             covers; an element writes 1.
+          title: skeleton_len
+          type: integer
         type:
           additionalProperties: false
           description: ""

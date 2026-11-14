@@ -528,7 +528,11 @@ func newElementFixture(t *testing.T) *elementFixture {
 	deliverInOrder(t, b, "b applies setup", setup)
 	collect(t, a, "a collects setup", vector)
 	collect(t, b, "b collects setup", vector)
-	require.Nil(t, nodeByID(t, b, markID), "the removed mark should be purged, not tombstoned")
+	// Collected: gone, or kept as a content-less skeleton when skeleton GC
+	// is on -- either way the undo below takes the purged-node path.
+	if n := nodeByID(t, b, markID); n != nil {
+		require.True(t, n.IsSkeleton(), "the removed mark should be collected, not just tombstoned")
+	}
 
 	require.NoError(t, b.Update(func(r *json.Object, _ *presence.Presence) error {
 		r.GetTree("t").Edit(0, 2, nil, 0)
@@ -704,7 +708,11 @@ func TestTreeRestoreOrphansDeeplyNestedNodeUnderTombstonedParent(t *testing.T) {
 
 	collect(t, d1, "d1 first collection", vector)
 	collect(t, d2, "d2 first collection", vector)
-	require.Nil(t, nodeByID(t, d1, textID), "the removed text should be purged, not tombstoned")
+	// Collected: gone, or kept as a content-less skeleton when skeleton GC
+	// is on -- either way the undo below takes the purged-node path.
+	if n := nodeByID(t, d1, textID); n != nil {
+		require.True(t, n.IsSkeleton(), "the removed text should be collected, not just tombstoned")
+	}
 
 	// d2 removes the enclosing <b> -- not <p>, so a LIVE ancestor survives
 	// above the tombstone and the document keeps rendering normally.

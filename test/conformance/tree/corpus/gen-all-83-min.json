@@ -1,7 +1,7 @@
 {
   "v": 1,
   "id": "gen-all-83-min",
-  "status": { "go": "known-error", "js": "known-error" },
+  "status": { "go": "pass", "js": "known-error" },
   "note": "Minimised from gen-all-n2-s24-83 (a parity all row). Off mode converges; minvv mode throws 'node not found'. Likely cause: a node's removedAt keeps one removal only, so an older concurrent removal is forgotten and GC purges a node a pending change still targets.",
   "replicas": 2,
   "init": "abcd",

@@ -158,7 +158,8 @@ func ledgerTombstones(t *testing.T, doc *document.Document) int {
 
 	n := 0
 	for _, node := range textOf(t, doc, "t").Nodes() {
-		if node.RemovedAt() != nil {
+		// A skeleton is a collected tombstone, not one GC still holds.
+		if node.RemovedAt() != nil && !node.IsSkeleton() {
 			n++
 		}
 	}

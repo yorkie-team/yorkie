@@ -703,11 +703,25 @@ func (r *Root) collect(vector time.VersionVector) (int, int, error) {
 			}
 		}
 
+		// A Text node is not unlinked by its purge but kept as a content-less
+		// skeleton, so its size has to be read before the purge empties it.
+		var purgedSize resource.DataSize
+		keepsSkeleton := false
+		if k, ok := pair.Child.(interface{ keptAsSkeleton() bool }); ok {
+			keepsSkeleton = k.keptAsSkeleton()
+		}
+		if keepsSkeleton {
+			purgedSize = pair.Child.DataSize()
+		}
+
 		if err := pair.Parent.Purge(pair.Child); err != nil {
 			return 0, 0, err
 		}
 
-		r.docSize.GC.Sub(pair.Child.DataSize())
+		if !keepsSkeleton {
+			purgedSize = pair.Child.DataSize()
+		}
+		r.docSize.GC.Sub(purgedSize)
 		delete(r.gcNodePairMap, key)
 		count++
 	}

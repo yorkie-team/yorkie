@@ -550,7 +550,8 @@ func TestDocument(t *testing.T) {
 		assert.Equal(t, 0, doc.GarbageLen())
 		assert.Equal(
 			t,
-			`[0:0:AA:0 {} ""][1:3:AA:0 {} "12"][1:2:AA:2 {} "CD"]`,
+			// The collected "AB" stays as a content-less skeleton.
+			`[0:0:AA:0 {} ""][1:3:AA:0 {} "12"]{1:2:AA:0 skel(2)}[1:2:AA:2 {} "CD"]`,
 			doc.Root().GetText("text").ToTestString(),
 		)
 
@@ -561,7 +562,7 @@ func TestDocument(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(
 			t,
-			`[0:0:AA:0 {} ""][1:3:AA:0 {} "12"]{1:2:AA:2 {} "CD"}`,
+			`[0:0:AA:0 {} ""][1:3:AA:0 {} "12"]{1:2:AA:0 skel(2)}{1:2:AA:2 {} "CD"}`,
 			doc.Root().GetText("text").ToTestString(),
 		)
 	})

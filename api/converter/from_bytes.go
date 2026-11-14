@@ -318,10 +318,34 @@ func fromJSONText(
 
 	rgaTreeSplit := crdt.NewRGATreeSplit(crdt.InitialTextNode())
 	current := rgaTreeSplit.InitialHead()
+	var rightIsNext []*crdt.RGATreeSplitNode[*crdt.TextValue]
 	for _, pbNode := range pbText.Nodes {
 		textNode, err := fromTextNode(pbNode)
 		if err != nil {
 			return nil, err
+		}
+		if pbNode.HasOrigin {
+			o := textNode.RawOrigin()
+			switch {
+			case pbNode.OriginFlags&originLeftSelf != 0:
+				o.Left = textNode.ID()
+			case pbNode.OriginFlags&originLeftPrev != 0:
+				o.Left = endOf(current)
+			}
+			if o.Left == nil {
+				return nil, fmt.Errorf("text node origin_left missing")
+			}
+			if pbNode.OriginFlags&originRightNext != 0 {
+				rightIsNext = append(rightIsNext, textNode)
+			}
+			if pbNode.OriginFlags&originRightPrev != 0 {
+				po := current.Origin()
+				if po == nil || po.Right == nil {
+					return nil, fmt.Errorf("text node origin_right refers to a missing previous origin")
+				}
+				o.Right = po.Right
+			}
+			textNode.SetOrigin(o)
 		}
 		current = rgaTreeSplit.InsertAfter(current, textNode)
 		insPrevID, err := fromTextNodeID(pbNode.InsPrevId)
@@ -335,6 +359,16 @@ func fromJSONText(
 			}
 			current.SetInsPrev(insPrevNode)
 		}
+	}
+
+	for _, node := range rightIsNext {
+		next := rgaTreeSplit.NextOf(node)
+		if next == nil {
+			return nil, fmt.Errorf("text node origin_right refers past the end")
+		}
+		o := node.RawOrigin()
+		o.Right = next.ID()
+		node.SetOrigin(o)
 	}
 
 	text := crdt.NewText(
@@ -460,6 +494,28 @@ func fromTextNode(
 		if err := textNode.SetRemovalEvents(events); err != nil {
 			return nil, fmt.Errorf("text_node.removal_events: %w", err)
 		}
+	}
+	if pbNode.SkeletonLen > 0 {
+		// A collected tombstone: no value, no attributes, and the shared
+		// stand-in removal time (see RGATreeSplit.Purge).
+		if pbNode.Value != "" || len(pbNode.Attributes) > 0 || len(pbNode.RemovalEvents) > 0 {
+			return nil, fmt.Errorf("text node skeleton must be empty")
+		}
+		textNode.SetSkeleton(int(pbNode.SkeletonLen))
+		textNode.SetRemovedAt(time.InitialTicket)
+	}
+	if pbNode.HasOrigin {
+		left, err := fromTextNodeID(pbNode.OriginLeft)
+		if err != nil {
+			return nil, err
+		}
+		right, err := fromTextNodeID(pbNode.OriginRight)
+		if err != nil {
+			return nil, err
+		}
+		// Neighbour-relative origins (OriginFlags) are filled in by fromText,
+		// which knows the node's neighbours.
+		textNode.SetOrigin(crdt.InsertOrigin{Left: left, Right: right})
 	}
 	return textNode, nil
 }

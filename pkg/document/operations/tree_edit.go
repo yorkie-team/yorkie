@@ -68,6 +68,10 @@ type TreeEdit struct {
 	// that reconstructed them from executedAt and the content count.
 	splitTickets []*time.Ticket
 
+	// origin is the right insertion origin of the contents (only Right is
+	// read), or nil for an edit placed by the createdAt-only rule.
+	origin *crdt.TreeInsertOrigin
+
 	// isUndoOp marks this TreeEdit as a reverse operation produced by Execute
 	// rather than by a user edit. It is local-only state (never on the wire),
 	// mirroring Edit.isUndoOp: it gates both ReconcileOperation (only a
@@ -351,7 +355,7 @@ func (e *TreeEdit) Execute(
 			}
 
 		}
-		pairs, diff, info, err := obj.Edit(
+		pairs, diff, info, err := obj.EditWithOrigin(
 			e.from,
 			e.to,
 			contents,
@@ -395,6 +399,7 @@ func (e *TreeEdit) Execute(
 			// source needs at least one of the two -- a remote change on a
 			// CLIENT still feeds the reconciliation loop below.
 			source != OpSourceReplay,
+			e.origin,
 		)
 		for _, pair := range pairs {
 			root.RegisterGCPair(pair)
@@ -962,6 +967,16 @@ func (e *TreeEdit) Contents() []*crdt.TreeNode {
 // SplitLevel returns the level of the split.
 func (e *TreeEdit) SplitLevel() int {
 	return e.splitLevel
+}
+
+// TreeOrigin returns the right insertion origin of this edit, or nil.
+func (e *TreeEdit) TreeOrigin() *crdt.TreeInsertOrigin {
+	return e.origin
+}
+
+// SetTreeOrigin records the right insertion origin of this edit.
+func (e *TreeEdit) SetTreeOrigin(origin *crdt.TreeInsertOrigin) {
+	e.origin = origin
 }
 
 // SplitTickets returns the tickets issued for the nodes an element split
