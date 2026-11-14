@@ -121,9 +121,11 @@ work here is porting plus the three repo-specific pieces named in §4.
     close it either: on a hosted runner the job's user has routes to the host's
     memory that do not go through `sudo`. And the credential pick resolves its
     secret by a computed name, so the set of secrets the job is sent may be
-    wider than the ones it names, which has not been checked. An earlier version
-    of this paragraph proposed those three changes together as the closure; none
-    of them, alone or together, keeps the key from the agent. The closure is to
+    wider than the ones it names, which has not been checked. Replacing that
+    lookup with a fixed chain over the named slots would settle the question
+    without checking it; that is a follow-up. An earlier version of this
+    paragraph proposed those three changes together as the closure; none of
+    them, alone or together, keeps the key from the agent. The closure is to
     keep the private key out of the job that runs the agent: the pre-agent App
     calls (the protection check, the branch pre-flight, the acknowledgement)
     move to a job before it, and the agent commits and hands a bundle across as
