@@ -43,22 +43,195 @@ else as JSON).
 | `ci.gateLabel`, `ci.handoffSummary` | `checks.mjs`, for `mark-ready.mjs` | wired |
 | `ci.laneReports` | `agent-iterate-ci.yml`: whether the CI-fix arm downloads and renders lane reports before the log tail | wired |
 | `review.classRules.code-adjacent`, `review.classRules.policy` | `review-panel.mjs` | wired |
+| `review.classRules.design-spec`, `review.classRules.prose` | `review-panel.mjs`; `lenses/lenses.json`, as `$class:design-spec` and `$class:prose`. **Optional**: each adds globs to the built-in ones and may be left out | wired |
 | `review.sourceGlobs` | `lenses/lenses.json`, as `$config:review.sourceGlobs` | wired |
 | `review.sharedPrimitivesNote` | `lenses/design-fit.md`, as `{{config:review.sharedPrimitivesNote}}` | wired |
 | `review.diffExcludes` | the three reviewed-diff steps (panel, panel delta, on-demand) | wired |
 | `fixer.*` | the agents' prompts and two messages — see "What the prompts say" below | wired |
-| `tests.rules`, `tests.go.*` | `test-removals.mjs`, `fix-guard.mjs` | wired |
-| `fixGuard.replicatedRuleGlobs`, `fixGuard.replicatedRuleNotice`, `fixGuard.counterpartRepo` | `fix-guard.mjs`. `counterpartRepo` is `owner/name`; a PR body silences the warning by referring to it as `owner/name`, `owner/name#12`, `name#12` or a github.com link, never by merely containing the name | wired |
+| `tests.rules`, `tests.go.*`, `tests.cargo.*` | `test-removals.mjs`, `fix-guard.mjs`. `tests.go` is required exactly when `go` is named and `tests.cargo` exactly when `cargo` is; either block without its rule set is refused | wired |
+| `fixGuard.replicatedRuleGlobs`, `fixGuard.replicatedRuleNotice`, `fixGuard.counterpartRepos` | `fix-guard.mjs`. `counterpartRepos` is a list of `owner/name`; a PR body silences the warning by referring to any one of them as `owner/name`, `owner/name#12`, `name#12` or a github.com link, never by merely containing the name | wired |
 | `redact.extraPatterns` | — | not wired yet |
 | `ask.permittedMcpTools` | — | not wired yet |
+
+Every key is required except the two marked optional. Those only add to a
+list this package already has, so leaving one out means "the built-in entries
+and no more" and can make no list shorter. `review.classRules.design-spec`
+says where the design contract lives besides `docs/design/**` (a repository
+with `docs/plans/**` or a parity ledger lists them, and design-fit then runs
+on and reads them); `review.classRules.prose` says what else is narration.
+Prose is the one class no code lens reads, and it is matched last, so an entry
+there takes every file it matches that no other class claimed away from the
+code lenses: `"**"` is refused, and a repository's `repo.test.mjs` should pin
+that a source file still classifies as `code`.
 
 The two keys marked "not wired yet" are required by the schema and read by
 nothing; editing one changes nothing. `repo.appSlug` must agree with the
 logins: `<slug>[bot]` has to be in both `repo.appLogins` and `repo.botLogins`.
 
-`tests.rules` chooses from the rule sets that exist, `go` and `vitest`.
-Another test framework needs a rule set written in `test-removals.mjs` first;
-naming one here does not create it.
+`fixGuard.counterpartRepos` was `fixGuard.counterpartRepo`, one `owner/name`
+string, until a rule turned up with two other homes (an SDK that ports from
+another SDK and must converge with a server). The old key is refused, not
+read: a copy that syncs past the rename writes `["owner/name"]` where it had
+`"owner/name"`, and `[]` where it had `""`. The loader says so, and `sync.mjs`
+prints what the loader says.
+
+`tests.rules` chooses from the rule sets that exist: `go`, `vitest` and
+`cargo`. Another test framework needs a rule set written in
+`test-removals.mjs` first, and its assertion and tautology patterns in
+`fix-guard.mjs`, which refuses to load while a rule set has none; naming one
+here does not create it.
+
+### The cargo rule set
+
+Go and JavaScript keep tests in test files, so their rules ask one question
+of a path. Rust keeps most unit tests inside the file they test, in a
+`#[cfg(test)] mod tests { … }` at the bottom, and the cargo rules answer two
+questions differently because of it. `cargo-rules.mjs` holds both and says,
+at its top, what each cannot see.
+
+**What the removal record counts**, from patches alone, in every `.rs` file
+whether or not its path says "test":
+
+| | What counts |
+|---|---|
+| A case | The test attribute: `#[test]`, `#[tokio::test]`, `#[tokio::test(…)]` and any `path::test`, `#[rstest]`, `#[…_test]`. Not `#[test_case(…)]` rows, `#[bench]`, tests a macro or a loop generates, or doc-tests |
+| Switched off in place | `#[ignore]`, with or without a reason, on one line or several; `#[cfg_attr(…, ignore)]`; `#[should_panic]` added to a test that was already there (with a new test it is that test's design) |
+| Gated | A `#[cfg(…)]` other than `cfg(test)` added on a test, on a test module, or anywhere in a test file, on one line or broken over several; an inner `#![cfg(…)]` added as the first line inside a test module. In a file that is new, only a predicate nothing satisfies (`any()`, `false`) |
+| Out of reach | A removed `mod <name>;` line when the name says test (`tests`, `*_tests`) or the line above is `#[cfg(test)]`: the file is still there and no longer compiled. A `#[path = "…"]` added to, or changed on, a test module that was already declared |
+| Doc-tests | A doc-comment fence switched from running to `ignore`, `no_run`, `compile_fail`, `should_panic` or a language that is not Rust. A new example that never ran is not counted |
+| In a `Cargo.toml` | `test`, `doctest`, `harness` or `autotests` set to `false` (not under `[[bench]]` or `[[example]]`), and an entry taken off `[workspace] members` |
+| Renamed away | An integration-test target renamed to where cargo does not look |
+
+**What the record does not see.** It reads the lines a patch adds and
+removes, so a test can be switched off in ways that add no line it knows.
+These are left to the test-adequacy lens, which is the only reader of them:
+
+- a test that leaves before it asserts: `if true { return Ok(()); }`, a
+  check of an environment variable (the idiom for "skip when the server is
+  not there"), `std::process::exit(0)`;
+- tests wrapped in a macro that expands to nothing, or moved into a nested
+  module under a gate — no `#[test]` line is removed;
+- a test function renamed, where CI selects tests by name;
+- an assertion that can no longer fail without being a literal tautology:
+  `assert!(x || true)`, or an expected value changed to match the wrong
+  output. The assertion lint warns when assertions are removed outright, and
+  on `assert!(true)`, `assert_eq!(x, x)`, `assert_eq!(f(), f())`;
+- in a `Cargo.toml`: `[features]` and default features, `required-features`
+  or `path` on a `[[test]]`, and `[workspace] exclude`. What stands behind
+  these is not the record: a manifest is a CI-defining path, so a pull
+  request that touches one is never promoted automatically.
+
+**What a fix round may change.** A fix round may touch the pull request's
+original files, test files and docs. A Rust reproducer usually belongs in
+none of those: it goes into `mod tests` of the source file it tests. So for a
+`.rs` file outside the scope, the guard reads the whole file before and after
+each commit — the hook with `git show`, the report job through the contents
+API, as data — and allows the change when, with every test region taken out,
+the file is the same tokens. A test region is a top-level
+`#[cfg(test)] mod name { … }` or `#[cfg(test)] mod name;`, with the comments
+directly above it. That allows exactly three things:
+
+- lines inside an existing test module;
+- a new test module, at the top level of the file;
+- a new test file, `tests.rs` or `*_tests.rs` under a `src/`, together with
+  the `#[cfg(test)] mod name;` line that declares it in its parent.
+
+**A Rust path is what cargo makes of it, not what it is called.** With the
+cargo rules on, Rust source, `Cargo.toml`, `Cargo.lock` and `.cargo/**` are
+judged by these rules only; the `test/`, `tests/`, `__tests__/` and `docs/`
+directory names that open a path in other languages do not apply to them:
+
+- A manifest, a lockfile, a `build.rs` (anywhere) and a `.cargo/` file are
+  never in scope by their path. Each decides what gets compiled or run.
+- A file under `src/bin/`, `examples/` or `benches/` is a target cargo
+  builds by itself, whatever it is called: `src/bin/merge_tests.rs` is a
+  shipped binary.
+- A file under a `tests.cargo.integrationTestDirs` directory, or matching
+  `tests.cargo.testOnlyFileGlobs`, is test code because the repository says
+  so. That is the only way a Rust file is in scope by path alone.
+- A `tests.rs` / `*_tests.rs` file is test code by convention, and the
+  convention is checked: it is in scope when a parent module — `mod.rs` in
+  its directory, `<dir>.rs` beside the directory, or `lib.rs` / `main.rs`
+  for a file directly in `src/` — declares it `#[cfg(test)] mod name;`, with
+  no `#[path]`, and declares it nowhere else. The hook reads the parent at
+  the head being pushed and the report job at the round's head, so the
+  declaration may arrive in the same round. A file whose parent says plain
+  `mod name_tests;` is part of the library, and one nobody declares is
+  nothing yet. Unread means out of scope.
+
+Three things about this reading that a maintainer should know, because the
+rule is a gate:
+
+- **A test region can change what product code does under test.** A
+  `#[cfg(test)] #[macro_use] mod` may define a macro named like one the
+  product uses — `debug_assert!`, say — and shadow it for the rest of the
+  file, in test builds only. Nothing outside the region changed, and a
+  release build is the same, so this is in scope; but the product code then
+  runs differently under `cargo test` than it ships. It is accepted, and it
+  is what a reviewer of a fix round's test module should look for.
+- **Own-line comments directly above a test region belong to it**, however
+  many blank lines lie between, so a fix round can reword them.
+- **False refusals**, each of which pages: a test region placed directly
+  after an inner attribute (`#![allow(…)]` at the top of a file) or after
+  any other attribute; a `#[test]` function outside a test module; a test
+  module inside another module; an operator re-spaced so that two
+  punctuation characters touch or part (`Vec<Vec<T>>` to `Vec<Vec<T> >`); a
+  `tests/build.rs`, which is a real test target and is named like a build
+  script.
+
+Two layouts the check does not follow, to be listed in
+`tests.cargo.testOnlyFileGlobs` once a person has looked: a test module
+reached through `#[path = "…"]`, and files in a directory that is itself a
+test module (`src/client/tests/*.rs` under `#[cfg(test)] mod tests`). The
+removal record and the lints take a test file's name at its word; only the
+scope asks for the declaration.
+
+Anything else in the file, in any commit of the round, puts the file out of
+scope: the hook refuses the push and the report job pages. That includes
+everything that only looks like a test region — `#[cfg(any(test, …))]`, a
+`mod tests` with no `#[cfg(test)]`, a region inside a macro invocation or
+under another attribute — and a file the job could not read.
+
+The fixer is told through `fixer.commitNote`, which is where a repository
+says what its hooks check. A cargo repository adds a sentence such as: "A new
+test goes inside a top-level `#[cfg(test)] mod` of the file it tests, or in a
+new `*_tests.rs` file declared by a `#[cfg(test)] mod <name>;` line; the scope
+hook refuses any other change to a Rust file outside the pull request's
+diff."
+
+The assertion lint reads `.rs` lines with the Rust idioms only (every
+`…assert…!` macro, `panic!`, `unreachable!`), in test files and, in a source
+file, in its test modules — for the lint, at any depth, so a
+`#[cfg(test)]` module nested in another module is read too. The replicated-rule warning skips a commit that
+changed only the tests inside a rule file.
+
+**Configuration**, required when `cargo` is named:
+
+| Key | |
+|---|---|
+| `tests.cargo.integrationTestDirs` | Directories, as globs, whose `.rs` files cargo builds as integration-test targets: `<dir>/<name>.rs` and `<dir>/<name>/main.rs`. Usually `crates/*/tests`, or `tests` for a single package. Name the directory, not `dir/**`. Everything under one is a test file; only the targets are "run by name" |
+| `tests.cargo.testOnlyFileGlobs` | Source files that are test code as a whole although the rules above cannot tell: a module declared `#[cfg(test)] mod sync_scenarios;`, one reached through `#[path]`, the files of a test-module directory. Listing a file puts it in a fix round's scope, so list only what a `#[cfg(test)]` declaration reaches; `repo.test.mjs` should pin that. May be empty |
+
+```json
+"tests": {
+  "rules": ["cargo", "vitest"],
+  "cargo": {
+    "integrationTestDirs": ["crates/*/tests"],
+    "testOnlyFileGlobs": []
+  }
+},
+"fixer": {
+  "verifyCommand": "make verify",
+  "verifyDescription": "`cargo fmt --all --check`, clippy with warnings denied, `cargo test --workspace` and the rustdoc build",
+  "keepReproducerAs": "Rust has no `it.fails`, so keep the test and put `#[ignore = \"still reproduces: <finding>\"]` directly under its test attribute, with a comment naming the finding",
+  "disabledTestForms": "switches off with `#[ignore]`, `#[should_panic]` or a `#[cfg(...)]` gate"
+}
+```
+
+`vitest` stays beside `cargo` for the harness's own tests, which every
+repository carries. A repository's `repo.test.mjs` should pin that a source
+file with inline tests, a `*_tests.rs` file, an integration target and one of
+its helper files each classify as the rule set intends.
 
 ### What the prompts say
 
@@ -102,7 +275,8 @@ A repository on another toolchain fills the same frames. With cargo, say:
 `verifyCommand` is `cargo fmt --check && cargo clippy -- -D warnings && cargo
 test` (or the one script that runs them), `verifyDescription` is "the format
 check, clippy with warnings denied and the test suite", and the integration
-pair is empty if no suite needs a service.
+pair is empty if no suite needs a service. "The cargo rule set" above has the
+rest of what a Rust repository writes.
 
 ### How a workflow reads a value
 
@@ -193,8 +367,10 @@ trailing `/` would all match no path. `review.diffExcludes` is the exception —
 those are git pathspecs, handed to `git diff`.
 
 In `lenses/lenses.json`, an `appliesWhen` entry `$config:<key>` stands for that
-list. In a rubric, `{{config:<key>}}` stands for that string. Both throw when
-the key is missing, empty or of the wrong type.
+list, and `$class:<file class>` for every glob of that class — the built-in
+ones and the repository's additions. In a rubric, `{{config:<key>}}` stands
+for that string. All three throw when what they name is missing, empty or of
+the wrong type.
 
 ## Conventions the core assumes
 
@@ -216,12 +392,43 @@ repository that adopts the harness follows them:
   `$RUNNER_TEMP/agent-hooks` with `core.hooksPath` pointed at it, which
   replaces whatever hooks the checkout would otherwise run, and the agent can
   point the path elsewhere. The report job's scope check is the gate.
+- A fix round adds ordinary commits to the end of the branch. The scope
+  check reads those, one parent each, so anything that arrives another way
+  is treated as out of scope: the hook refuses the push and the report job
+  pages. That is a merge of anything but the base branch, a commit with no
+  parent, a round of more than 50 commits, and a round whose commits the
+  report job could not list. A merge of the base branch is allowed — it is
+  how a fixer resolves a conflict — as long as no file it left different
+  from both of its parents is outside the scope.
 - CI's lane reports, where `ci.laneReports` is true, are an artifact named
   `ci-lane-reports` rendered by `scripts/ci/summarize-ci.mjs`.
-- The issue-to-PR prompt names `CLAUDE.md`, `CONTRIBUTING.md`, `docs/tasks/`,
-  `docs/design/TEMPLATE.md` and `.github/PULL_REQUEST_TEMPLATE.md`.
-- The CI workflow is `.github/workflows/ci.yml`, named `CI`. The ready gate
-  reads that file's runs, and the panel and the CI-fix arm trigger on it.
+- The issue-to-PR prompt names six paths, and each has to exist before the
+  first run: `CLAUDE.md` and `CONTRIBUTING.md` ("follow … exactly"),
+  `docs/tasks/active/` (where the todo and lessons pair goes; a directory
+  exists in a checkout only with a tracked file in it),
+  `docs/design/TEMPLATE.md` and `docs/design/README.md` (what a new design
+  document starts from, and the index it is added to), and
+  `.github/PULL_REQUEST_TEMPLATE.md`. They are not configurable: a repository
+  that plans in another layout adopts this one. `conventions.mjs` holds the
+  list, and a repository's `repo.test.mjs` is required to check it — see
+  "Adopting and syncing".
+- The CI workflow is `.github/workflows/ci.yml`, and its `name:` is exactly
+  `CI`. The ready gate reads that file's runs by path. The panel and the
+  CI-fix arm are started by `workflow_run` with `workflows: ["CI"]`, which
+  matches a workflow's NAME, and with any other name they never start: no
+  error, no run. Whether GitHub compares that name case-insensitively is not
+  documented, and this was not tested; write `CI`, capitals included, and pin
+  it in `repo.test.mjs`. (Each of those jobs also asserts the run's path, so
+  a second workflow that calls itself `CI` starts them and is then refused.)
+- The issue-to-PR verb, and only it, refuses to run unless `main` requires a
+  human approval the agent App cannot get around (`check-protection.mjs`):
+  classic branch protection or an active ruleset with at least one required
+  approving review, re-approval required after the last push, and nobody
+  allowed to bypass — and the App must be able to read that (Administration:
+  read). A repository protected by nothing, or only against force pushes,
+  gets a refusal that says which of these is missing. Required status checks
+  are not looked at, and the verbs that work on an existing pull request do
+  not ask.
 - `.github/workflows/**`, `.github/actions/**`, `.github/CODEOWNERS`,
   `.github/agent-harness/**`, `scripts/setup.sh`, `scripts/hooks/**` and
   `.githooks/**` define CI. A pull request touching any of them is never
@@ -231,7 +438,9 @@ repository that adopts the harness follows them:
   are reviewed as instructions to people and agents, not as prose.
 - `docs/design/**` is the design contract (with `TEMPLATE.md` and `README.md`
   in it); the rest of `docs/**`, top-level `*.md` and `*.txt`, and any
-  `README.md` are prose.
+  `README.md` are prose. A repository can add to either list
+  (`review.classRules.design-spec`, `review.classRules.prose`) and cannot
+  take from them.
 - `scripts/hooks/**` and `.githooks/**` are the local enforcement layer that
   `scripts/setup.sh` installs.
 - This package lives at `scripts/agent`, and nothing in it imports from
@@ -286,7 +495,8 @@ Then it writes every file the manifest lists, deletes the tracked core files
 the source no longer has, writes `upstream.json` (the source's repository,
 its `HEAD`, the manifest's digest), and runs the new core's configuration
 loader against the existing `config.json`, printing each key the new schema
-requires and each it no longer knows. Only a filesystem error can stop it
+requires and each it no longer knows — with the new spelling, where a key
+was renamed. Only a filesystem error can stop it
 part-way; every file touched was tracked and unmodified, so
 `git restore --staged --worktree -- scripts/agent .github/workflows` undoes
 it. What it leaves to a person, and prints:
@@ -311,6 +521,22 @@ test("the shared files are a copy of owner/name", () => {
 ```
 
 The origin pins `{ repository: null }` the same way.
+
+**Required in every repository's `repo.test.mjs`: the files the issue-to-PR
+prompt names exist.** The prompt is shared, so it names the same six paths
+everywhere ("Conventions the core assumes"), and a repository without one of
+them learns it from an agent told to follow a file it cannot open:
+
+```js
+test("every file the issue-to-PR prompt names exists here", async () => {
+  const { missingImplementPaths } = await import(path.join(ROOT, "scripts", "agent", "conventions.mjs"));
+  assert.deepEqual(missingImplementPaths(ROOT), []);
+});
+```
+
+`conventions.test.mjs` keeps that list equal to what the prompt names, in
+both directions, so a path added to the prompt fails this test in every copy
+at its next sync.
 
 **Required in every repository's root `.gitattributes`:**
 

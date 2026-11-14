@@ -324,9 +324,9 @@ test("every configured path and glob matches a file this repository tracks", () 
   // Guards on the guard: the lists were walked, and RESERVED holds nothing stale.
   assert.ok(checked >= 30, `expected every configured entry, checked ${checked}`);
   assert.deepEqual(reservedSeen.sort(), Object.entries(RESERVED).flatMap(([e, keys]) => keys.map((k) => `${k}: ${e}`)).sort());
-  assert.equal(CONFIG.fixGuard.counterpartRepo, "yorkie-team/yorkie-js-sdk");
+  assert.deepEqual([...CONFIG.fixGuard.counterpartRepos], ["yorkie-team/yorkie-js-sdk"]);
   // What a pull request here writes to point at the other side still counts.
-  const named = fixGuard.counterpartReference(CONFIG.fixGuard.counterpartRepo);
+  const named = fixGuard.counterpartReference(CONFIG.fixGuard.counterpartRepos[0]);
   for (const body of ["JS side: yorkie-js-sdk#1442", "yorkie-team/yorkie-js-sdk#1442", "https://github.com/yorkie-team/yorkie-js-sdk/pull/1442"]) {
     assert.equal(named(body), true, body);
   }
@@ -341,6 +341,21 @@ test("this is the repository the shared files are written in", () => {
   // requires that it matches the tree.
   const upstream = JSON.parse(readFileSync(path.join(HERE, "upstream.json"), "utf8"));
   assert.deepEqual(upstream, { repository: null });
+});
+
+test("every file the issue-to-PR prompt names exists here", async () => {
+  // The prompt is shared, so it names the same paths in every repository:
+  // the two process documents, the task directory, the design template and
+  // index, the pull request template. `conventions.mjs` holds the list and
+  // the package's own test keeps it equal to the prompt.
+  const { IMPLEMENT_PROMPT_PATHS, missingImplementPaths } = await agent("conventions.mjs");
+  assert.ok(IMPLEMENT_PROMPT_PATHS.length >= 6, "the list was emptied");
+  assert.deepEqual(missingImplementPaths(ROOT), []);
+  // …and each is TRACKED, not merely on this machine's disk.
+  for (const entry of IMPLEMENT_PROMPT_PATHS) {
+    const tracked = execFileSync("git", ["ls-files", "--", entry.path], { cwd: ROOT, encoding: "utf8" }).trim();
+    assert.ok(tracked !== "", `${entry.path} exists here but git does not track it`);
+  }
 });
 
 test("no checkout converts the shared files' line endings", () => {

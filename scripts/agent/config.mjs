@@ -58,7 +58,7 @@ export const CONFIG_FILE = "config.json";
 export const COVERAGE_NOTE_FILE = "coverage-note.md";
 
 /** The language rule sets `tests.rules` may name. */
-export const TEST_RULE_SETS = Object.freeze(["go", "vitest"]);
+export const TEST_RULE_SETS = Object.freeze(["go", "vitest", "cargo"]);
 
 // --- globs -------------------------------------------------------------------
 //
@@ -217,9 +217,27 @@ const dirNames = [
   "an array of plain directory names (one path segment each: no slash, no dot-prefix, no pattern)",
 ];
 
+// Directories, as globs: `crates/*/tests`. A last segment of `**` would name
+// a directory's contents at every depth, and the rule these feed is about
+// what sits DIRECTLY in the directory.
+const isDirGlobList = (v) => isGlobList(v) && v.every((x) => x.split("/").at(-1) !== "**");
+const dirGlobList = [
+  isDirGlobList,
+  `an array of directories as ${GLOBS} (may be empty); name the directory itself, not \`dir/**\``,
+  globDetail,
+];
+
 /** Marks a nested schema whose key may be absent as a whole. */
 const OPTIONAL = Symbol("optional");
 const optional = (schema) => ({ [OPTIONAL]: true, ...schema });
+/**
+ * Marks a LIST that may be absent, for a key that only ever ADDS to a list
+ * this package already has. Absent and `[]` then mean the same thing — "the
+ * built-in entries and no more" — so absence cannot make any list shorter,
+ * which is the failure "no defaults" exists to prevent. Read with
+ * `getOptionalList`, never with `get`.
+ */
+const optionalAddition = ([ok, wants, detail]) => Object.assign([ok, wants, detail], { [OPTIONAL]: true });
 
 const SCHEMA = {
   repo: {
@@ -252,6 +270,11 @@ const SCHEMA = {
     classRules: {
       "code-adjacent": globList,
       policy: globList,
+      // Additions to the two classes whose paths are otherwise this
+      // package's own: where the design contract lives beyond
+      // `docs/design/**`, and what else is narration. Both may be absent.
+      "design-spec": optionalAddition(globList),
+      prose: optionalAddition(globList),
     },
     // What counts as source for the path-scoped lenses.
     sourceGlobs: nonEmptyGlobList,
@@ -319,16 +342,28 @@ const SCHEMA = {
       sharedSuiteDirs: dirNames,
       ciPlatform: { goos: identifier, goarch: identifier },
     }),
+    cargo: optional({
+      // Where cargo finds integration-test TARGETS: a `.rs` file directly in
+      // one of these, or `<dir>/<name>/main.rs`, is built and run by name.
+      // Usually `tests` beside each `Cargo.toml` (`crates/*/tests`).
+      integrationTestDirs: dirGlobList,
+      // Source files that are test code as a whole although neither their
+      // directory nor their name says so: a module declared
+      // `#[cfg(test)] mod sync_scenarios;` in its parent.
+      testOnlyFileGlobs: globList,
+    }),
   },
   fixGuard: {
     replicatedRuleGlobs: globList,
     replicatedRuleNotice: optionalText,
-    // `owner/name`: the repository that must apply the same rule. A pull
-    // request body that refers to it — `owner/name`, `owner/name#12`,
-    // `name#12`, or a github.com link to it — has made the question visible.
-    // The full name, because a bare one is a substring of its neighbours
-    // (`yorkie` of `yorkie-js-sdk`) and would match nearly every body.
-    counterpartRepo: [(v) => v === "" || isRepoSlug(v), "empty, or a repository as `owner/name`"],
+    // `owner/name`, each: the repositories that must apply the same rule. A
+    // pull request body that refers to ANY of them — `owner/name`,
+    // `owner/name#12`, `name#12`, or a github.com link to it — has made the
+    // question visible. The full name, because a bare one is a substring of
+    // its neighbours (`yorkie` of `yorkie-js-sdk`) and would match nearly
+    // every body. A list, because a rule can have more than one other home: a
+    // client SDK ports it from another SDK and must converge with a server.
+    counterpartRepos: [(v) => isList(v) && v.every(isRepoSlug), "an array of repositories as `owner/name`, not repeated (may be empty)"],
   },
   redact: {
     extraPatterns: list,
@@ -340,6 +375,15 @@ const SCHEMA = {
 
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 
+// A key this schema used to have under another name, and what to write now.
+// `sync.mjs` prints the loader's problems as the list of edits a newer core
+// leaves for a person; "is not a known key" alone would leave them to find
+// the new spelling by reading a diff.
+const RENAMED_KEYS = Object.freeze({
+  "fixGuard.counterpartRepo":
+    'it was renamed to fixGuard.counterpartRepos and is now a list: write ["owner/name"], or [] where it was ""',
+});
+
 function validate(value, schema, where, problems) {
   if (!isObject(value)) {
     problems.push(`${where || "the document"} must be an object`);
@@ -349,7 +393,7 @@ function validate(value, schema, where, problems) {
     const at = where ? `${where}.${key}` : key;
     const rule = schema[key];
     if (!Object.hasOwn(value, key)) {
-      if (!Array.isArray(rule) && rule[OPTIONAL]) continue;
+      if (rule[OPTIONAL]) continue;
       problems.push(`${at} is missing`);
       continue;
     }
@@ -361,7 +405,9 @@ function validate(value, schema, where, problems) {
     }
   }
   for (const key of Object.keys(value)) {
-    if (!Object.hasOwn(schema, key)) problems.push(`${where ? `${where}.` : ""}${key} is not a known key`);
+    if (Object.hasOwn(schema, key)) continue;
+    const at = `${where ? `${where}.` : ""}${key}`;
+    problems.push(`${at} is not a known key${Object.hasOwn(RENAMED_KEYS, at) ? ` — ${RENAMED_KEYS[at]}` : ""}`);
   }
 }
 
@@ -376,6 +422,13 @@ function crossChecks(config, problems) {
   if (!wantsGo && config.tests.go) {
     problems.push('tests.go is present, but tests.rules does not name "go" — nothing would read it');
   }
+  const wantsCargo = config.tests.rules.includes("cargo");
+  if (wantsCargo && !config.tests.cargo) {
+    problems.push('tests.cargo is missing, and tests.rules names "cargo"');
+  }
+  if (!wantsCargo && config.tests.cargo) {
+    problems.push('tests.cargo is present, but tests.rules does not name "cargo" — nothing would read it');
+  }
   // One App, named three ways. A slug that disagreed with the logins would
   // have the workflows allow-list one bot while the scripts believe another.
   const appBot = `${config.repo.appSlug}[bot]`;
@@ -386,13 +439,19 @@ function crossChecks(config, problems) {
   if ((config.fixer.integrationWarning === "") !== (config.fixer.integrationRerunBy === "")) {
     problems.push("fixer.integrationWarning and fixer.integrationRerunBy must both be set or both be empty");
   }
+  // `prose` is the one class routed AWAY from the code lenses, and it is
+  // matched last. An addition that matches every path would turn every file
+  // no other class claims — all the code — into prose.
+  if ((config.review.classRules.prose ?? []).includes("**")) {
+    problems.push('review.classRules.prose must not contain "**": every file no other class claims would be read as prose, by no code lens');
+  }
   const guard = config.fixGuard;
   if (guard.replicatedRuleGlobs.length > 0) {
     if (guard.replicatedRuleNotice.trim() === "") {
       problems.push("fixGuard.replicatedRuleNotice must be non-empty when fixGuard.replicatedRuleGlobs is");
     }
-    if (guard.counterpartRepo.trim() === "") {
-      problems.push("fixGuard.counterpartRepo must be non-empty when fixGuard.replicatedRuleGlobs is");
+    if (guard.counterpartRepos.length === 0) {
+      problems.push("fixGuard.counterpartRepos must be non-empty when fixGuard.replicatedRuleGlobs is");
     }
   }
 }
@@ -518,6 +577,25 @@ export function get(key, config = loadConfig()) {
     if (!isObject(node) || !Object.hasOwn(node, part)) {
       throw new Error(`harness config: no key ${JSON.stringify(walked.join("."))} (asked for ${JSON.stringify(key)})`);
     }
+    node = node[part];
+  }
+  return node;
+}
+
+/**
+ * The list at a key the schema marks as an optional addition: its entries, or
+ * `[]` when the repository did not write the key. Throws on any other key, so
+ * this cannot become the general "absent is fine" read that `get` refuses.
+ */
+export function getOptionalList(key, config = loadConfig()) {
+  let rule = SCHEMA;
+  for (const part of String(key).split(".")) rule = isObject(rule) && Object.hasOwn(rule, part) ? rule[part] : undefined;
+  if (!Array.isArray(rule) || !rule[OPTIONAL]) {
+    throw new Error(`harness config: ${JSON.stringify(key)} is not an optional list; read it with get()`);
+  }
+  let node = config;
+  for (const part of key.split(".")) {
+    if (!isObject(node) || !Object.hasOwn(node, part)) return [];
     node = node[part];
   }
   return node;

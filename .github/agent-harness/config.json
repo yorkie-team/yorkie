@@ -117,7 +117,9 @@
       "pkg/document/crdt/*.go"
     ],
     "replicatedRuleNotice": "**Replicated CRDT rule changed in Go only (warning).** yorkie-js-sdk must apply the same rule or a Go server and JS clients diverge. Link the matching yorkie-js-sdk change in the PR body, or say why none is needed:",
-    "counterpartRepo": "yorkie-team/yorkie-js-sdk"
+    "counterpartRepos": [
+      "yorkie-team/yorkie-js-sdk"
+    ]
   },
   "redact": {
     "extraPatterns": []

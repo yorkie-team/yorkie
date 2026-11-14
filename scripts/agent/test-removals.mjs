@@ -47,6 +47,20 @@
 //     platform CI runs on.
 //   - `vitest`: `*.test.*` / `*.spec.*` files with `it(`/`test(` cases — the
 //     shape of this package's own tests too.
+//   - `cargo`: Rust keeps most unit tests INSIDE the file they test, so
+//     there is no "test file" to find them in. A case is the `#[test]`
+//     attribute (and its family: `#[tokio::test]`, `#[rstest]`, …), which
+//     occurs only on tests, so every `.rs` patch is tallied whatever the file
+//     is. Switched off in place: `#[ignore]` — which is how a Rust fixer keeps
+//     a reproducer — `#[cfg_attr(…, ignore)]`, `#[should_panic]` added to an
+//     existing test, a `#[cfg(…)]` gate on a test or a test module, a removed
+//     `mod x_tests;` line (the file is still there and no longer compiled), a
+//     doc-test fence switched to `ignore`/`no_run`/`compile_fail`, and in a
+//     `Cargo.toml`, `test`/`doctest`/`harness`/`autotests = false` or a
+//     workspace member dropped. `tests.cargo` says where integration-test
+//     targets live and which files are test code although no naming
+//     convention says so. The rules and what a patch cannot show them are in
+//     `cargo-rules.mjs`.
 // `countCases` picks between the enabled sets by the file's extension.
 //
 // Usage:
@@ -62,7 +76,8 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { get } from "./config.mjs";
+import { compileGlob, get } from "./config.mjs";
+import { cargoManifestTally, cargoTally } from "./cargo-rules.mjs";
 
 export const TEST_REMOVALS_MARKER = "<!-- agent-fix-tests ";
 export const TEST_REMOVALS_VERSION = 1;
@@ -89,6 +104,8 @@ const RULES = get("tests.rules");
 const GO_RULES = RULES.includes("go");
 const JS_RULES = RULES.includes("vitest");
 const GO_CONFIG = GO_RULES ? get("tests.go") : null;
+const CARGO_RULES = RULES.includes("cargo");
+const CARGO_CONFIG = CARGO_RULES ? get("tests.cargo") : null;
 
 /**
  * The test layouts: `test/` trees and `__tests__/` in any language; with the Go
@@ -103,8 +120,78 @@ const GO_CONFIG = GO_RULES ? get("tests.go") : null;
  */
 export function isTestFile(file) {
   const f = str(file);
+  // What cargo builds is decided by cargo's rules and nothing else. The
+  // directory names below were written for other languages: under them,
+  // `src/bin/tests/main.rs` is a shipped binary and `src/test/x.rs` a module
+  // of the library.
+  if (isCargoGoverned(f)) return isCargoTestSource(f);
   return /(^|\/)(test|tests|__tests__)\//.test(f) || isSharedGoSuite(f) || isRunnableTest(f);
 }
+
+/**
+ * A path whose meaning cargo decides: Rust source, a manifest or lockfile,
+ * anything under `.cargo/`. With the cargo rules on, such a path is a test
+ * file only by those rules, and is never documentation — `docs/` and
+ * `tests/` in its path say nothing about what it is built into.
+ */
+export function isCargoGoverned(file) {
+  const f = str(file);
+  return CARGO_RULES && (/\.rs$/.test(f) || /(^|\/)Cargo\.(toml|lock)$/.test(f) || /(^|\/)\.cargo\//.test(f));
+}
+
+// Cargo. An INTEGRATION-TEST TARGET is a `.rs` file directly in a package's
+// `tests/` directory, or `tests/<name>/main.rs`: cargo builds exactly those,
+// by name, and nothing deeper (`tests/support/mod.rs` is a helper some target
+// declares). Which directories those are is `tests.cargo.integrationTestDirs`.
+const CARGO_TARGETS = (CARGO_CONFIG?.integrationTestDirs ?? []).flatMap((dir) => [compileGlob(`${dir}/*.rs`), compileGlob(`${dir}/*/main.rs`)]);
+const CARGO_TEST_TREES = (CARGO_CONFIG?.integrationTestDirs ?? []).map((dir) => compileGlob(`${dir}/**`));
+const CARGO_TEST_ONLY = (CARGO_CONFIG?.testOnlyFileGlobs ?? []).map(compileGlob);
+// A unit-test module in a file of its own, by the two names the convention
+// has: `tests.rs` / `test.rs`, and `<anything>_tests.rs` / `_test.rs`, under
+// a `src/`. The parent declares it `#[cfg(test)] mod <name>;`.
+const CARGO_UNIT_TEST_FILE = /(^|\/)src\/(.*\/)?(tests?|[^/]*_tests?)\.rs$/;
+// A package's build script runs at compile time, with the job's tokens in
+// reach. It is one only at a package's root, and telling a package root from
+// a path takes the manifests; so no file with this name is taken for a test,
+// wherever it is. (`tests/build.rs` is a real test target, refused: it pages.)
+const CARGO_BUILD_SCRIPT = /(^|\/)build\.rs$/;
+// Where cargo finds TARGETS by itself and builds each file as one: a file
+// there is a binary, an example or a benchmark whatever it is called.
+const CARGO_AUTO_TARGET_DIR = /(^|\/)(src\/bin|examples|benches)\//;
+
+/**
+ * A Rust file that is test code as a WHOLE: under an integration-test
+ * directory, named as a unit-test module, or listed in
+ * `tests.cargo.testOnlyFileGlobs`. Never a `build.rs`. A source file with a `mod tests` at the
+ * bottom is NOT one — see `cargo-rules.mjs` for how those are handled.
+ */
+function isCargoTestSource(file) {
+  if (!CARGO_RULES || !/\.rs$/.test(file) || CARGO_BUILD_SCRIPT.test(file)) return false;
+  return isCargoTestByConfiguration(file) || isCargoUnitTestByName(file);
+}
+
+/** Named by the configuration: under an integration-test directory, or a listed test-only file. */
+function isCargoTestByConfiguration(file) {
+  return CARGO_TEST_TREES.some((re) => re.test(file)) || CARGO_TEST_ONLY.some((re) => re.test(file));
+}
+
+/**
+ * A Rust file that is a unit-test module BY ITS NAME ALONE: `tests.rs` or
+ * `*_tests.rs` under a `src/`, outside the directories cargo builds targets
+ * from, and not already named by the configuration. The name is a
+ * convention, not a fact — the file is test code only if its parent declares
+ * it under `#[cfg(test)]` — so the removal record and the lints take the
+ * name's word, and the fix guard's scope does not (`fix-guard.mjs`
+ * `rustDeclared`).
+ */
+export function isCargoUnitTestByName(file) {
+  const f = str(file);
+  return CARGO_RULES && CARGO_UNIT_TEST_FILE.test(f) && !CARGO_AUTO_TARGET_DIR.test(f) && !isCargoTestByConfiguration(f);
+}
+
+/** A file the cargo rules tally: any Rust source (cases identify themselves), and any `Cargo.toml`. */
+const isCargoManifest = (file) => CARGO_RULES && /(^|\/)Cargo\.toml$/.test(str(file));
+const isRust = (file) => CARGO_RULES && /\.rs$/.test(str(file));
 
 const SHARED_GO_SUITE = (GO_CONFIG?.sharedSuiteDirs ?? []).map(
   (dir) => new RegExp(`(^|/)${dir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/(.*/)?[^/]*\\.go$`),
@@ -140,10 +227,16 @@ function goTestInReach(file) {
   return !(GOOS.has(last) && last !== CI_GOOS);
 }
 
-/** A file the runners pick up by NAME (`*_test.go` in reach of `go test` on CI; `*.test.*`, `*.spec.*`, `*_test.*` in JS), wherever it lives. */
+/**
+ * A file the runners pick up by NAME (`*_test.go` in reach of `go test` on CI; `*.test.*`, `*.spec.*`, `*_test.*` in JS), wherever it lives.
+ * With the cargo rules, a Rust file is one only as an integration-test
+ * target. A unit-test file has no such name: it is compiled because a `mod`
+ * line reaches it, and renaming it without that line does not build.
+ */
 export function isRunnableTest(file) {
   const f = str(file);
   if (GO_RULES && /_test\.go$/.test(f)) return goTestInReach(f);
+  if (isRust(f)) return !CARGO_BUILD_SCRIPT.test(f) && CARGO_TARGETS.some((re) => re.test(f));
   return JS_RULES && /[._](test|spec)\.[cm]?[jt]sx?$/.test(f);
 }
 
@@ -196,8 +289,8 @@ const ignores = (expr) => /(^|[^\w!])ignore(?!\w)/.test(expr);
  * patch or over a whole round, so a constraint changed and changed back nets
  * out. `newFile`: the file did not exist before the span.
  */
-function constraintsOff(added, removed, newFile) {
-  return [...added].filter((e) => !removed.has(e) && (!newFile || ignores(e))).length;
+function constraintsOff(added, removed, newFile, never = ignores) {
+  return [...added].filter((e) => !removed.has(e) && (!newFile || never(e))).length;
 }
 
 /**
@@ -206,6 +299,10 @@ function constraintsOff(added, removed, newFile) {
  * switched back on, and the build-constraint sets are left for the caller.
  */
 function tally(patch, { file = "", status = "" } = {}) {
+  // Rust and Cargo manifests have rules of their own, which read a hunk
+  // rather than a line; they return this same shape, plus `never`.
+  if (isRust(file)) return cargoTally(patch, { status, testFile: isTestFile(file) });
+  if (isCargoManifest(file)) return cargoManifestTally(patch, { status });
   const go = isGo(file);
   const shared = go && isSharedGoSuite(file);
   let removed = 0, added = 0, offNet = 0;
@@ -239,15 +336,18 @@ function tally(patch, { file = "", status = "" } = {}) {
   return { removed, added, offNet, buildsAdded: builds["+"], buildsRemoved: builds["-"], newFile: status === "added" };
 }
 
-const suitesOffOf = (t) => Math.max(0, t.offNet) + constraintsOff(t.buildsAdded, t.buildsRemoved, t.newFile);
+// `never`: which gates count in a file that is new. The Go answer (the
+// `ignore` tag) is the default; the cargo tally brings its own.
+const suitesOffOf = (t) => Math.max(0, t.offNet) + constraintsOff(t.buildsAdded, t.buildsRemoved, t.newFile, t.never);
 
 /**
  * Active cases a unified diff removes and adds, and how many suites it newly
  * switches off. Suite lines are netted against THEMSELVES only, so editing an
  * already-skipped suite's title, or re-enabling one, is not a disablement.
- * `file` picks the language (a `.go` file gets the Go rules, anything else the
- * JS ones); `status` is the file's GitHub status, which only the Go
- * build-constraint rule reads.
+ * `file` picks the language (a `.go` file gets the Go rules, a `.rs` file or a
+ * `Cargo.toml` the cargo ones, anything else the JS ones); `status` is the
+ * file's GitHub status, which only the gate rules read: a gate in a NEW file
+ * counts only when nothing can satisfy it.
  */
 export function countCases(patch, opts = {}) {
   const t = tally(patch, opts);
@@ -264,7 +364,10 @@ function entries(files) {
     // `a_test.ts.off`, or `_test` dropped from the name) no longer runs: that is
     // the old file deleted, wherever the new name lives.
     const renamedAway = f?.status === "renamed" && isRunnableTest(was) && !isRunnableTest(now);
-    if (!isTestFile(now) && !renamedAway) continue;
+    // With the cargo rules every Rust file is read, test file or not: most
+    // Rust tests are inside the source file they test. So is every manifest.
+    const tallied = isRust(was) || isRust(now) || isCargoManifest(now);
+    if (!isTestFile(now) && !renamedAway && !tallied) continue;
     const deleted = f.status === "removed" || renamedAway;
     // GitHub omits `patch` for a diff too large to show. That is "unknown", not
     // "nothing removed". (A pure rename also carries no patch, but an unchanged
@@ -319,12 +422,13 @@ export function aggregateCommits(commits) {
       const fresh = !byFile.has(e.file);
       const cur = byFile.get(e.file) ?? {
         file: e.file, deleted: false, removed: 0, added: 0, suitesOff: 0,
-        raw: { offNet: 0, buildsAdded: new Set(), buildsRemoved: new Set(), newFile: e.raw?.newFile === true },
+        raw: { offNet: 0, buildsAdded: new Set(), buildsRemoved: new Set(), newFile: e.raw?.newFile === true, never: e.raw?.never },
       };
       if (fresh && !e.raw) cur.raw.newFile = false;
       cur.removed += e.removed;
       cur.added += e.added;
       if (e.raw) {
+        cur.raw.never ??= e.raw.never;
         cur.raw.offNet += e.raw.offNet;
         for (const x of e.raw.buildsAdded) cur.raw.buildsAdded.add(x);
         for (const x of e.raw.buildsRemoved) cur.raw.buildsRemoved.add(x);

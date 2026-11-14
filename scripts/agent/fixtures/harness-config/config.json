@@ -20,7 +20,9 @@
   "review": {
     "classRules": {
       "code-adjacent": ["**/fixtures/**", "stack/**"],
-      "policy": ["build.config", "tools/lint.rules"]
+      "policy": ["build.config", "tools/lint.rules"],
+      "design-spec": ["fixture-docs/contracts/**"],
+      "prose": ["notes/**/*.md"]
     },
     "sourceGlobs": ["src/**", "lib/**"],
     "sharedPrimitivesNote": "This fixture keeps its shared primitives in `lib/`.",
@@ -55,7 +57,7 @@
   "fixGuard": {
     "replicatedRuleGlobs": ["lib/rules/*.go"],
     "replicatedRuleNotice": "**Replicated rule changed on one side only (warning).** fixture-counterpart must apply the same rule. Link the matching change in the PR body, or say why none is needed:",
-    "counterpartRepo": "fixture-org/fixture-counterpart"
+    "counterpartRepos": ["fixture-org/fixture-counterpart", "fixture-org/fixture-second.counterpart"]
   },
   "redact": {
     "extraPatterns": []

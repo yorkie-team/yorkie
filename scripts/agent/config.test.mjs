@@ -15,6 +15,7 @@ import {
   get,
   globProblem,
   loadConfig,
+  getOptionalList,
 } from "./config.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,9 @@ function scratch(t, edit = (c) => c) {
   if (next !== undefined) writeFileSync(path.join(dir, CONFIG_FILE), JSON.stringify(next));
   return dir;
 }
+
+/** The keys that only add to a list the package already has, and so may be absent. */
+const OPTIONAL_ADDITIONS = ["review.classRules.design-spec", "review.classRules.prose"];
 
 /** Every dotted path to a leaf (a non-object value) of `obj`. */
 function leafPaths(obj, prefix = "") {
@@ -108,8 +112,9 @@ test("loadConfig: JSON that does not parse, or is not an object, throws", (t) =>
 });
 
 test("loadConfig: EVERY key is required — removing any one of them throws, naming it", (t) => {
-  // `tests.go.*` is the one conditional block; it has its own test below.
-  const required = leafPaths(FIXTURE).filter((p) => !p.startsWith("tests.go."));
+  // `tests.go.*` is the one conditional block, and the two class-rule
+  // additions are the only optional leaves; each has its own test below.
+  const required = leafPaths(FIXTURE).filter((p) => !p.startsWith("tests.go.") && !OPTIONAL_ADDITIONS.includes(p));
   // The count is the guard on the guard: a walk that found nothing would pass.
   assert.ok(required.length >= 25, `expected the whole schema, walked ${required.length} keys`);
   for (const key of required) {
@@ -167,14 +172,17 @@ test("loadConfig: a value of the wrong type throws, and no value is coerced", (t
     ["tests.go.ciPlatform", "linux/amd64"],
     ["tests.go.ciPlatform.goos", ""],
     ["fixGuard.replicatedRuleGlobs", "lib/**"],
-    ["fixGuard.counterpartRepo", "fixture-counterpart"],
-    ["fixGuard.counterpartRepo", "fixture-org/fixture-counterpart#"],
-    ["fixGuard.counterpartRepo", "https://github.com/fixture-org/fixture-counterpart"],
-    ["fixGuard.counterpartRepo", "a/b/c"],
-    ["fixGuard.counterpartRepo", "fixture-org/.."],
-    ["fixGuard.counterpartRepo", "fixture-org/."],
-    ["fixGuard.counterpartRepo", "fixture--org/x"],
-    ["fixGuard.counterpartRepo", "fixture-org-/x"],
+    ["fixGuard.counterpartRepos", "fixture-org/fixture-counterpart"],
+    ["fixGuard.counterpartRepos", ["fixture-counterpart"]],
+    ["fixGuard.counterpartRepos", ["fixture-org/fixture-counterpart#"]],
+    ["fixGuard.counterpartRepos", ["https://github.com/fixture-org/fixture-counterpart"]],
+    ["fixGuard.counterpartRepos", ["a/b/c"]],
+    ["fixGuard.counterpartRepos", ["fixture-org/.."]],
+    ["fixGuard.counterpartRepos", ["fixture-org/."]],
+    ["fixGuard.counterpartRepos", ["fixture--org/x"]],
+    ["fixGuard.counterpartRepos", ["fixture-org-/x"]],
+    ["fixGuard.counterpartRepos", ["a/b", "a/b"]],
+    ["fixGuard.counterpartRepos", ["a/b", ""]],
     ["fixer.commitNote", "subject under 70"],
     ["redact.extraPatterns", null],
     ["ask.permittedMcpTools", [null]],
@@ -218,6 +226,57 @@ test("loadConfig: tests.go is required exactly when tests.rules names go", (t) =
   assert.throws(() => loadConfig(blockWithoutGo), /tests\.go is present, but tests\.rules does not name "go"/);
 });
 
+test("loadConfig: tests.cargo is required exactly when tests.rules names cargo", (t) => {
+  const block = { integrationTestDirs: ["crates/*/tests", "tests"], testOnlyFileGlobs: ["crates/core/src/sync_scenarios.rs"] };
+  const cargo = (c, value = block) => {
+    c.tests = { rules: ["cargo", "vitest"], ...(value === null ? {} : { cargo: value }) };
+    return c;
+  };
+  const fine = scratch(t, (c) => cargo(c));
+  assert.deepEqual([...loadConfig(fine).tests.rules], ["cargo", "vitest"]);
+  assert.deepEqual([...loadConfig(fine).tests.cargo.integrationTestDirs], ["crates/*/tests", "tests"]);
+  // Beside Go, each with its own block.
+  const both = scratch(t, (c) => {
+    c.tests = { ...c.tests, rules: ["go", "cargo"], cargo: block };
+    return c;
+  });
+  assert.deepEqual([...loadConfig(both).tests.rules], ["go", "cargo"]);
+  // A crate with no integration tests, and no file to single out, says so.
+  const empty = scratch(t, (c) => cargo(c, { integrationTestDirs: [], testOnlyFileGlobs: [] }));
+  assert.deepEqual([...loadConfig(empty).tests.cargo.integrationTestDirs], []);
+
+  const missing = scratch(t, (c) => cargo(c, null));
+  assert.throws(() => loadConfig(missing), /tests\.cargo is missing, and tests\.rules names "cargo"/);
+  const unread = scratch(t, (c) => {
+    c.tests.cargo = block;
+    return c;
+  });
+  assert.throws(() => loadConfig(unread), /tests\.cargo is present, but tests\.rules does not name "cargo"/);
+  // A Go block does not stand in for it, in either direction.
+  const goBlockOnly = scratch(t, (c) => withValue(c, "tests.rules", ["cargo"]));
+  assert.throws(() => loadConfig(goBlockOnly), (err) =>
+    err.message.includes('tests.cargo is missing') && err.message.includes('tests.go is present, but tests.rules does not name "go"'));
+
+  for (const key of ["integrationTestDirs", "testOnlyFileGlobs"]) {
+    const without_ = scratch(t, (c) => cargo(c, without(structuredClone(block), key)));
+    assert.throws(() => loadConfig(without_), (err) => err.message.includes(`tests.cargo.${key} is missing`), key);
+    for (const bad of ["crates/*/tests", ["crates/*/tests/"], ["./tests"], ["{a,b}/tests"], ["a", "a"], [""]]) {
+      const dir = scratch(t, (c) => cargo(c, { ...block, [key]: bad }));
+      assert.throws(() => loadConfig(dir), (err) => err.message.includes(`tests.cargo.${key} must be`), `${key} = ${JSON.stringify(bad)}`);
+    }
+  }
+  // A target directory is named itself. `dir/**` names its contents at every
+  // depth, and would make every helper file under it a target.
+  for (const bad of [["crates/*/tests/**"], ["**"]]) {
+    const dir = scratch(t, (c) => cargo(c, { ...block, integrationTestDirs: bad }));
+    assert.throws(() => loadConfig(dir), /tests\.cargo\.integrationTestDirs must be an array of directories.*name the directory itself/, JSON.stringify(bad));
+  }
+  const deep = scratch(t, (c) => cargo(c, { ...block, integrationTestDirs: ["**/tests"] }));
+  assert.deepEqual([...loadConfig(deep).tests.cargo.integrationTestDirs], ["**/tests"]);
+  const unknown = scratch(t, (c) => cargo(c, { ...block, features: ["default"] }));
+  assert.throws(() => loadConfig(unknown), /tests\.cargo\.features is not a known key/);
+});
+
 test("loadConfig: the App's slug and its logins name one App", (t) => {
   // The workflows allow-list `<slug>[bot]` and the scripts believe the logins.
   // A slug that named another App would have the two disagree in silence.
@@ -248,17 +307,63 @@ test("loadConfig: the optional fixer sentences may be empty, the others may not"
 });
 
 test("loadConfig: a replicated-rule glob needs its notice and its counterpart", (t) => {
-  for (const key of ["fixGuard.replicatedRuleNotice", "fixGuard.counterpartRepo"]) {
-    const dir = scratch(t, (c) => withValue(c, key, ""));
+  for (const [key, nothing] of [["fixGuard.replicatedRuleNotice", ""], ["fixGuard.counterpartRepos", []]]) {
+    const dir = scratch(t, (c) => withValue(c, key, nothing));
     assert.throws(() => loadConfig(dir), (err) => err.message.includes(`${key} must be non-empty`), key);
   }
   // A repository with no replicated rule says so with an empty list, and then
   // has nothing to say in the other two.
   const none = scratch(t, (c) => {
-    c.fixGuard = { replicatedRuleGlobs: [], replicatedRuleNotice: "", counterpartRepo: "" };
+    c.fixGuard = { replicatedRuleGlobs: [], replicatedRuleNotice: "", counterpartRepos: [] };
     return c;
   });
   assert.deepEqual([...loadConfig(none).fixGuard.replicatedRuleGlobs], []);
+  // More than one counterpart is the point of the list.
+  const two = scratch(t, (c) => withValue(c, "fixGuard.counterpartRepos", ["a/b", "a/c"]));
+  assert.deepEqual([...loadConfig(two).fixGuard.counterpartRepos], ["a/b", "a/c"]);
+});
+
+test("loadConfig: the class-rule additions may be absent, and are validated when present", (t) => {
+  for (const key of OPTIONAL_ADDITIONS) {
+    assert.ok(Array.isArray(get(key)), `${key}: the fixture is expected to set it`);
+    const dir = scratch(t, (c) => without(c, key));
+    const config = loadConfig(dir);
+    assert.equal(Object.hasOwn(config.review.classRules, key.split(".").at(-1)), false, key);
+    // Absent reads as "no additions", through the one reader that allows it.
+    assert.deepEqual(getOptionalList(key, config), [], key);
+    assert.throws(() => get(key, config), /no key/, `${key}: get() still refuses an absent key`);
+    assert.deepEqual([...getOptionalList(key)], FIXTURE.review.classRules[key.split(".").at(-1)], key);
+    const empty = scratch(t, (c) => withValue(c, key, []));
+    assert.deepEqual(getOptionalList(key, loadConfig(empty)), [], key);
+    for (const bad of ["docs/plans", ["docs/plans/"], ["{a,b}/**"], [7], null]) {
+      const wrong = scratch(t, (c) => withValue(c, key, bad));
+      assert.throws(() => loadConfig(wrong), (err) => err.message.includes(`${key} must be`), `${key} = ${JSON.stringify(bad)}`);
+    }
+  }
+  // The reader is for those keys alone: it must not become a way to read any
+  // absent key as an empty list.
+  for (const key of ["review.classRules.policy", "review.sourceGlobs", "tests.go", "review.classRules.nope", "nope"]) {
+    assert.throws(() => getOptionalList(key), /is not an optional list/, key);
+  }
+  // `prose` is matched last and routed off the code lenses: one entry that
+  // matches everything would leave no file in `code`.
+  const all = scratch(t, (c) => withValue(c, "review.classRules.prose", ["notes/**", "**"]));
+  assert.throws(() => loadConfig(all), /review\.classRules\.prose must not contain "\*\*"/);
+  const allSpec = scratch(t, (c) => withValue(c, "review.classRules.design-spec", ["**"]));
+  assert.deepEqual([...loadConfig(allSpec).review.classRules["design-spec"]], ["**"], "design-spec is read by MORE lenses than code, so this is only expensive");
+});
+
+test("loadConfig: a key that was renamed says what to write instead", (t) => {
+  // What an adopter sees after syncing past the rename: `sync.mjs` prints
+  // these lines as the edits the new core leaves for a person.
+  const old = scratch(t, (c) => {
+    delete c.fixGuard.counterpartRepos;
+    c.fixGuard.counterpartRepo = "fixture-org/fixture-counterpart";
+    return c;
+  });
+  assert.throws(() => loadConfig(old), (err) =>
+    err.message.includes("fixGuard.counterpartRepos is missing") &&
+    err.message.includes('fixGuard.counterpartRepo is not a known key — it was renamed to fixGuard.counterpartRepos and is now a list: write ["owner/name"]'));
 });
 
 test("configDir: beside the package by default, the override when set, never a relative path", () => {
@@ -379,7 +484,7 @@ test("globProblem / compileGlob: syntax this dialect does not have is REFUSED, n
 });
 
 test("loadConfig: every glob list refuses a non-glob entry and names it; no list takes a blank or repeated entry", (t) => {
-  const globKeys = ["ci.definingPaths", "review.classRules.code-adjacent", "review.classRules.policy", "review.sourceGlobs", "fixGuard.replicatedRuleGlobs"];
+  const globKeys = ["ci.definingPaths", "review.classRules.code-adjacent", "review.classRules.policy", "review.classRules.design-spec", "review.classRules.prose", "review.sourceGlobs", "fixGuard.replicatedRuleGlobs"];
   let checked = 0;
   for (const key of globKeys) {
     for (const bad of ["./x", "x/", "{a,b}", "!x", "a?b", "/x", "**.md"]) {
@@ -392,9 +497,9 @@ test("loadConfig: every glob list refuses a non-glob entry and names it; no list
       checked++;
     }
   }
-  assert.equal(checked, 35);
+  assert.equal(checked, 49);
   // Blank, padded and repeated entries: in every list, glob or not.
-  const lists = [...globKeys, "repo.botLogins", "repo.appLogins", "review.diffExcludes", "tests.rules", "tests.go.sharedSuiteDirs", "redact.extraPatterns", "ask.permittedMcpTools"];
+  const lists = [...globKeys, "repo.botLogins", "repo.appLogins", "review.diffExcludes", "tests.rules", "tests.go.sharedSuiteDirs", "fixGuard.counterpartRepos", "redact.extraPatterns", "ask.permittedMcpTools"];
   for (const key of lists) {
     for (const value of [["a", " "], ["a", ""], ["a", " b"], ["a", "b "], ["a", "a"]]) {
       const dir = scratch(t, (c) => withValue(c, key, value));

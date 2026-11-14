@@ -50,7 +50,7 @@ import { MAX_SLOTS } from "./token-pool.mjs";
 import { publicInfraReason, redactSecrets } from "./redact.mjs";
 import { renderScopeNote, serializeReviewState } from "./review-state.mjs";
 import { CITATION } from "./citation.mjs";
-import { compileGlob, get, globProblem } from "./config.mjs";
+import { compileGlob, get, getOptionalList, globProblem } from "./config.mjs";
 import { findingLocation, noveltyOf, baseResolves, DEMOTING_ORIGINS } from "./novelty.mjs";
 import { surfaceOfFinding, freezeResolves, DEMOTING_SCOPES } from "./review-surface.mjs";
 import {
@@ -212,6 +212,16 @@ const DROP_GROUNDS_BY_CLAIM = {
  */
 export const CONFIG_GLOBS_PREFIX = "$config:";
 const CONFIG_GLOBS_REF = /^\$config:([A-Za-z][\w-]*(?:\.[A-Za-z][\w-]*)*)$/;
+/**
+ * And an entry of this form stands for every glob of a FILE CLASS, as
+ * `CLASS_RULES` holds it — this package's entries and the repository's
+ * additions together: `"$class:design-spec"`. It is how a lens says "runs
+ * when the design contract changes" and stays true in a repository whose
+ * contract is not all under `docs/design/`. A class always has this
+ * package's own entries, so the list cannot be empty.
+ */
+export const CLASS_GLOBS_PREFIX = "$class:";
+const CLASS_GLOBS_REF = /^\$class:([a-z][a-z-]*)$/;
 
 /**
  * A lens's `appliesWhen` with every configuration reference expanded. Missing →
@@ -236,11 +246,22 @@ export function lensGlobs(lens) {
       if (problem) throw new Error(`lens "${lens.id}": appliesWhen entry ${JSON.stringify(glob)} ${problem}`);
       return [glob];
     }
+    const cls = CLASS_GLOBS_REF.exec(glob);
+    if (cls) {
+      const rule = CLASS_RULES.find(([name]) => name === cls[1]);
+      if (!rule) {
+        throw new Error(`lens "${lens.id}": appliesWhen names the file class ${JSON.stringify(cls[1])}, which has no path rules (${CLASS_RULES.map(([name]) => name).join(", ")} do)`);
+      }
+      if (rule[1].length === 0) {
+        throw new Error(`lens "${lens.id}": appliesWhen names the file class ${cls[1]}, which has no paths here — the lens would apply to every change`);
+      }
+      return rule[1];
+    }
     const ref = CONFIG_GLOBS_REF.exec(glob);
     if (!ref) {
       throw new Error(
         `lens "${lens.id}": appliesWhen entry ${JSON.stringify(glob)} starts with \`$\` but is not exactly ` +
-          `\`${CONFIG_GLOBS_PREFIX}<dotted.key>\``,
+          `\`${CONFIG_GLOBS_PREFIX}<dotted.key>\` or \`${CLASS_GLOBS_PREFIX}<file class>\``,
       );
     }
     const value = get(ref[1]);
@@ -288,7 +309,10 @@ export const FILE_CLASSES = ["code", "code-adjacent", "policy", "design-spec", "
 // The classes and their order are the harness's; WHICH paths are code-adjacent
 // data or governing policy differs per repository, so those two lists take the
 // repository's own entries from its harness configuration
-// (`review.classRules`) around the ones every repository shares.
+// (`review.classRules`) around the ones every repository shares. The other
+// two take ADDITIONS only, and only when the repository writes them: the
+// entries below are a convention every repository follows, and a repository
+// whose design contract or narration also lives elsewhere says where.
 export const CLASS_RULES = Object.freeze([
   // 1. Data that BEHAVIOR depends on: parsed at runtime or asserted against by
   //    tests. Reviewed as code, because it is code's input. Test SOURCE is not
@@ -310,7 +334,7 @@ export const CLASS_RULES = Object.freeze([
   ]],
   // 3. The design contract. Never cheap: this is what design-fit measures the
   //    code against, and nothing in the pipeline re-syncs it after PLAN.
-  ["design-spec", ["docs/design/**"]],
+  ["design-spec", ["docs/design/**", ...getOptionalList("review.classRules.design-spec")]],
   // 4. Narration and user-facing docs — the only class routed off the code
   //    lenses. Deliberately NOT `**/*.md`: a stray markdown file next to
   //    source is more likely a fixture than prose, and unmatched → `code` is
@@ -321,6 +345,7 @@ export const CLASS_RULES = Object.freeze([
     "*.md",
     "*.txt",
     "**/README.md",
+    ...getOptionalList("review.classRules.prose"),
   ]],
 ]);
 
