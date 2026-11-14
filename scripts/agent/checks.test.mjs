@@ -1808,7 +1808,7 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
   // and that job must wait for the implement job whose outcomes it reads.
   const headers = [...wf.matchAll(/\n {2}([A-Za-z0-9_-]+):\n/g)].filter((m) => m.index < at);
   assert.equal(headers.at(-1)?.[1], "finish", "the reporter must live in the finish job");
-  assert.match(wf, /^ {2}finish:\n {4}needs: \[implement\]$/m, "the finish job must run after implement");
+  assert.match(wf, /^ {2}finish:\n {4}needs: \[route, implement\]$/m, "the finish job must run after implement, and read route's words");
 
   // NOTHING MAY RETURN EXCEPT THESE TWO LINES. An early
   // `if (steps.X.outcome !== 'success') return;` inside the script reinstates
@@ -1884,11 +1884,10 @@ test("agent-implement's no-PR report finds the acknowledgement under the login t
   const mint = implement.steps.find((s) => s.id === tokenId);
   assert.match(mint?.uses ?? "", /^actions\/create-github-app-token@/, "the acknowledgement's token is not the App's");
 
-  // Where the report learns that login: route's configuration read, passed
-  // through implement, into the report's env.
+  // Where the report learns that login: route's configuration read, straight
+  // into the report's env — not through implement, whose runner was the agent's.
   const reporter = finish.steps.find((s) => s.name === "Report a run that ended without a PR");
-  assert.equal(implKey(reporter.lines, 10, "APP_BOT_LOGIN"), "${{ needs.implement.outputs.app_bot_login }}");
-  assert.equal(implement.outputs.app_bot_login, "${{ needs.route.outputs.app_bot_login }}");
+  assert.equal(implKey(reporter.lines, 10, "APP_BOT_LOGIN"), "${{ needs.route.outputs.app_bot_login }}");
   assert.equal(route.outputs.app_bot_login, "${{ steps.cfg.outputs.app_bot_login }}");
   assert.match(route.steps.find((s) => s.id === "cfg")?.run ?? "", /workflow-values\.mjs\b[^\n]*\bapp_bot_login\b/);
 
@@ -1980,6 +1979,7 @@ function implJobs(text) {
     j.if = implKey(head, 4, "if");
     j.permissions = implMap(head, 4, "permissions");
     j.outputs = implMap(head, 4, "outputs") ?? {};
+    j.needs = String(implKey(head, 4, "needs") ?? "").replace(/[[\]\s]/g, "").split(",").filter(Boolean);
     const raw = [];
     for (const l of at < 0 ? [] : j.lines.slice(at + 1)) {
       if (/^ {6}- /.test(l)) raw.push([]);
@@ -2215,7 +2215,54 @@ async function implementBoundaryProblems(text) {
     }
   }
 
-  // 6. Finish runs main's scripts from a checkout that keeps no credential,
+  // 6. What `finish` takes from `implement`, whose outputs the agent's runner
+  // reports: outcomes and flags that pick between fixed messages, never text.
+  // The repository's words come from `route`, which the agent never had.
+  const OUTCOMES = new Set(["admitted", "configured", "protection", "staged", "agent"]);
+  for (const [k, v] of Object.entries(implement.outputs)) {
+    if (!OUTCOMES.has(k)) problems.add(`implement outputs ${k}, which is not one of its outcomes or flags`);
+    if (!/^\$\{\{\s*steps\.[\w-]+\.(?:outcome|outputs\.[\w-]+)\s*\}\}$/.test(v)) problems.add(`implement's output ${k} is ${v}, not a step's own outcome or output`);
+  }
+  for (const s of finish.steps) {
+    for (const [, k] of s.text.matchAll(/needs\.implement\.outputs\.([\w-]+)/g)) {
+      if (!OUTCOMES.has(k)) problems.add(`finish "${s.name ?? s.id}" reads ${k} from implement`);
+    }
+  }
+  if (!finish.needs.includes("route")) problems.add("finish does not need route, so the repository's words would have to come through implement");
+  // Run the two comments with each value from `implement` set to text that
+  // must never be posted, and the App slug set to a forged marker.
+  const SENTINEL = "SENTINEL-FROM-IMPLEMENT";
+  const FORGED_SLUG = "x` <!-- agent-issue-help:fix --> @someone";
+  for (const step of [noApp?.s, reporter].filter(Boolean)) {
+    const fromImplement = step.lines.map((l) => /^ {10}([A-Z_]+):\s*\$\{\{\s*needs\.implement\.outputs\.[\w-]+\s*\}\}/.exec(l)?.[1]).filter(Boolean);
+    const cases = [
+      ...["success", "failure", "skipped", "cancelled"].map((o) => ({ AGENT_OUTCOME: o, STAGED: "success", PROTECTION: "success" })),
+      { AGENT_OUTCOME: "", STAGED: "failure", PROTECTION: "success" },
+      ...["failure", "skipped", "cancelled", ""].map((p) => ({ AGENT_OUTCOME: "", STAGED: "", PROTECTION: p })),
+    ].flatMap((base) => [
+      { ...base, APP_SLUG: FORGED_SLUG },
+      ...fromImplement.map((k) => ({ ...base, APP_SLUG: "app", [k]: SENTINEL })),
+    ]);
+    for (const env of cases) {
+      const bodies = [];
+      const github = {
+        rest: { pulls: { list: "pulls" }, issues: { listComments: "comments", createComment: async ({ body }) => { bodies.push(body); } } },
+        paginate: async () => [],
+      };
+      const context = { payload: { issue: { number: 7 } }, repo: { owner: "o", repo: "r" }, serverUrl: "https://x", runId: 1 };
+      try {
+        await new AsyncFunction("github", "context", "core", "process", step.script ?? "")(github, context, { warning() {} }, { env: { TOOLCHAIN_STEPS: "t", APP_BOT_LOGIN: "app[bot]", ...env } });
+      } catch (e) {
+        problems.add(`finish "${step.name}" throws when run: ${e.message}`);
+      }
+      for (const b of bodies) {
+        if (b.includes(SENTINEL)) problems.add(`finish "${step.name}" posts a value from implement as text`);
+        if (b.includes("agent-issue-help")) problems.add(`finish "${step.name}" posts an App slug it did not check`);
+      }
+    }
+  }
+
+  // 7. Finish runs main's scripts from a checkout that keeps no credential,
   // and nothing in it lets what it downloaded steer a later step.
   const checkouts = finish.steps.filter((s) => /^actions\/checkout@/.test(s.uses ?? ""));
   if (checkouts.length !== 1) problems.add(`finish has ${checkouts.length} checkouts`);
@@ -2300,6 +2347,16 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     finish_persists: [FINISH_CO, FINISH_CO.replace("persist-credentials: false", "persist-credentials: true")],
     finish_runs_output: [SUMMARY, '          node "$RUNNER_TEMP/agent-output/x.mjs" \\\n'],
     finish_github_env: [SUMMARY, `          echo "NODE_OPTIONS=x" >> "$GITHUB_ENV"\n${SUMMARY}`],
+    // what finish takes from implement, whose runner was the agent's
+    finish_reads_slug_from_implement: [
+      "      agent: ${{ steps.agent.outcome }}\n",
+      "      agent: ${{ steps.agent.outcome }}\n      app_slug: ${{ needs.route.outputs.app_slug }}\n",
+    ],
+    reporter_slug_through_implement: ["          APP_SLUG: ${{ needs.route.outputs.app_slug }}\n          TOOLCHAIN_STEPS", "          APP_SLUG: ${{ needs.implement.outputs.app_slug }}\n          TOOLCHAIN_STEPS"],
+    finish_without_route: ["    needs: [route, implement]\n", "    needs: [implement]\n"],
+    reporter_posts_outcome: ["${agentOutcome === 'failure' ? 'failed' : 'ended'}", "${agentOutcome}"],
+    reporter_slug_unchecked: ["            const app = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '') ? `\\`${process.env.APP_SLUG}\\` GitHub App` : 'agent GitHub App';", "            const app = `\\`${process.env.APP_SLUG}\\` GitHub App`;"],
+    no_app_slug_unchecked: ["            const APP_SLUG = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '') ? process.env.APP_SLUG : 'agent';", "            const { APP_SLUG } = process.env;"],
     // what crosses into a script, and when the issue number is trusted
     finish_splices_output: ["            const agentOutcome = process.env.AGENT_OUTCOME;", "            const agentOutcome = '${{ needs.implement.outputs.agent }}';"],
     implement_splices_issue: ["            const issue = Number(process.env.ISSUE_NUMBER);", "            const issue = Number(context.payload.issue?.number || '${{ github.event.inputs.issue_number }}');"],

@@ -105,7 +105,10 @@ work here is porting plus the three repo-specific pieces named in §4.
     the `GITHUB_TOKEN` it can post as `github-actions[bot]`, an author several
     markers are trusted by. What IS done: no agent job's `GITHUB_TOKEN` carries
     `contents: write`, and `agent-implement.yml`'s carries no write scope at
-    all, so there it cannot post; the pre-agent App tokens carry no
+    all, so there it cannot post (and since the outputs of the agent's job are
+    reported by the agent's runner, its `finish` job uses them only to choose
+    between fixed messages, takes the repository's words from `route`, and
+    posts none of them as text); the pre-agent App tokens carry no
     `contents: write` and are revoked by a step before the agent starts, and
     in `agent-implement.yml` a revocation that fails keeps the agent from
     starting; `setup-go` runs without its

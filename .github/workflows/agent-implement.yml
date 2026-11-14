@@ -132,9 +132,15 @@ jobs:
       # carries it. A token that could comment here would let the agent post as
       # `github-actions[bot]`, the author the no-PR reporter's dedupe trusts.
       contents: read # the trusted checkout of the protection check
-    # For the `finish` job, from steps that ran BEFORE the agent — see
-    # agent-fix.yml's handoff step for why nothing later in this job counts.
-    # `agent` is the runner's own outcome for that step.
+    # For the `finish` job: step outcomes and two flags, set by steps that ran
+    # BEFORE the agent — see agent-fix.yml's handoff step for why nothing later
+    # in this job counts. `agent` is the runner's own outcome for that step.
+    #
+    # REPORTED BY THE AGENT'S RUNNER, all the same. A job's outputs are
+    # evaluated and sent by the runner the job ran on, and the agent had that
+    # runner, so `finish` treats every one of them as attacker-influenced: it
+    # selects between fixed messages with them and posts none of them as text.
+    # The repository's own words reach `finish` from `route`, never from here.
     outputs:
       # Whether the commenter passed the write-access check, from a step that
       # runs only after it passed (or on a dispatch, where it does not apply).
@@ -144,13 +150,6 @@ jobs:
       protection: ${{ steps.protection.outcome }}
       staged: ${{ steps.stage.outcome }}
       agent: ${{ steps.agent.outcome }}
-      # Passed through from `route` for the `finish` job's reporter, which
-      # must be able to name them when this job got nowhere. Empty on
-      # `workflow_dispatch`, where `route` does not run and the reporter does
-      # not either.
-      app_slug: ${{ needs.route.outputs.app_slug }}
-      app_bot_login: ${{ needs.route.outputs.app_bot_login }}
-      toolchain_steps: ${{ needs.route.outputs.toolchain_steps }}
     steps:
       # The association check above is a pre-filter on a field the payload
       # carries; this asks the API. Both, because `author_association` is
@@ -790,8 +789,14 @@ jobs:
   # reply and the reporter are keyed on the App check, and everything that
   # opens or edits a PR on staging having succeeded, which is what "the agent
   # may have run" means.
+  #
+  # `route` TOO, for the repository's words the two comments use: the App's
+  # name and login, and what the toolchain setup consists of. Read there, on a
+  # runner the agent never had, and not passed through `implement`. Empty on
+  # `workflow_dispatch`, where `route` does not run and neither comment is
+  # posted; `always()` keeps this job running when `route` was skipped.
   finish:
-    needs: [implement]
+    needs: [route, implement]
     if: always() && needs.implement.outputs.admitted == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -814,13 +819,13 @@ jobs:
         continue-on-error: true
         uses: actions/github-script@v7
         env:
-          # From `route` by way of `implement`'s outputs: this step is
-          # `issue_comment` only, where `route` ran.
-          APP_SLUG: ${{ needs.implement.outputs.app_slug }}
+          # From `route`: this step is `issue_comment` only, where it ran.
+          APP_SLUG: ${{ needs.route.outputs.app_slug }}
         with:
           retries: 3
           script: |
-            const { APP_SLUG } = process.env;
+            // An App's slug, or the general word: nothing else is posted.
+            const APP_SLUG = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '') ? process.env.APP_SLUG : 'agent';
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: context.payload.issue.number,
@@ -1036,16 +1041,16 @@ jobs:
         continue-on-error: true
         uses: actions/github-script@v7
         env:
-          # From the `route` job by way of `implement`'s outputs, not from a
-          # checkout here: this step reports the runs where nothing got that
-          # far. If either is somehow empty the message says so in general
-          # terms below rather than printing a hole.
-          APP_SLUG: ${{ needs.implement.outputs.app_slug }}
-          TOOLCHAIN_STEPS: ${{ needs.implement.outputs.toolchain_steps }}
+          # From the `route` job, not from a checkout here: this step reports
+          # the runs where nothing got that far. If either is somehow empty the
+          # message says so in general terms below rather than printing a hole.
+          APP_SLUG: ${{ needs.route.outputs.app_slug }}
+          TOOLCHAIN_STEPS: ${{ needs.route.outputs.toolchain_steps }}
           # Who posts the "On it" reply: the App, whose token that step holds.
-          APP_BOT_LOGIN: ${{ needs.implement.outputs.app_bot_login }}
-          # The implement job's step outcomes, as data. Nothing from that job,
-          # whose runner the agent had, is spliced into this script.
+          APP_BOT_LOGIN: ${{ needs.route.outputs.app_bot_login }}
+          # The implement job's step outcomes, as data, and only to choose
+          # between fixed messages: its runner was the agent's, so nothing
+          # from it is spliced into this script or posted as text.
           AGENT_OUTCOME: ${{ needs.implement.outputs.agent }}
           STAGED: ${{ needs.implement.outputs.staged }}
           PROTECTION: ${{ needs.implement.outputs.protection }}
@@ -1068,7 +1073,7 @@ jobs:
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const agentOutcome = process.env.AGENT_OUTCOME;
             const staged = process.env.STAGED === 'success';
-            const app = process.env.APP_SLUG ? `\`${process.env.APP_SLUG}\` GitHub App` : 'agent GitHub App';
+            const app = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '') ? `\`${process.env.APP_SLUG}\` GitHub App` : 'agent GitHub App';
             const toolchainSteps = process.env.TOOLCHAIN_STEPS || 'the toolchain setup';
             // `failure` and `skipped` are different answers. The gate REFUSING
             // is `failure`; `skipped` means it never ran, and the only thing
