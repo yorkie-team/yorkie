@@ -341,6 +341,31 @@ test("scopeAnchor: the dispatch ledger wins; without one the round's starting he
   assert.equal(scopeAnchor([], "not-a-sha"), "");
 });
 
+test("rulePattern: every rule set must say what it matches, and no rule set matches nothing", async () => {
+  const { rulePattern } = await import("./fix-guard.mjs");
+  const { TEST_RULE_SETS } = await import("./config.mjs");
+  const table = { a: ["\\bfoo\\("], b: ["\\bbar\\(", "\\bbaz\\("] };
+  // The sets asked for, in the TABLE's order whatever order they are asked in.
+  assert.equal(rulePattern(table, ["b", "a"], ["a", "b"]).source, "\\bfoo\\(|\\bbar\\(|\\bbaz\\(");
+  assert.equal(rulePattern(table, ["b"], ["a", "b"]).source, "\\bbar\\(|\\bbaz\\(");
+  // THE TRAP: no sets used to compile to `new RegExp("")`, which matches
+  // every line. It is now a pattern that matches none.
+  const none = rulePattern(table, [], ["a", "b"]);
+  for (const line of ["", "anything", "foo(", " "]) assert.equal(none.test(line), false, JSON.stringify(line));
+  assert.equal(new RegExp("").test("anything"), true, "what the empty pattern does, for the record");
+  // And a rule set the schema knows with no entry here — the way the empty
+  // pattern came about — cannot be loaded at all: this module would throw at
+  // import, in every repository, the day such a rule set was added.
+  assert.throws(() => rulePattern(table, ["a"], ["a", "b", "c"]), /the rule set "c" has no patterns in this table/);
+  assert.throws(() => rulePattern({ ...table, c: [] }, ["a"], ["a", "b", "c"]), /the rule set "c" has no patterns/);
+  assert.throws(() => rulePattern({ ...table, c: [""] }, ["a"], ["a", "b", "c"]), /the rule set "c" has no patterns/);
+  assert.throws(() => rulePattern({ ...table, c: "x" }, ["a"], ["a", "b", "c"]), /the rule set "c" has no patterns/);
+  // The check is against the schema's own list by default, so it covers
+  // every rule set a configuration may name.
+  assert.deepEqual([...TEST_RULE_SETS], ["go", "vitest", "cargo"]);
+  assert.throws(() => rulePattern(table, ["a"]), /the rule set "go" has no patterns/);
+});
+
 // Which idioms count as an assertion, and which files count as tests, follow
 // `tests.rules`. The module reads the configuration once at import, so the
 // other setting is exercised in a child process with its own configuration.

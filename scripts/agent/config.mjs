@@ -58,7 +58,7 @@ export const CONFIG_FILE = "config.json";
 export const COVERAGE_NOTE_FILE = "coverage-note.md";
 
 /** The language rule sets `tests.rules` may name. */
-export const TEST_RULE_SETS = Object.freeze(["go", "vitest"]);
+export const TEST_RULE_SETS = Object.freeze(["go", "vitest", "cargo"]);
 
 // --- globs -------------------------------------------------------------------
 //
@@ -217,6 +217,16 @@ const dirNames = [
   "an array of plain directory names (one path segment each: no slash, no dot-prefix, no pattern)",
 ];
 
+// Directories, as globs: `crates/*/tests`. A last segment of `**` would name
+// a directory's contents at every depth, and the rule these feed is about
+// what sits DIRECTLY in the directory.
+const isDirGlobList = (v) => isGlobList(v) && v.every((x) => x.split("/").at(-1) !== "**");
+const dirGlobList = [
+  isDirGlobList,
+  `an array of directories as ${GLOBS} (may be empty); name the directory itself, not \`dir/**\``,
+  globDetail,
+];
+
 /** Marks a nested schema whose key may be absent as a whole. */
 const OPTIONAL = Symbol("optional");
 const optional = (schema) => ({ [OPTIONAL]: true, ...schema });
@@ -332,6 +342,16 @@ const SCHEMA = {
       sharedSuiteDirs: dirNames,
       ciPlatform: { goos: identifier, goarch: identifier },
     }),
+    cargo: optional({
+      // Where cargo finds integration-test TARGETS: a `.rs` file directly in
+      // one of these, or `<dir>/<name>/main.rs`, is built and run by name.
+      // Usually `tests` beside each `Cargo.toml` (`crates/*/tests`).
+      integrationTestDirs: dirGlobList,
+      // Source files that are test code as a whole although neither their
+      // directory nor their name says so: a module declared
+      // `#[cfg(test)] mod sync_scenarios;` in its parent.
+      testOnlyFileGlobs: globList,
+    }),
   },
   fixGuard: {
     replicatedRuleGlobs: globList,
@@ -401,6 +421,13 @@ function crossChecks(config, problems) {
   // configuration, and whoever wrote it believes the Go rules are on.
   if (!wantsGo && config.tests.go) {
     problems.push('tests.go is present, but tests.rules does not name "go" — nothing would read it');
+  }
+  const wantsCargo = config.tests.rules.includes("cargo");
+  if (wantsCargo && !config.tests.cargo) {
+    problems.push('tests.cargo is missing, and tests.rules names "cargo"');
+  }
+  if (!wantsCargo && config.tests.cargo) {
+    problems.push('tests.cargo is present, but tests.rules does not name "cargo" — nothing would read it');
   }
   // One App, named three ways. A slug that disagreed with the logins would
   // have the workflows allow-list one bot while the scripts believe another.

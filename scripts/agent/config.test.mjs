@@ -226,6 +226,57 @@ test("loadConfig: tests.go is required exactly when tests.rules names go", (t) =
   assert.throws(() => loadConfig(blockWithoutGo), /tests\.go is present, but tests\.rules does not name "go"/);
 });
 
+test("loadConfig: tests.cargo is required exactly when tests.rules names cargo", (t) => {
+  const block = { integrationTestDirs: ["crates/*/tests", "tests"], testOnlyFileGlobs: ["crates/core/src/sync_scenarios.rs"] };
+  const cargo = (c, value = block) => {
+    c.tests = { rules: ["cargo", "vitest"], ...(value === null ? {} : { cargo: value }) };
+    return c;
+  };
+  const fine = scratch(t, (c) => cargo(c));
+  assert.deepEqual([...loadConfig(fine).tests.rules], ["cargo", "vitest"]);
+  assert.deepEqual([...loadConfig(fine).tests.cargo.integrationTestDirs], ["crates/*/tests", "tests"]);
+  // Beside Go, each with its own block.
+  const both = scratch(t, (c) => {
+    c.tests = { ...c.tests, rules: ["go", "cargo"], cargo: block };
+    return c;
+  });
+  assert.deepEqual([...loadConfig(both).tests.rules], ["go", "cargo"]);
+  // A crate with no integration tests, and no file to single out, says so.
+  const empty = scratch(t, (c) => cargo(c, { integrationTestDirs: [], testOnlyFileGlobs: [] }));
+  assert.deepEqual([...loadConfig(empty).tests.cargo.integrationTestDirs], []);
+
+  const missing = scratch(t, (c) => cargo(c, null));
+  assert.throws(() => loadConfig(missing), /tests\.cargo is missing, and tests\.rules names "cargo"/);
+  const unread = scratch(t, (c) => {
+    c.tests.cargo = block;
+    return c;
+  });
+  assert.throws(() => loadConfig(unread), /tests\.cargo is present, but tests\.rules does not name "cargo"/);
+  // A Go block does not stand in for it, in either direction.
+  const goBlockOnly = scratch(t, (c) => withValue(c, "tests.rules", ["cargo"]));
+  assert.throws(() => loadConfig(goBlockOnly), (err) =>
+    err.message.includes('tests.cargo is missing') && err.message.includes('tests.go is present, but tests.rules does not name "go"'));
+
+  for (const key of ["integrationTestDirs", "testOnlyFileGlobs"]) {
+    const without_ = scratch(t, (c) => cargo(c, without(structuredClone(block), key)));
+    assert.throws(() => loadConfig(without_), (err) => err.message.includes(`tests.cargo.${key} is missing`), key);
+    for (const bad of ["crates/*/tests", ["crates/*/tests/"], ["./tests"], ["{a,b}/tests"], ["a", "a"], [""]]) {
+      const dir = scratch(t, (c) => cargo(c, { ...block, [key]: bad }));
+      assert.throws(() => loadConfig(dir), (err) => err.message.includes(`tests.cargo.${key} must be`), `${key} = ${JSON.stringify(bad)}`);
+    }
+  }
+  // A target directory is named itself. `dir/**` names its contents at every
+  // depth, and would make every helper file under it a target.
+  for (const bad of [["crates/*/tests/**"], ["**"]]) {
+    const dir = scratch(t, (c) => cargo(c, { ...block, integrationTestDirs: bad }));
+    assert.throws(() => loadConfig(dir), /tests\.cargo\.integrationTestDirs must be an array of directories.*name the directory itself/, JSON.stringify(bad));
+  }
+  const deep = scratch(t, (c) => cargo(c, { ...block, integrationTestDirs: ["**/tests"] }));
+  assert.deepEqual([...loadConfig(deep).tests.cargo.integrationTestDirs], ["**/tests"]);
+  const unknown = scratch(t, (c) => cargo(c, { ...block, features: ["default"] }));
+  assert.throws(() => loadConfig(unknown), /tests\.cargo\.features is not a known key/);
+});
+
 test("loadConfig: the App's slug and its logins name one App", (t) => {
   // The workflows allow-list `<slug>[bot]` and the scripts believe the logins.
   // A slug that named another App would have the two disagree in silence.

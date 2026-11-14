@@ -48,7 +48,7 @@ else as JSON).
 | `review.sharedPrimitivesNote` | `lenses/design-fit.md`, as `{{config:review.sharedPrimitivesNote}}` | wired |
 | `review.diffExcludes` | the three reviewed-diff steps (panel, panel delta, on-demand) | wired |
 | `fixer.*` | the agents' prompts and two messages — see "What the prompts say" below | wired |
-| `tests.rules`, `tests.go.*` | `test-removals.mjs`, `fix-guard.mjs` | wired |
+| `tests.rules`, `tests.go.*`, `tests.cargo.*` | `test-removals.mjs`, `fix-guard.mjs`. `tests.go` is required exactly when `go` is named and `tests.cargo` exactly when `cargo` is; either block without its rule set is refused | wired |
 | `fixGuard.replicatedRuleGlobs`, `fixGuard.replicatedRuleNotice`, `fixGuard.counterpartRepos` | `fix-guard.mjs`. `counterpartRepos` is a list of `owner/name`; a PR body silences the warning by referring to any one of them as `owner/name`, `owner/name#12`, `name#12` or a github.com link, never by merely containing the name | wired |
 | `redact.extraPatterns` | — | not wired yet |
 | `ask.permittedMcpTools` | — | not wired yet |
@@ -75,9 +75,98 @@ read: a copy that syncs past the rename writes `["owner/name"]` where it had
 `"owner/name"`, and `[]` where it had `""`. The loader says so, and `sync.mjs`
 prints what the loader says.
 
-`tests.rules` chooses from the rule sets that exist, `go` and `vitest`.
-Another test framework needs a rule set written in `test-removals.mjs` first;
-naming one here does not create it.
+`tests.rules` chooses from the rule sets that exist: `go`, `vitest` and
+`cargo`. Another test framework needs a rule set written in
+`test-removals.mjs` first, and its assertion and tautology patterns in
+`fix-guard.mjs`, which refuses to load while a rule set has none; naming one
+here does not create it.
+
+### The cargo rule set
+
+Go and JavaScript keep tests in test files, so their rules ask one question
+of a path. Rust keeps most unit tests inside the file they test, in a
+`#[cfg(test)] mod tests { … }` at the bottom, and the cargo rules answer two
+questions differently because of it. `cargo-rules.mjs` holds both and says,
+at its top, what each cannot see.
+
+**What the removal record counts**, from patches alone, in every `.rs` file
+whether or not its path says "test":
+
+| | What counts |
+|---|---|
+| A case | The test attribute: `#[test]`, `#[tokio::test]`, `#[tokio::test(…)]` and any `path::test`, `#[rstest]`, `#[…_test]`. Not `#[test_case(…)]` rows, `#[bench]`, tests a macro or a loop generates, or doc-tests |
+| Switched off in place | `#[ignore]`, with or without a reason, on one line or several; `#[cfg_attr(…, ignore)]`; `#[should_panic]` added to a test that was already there (with a new test it is that test's design) |
+| Gated | A `#[cfg(…)]` other than `cfg(test)` added on a test, on a test module, or anywhere in a test file. In a file that is new, only a predicate nothing satisfies (`any()`, `false`) |
+| Out of reach | A removed `mod <name>;` line when the name says test (`tests`, `*_tests`) or the line above is `#[cfg(test)]`: the file is still there and no longer compiled |
+| Doc-tests | A doc-comment fence switched from running to `ignore`, `no_run`, `compile_fail`, `should_panic` or a language that is not Rust. A new example that never ran is not counted |
+| In a `Cargo.toml` | `test`, `doctest`, `harness` or `autotests` set to `false` (not under `[[bench]]` or `[[example]]`), and an entry taken off `[workspace] members` |
+| Renamed away | An integration-test target renamed to where cargo does not look |
+
+Not seen, and to be left to the test-adequacy lens: a test that returns early
+(the idiom for "skip when the server is not there"), and one whose assertions
+were taken out — though the fix guard's assertion lint warns about the second.
+
+**What a fix round may change.** A fix round may touch the pull request's
+original files, test files and docs. A Rust reproducer usually belongs in
+none of those: it goes into `mod tests` of the source file it tests. So for a
+`.rs` file outside the scope, the guard reads the whole file before and after
+each commit — the hook with `git show`, the report job through the contents
+API, as data — and allows the change when, with every test region taken out,
+the file is the same tokens. A test region is a top-level
+`#[cfg(test)] mod name { … }` or `#[cfg(test)] mod name;`, with the comments
+directly above it. That allows exactly three things:
+
+- lines inside an existing test module;
+- a new test module, at the top level of the file;
+- a new test file — in scope by its name, `tests.rs` or `*_tests.rs` under a
+  `src/` — and the `#[cfg(test)] mod name;` line that declares it in its
+  parent.
+
+Anything else in the file, in any commit of the round, puts the file out of
+scope: the hook refuses the push and the report job pages. That includes
+everything that only looks like a test region — `#[cfg(any(test, …))]`, a
+`mod tests` with no `#[cfg(test)]`, a region inside a macro invocation or
+under another attribute — and a file the job could not read.
+
+The fixer is told through `fixer.commitNote`, which is where a repository
+says what its hooks check. A cargo repository adds a sentence such as: "A new
+test goes inside a top-level `#[cfg(test)] mod` of the file it tests, or in a
+new `*_tests.rs` file declared by a `#[cfg(test)] mod <name>;` line; the scope
+hook refuses any other change to a Rust file outside the pull request's
+diff."
+
+The assertion lint reads `.rs` lines with the Rust idioms only (every
+`…assert…!` macro, `panic!`, `unreachable!`), in test files and, in a source
+file, in its test regions. The replicated-rule warning skips a commit that
+changed only the tests inside a rule file.
+
+**Configuration**, required when `cargo` is named:
+
+| Key | |
+|---|---|
+| `tests.cargo.integrationTestDirs` | Directories, as globs, whose `.rs` files cargo builds as integration-test targets: `<dir>/<name>.rs` and `<dir>/<name>/main.rs`. Usually `crates/*/tests`, or `tests` for a single package. Name the directory, not `dir/**`. Everything under one is a test file; only the targets are "run by name" |
+| `tests.cargo.testOnlyFileGlobs` | Source files that are test code as a whole although neither their directory nor their name says so — a module declared `#[cfg(test)] mod sync_scenarios;`. May be empty |
+
+```json
+"tests": {
+  "rules": ["cargo", "vitest"],
+  "cargo": {
+    "integrationTestDirs": ["crates/*/tests"],
+    "testOnlyFileGlobs": []
+  }
+},
+"fixer": {
+  "verifyCommand": "make verify",
+  "verifyDescription": "`cargo fmt --all --check`, clippy with warnings denied, `cargo test --workspace` and the rustdoc build",
+  "keepReproducerAs": "Rust has no `it.fails`, so keep the test and put `#[ignore = \"still reproduces: <finding>\"]` directly under its test attribute, with a comment naming the finding",
+  "disabledTestForms": "switches off with `#[ignore]`, `#[should_panic]` or a `#[cfg(...)]` gate"
+}
+```
+
+`vitest` stays beside `cargo` for the harness's own tests, which every
+repository carries. A repository's `repo.test.mjs` should pin that a source
+file with inline tests, a `*_tests.rs` file, an integration target and one of
+its helper files each classify as the rule set intends.
 
 ### What the prompts say
 
@@ -121,7 +210,8 @@ A repository on another toolchain fills the same frames. With cargo, say:
 `verifyCommand` is `cargo fmt --check && cargo clippy -- -D warnings && cargo
 test` (or the one script that runs them), `verifyDescription` is "the format
 check, clippy with warnings denied and the test suite", and the integration
-pair is empty if no suite needs a service.
+pair is empty if no suite needs a service. "The cargo rule set" above has the
+rest of what a Rust repository writes.
 
 ### How a workflow reads a value
 
