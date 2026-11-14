@@ -23,3 +23,19 @@
   spell the configuration directory's name — the marker was renamed for that.
 - Comparing the body's first line, not the whole body, is what makes "has
   anything changed" survive a web edit that turned every line ending to CRLF.
+- "No open issue" is not "no issue". A person closing the issue is an answer,
+  and a job that only lists open ones replies to it with a new issue every
+  week. The closed one has to be read too, and the same state respected.
+- Comment after the close, not before. Whichever write comes first is the one
+  a retry repeats, and a repeated close is harmless where a repeated comment
+  is not.
+- Rules about the job that runs a script do not see the job next to it, or
+  the step after it. Where a workflow holds a write token on a clock, the
+  guard has to pin the file's shape — one job, these steps, these lines —
+  and refuse everything else, rather than list what is known to be bad.
+- "Starts with the marker" is true of other workflows' issues by the same
+  bot. Match the whole line the script writes, and a second property (the
+  title) that another workflow would not have by accident.
+- A name that passed `[\w./-]+` is safe in a query string after encoding and
+  not in a path: `..` survives. Check it where it is used, not where it was
+  read.

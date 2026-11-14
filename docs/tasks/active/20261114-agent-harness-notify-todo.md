@@ -21,14 +21,23 @@ again. It only notifies. A person runs `sync.mjs`.
       rewrite or close one issue; `--dry-run` sends only `GET`s
 - [x] The pinned check failing, or the head being unreadable, throws before
       this repository's API is called: a wrong record is not "upstream moved"
-- [x] The issue is found by author (`github-actions[bot]`) and a marker on
-      the first line of its body, never by title or label
+- [x] The issue is found by author (`github-actions[bot]`), a title prefix
+      and the whole marker as the first line of its body, never by label
 - [x] Everything written into the issue is a validated slug, commit id or
       digest; nothing upstream wrote is copied in
 - [x] `agent-upstream-notify.yml`: schedule and dispatch only, `main`
       checked out, `contents: read` and `issues: write`, the job's own token
 - [x] Trust guard: a job that runs the notifier is held to those triggers,
       those two permissions and no secret; ten mutation cases
+- [x] Review round: a closed issue for the current state is left closed, and
+      one for an older state is reopened, so closing by hand no longer gets a
+      new issue every week; close before commenting; rewrite the title with
+      the body; reads of this repository are retried; Issues turned off is a
+      notice, not a failure; the head is read from `git/ref/heads/`; the
+      script ends itself before the job's timeout does
+- [x] Review round, guard: the notifier's workflow is held to its shape —
+      `permissions: {}`, one job, three steps with every line on a list, no
+      secret, no variable, no other action; eleven more mutation cases
 - [x] `manifest.mjs`: the retry is shared, and a passing check hands back the
       default branch's name
 - [x] README: the fourth row, and what the notifier does and does not do
