@@ -740,8 +740,9 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: gh api -X DELETE installation/token
 
-      # NO `always()` OR `!cancelled()` HERE: the implicit `success()` is what
-      # keeps the agent from starting after a failed revocation.
+      # NO STATUS FUNCTION HERE, not even `success()`: the implicit one is what
+      # keeps the agent from starting after a failed revocation, and any
+      # written one can be widened (`|| cancelled()`) without looking it.
       - name: Run Claude Code
         if: steps.app.outputs.configured == 'true'
         id: agent

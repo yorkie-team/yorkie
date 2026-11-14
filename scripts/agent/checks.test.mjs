@@ -2073,8 +2073,22 @@ async function implRefusedRoles(script) {
   for (const permission of ["admin", "maintain", "write", "triage", "read", "none"]) {
     let failed = false;
     const core = { setFailed: () => { failed = true; }, info() {}, notice() {}, warning() {}, error() {}, setOutput() {} };
-    const github = { rest: { repos: { getCollaboratorPermissionLevel: async () => ({ data: { permission } }) } } };
-    const context = { payload: { comment: { user: { login: "someone" } } }, repo: { owner: "o", repo: "r" } };
+    // The role belongs to the COMMENTER, in this repository; anyone else asked
+    // about — the issue's author, say — has none. A check that asks about the
+    // wrong person would otherwise read the commenter's role and pass.
+    const github = {
+      rest: {
+        repos: {
+          getCollaboratorPermissionLevel: async ({ owner, repo, username }) => ({
+            data: { permission: owner === "o" && repo === "r" && username === "someone" ? permission : "none" },
+          }),
+        },
+      },
+    };
+    const context = {
+      payload: { comment: { user: { login: "someone" } }, issue: { user: { login: "maintainer" } }, sender: { login: "maintainer" } },
+      repo: { owner: "o", repo: "r" },
+    };
     try {
       await new AsyncFunction("github", "context", "core", script)(github, context, core);
     } catch {
@@ -2101,7 +2115,20 @@ async function implementBoundaryProblems(text) {
   // one or revoked before it starts. Not only `app-token`: a second mint added
   // beside it lives into the agent's runtime through its action's post step.
   const narrow = /steps\.([\w-]+)\.outputs\.token/.exec(st[agentAt].text.match(/^\s+github_token:.*$/m)?.[0] ?? "")?.[1];
-  const mints = st.slice(0, agentAt).filter((s) => /^actions\/create-github-app-token@/.test(s.uses ?? ""));
+  // Action references are case-insensitive, so the match is too.
+  const mints = st.slice(0, agentAt).filter((s) => /^actions\/create-github-app-token@/i.test(s.uses ?? ""));
+  // THE KEY, BY STEP. Every step that names the App's private key is one of
+  // the three that need it: the presence check and the two mints. Any other
+  // — a `run:` that mints through the API, a local or third-party action —
+  // is a token the checks above never see.
+  const KEY_STEPS = new Set(["app", "app-token", "agent-token"]);
+  for (const s of st) {
+    if (/\bAGENT_APP_PRIVATE_KEY\b/.test(s.text) && !KEY_STEPS.has(s.id)) problems.add(`"${s.name ?? s.id ?? s.uses}" holds the App's private key, and is not one of ${[...KEY_STEPS].join(", ")}`);
+  }
+  // The agent's own condition names no status function: the implicit
+  // `success()` is what stops it after a failed revocation, and any explicit
+  // one (`always()`, `cancelled()`, even `success() || …`) can start it past one.
+  if (/\b(?:always|success|failure|cancelled)\s*\(\s*\)/.test(st[agentAt].if ?? "")) problems.add(`the agent step's condition names a status function: ${st[agentAt].if}`);
   if (!mints.some((m) => m.id === "app-token")) return ["the pre-agent mint is missing"];
   for (const m of mints.filter((m) => m.id === narrow)) {
     const asked = m.lines.map((l) => /^\s+permission-([a-z-]+):\s*(\S+)/.exec(l)).filter(Boolean).map((x) => `${x[1]}: ${x[2]}`);
@@ -2117,6 +2144,15 @@ async function implementBoundaryProblems(text) {
     // The one command, so its exit status is the revocation's: an `|| true`, a
     // second command or a token swapped in through the shell all hide a failure.
     else if (String(st[revokeAt].run).trim() !== IMPL_REVOKE) problems.add(`the revocation of ${name} runs \`${String(st[revokeAt].run).trim()}\`, not \`${IMPL_REVOKE}\` alone`);
+    if (revokeAt >= 0) {
+      // ITS KEYS, EXACTLY. `shell:` can turn the command into an argument of
+      // something else, `working-directory:` and extra `env:` change what it
+      // runs against; each leaves the step green and the token live.
+      const r = st[revokeAt];
+      const keys = r.lines.map((l) => /^(?: {6}- | {8})([\w-]+):/.exec(l)?.[1]).filter(Boolean).sort();
+      const env = r.lines.map((l) => /^ {10}([\w-]+):/.exec(l)?.[1]).filter(Boolean);
+      if (keys.join() !== "env,if,name,run" || env.join() !== "GH_TOKEN") problems.add(`the revocation of ${name} has keys [${keys.join(", ")}] and env [${env.join(", ")}], not exactly name, if, env: GH_TOKEN and run`);
+    }
   }
   // The write-access check must FAIL the step for a role below write, or
   // every commenter is admitted; it is run here, not read.
@@ -2327,6 +2363,14 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     agent_token_widened: ["          permission-contents: write # commit and push the branch, and nothing else\n", "          permission-contents: write # commit and push the branch, and nothing else\n          permission-issues: write\n"],
     verify_warns_only: ["core.setFailed(`@${actor} lacks write access", "core.warning(`@${actor} lacks write access"],
     verify_fail_open_expression: [VERIFY, VERIFY.replace("        uses:", "        continue-on-error: ${{ true }}\n        uses:")],
+    revoke_through_another_shell: [REVOKE_RUN, `        shell: true {0}\n${REVOKE_RUN}`],
+    revoke_elsewhere: [REVOKE_RUN, `        working-directory: /tmp\n${REVOKE_RUN}`],
+    key_in_a_run_step: [SETUP_NODE, `      - name: Mint by hand\n        env:\n          KEY: \${{ secrets.AGENT_APP_PRIVATE_KEY }}\n        run: node -e 1\n${SETUP_NODE}`],
+    mint_mixed_case: [SETUP_NODE, `      - name: Extra token\n        id: extra-token\n        uses: Actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0\n        with:\n          app-id: \${{ secrets.AGENT_APP_ID }}\n          private-key: \${{ secrets.AGENT_APP_PRIVATE_KEY }}\n          permission-issues: write\n${SETUP_NODE}`],
+    mint_local_action: [SETUP_NODE, `      - name: Extra token\n        id: extra-token\n        uses: ./.github/actions/app-token\n        with:\n          app-id: \${{ secrets.AGENT_APP_ID }}\n          private-key: \${{ secrets.AGENT_APP_PRIVATE_KEY }}\n${SETUP_NODE}`],
+    agent_success_or_cancelled: [AGENT, "      - name: Run Claude Code\n        if: (success() || cancelled()) && steps.app.outputs.configured == 'true'\n"],
+    agent_explicit_success: [AGENT, "      - name: Run Claude Code\n        if: success() && steps.app.outputs.configured == 'true'\n"],
+    verify_asks_about_someone_else: (t) => t.replace("repo: context.repo.repo, username: actor,", "repo: context.repo.repo, username: context.payload.issue?.user?.login ?? actor,"),
     revoke_never: [REVOKE, "      - name: Revoke the pre-agent token\n        if: false\n"],
     revoke_only_with_the_agent: [REVOKE, "      - name: Revoke the pre-agent token\n        if: steps.app.outputs.configured == 'true'\n"],
     revoke_removed: (t) => t.replace(/ {6}- name: Revoke the pre-agent token\n(?: {8}.*\n)+/, ""),
