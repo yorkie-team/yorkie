@@ -591,7 +591,9 @@ test("each verb that needs the App answers the commenter when it is missing", ()
     assert.match(text, /id: app\b/, `${file}: no App-presence check`);
     assert.match(
       text,
-      /needs the `yorkie-team-agent` GitHub App/,
+      // The App's name is the repository's (`repo.appSlug`), read from the
+      // configuration and never written into the workflow.
+      /needs the `' \+ APP_SLUG \+ '` GitHub App/,
       `${file}: must tell the commenter the App is missing, not just skip`,
     );
     // ...and it must come after the trust gate, so an account without write
@@ -660,6 +662,10 @@ test("every App-token mint is pinned and narrowed, and none can push workflows",
   assert.ok(mints >= 4, `expected the App-token mints to be found, saw ${mints}`);
 });
 
+// `workflow-values.mjs` is here because route and gate jobs read the
+// repository's configuration with it, on the runner's own Node.
+const BUILTIN_ONLY_SCRIPTS = ["command.mjs", "checks.mjs", "loop-status.mjs", "workflow-values.mjs"];
+
 test("every job that runs a pipeline script pins its Node", () => {
   // REGRESSION GUARD, for a mistake made twice in one branch.
   //
@@ -681,7 +687,7 @@ test("every job that runs a pipeline script pins its Node", () => {
   // arms carry no setup step. The allow-list below is checked against the real
   // module graph by the test after this one, so a script that grows a dependency
   // fails there rather than silently widening this exemption.
-  const BUILTIN_ONLY = new Set(["command.mjs", "checks.mjs", "loop-status.mjs"]);
+  const BUILTIN_ONLY = new Set(BUILTIN_ONLY_SCRIPTS);
   const HERE = path.dirname(fileURLToPath(import.meta.url));
   const dir = path.join(HERE, "..", "..", ".github", "workflows");
   const offenders = [];
@@ -734,7 +740,7 @@ test("the scripts exempted from the Node pin really import only builtins", () =>
   // — a module-not-found in a job whose whole purpose is to route or to page.
   const HERE = path.dirname(fileURLToPath(import.meta.url));
   const IMPORT = /^\s*import\s[^;]*?from\s+["']([^"']+)["']/gm;
-  for (const entry of ["command.mjs", "checks.mjs", "loop-status.mjs"]) {
+  for (const entry of BUILTIN_ONLY_SCRIPTS) {
     const seen = new Set();
     const queue = [entry];
     while (queue.length) {
@@ -844,59 +850,47 @@ test("agent-fix reports cost and outcome even when the agent step fails", () => 
 });
 
 test("no token-bearing job sets itself up by running the branch's build files", () => {
-  // Every one of these jobs checks out the PR branch (UNTRUSTED) with an App
-  // token already in the environment. A setup step that executes
-  // branch-authored build instructions therefore hands a credential to code the
-  // branch wrote. `make tools` is exactly that shape — five `go install` lines
-  // the PR can rewrite — which is why the linter is installed from a version
-  // pinned in the workflow instead.
+  // Every one of these jobs has an App token in the environment while it sets
+  // up, and four of the five have already checked out the PR branch
+  // (UNTRUSTED). A setup step that executes branch-authored build instructions
+  // therefore hands a credential to code the branch wrote — a `make tools`, a
+  // package manager's install scripts.
   //
-  // This is the Go-shaped version of the `--ignore-scripts` rule the pipeline
-  // this was ported from applies to its package manager. Scoped to SETUP: the
-  // agent itself runs branch code by design, and holds the token by design,
-  // because it has to push. What must not happen is the job reaching that point
-  // having already run the branch's Makefile for its own convenience.
-  const TOOL_PIN = /go install github\.com\/golangci\/golangci-lint\/v2\/cmd\/golangci-lint@v[0-9.]+/;
-  for (const name of ["agent-fix.yml", "agent-review-panel.yml", "agent-review-reply.yml"]) {
-    const wf = WF(name);
-    if (!/actions\/setup-go/.test(wf)) continue;
-    assert.match(wf, TOOL_PIN, `${name}: the linter version must be pinned in the workflow`);
-    // `run: make tools` — the invocation, not the word in a comment, which the
-    // rationale above legitimately contains.
-    assert.ok(
-      !/^\s*run: make tools\s*$/m.test(wf),
-      `${name}: sets up by running the branch's \`make tools\` while holding a token`,
-    );
+  // So the setup is ONE step, the repository's `agent-toolchain` action, whose
+  // file pins what it installs; `config-wiring.test.mjs` checks the action is
+  // main's copy and not the branch's. What this asserts is that nothing sits
+  // beside it: no language setup action and no install command written into
+  // the workflow, where it would be this repository's toolchain in a file that
+  // is meant to be every repository's. Scoped to SETUP: the agent itself runs
+  // branch code by design, and holds the token by design, because it has to
+  // push.
+  const SETUP_ACTION = /uses:\s*(?:actions\/setup-(?!node@)[\w-]+|pnpm\/action-setup|oven-sh\/setup-bun|ruby\/setup-ruby|dtolnay\/rust-toolchain)@/;
+  const INSTALL = /^\s*(?:run:\s*)?(?:make\s+tools|go\s+install|pnpm\s+install|yarn(?:\s+install)?|npm\s+install|pip\s+install|cargo\s+install)\b/m;
+  for (const name of ["agent-fix.yml", "agent-implement.yml", "agent-iterate-ci.yml", "agent-review-panel.yml", "agent-review-reply.yml"]) {
+    const code = WF(name).split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+    assert.match(code, /uses: \.\/(?:\.trusted-toolchain\/)?\.github\/actions\/agent-toolchain\n/, `${name}: no toolchain action`);
+    assert.ok(!SETUP_ACTION.test(code), `${name}: sets a language toolchain up in the workflow instead of in the agent-toolchain action`);
+    assert.ok(!INSTALL.test(code), `${name}: installs tools or dependencies in the workflow instead of in the agent-toolchain action`);
   }
 });
 
 test("every fixer prompt runs the same verification target", () => {
-  // THE LANE THE AUTONOMOUS ARM VERIFIES WITH, named once.
+  // THE LANE THE AUTONOMOUS ARM VERIFIES WITH, named once: `fixer.verifyCommand`
+  // in the repository's configuration.
   //
-  // All three prompts used to spell out `make lint` and `go test ./...`, which
-  // is `make verify` MINUS the licence check — so a fixer could push a `.go`
-  // file with no Apache header, red `ci.yml`'s `build` job, and buy the PR a
-  // whole extra round plus a CI-fix round for a line it could have added before
-  // pushing. Naming the target instead means a lane added to the Makefile
-  // reaches all three at once, which is the only reason to name one.
-  //
-  // `make verify-license` announces SKIPPED where Node is absent, which would
-  // have made this a cosmetic rename — the guard below is what rules that out
-  // for these jobs specifically. ("every job that runs a pipeline script pins
-  // its Node" covers the same steps from the other direction, for a different
-  // reason; both must hold, and only this one is about the licence gate.)
+  // The prompts used to spell out a lint command and a test command, which was
+  // the repository's verify target MINUS one of its checks — so a fixer could
+  // push something the missing check refuses, red CI, and buy the PR a whole
+  // extra round for a line it could have added before pushing. Naming the one
+  // target means a lane added to it reaches every prompt at once.
   for (const name of ["agent-fix.yml", "agent-iterate-ci.yml", "agent-review-panel.yml"]) {
     const wf = WF(name);
-    assert.match(wf, /Run `make verify` ONCE at the end/,
-      `${name}: the fixer prompt must call \`make verify\`, not a hand-written subset of it`);
-    assert.ok(
-      !/- Run `make lint` and `go test \.\/\.\.\.` ONCE/.test(wf),
-      `${name}: the prompt still spells out the pair, so the licence check is not in the fixer's lane`,
-    );
-    // The licence half of `make verify` only runs where node does, and the
-    // prompt promises it unconditionally.
+    assert.match(wf, /Run `\$\{\{ steps\.cfg\.outputs\.verify_command \}\}` ONCE at the end/,
+      `${name}: the fixer prompt must name the configured verify command, not a hand-written subset of it`);
+    // A verify target may shell out to Node (a licence check, a link check) and
+    // skip that half quietly where Node is absent — so the job pins one.
     assert.match(wf, /uses: actions\/setup-node@v4/,
-      `${name}: without a Node setup, \`make verify\` skips the licence check and the prompt lies`);
+      `${name}: without a Node setup, the parts of the verify command that need Node are skipped and the prompt lies`);
   }
 });
 
@@ -1025,18 +1019,10 @@ test("agent-fix always answers the commenter, even when the gate step itself fai
     "...and the refusal must name the third cause, or an absent run reads as a stuck CI");
 });
 
-test("CI_WORKFLOW_PATH names a workflow file that actually exists", () => {
-  // The gate matches CI runs on this path instead of on the run's display name,
-  // which is what makes gate 1 unforgeable — a second file cannot claim the
-  // path. The cost is that a typo, or renaming ci.yml, silently makes the gate
-  // unsatisfiable for every PR: the workflow-scoped query would find nothing and read as
-  // "CI has not run". Assert the file is there, and that it is the one whose
-  // runs are named "CI".
-  const HERE = path.dirname(fileURLToPath(import.meta.url));
-  const abs = path.join(HERE, "..", "..", CI_WORKFLOW_PATH);
-  const src = readFileSync(abs, "utf8"); // throws if the path is wrong
-  assert.match(src, /^name:\s*CI\s*$/m, "ci.yml must still be the workflow whose runs are named CI");
-});
+// That the file CI_WORKFLOW_PATH names exists, is the workflow whose runs are
+// named "CI", and has no trigger that could race for a pull request's head is
+// a fact about the repository's own `ci.yml`. It is checked where the
+// repository's values are graded: `.github/agent-harness/repo.test.mjs`.
 
 
 
@@ -1176,43 +1162,6 @@ test("every workflow_run consumer CI can drive gates on the CI workflow's PATH",
   // and no workflow here holds a cross-repository credential, so there is
   // nothing of that shape left to guard. The loop above covers every installed
   // workflow_run consumer, which is the property that survives.
-});
-
-test("no two ci.yml triggers can race for the same PR head SHA", () => {
-  // THE INVARIANT `ciConclusion` RESTS ON — stated precisely, because an earlier
-  // revision of this test overclaimed it as "exactly one run per head SHA".
-  // That is false: closing and reopening a PR files a second `pull_request` run
-  // for the same commit. Newest-wins is CORRECT there, because the later run is
-  // a fresh execution of the same file at the same tree and supersedes the
-  // earlier one.
-  //
-  // What must not happen is two runs from DIFFERENT triggers for one PR head,
-  // where "newest" is arbitrary rather than superseding. `push` restricted to
-  // `main` never fires for a PR branch, and a `merge_group` run carries the
-  // speculative merge commit. Widen `push`, or add a trigger that fires on a PR
-  // head, and this fails — making the choice conscious instead of silent.
-  const HERE = path.dirname(fileURLToPath(import.meta.url));
-  const yml = readFileSync(path.join(HERE, "..", "..", CI_WORKFLOW_PATH), "utf8");
-  // To the next TOP-LEVEL key, whatever it is. Slicing to a named one (`permissions:`)
-  // silently ran to end-of-file in a workflow that declares none, and the "events"
-  // it then found were job names.
-  const from = yml.indexOf("\non:");
-  const rest = yml.slice(from + 1);
-  const nextKey = rest.slice(3).search(/^[a-z_]+:/m);
-  const on = rest.slice(0, nextKey < 0 ? undefined : nextKey + 3);
-  const code = on.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
-
-  const events = [...code.matchAll(/^ {2}([a-z_]+):/gm)].map((m) => m[1]);
-  assert.deepEqual(
-    events.sort(),
-    ["pull_request", "push"],
-    "a new CI trigger may fire for a PR head SHA — see ciConclusion before adding one",
-  );
-  assert.match(
-    code.slice(code.indexOf("push:"), code.indexOf("pull_request:")),
-    /branches: \[["']?main["']?\]/,
-    "push must stay restricted to main, or every PR branch push races pull_request",
-  );
 });
 
 test("ciConclusion: the newest run wins, and an unfinished one is 'not yet'", () => {
@@ -2311,6 +2260,7 @@ test("no agent module imports outside scripts/agent/, because its staging drops 
   // along — this is the assertion that should fail first, so the constraint
   // below gets revisited instead of being obeyed out of habit.
   const workflows = readdirSync(wfDir)
+    .filter((f) => f.startsWith("agent-"))
     .map((f) => readFileSync(path.join(wfDir, f), "utf8"))
     .join("\n");
   assert.match(workflows, /cp -R \S*scripts\/agent /, "no workflow copies the package out any more");
@@ -2343,7 +2293,7 @@ test("command.mjs imports nothing relative, because workflows check it out alone
   const HERE = path.dirname(fileURLToPath(import.meta.url));
   const wfDir = path.join(HERE, "..", "..", ".github", "workflows");
   const alone = readdirSync(wfDir).filter((f) =>
-    /sparse-checkout: scripts\/agent\/command\.mjs/.test(readFileSync(path.join(wfDir, f), "utf8")),
+    f.startsWith("agent-") && /sparse-checkout: scripts\/agent\/command\.mjs/.test(readFileSync(path.join(wfDir, f), "utf8")),
   );
   assert.ok(alone.length > 0, "no workflow checks command.mjs out on its own any more");
 

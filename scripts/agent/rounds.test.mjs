@@ -55,10 +55,12 @@ test("the gate job's literal copy of the latch matches the module", skipWithout(
   // The author allow-list is half the rule; a copy that drifted to a smaller set
   // would silently stop honouring a real page, and a larger one re-opens the
   // spoof this check exists to close. WHICH logins those are is the
-  // repository's configuration, so the copy is compared with it where the
-  // repository's own values are graded (`.github/agent-harness/repo.test.mjs`);
-  // here, only that the copy exists to be compared.
-  assert.match(PANEL_WORKFLOW, /const PAGE_AUTHOR_LOGINS = \[.+\];/, "gate job must carry an author allow-list");
+  // repository's configuration, so the gate reads `repo.botLogins` rather than
+  // carrying a copy that could drift.
+  assert.ok(
+    PANEL_WORKFLOW.includes("const PAGE_AUTHOR_LOGINS = JSON.parse(process.env.BOT_LOGINS);"),
+    "gate job must take its author allow-list from the configuration",
+  );
   assert.ok(
     PANEL_WORKFLOW.includes("const isPagedLatchComment = (c) =>"),
     "gate job must author-check the latch, not match the marker alone",

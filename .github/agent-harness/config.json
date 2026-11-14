@@ -1,6 +1,7 @@
 {
   "repo": {
     "name": "yorkie",
+    "appSlug": "yorkie-team-agent",
     "botLogins": [
       "github-actions[bot]",
       "yorkie-team-agent[bot]"
@@ -79,13 +80,22 @@
   },
   "fixer": {
     "verifyCommand": "make verify",
-    "verifyDescription": "`make lint`, the Apache licence-header check, the `go fix` check and `go test ./...`. If the `go fix` check fails, run `make modernize` rather than editing the idioms by hand.",
-    "forbiddenCommands": "`make test`, `make test-complex`, `make bench` or `make coverage`",
-    "targetedTestHint": "`make lint` and a targeted `go test ./path/to/pkg/...` in the foreground",
+    "verifyDescription": "`make lint`, the Apache licence-header check, the `go fix` check and `go test ./...`",
+    "verifyFailureHint": "If the `go fix` check or the `modernize` lane fails, run `make modernize` rather than editing the idioms by hand.",
+    "integrationWarning": "Do NOT run `make test`: it needs a MongoDB this job does not stand up",
+    "integrationRerunBy": "the full integration lane",
+    "ciFailureNote": "",
     "generatedCodeNote": "Generated protobuf under api/yorkie/v1/ cannot be changed from this run: hand-editing it is forbidden, and `make proto` needs buf and two protoc plugins that are not installed here.",
-    "keepReproducerAs": "`t.Skip(\"still reproduces: <finding>\")` as the test's first statement, with a comment naming the finding",
+    "apiChangeNote": "If the issue requires an API change, say so on the issue and stop rather than working around it.",
+    "keepReproducerAs": "Go has no `it.fails`, so keep the test and make its first statement `t.Skip(\"still reproduces: <finding>\")`, with a comment naming the finding",
+    "disabledTestForms": "switches off with `t.Skip`/`t.Skipf`/`t.SkipNow`",
+    "commitNote": "Commit messages follow this repository's convention: subject <= 70 characters, a blank line, body wrapped at 80.",
     "licenceScope": "Apache 2.0 licence header on every new Go file; every package needs a package comment.",
-    "todoTrackingLine": ""
+    "todoTrackingLine": "",
+    "implementVerifyStep": "LET CI VERIFY — do NOT run `make test`, `make test-complex`, `make bench` or `make coverage`: they need a MongoDB stack and are far too slow for a one-shot headless run. `make lint` and a TARGETED `go test ./path/to/pkg/...` in the foreground are fine. The PR's CI runs the full lanes, including the `-race` integration suite.",
+    "replyVerifyInstruction": "",
+    "toolchainSteps": "the Go toolchain, the linter install",
+    "lastResortDiagnosis": "Re-run the failing lane locally: `make verify` (lint, licence headers, go fix, unit tests; `make modernize` fixes the go fix check), then `make build`."
   },
   "tests": {
     "rules": [
@@ -107,7 +117,7 @@
       "pkg/document/crdt/*.go"
     ],
     "replicatedRuleNotice": "**Replicated CRDT rule changed in Go only (warning).** yorkie-js-sdk must apply the same rule or a Go server and JS clients diverge. Link the matching yorkie-js-sdk change in the PR body, or say why none is needed:",
-    "counterpartRepo": "yorkie-js-sdk"
+    "counterpartRepo": "yorkie-team/yorkie-js-sdk"
   },
   "redact": {
     "extraPatterns": []

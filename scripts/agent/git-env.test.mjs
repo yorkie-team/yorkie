@@ -169,7 +169,11 @@ test("readHeadSha works in a linked worktree — the reason GIT_DIR is deleted, 
 // without the helper, did exactly that: it set `core.bare` and a `t@t`
 // identity in the shared config and committed over a working branch.
 test("every test that creates a git fixture builds its env from git-env.mjs", () => {
-  const scriptsDir = path.join(import.meta.dirname, "..");
+  // THIS PACKAGE, and nothing above it. The package is the same bytes in every
+  // repository; the directory it sits in is not, and a repository's own script
+  // tests scrub git's environment their own way. Whether those do is that
+  // repository's to check, in `.github/agent-harness/repo.test.mjs`.
+  const scriptsDir = import.meta.dirname;
   const files = [];
   const walk = (dir) => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -188,6 +192,6 @@ test("every test that creates a git fixture builds its env from git-env.mjs", ()
       return spawnsGit.test(src) && initsRepo.test(src) && !src.includes("git-env.mjs");
     })
     .map((f) => path.relative(scriptsDir, f));
-  assert.ok(files.some((f) => f.endsWith(path.join("agent", "git-env.test.mjs"))), "the walk found the test files");
+  assert.ok(files.some((f) => path.basename(f) === "git-env.test.mjs") && files.length > 20, "the walk found the test files");
   assert.deepEqual(offenders, [], "use fixtureGitEnv(dir) for every git call on a fixture");
 });

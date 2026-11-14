@@ -222,7 +222,35 @@ export function weakenedAssertions(files) {
 // keys throws here rather than leaving the lint with nothing to match.
 const REPLICATED_RULE = get("fixGuard.replicatedRuleGlobs").map(compileGlob);
 const REPLICATED_RULE_NOTICE = get("fixGuard.replicatedRuleNotice");
-const COUNTERPART_REPO = get("fixGuard.counterpartRepo").toLowerCase();
+const NAMES_COUNTERPART = counterpartReference(get("fixGuard.counterpartRepo"));
+
+/**
+ * A predicate: does this text refer to the repository `repo` (`owner/name`)?
+ *
+ * A REFERENCE, NOT A SUBSTRING. The name alone is contained in its neighbours'
+ * — `yorkie` in `yorkie-js-sdk`, in the `yorkie-team` organisation, in the
+ * `@yorkie-js/sdk` package — so a substring test is true of nearly every pull
+ * request body in a repository whose counterpart has the shorter name, and the
+ * warning it is meant to silence would never be shown. What counts is one of:
+ *
+ *   owner/name, owner/name#12   the full name, not continued by a name character
+ *   name#12                     the short issue form, not preceded by one
+ *   github.com/owner/name…      a link to the repository, a pull request or an issue
+ *
+ * Case is ignored, as GitHub ignores it. An empty `repo` refers to nothing.
+ */
+export function counterpartReference(repo) {
+  if (str(repo) === "") return () => false;
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const [owner, name] = repo.split("/").map(esc);
+  // Not followed by more of a name: a word character, a hyphen, or a dot that
+  // goes on (`yorkie.js`). A dot that ends a sentence is fine.
+  const END = "(?![\\w-]|\\.[\\w-])";
+  // Not preceded by more of a name, a path or a package scope.
+  const START = "(?<![\\w.@/-])";
+  const re = new RegExp(`${START}${owner}/${name}${END}|${START}${name}#\\d+|github\\.com/${owner}/${name}${END}`, "i");
+  return (text) => re.test(str(text));
+}
 
 /** Non-test changes to a replicated rule (the paths `fixGuard.replicatedRuleGlobs` lists). */
 export function crdtRuleChanges(files) {
@@ -243,9 +271,9 @@ export function lintRound({ files = [], original = null, prBody = "" } = {}) {
   const reviewerDirected = reviewerDirectedHits(files);
   const weakened = weakenedAssertions(files);
   // Asked only when nothing already points at the counterpart: a PR body that
-  // names it (in any case) has made the cross-repository change visible to a
-  // human.
-  const named = COUNTERPART_REPO !== "" && str(prBody).toLowerCase().includes(COUNTERPART_REPO);
+  // refers to it (see `counterpartReference`) has made the cross-repository
+  // change visible to a human.
+  const named = NAMES_COUNTERPART(prBody);
   const crdt = named ? [] : [...new Set(crdtRuleChanges(files))];
   return {
     scopeKnown: !!original,

@@ -2,6 +2,7 @@ import "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  counterpartReference,
   crdtRuleChanges,
   inScope,
   isDocFile,
@@ -116,7 +117,66 @@ test("lintRound: scope and reviewer text block; assertions and CRDT warn", () =>
   // case, has made the parity question visible. Any other repository's name has not.
   const one = { files: [{ filename: "lib/rules/root.go" }], original: new Set(["lib/rules/root.go"]) };
   assert.equal(lintRound({ ...one, prBody: "Other side: Fixture-Counterpart#1442" }).crdt.length, 0);
+  assert.equal(lintRound({ ...one, prBody: "Other side: fixture-org/fixture-counterpart#1442" }).crdt.length, 0);
   assert.equal(lintRound({ ...one, prBody: "Other side: some-other-repo#1442" }).crdt.length, 1);
+  assert.equal(lintRound({ ...one, prBody: "" }).crdt.length, 1);
+  assert.equal(lintRound({ ...one }).crdt.length, 1);
+});
+
+test("counterpartReference: a reference to the repository, never a substring of its neighbours", () => {
+  // THE CASE THAT BROKE THE SUBSTRING TEST: the counterpart's name is the
+  // prefix of this repository's own name, organisation and package scope, so
+  // it is in nearly every pull request body.
+  const short = counterpartReference("yorkie-team/yorkie");
+  const yes = [
+    "yorkie-team/yorkie#12",
+    "Server side: yorkie-team/yorkie#12.",
+    "see yorkie-team/yorkie",
+    "(yorkie-team/yorkie)",
+    "Yorkie-Team/Yorkie#12",
+    "yorkie#12",
+    "Fixes the rule; server change is yorkie#2100, merged.",
+    "https://github.com/yorkie-team/yorkie/pull/12",
+    "https://github.com/yorkie-team/yorkie/issues/12",
+    "[server PR](https://github.com/yorkie-team/yorkie/pull/12)",
+    "github.com/yorkie-team/yorkie",
+  ];
+  const no = [
+    "yorkie-team/yorkie-js-sdk#12",
+    "https://github.com/yorkie-team/yorkie-js-sdk/pull/12",
+    "@yorkie-js/sdk",
+    "@yorkie-js/sdk#12",
+    "yorkie-js-sdk#12",
+    "the yorkie-team organisation",
+    "yorkie",
+    "the yorkie server must do the same",
+    "yorkie-team/yorkie.github.io#3",
+    "other-org/yorkie-team/yorkie#12",
+    "https://github.com/someone/yorkie/pull/12",
+    "myyorkie#12",
+    "#12",
+    "",
+    null,
+    undefined,
+  ];
+  for (const body of yes) assert.equal(short(body), true, `should refer to it: ${body}`);
+  for (const body of no) assert.equal(short(body), false, `should not: ${body}`);
+
+  // The longer name, as the server repository configures it. What a pull
+  // request body realistically writes still counts; only a bare mention in
+  // prose, with neither owner nor number, no longer does.
+  const long = counterpartReference("yorkie-team/yorkie-js-sdk");
+  for (const body of ["yorkie-js-sdk#1442", "yorkie-team/yorkie-js-sdk#1442", "Yorkie-JS-SDK#1", "https://github.com/yorkie-team/yorkie-js-sdk/pull/1442", "JS side: yorkie-team/yorkie-js-sdk"]) {
+    assert.equal(long(body), true, body);
+  }
+  for (const body of ["yorkie-team/yorkie#12", "yorkie#12", "the yorkie-js-sdk change is not needed", "yorkie-js-sdk-next#3"]) {
+    assert.equal(long(body), false, body);
+  }
+
+  // A name with a regex metacharacter is a name, and nothing refers to no repository.
+  assert.equal(counterpartReference("a/b.c")("a/bxc#1"), false);
+  assert.equal(counterpartReference("a/b.c")("a/b.c#1"), true);
+  assert.equal(counterpartReference("")("anything at all"), false);
 });
 
 test("lintRound: an unknown original scope enforces nothing and says so", () => {

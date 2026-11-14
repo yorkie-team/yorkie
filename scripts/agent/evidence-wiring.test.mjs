@@ -42,12 +42,15 @@ for (const file of ["agent-review-panel.yml", "agent-fix.yml"]) {
   });
 
   test(`${file}: the fixer is told not to delete a test that still reproduces`, () => {
-    // Go has no `it.fails`: the reproducer is kept behind a `t.Skip` that
-    // names the finding, the item is reported skipped, and test-removals.mjs
-    // records the skip for the adjudicator.
-    assert.match(WF(file), /NEVER DELETE A TEST THAT SHOWS A FINDING STILL REPRODUCES\./);
-    assert.match(WF(file), /make its first\s+statement `t\.Skip\("still reproduces: <finding>"\)`/);
-    assert.match(WF(file), /report that item `--skipped`/);
+    // HOW the reproducer is kept is the repository's (`fixer.keepReproducerAs`:
+    // an expected-failure marker, a skip that names the finding). The rule,
+    // and that the item is then reported skipped, is the workflow's;
+    // test-removals.mjs records what was switched off for the adjudicator.
+    assert.match(WF(file), /NEVER DELETE OR QUIETLY DISABLE A TEST THAT SHOWS A FINDING STILL REPRODUCES\./);
+    // The closing line must not name one repository's form of "kept".
+    assert.match(WF(file), /a reproducer kept that way beside a\s+`--skipped` claim is honest/);
+    assert.match(WF(file), /fixed\. \$\{\{ steps\.cfg\.outputs\.keep_reproducer_as \}\}, and report that item/);
+    assert.match(WF(file), /report that item\s+`--skipped`/);
   });
 }
 

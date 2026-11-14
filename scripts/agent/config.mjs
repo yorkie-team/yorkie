@@ -148,6 +148,30 @@ const GLOBS = `globs in the harness dialect (${GLOB_DIALECT}), not blank, not pa
 const text = [(v) => isStr(v) && v.trim() !== "", "a non-empty string"];
 /** A string that may be empty: the repository has nothing to say here, on purpose. */
 const optionalText = [isStr, "a string (may be empty)"];
+
+// WHAT A WORKFLOW DROPS INTO A SENTENCE IT OWNS comes in two shapes, and a
+// value of the wrong shape renders as a sentence that is visibly broken
+// ("…line. , and a second line…") or quietly run on. Both are ONE LINE: the
+// value is spliced into a wrapped paragraph, and a line break in it would
+// start a list item or end a block the workflow did not mean to end.
+//
+//   fragment   part of a sentence the workflow finishes. Starts with a word,
+//              not punctuation; ends without `.`, `,`, `;`, `:`, `!` or `?`,
+//              because the workflow writes what follows.
+//   sentences  one or more whole sentences. Starts with a capital, a digit, a
+//              backtick or a quote; ends with `.`, `!` or `?` (a closing
+//              bracket, quote or backtick may follow).
+const oneLine = (v) => isStr(v) && v !== "" && v === v.trim() && !/[\r\n]/.test(v);
+const isFragment = (v) => oneLine(v) && !/^[,.;:!?)\]]/.test(v) && !/[.,;:!?]$/.test(v);
+const isSentences = (v) => oneLine(v) && /^[\p{Lu}\p{N}`"'(]/u.test(v) && /[.!?][)"'`\]]*$/.test(v);
+const FRAGMENT = "one line that continues a sentence: no leading punctuation, no trailing `.`, `,`, `;`, `:`, `!` or `?`";
+const SENTENCES = "one line of whole sentences: starts with a capital, a digit, a backtick or a quote, and ends with `.`, `!` or `?`";
+/** `owner/name`, as GitHub spells a repository. */
+const REPO_SLUG = /^[A-Za-z0-9][A-Za-z0-9-]*\/[A-Za-z0-9._-]+$/;
+const fragment = [isFragment, FRAGMENT];
+const optionalFragment = [(v) => v === "" || isFragment(v), `empty, or ${FRAGMENT}`];
+const sentences = [isSentences, SENTENCES];
+const optionalSentences = [(v) => v === "" || isSentences(v), `empty, or ${SENTENCES}`];
 const list = [isList, `an array of ${ENTRIES} (may be empty)`];
 const nonEmptyList = [(v) => isList(v) && v.length > 0, `a non-empty array of ${ENTRIES}`];
 /** Names the first entry that is not a glob, and why. */
@@ -184,6 +208,9 @@ const SCHEMA = {
     // The repository's name as a reviewer is told it, and the prefix of the
     // capture schema id.
     name: text,
+    // The agent GitHub App's slug: what a message calls the App, and the stem
+    // of its two logins.
+    appSlug: [(v) => isStr(v) && /^[a-z0-9][a-z0-9-]*$/.test(v), "a GitHub App slug (lower-case letters, digits and hyphens)"],
     // Bots whose latch, page and ledger comments are believed.
     botLogins: nonEmptyList,
     // The agent App's own identities, in both spellings the API reports.
@@ -216,15 +243,57 @@ const SCHEMA = {
     // the harness's: they are handed to `git diff`, never compiled here.
     diffExcludes: list,
   },
+  // What the workflows tell a fixer, in this repository's words. Each value is
+  // dropped into a sentence the workflow owns; `workflow-values.mjs` renders
+  // them and the README shows every frame with its surrounding words. A
+  // FRAGMENT continues the workflow's sentence, SENTENCES stand on their own,
+  // and an optional one may be empty: its sentence is then left out whole.
   fixer: {
-    verifyCommand: text,
-    verifyDescription: text,
-    forbiddenCommands: text,
-    targetedTestHint: text,
-    generatedCodeNote: optionalText,
-    keepReproducerAs: text,
-    licenceScope: text,
-    todoTrackingLine: optionalText,
+    // "Run `<verifyCommand>` ONCE at the end … It is <verifyDescription>,
+    // which is the whole of what this job can verify."
+    verifyCommand: fragment,
+    verifyDescription: fragment,
+    // Said after that: what to do when a particular part of it fails.
+    verifyFailureHint: optionalSentences,
+    // "<integrationWarning>, and the push re-runs <integrationRerunBy>
+    // anyway." Both or neither: a repository with no suite a fixer must keep
+    // away from leaves both empty and the sentence is not said.
+    integrationWarning: optionalFragment,
+    integrationRerunBy: optionalFragment,
+    // Said after that in the CI-fix prompt only: what to do when the failing
+    // lane is one the fixer may not run.
+    ciFailureNote: optionalSentences,
+    // Which generated code may not be edited by hand: a list item in the three
+    // fixer prompts, and the opening of the issue-to-PR prompt's last
+    // paragraph, where <apiChangeNote> follows it.
+    generatedCodeNote: optionalSentences,
+    apiChangeNote: optionalSentences,
+    // "If a test … still fails, the finding is not fixed. <keepReproducerAs>,
+    // and report that item `--skipped` with the reason."
+    keepReproducerAs: fragment,
+    // "…every test a fix round removes or <disabledTestForms>, and shows it…"
+    disabledTestForms: fragment,
+    // Said after the push rules in the three fixer prompts: what this
+    // repository asks of a commit message, or of anything else its own hooks
+    // would check. The harness installs one hook, the scope check, and says so
+    // itself; whether the repository's hooks are active in a fresh checkout is
+    // the repository's to know, so this sentence is the repository's to write.
+    commitNote: optionalSentences,
+    // In the issue-to-PR prompt: "3. IMPLEMENT: make the change.
+    // <licenceScope> Commit subject …"; "The todo starts with a `**Created**`
+    // line. <todoTrackingLine>"; and "5. <implementVerifyStep>". These three
+    // may use the prompt's own placeholders: `__ISSUE_NUMBER__`, `__TODAY__`,
+    // `__ISSUE_FILE__`, `__PR_FILE__`.
+    licenceScope: optionalSentences,
+    todoTrackingLine: optionalSentences,
+    implementVerifyStep: sentences,
+    // "…edit the branch, <replyVerifyInstruction>, commit with the trailer…"
+    replyVerifyInstruction: optionalFragment,
+    // "…stopped after setup and before the agent started — <toolchainSteps>,
+    // or fetching the issue."
+    toolchainSteps: fragment,
+    // "No failed-step log could be read for run N. <lastResortDiagnosis>"
+    lastResortDiagnosis: sentences,
   },
   tests: {
     rules: ruleSets,
@@ -236,7 +305,12 @@ const SCHEMA = {
   fixGuard: {
     replicatedRuleGlobs: globList,
     replicatedRuleNotice: optionalText,
-    counterpartRepo: optionalText,
+    // `owner/name`: the repository that must apply the same rule. A pull
+    // request body that refers to it — `owner/name`, `owner/name#12`,
+    // `name#12`, or a github.com link to it — has made the question visible.
+    // The full name, because a bare one is a substring of its neighbours
+    // (`yorkie` of `yorkie-js-sdk`) and would match nearly every body.
+    counterpartRepo: [(v) => v === "" || REPO_SLUG.test(v), "empty, or a repository as `owner/name`"],
   },
   redact: {
     extraPatterns: list,
@@ -283,6 +357,16 @@ function crossChecks(config, problems) {
   // configuration, and whoever wrote it believes the Go rules are on.
   if (!wantsGo && config.tests.go) {
     problems.push('tests.go is present, but tests.rules does not name "go" — nothing would read it');
+  }
+  // One App, named three ways. A slug that disagreed with the logins would
+  // have the workflows allow-list one bot while the scripts believe another.
+  const appBot = `${config.repo.appSlug}[bot]`;
+  if (!config.repo.appLogins.includes(appBot)) problems.push(`repo.appLogins must include ${JSON.stringify(appBot)}, the login of repo.appSlug`);
+  if (!config.repo.botLogins.includes(appBot)) problems.push(`repo.botLogins must include ${JSON.stringify(appBot)}, the login of repo.appSlug`);
+  // Two halves of one sentence: either without the other renders as
+  // "…, and the push re-runs  anyway."
+  if ((config.fixer.integrationWarning === "") !== (config.fixer.integrationRerunBy === "")) {
+    problems.push("fixer.integrationWarning and fixer.integrationRerunBy must both be set or both be empty");
   }
   const guard = config.fixGuard;
   if (guard.replicatedRuleGlobs.length > 0) {
