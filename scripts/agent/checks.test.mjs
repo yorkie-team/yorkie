@@ -691,7 +691,9 @@ test("each verb that needs the App answers the commenter when it is missing", ()
       text,
       // The App's name is the repository's (`repo.appSlug`), read from the
       // configuration and never written into the workflow.
-      /needs the `' \+ APP_SLUG \+ '` GitHub App/,
+      // Either spelling: the slug inline, or a phrase built from it that
+      // falls back to a general one when the slug is not a slug.
+      /needs the (?:`' \+ APP_SLUG \+ '` GitHub App|' \+ APP \+ ',)/,
       `${file}: must tell the commenter the App is missing, not just skip`,
     );
     // ...and it must come after the trust gate, so an account without write
@@ -2189,7 +2191,7 @@ async function implementBoundaryProblems(text) {
   if (refused.join() !== "triage,read,none") problems.add(`the write-access check fails the step for [${refused.join(", ")}], not for exactly the roles below write`);
   if (st[verifyAt].failOpen) problems.add("the write-access check is continue-on-error, so a refusal admits");
   const allSteps = [...jobs.values()].flatMap((j) => j.steps.map((s) => ({ job: j, s })));
-  const noApp = allSteps.find(({ s }) => /needs the `' \+ APP_SLUG \+ '` GitHub App/.test(s.script ?? ""));
+  const noApp = allSteps.find(({ s }) => /needs the (?:`' \+ APP_SLUG \+ '` GitHub App|' \+ APP \+ ',)/.test(s.script ?? ""));
   const reporter = finish.steps.find((s) => s.name === "Report a run that ended without a PR");
   if (!noApp) problems.add("nothing answers a commenter when the App is missing");
   if (!reporter) problems.add("finish has no no-PR reporter");
@@ -2327,6 +2329,7 @@ async function implementBoundaryProblems(text) {
       for (const b of bodies) {
         if (b.includes(SENTINEL)) problems.add(`finish "${step.name}" posts a value from implement as text`);
         if (b.includes("agent-issue-help")) problems.add(`finish "${step.name}" posts an App slug it did not check`);
+        if (env.APP_SLUG === FORGED_SLUG && b.includes("`agent`")) problems.add(`finish "${step.name}" names its fallback as though it were an App`);
       }
     }
   }
@@ -2441,7 +2444,7 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     finish_without_route: ["    needs: [route, implement]\n", "    needs: [implement]\n"],
     reporter_posts_outcome: ["${agentOutcome === 'failure' ? 'failed' : 'ended'}", "${agentOutcome}"],
     reporter_slug_unchecked: ["            const app = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '') ? `\\`${process.env.APP_SLUG}\\` GitHub App` : 'agent GitHub App';", "            const app = `\\`${process.env.APP_SLUG}\\` GitHub App`;"],
-    no_app_slug_unchecked: ["            const APP_SLUG = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '') ? process.env.APP_SLUG : 'agent';", "            const { APP_SLUG } = process.env;"],
+    no_app_slug_unchecked: ["            const APP = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '')\n              ? '`' + process.env.APP_SLUG + '` GitHub App' : 'agent GitHub App';", "            const APP = '`' + process.env.APP_SLUG + '` GitHub App';"],
     // what crosses into a script, and when the issue number is trusted
     finish_splices_output: ["            const agentOutcome = process.env.AGENT_OUTCOME;", "            const agentOutcome = '${{ needs.implement.outputs.agent }}';"],
     implement_splices_issue: ["            const issue = Number(process.env.ISSUE_NUMBER);", "            const issue = Number(context.payload.issue?.number || '${{ github.event.inputs.issue_number }}');"],

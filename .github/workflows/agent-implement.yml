@@ -825,12 +825,13 @@ jobs:
         with:
           retries: 3
           script: |
-            // An App's slug, or the general word: nothing else is posted.
-            const APP_SLUG = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '') ? process.env.APP_SLUG : 'agent';
+            // An App's slug, or the general phrase: nothing else is posted.
+            const APP = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '')
+              ? '`' + process.env.APP_SLUG + '` GitHub App' : 'agent GitHub App';
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: context.payload.issue.number,
-              body: '⏸️ `@claude fix` needs the `' + APP_SLUG + '` GitHub App, which is not configured on '
+              body: '⏸️ `@claude fix` needs the ' + APP + ', which is not configured on '
                 + 'this repository — it pushes a branch and opens a pull request, and `GITHUB_TOKEN` can do '
                 + 'neither in a way that re-triggers CI.\n\nOn a pull request, `@claude review` and '
                 + '`@claude summarize` work today; they post with `GITHUB_TOKEN` and need no App.',
