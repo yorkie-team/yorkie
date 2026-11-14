@@ -66,6 +66,27 @@ its own pull request.
       nothing else is; no wrong classification found in the sample
 - [x] `npm test`, `npm run test:repo`, `manifest.mjs verify`, actionlint,
       `scripts/test`, `make verify`
+- [x] Review round, scanner: `a && b` and `a & &b` were the same tokens, so
+      an eager `bool & &bool` passed as test-only on a real file. A
+      punctuation token now carries whether the next one touches it; every
+      multi-character operator is tested split at each position, both ways;
+      the snippet was compiled once (rustc 1.100.0) to confirm it is valid
+- [x] Review round, commits: a merge that is not of the base branch, a
+      commit with no parent, a round past 50 commits and a round that could
+      not be listed are refused by the hook and paged by the report. A merge
+      of the base branch is judged by the files it left different from both
+      parents. Not cargo-specific: it applies to every adopter
+- [x] Review round, paths: Rust source, manifests, lockfiles and `.cargo/`
+      are judged by the cargo rules alone; nothing under `src/bin`,
+      `examples` or `benches`, no manifest and no `build.rs` is in scope by
+      its path; a `*_tests.rs` file is in scope only once a parent module is
+      read declaring it under `#[cfg(test)]`
+- [x] Review round, record: an inner `#![cfg(…)]` at the top of a test
+      module, a `cfg` broken over lines, a repointed `#[path]`,
+      `assert_eq!(f(), f())`, and nested test modules for the lints
+- [x] The reviewer's probes re-run: the `&&` cases, H3, H5, H6, H11 and H15
+      are refused; the five equivalence dumps are still byte-identical; the
+      Rust repository's numbers are unchanged
 - [ ] A fix round on a runner in a Cargo repository: the hook's `git show`
       reads and the report job's contents-API reads have run only in tests
       and by hand
@@ -81,5 +102,8 @@ its own pull request.
   nested module, and `#[cfg(test)]` on items other than modules: harmless to
   a release build, refused by the scope rule, and each pages. Delimiting an
   arbitrary item needs a parser.
+- The other ways the review found to switch a test off without a line the
+  record knows (a swallow-all macro, a renamed test, `|| true`, a flipped
+  expectation, manifest features): listed in the README, not matched.
 - A runtime self-skip (`return` before the assertions). No line pattern
   identifies it; the test-adequacy lens is its only reader.
