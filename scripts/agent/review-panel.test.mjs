@@ -1,8 +1,9 @@
-import "./fixtures/use-fixture-config.mjs";
+import { FIXTURE_CONFIG_DIR } from "./fixtures/use-fixture-config.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { hasWorkflow } from "./workflow-presence.mjs";
-import { readFileSync, readdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { cpSync, readFileSync, readdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +11,8 @@ import {
   lensApplies,
   lensGlobs,
   CONFIG_GLOBS_PREFIX,
+  CLASS_GLOBS_PREFIX,
+  CLASS_RULES,
   dedupeFindings,
   keepUnrefuted,
   routeFinding,
@@ -1087,6 +1090,19 @@ test("classifyFile: ordered rules — the .md that is policy is not prose", () =
   assert.equal(classifyFile("CHANGELOG.md"), "prose");
   assert.equal(classifyFile("ROADMAP.md"), "prose");
 
+  // A repository may ADD to the design contract and to prose
+  // (`review.classRules.design-spec` and `.prose` in the fixture). An added
+  // design-spec path wins over the built-in prose globs it also matches,
+  // because the class is matched first; nothing built in is displaced.
+  assert.equal(classifyFile("fixture-docs/contracts/wire-format.md"), "design-spec");
+  assert.equal(classifyFile("fixture-docs/contracts/parity/README.md"), "design-spec");
+  assert.equal(classifyFile("fixture-docs/command-verbs.md"), "code", "outside docs/ and outside the addition");
+  assert.equal(classifyFile("notes/2026/retro.md"), "prose");
+  assert.equal(classifyFile("notes/2026/retro.json"), "code", "the addition names markdown only");
+  // …and policy still outranks both: an addition cannot route an
+  // instruction file to a cheaper reader.
+  assert.equal(classifyFile(".github/notes/x.md"), "policy");
+
   // Go source is code, TEST source included — a `_test.go` file is where a
   // convergence bug hides, not narration about one.
   assert.equal(classifyFile("pkg/document/crdt/tree.go"), "code");
@@ -1789,6 +1805,25 @@ test("lensGlobs: a configuration reference expands in place, and a bad one throw
   const once = lensGlobs({ id: "x", appliesWhen: [`${CONFIG_GLOBS_PREFIX}review.sourceGlobs`] });
   assert.deepEqual(lensGlobs({ id: "x", appliesWhen: once }), once);
 
+  // A FILE CLASS, by name: this package's globs for it and the repository's
+  // additions, as `CLASS_RULES` holds them — so "runs when the design
+  // contract changes" follows the contract to wherever a repository keeps it.
+  const classGlobs = (cls) => CLASS_RULES.find(([name]) => name === cls)[1];
+  assert.deepEqual(lensGlobs({ id: "x", appliesWhen: ["a/**", `${CLASS_GLOBS_PREFIX}design-spec`] }), ["a/**", "docs/design/**", "fixture-docs/contracts/**"]);
+  assert.deepEqual(
+    lensGlobs({ id: "x", appliesWhen: [`${CLASS_GLOBS_PREFIX}prose`] }),
+    ["docs/**/*.md", "docs/**/*.txt", "*.md", "*.txt", "**/README.md", "notes/**/*.md"],
+  );
+  assert.deepEqual(lensGlobs({ id: "x", appliesWhen: [`${CLASS_GLOBS_PREFIX}policy`] }), classGlobs("policy"));
+  assert.equal(lensApplies({ id: "x", appliesWhen: [`${CLASS_GLOBS_PREFIX}design-spec`] }, ["fixture-docs/contracts/a.md"]), true);
+  assert.equal(lensApplies({ id: "x", appliesWhen: [`${CLASS_GLOBS_PREFIX}design-spec`] }, ["fixture-docs/other.md"]), false);
+  // `code` is what is left when no rule matches: it has no globs to stand for.
+  assert.throws(() => lensGlobs({ id: "x", appliesWhen: [`${CLASS_GLOBS_PREFIX}code`] }), /file class "code", which has no path rules/);
+  assert.throws(() => lensGlobs({ id: "x", appliesWhen: [`${CLASS_GLOBS_PREFIX}designspec`] }), /file class "designspec", which has no path rules/);
+  for (const bad of [CLASS_GLOBS_PREFIX, "$Class:prose", "$class: prose", " $class:prose", "$class:prose ", "$class:prose/**", "$class:Prose"]) {
+    assert.throws(() => lensGlobs({ id: "x", appliesWhen: [bad] }), /is not exactly `\$config:<dotted\.key>` or `\$class:<file class>`/, JSON.stringify(bad));
+  }
+
   // THE FAILURE THIS GUARDS: an unexpanded reference is a glob that matches no
   // path, so the lens would be skipped on every change, silently. A reference
   // that cannot be resolved must throw instead.
@@ -1854,6 +1889,57 @@ test("every configuration reference the shipped lenses make resolves", () => {
   const designFit = loaded.find((l) => l.id === "design-fit");
   assert.ok(designFit.rubric.includes(get("review.sharedPrimitivesNote")), "design-fit lost the repository's sentence");
   assert.ok(designFit.appliesWhen.includes("src/**") && designFit.appliesWhen.includes("docs/design/**"));
+  // The two lenses that run on a class of documents name the class, so a
+  // repository's additions reach them: design-fit runs when an added contract
+  // path changes, the docs lens when an added narration path does.
+  assert.ok(designFit.appliesWhen.includes("fixture-docs/contracts/**"), "design-fit lost the repository's design-spec addition");
+  const docs = loaded.find((l) => l.id === "docs");
+  assert.deepEqual(docs.appliesWhen, ["docs/**/*.md", "docs/**/*.txt", "*.md", "*.txt", "**/README.md", "notes/**/*.md"]);
+  assert.equal(lensApplies(designFit, ["fixture-docs/contracts/wire.md"]), true);
+  assert.equal(lensApplies(docs, ["notes/a/b.md"]), true);
+  assert.equal(lensApplies(docs, ["fixture-docs/contracts/wire.md"]), false, "a design-spec addition under no prose glob does not start the docs lens");
+});
+
+// The additions are optional. Without them the classes and the lenses' path
+// lists are this package's own entries and nothing else — which is what every
+// repository that adopted the harness before the keys existed has. The panel
+// reads the configuration once at import, so that is a process of its own.
+test("without the class-rule additions, the classes and the lens paths are the built-in ones", (t) => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "harness-classes-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  cpSync(FIXTURE_CONFIG_DIR, dir, { recursive: true });
+  const config = JSON.parse(readFileSync(path.join(dir, "config.json"), "utf8"));
+  delete config.review.classRules["design-spec"];
+  delete config.review.classRules.prose;
+  writeFileSync(path.join(dir, "config.json"), JSON.stringify(config));
+  const probe = `
+    const rp = await import(${JSON.stringify(path.join(HERE, "review-panel.mjs"))});
+    const lenses = rp.loadLenses(${JSON.stringify(path.join(HERE, "lenses"))});
+    const rules = Object.fromEntries(rp.CLASS_RULES);
+    console.log(JSON.stringify({
+      designSpec: rules["design-spec"],
+      prose: rules.prose,
+      contract: rp.classifyFile("fixture-docs/contracts/wire-format.md"),
+      note: rp.classifyFile("notes/2026/retro.md"),
+      design: rp.classifyFile("docs/design/tree.md"),
+      designFit: lenses.find((l) => l.id === "design-fit").appliesWhen,
+      docs: lenses.find((l) => l.id === "docs").appliesWhen,
+    }));`;
+  const run = spawnSync(process.execPath, ["--input-type=module", "-e", probe], {
+    encoding: "utf8",
+    env: { ...process.env, AGENT_HARNESS_CONFIG_DIR: dir },
+  });
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(JSON.parse(run.stdout), {
+    designSpec: ["docs/design/**"],
+    prose: ["docs/**/*.md", "docs/**/*.txt", "*.md", "*.txt", "**/README.md"],
+    contract: "code",
+    note: "code",
+    design: "design-spec",
+    // Exactly what `lenses.json` spelt out before it named the classes.
+    designFit: ["src/**", "lib/**", "scripts/**", "docs/design/**"],
+    docs: ["docs/**/*.md", "docs/**/*.txt", "*.md", "*.txt", "**/README.md"],
+  });
 });
 
 test("loadLenses: a rubric placeholder that is unknown, or not a string, throws", () => {

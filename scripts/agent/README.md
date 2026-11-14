@@ -43,6 +43,7 @@ else as JSON).
 | `ci.gateLabel`, `ci.handoffSummary` | `checks.mjs`, for `mark-ready.mjs` | wired |
 | `ci.laneReports` | `agent-iterate-ci.yml`: whether the CI-fix arm downloads and renders lane reports before the log tail | wired |
 | `review.classRules.code-adjacent`, `review.classRules.policy` | `review-panel.mjs` | wired |
+| `review.classRules.design-spec`, `review.classRules.prose` | `review-panel.mjs`; `lenses/lenses.json`, as `$class:design-spec` and `$class:prose`. **Optional**: each adds globs to the built-in ones and may be left out | wired |
 | `review.sourceGlobs` | `lenses/lenses.json`, as `$config:review.sourceGlobs` | wired |
 | `review.sharedPrimitivesNote` | `lenses/design-fit.md`, as `{{config:review.sharedPrimitivesNote}}` | wired |
 | `review.diffExcludes` | the three reviewed-diff steps (panel, panel delta, on-demand) | wired |
@@ -51,6 +52,17 @@ else as JSON).
 | `fixGuard.replicatedRuleGlobs`, `fixGuard.replicatedRuleNotice`, `fixGuard.counterpartRepos` | `fix-guard.mjs`. `counterpartRepos` is a list of `owner/name`; a PR body silences the warning by referring to any one of them as `owner/name`, `owner/name#12`, `name#12` or a github.com link, never by merely containing the name | wired |
 | `redact.extraPatterns` | — | not wired yet |
 | `ask.permittedMcpTools` | — | not wired yet |
+
+Every key is required except the two marked optional. Those only add to a
+list this package already has, so leaving one out means "the built-in entries
+and no more" and can make no list shorter. `review.classRules.design-spec`
+says where the design contract lives besides `docs/design/**` (a repository
+with `docs/plans/**` or a parity ledger lists them, and design-fit then runs
+on and reads them); `review.classRules.prose` says what else is narration.
+Prose is the one class no code lens reads, and it is matched last, so an entry
+there takes every file it matches that no other class claimed away from the
+code lenses: `"**"` is refused, and a repository's `repo.test.mjs` should pin
+that a source file still classifies as `code`.
 
 The two keys marked "not wired yet" are required by the schema and read by
 nothing; editing one changes nothing. `repo.appSlug` must agree with the
@@ -200,8 +212,10 @@ trailing `/` would all match no path. `review.diffExcludes` is the exception —
 those are git pathspecs, handed to `git diff`.
 
 In `lenses/lenses.json`, an `appliesWhen` entry `$config:<key>` stands for that
-list. In a rubric, `{{config:<key>}}` stands for that string. Both throw when
-the key is missing, empty or of the wrong type.
+list, and `$class:<file class>` for every glob of that class — the built-in
+ones and the repository's additions. In a rubric, `{{config:<key>}}` stands
+for that string. All three throw when what they name is missing, empty or of
+the wrong type.
 
 ## Conventions the core assumes
 
@@ -238,7 +252,9 @@ repository that adopts the harness follows them:
   are reviewed as instructions to people and agents, not as prose.
 - `docs/design/**` is the design contract (with `TEMPLATE.md` and `README.md`
   in it); the rest of `docs/**`, top-level `*.md` and `*.txt`, and any
-  `README.md` are prose.
+  `README.md` are prose. A repository can add to either list
+  (`review.classRules.design-spec`, `review.classRules.prose`) and cannot
+  take from them.
 - `scripts/hooks/**` and `.githooks/**` are the local enforcement layer that
   `scripts/setup.sh` installs.
 - This package lives at `scripts/agent`, and nothing in it imports from

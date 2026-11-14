@@ -20,7 +20,9 @@
   "review": {
     "classRules": {
       "code-adjacent": ["**/fixtures/**", "stack/**"],
-      "policy": ["build.config", "tools/lint.rules"]
+      "policy": ["build.config", "tools/lint.rules"],
+      "design-spec": ["fixture-docs/contracts/**"],
+      "prose": ["notes/**/*.md"]
     },
     "sourceGlobs": ["src/**", "lib/**"],
     "sharedPrimitivesNote": "This fixture keeps its shared primitives in `lib/`.",

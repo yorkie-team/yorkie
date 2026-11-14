@@ -220,6 +220,14 @@ const dirNames = [
 /** Marks a nested schema whose key may be absent as a whole. */
 const OPTIONAL = Symbol("optional");
 const optional = (schema) => ({ [OPTIONAL]: true, ...schema });
+/**
+ * Marks a LIST that may be absent, for a key that only ever ADDS to a list
+ * this package already has. Absent and `[]` then mean the same thing — "the
+ * built-in entries and no more" — so absence cannot make any list shorter,
+ * which is the failure "no defaults" exists to prevent. Read with
+ * `getOptionalList`, never with `get`.
+ */
+const optionalAddition = ([ok, wants, detail]) => Object.assign([ok, wants, detail], { [OPTIONAL]: true });
 
 const SCHEMA = {
   repo: {
@@ -252,6 +260,11 @@ const SCHEMA = {
     classRules: {
       "code-adjacent": globList,
       policy: globList,
+      // Additions to the two classes whose paths are otherwise this
+      // package's own: where the design contract lives beyond
+      // `docs/design/**`, and what else is narration. Both may be absent.
+      "design-spec": optionalAddition(globList),
+      prose: optionalAddition(globList),
     },
     // What counts as source for the path-scoped lenses.
     sourceGlobs: nonEmptyGlobList,
@@ -360,7 +373,7 @@ function validate(value, schema, where, problems) {
     const at = where ? `${where}.${key}` : key;
     const rule = schema[key];
     if (!Object.hasOwn(value, key)) {
-      if (!Array.isArray(rule) && rule[OPTIONAL]) continue;
+      if (rule[OPTIONAL]) continue;
       problems.push(`${at} is missing`);
       continue;
     }
@@ -398,6 +411,12 @@ function crossChecks(config, problems) {
   // "…, and the push re-runs  anyway."
   if ((config.fixer.integrationWarning === "") !== (config.fixer.integrationRerunBy === "")) {
     problems.push("fixer.integrationWarning and fixer.integrationRerunBy must both be set or both be empty");
+  }
+  // `prose` is the one class routed AWAY from the code lenses, and it is
+  // matched last. An addition that matches every path would turn every file
+  // no other class claims — all the code — into prose.
+  if ((config.review.classRules.prose ?? []).includes("**")) {
+    problems.push('review.classRules.prose must not contain "**": every file no other class claims would be read as prose, by no code lens');
   }
   const guard = config.fixGuard;
   if (guard.replicatedRuleGlobs.length > 0) {
@@ -531,6 +550,25 @@ export function get(key, config = loadConfig()) {
     if (!isObject(node) || !Object.hasOwn(node, part)) {
       throw new Error(`harness config: no key ${JSON.stringify(walked.join("."))} (asked for ${JSON.stringify(key)})`);
     }
+    node = node[part];
+  }
+  return node;
+}
+
+/**
+ * The list at a key the schema marks as an optional addition: its entries, or
+ * `[]` when the repository did not write the key. Throws on any other key, so
+ * this cannot become the general "absent is fine" read that `get` refuses.
+ */
+export function getOptionalList(key, config = loadConfig()) {
+  let rule = SCHEMA;
+  for (const part of String(key).split(".")) rule = isObject(rule) && Object.hasOwn(rule, part) ? rule[part] : undefined;
+  if (!Array.isArray(rule) || !rule[OPTIONAL]) {
+    throw new Error(`harness config: ${JSON.stringify(key)} is not an optional list; read it with get()`);
+  }
+  let node = config;
+  for (const part of key.split(".")) {
+    if (!isObject(node) || !Object.hasOwn(node, part)) return [];
     node = node[part];
   }
   return node;

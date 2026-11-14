@@ -15,6 +15,7 @@ import {
   get,
   globProblem,
   loadConfig,
+  getOptionalList,
 } from "./config.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,9 @@ function scratch(t, edit = (c) => c) {
   if (next !== undefined) writeFileSync(path.join(dir, CONFIG_FILE), JSON.stringify(next));
   return dir;
 }
+
+/** The keys that only add to a list the package already has, and so may be absent. */
+const OPTIONAL_ADDITIONS = ["review.classRules.design-spec", "review.classRules.prose"];
 
 /** Every dotted path to a leaf (a non-object value) of `obj`. */
 function leafPaths(obj, prefix = "") {
@@ -108,8 +112,9 @@ test("loadConfig: JSON that does not parse, or is not an object, throws", (t) =>
 });
 
 test("loadConfig: EVERY key is required — removing any one of them throws, naming it", (t) => {
-  // `tests.go.*` is the one conditional block; it has its own test below.
-  const required = leafPaths(FIXTURE).filter((p) => !p.startsWith("tests.go."));
+  // `tests.go.*` is the one conditional block, and the two class-rule
+  // additions are the only optional leaves; each has its own test below.
+  const required = leafPaths(FIXTURE).filter((p) => !p.startsWith("tests.go.") && !OPTIONAL_ADDITIONS.includes(p));
   // The count is the guard on the guard: a walk that found nothing would pass.
   assert.ok(required.length >= 25, `expected the whole schema, walked ${required.length} keys`);
   for (const key of required) {
@@ -267,6 +272,36 @@ test("loadConfig: a replicated-rule glob needs its notice and its counterpart", 
   assert.deepEqual([...loadConfig(two).fixGuard.counterpartRepos], ["a/b", "a/c"]);
 });
 
+test("loadConfig: the class-rule additions may be absent, and are validated when present", (t) => {
+  for (const key of OPTIONAL_ADDITIONS) {
+    assert.ok(Array.isArray(get(key)), `${key}: the fixture is expected to set it`);
+    const dir = scratch(t, (c) => without(c, key));
+    const config = loadConfig(dir);
+    assert.equal(Object.hasOwn(config.review.classRules, key.split(".").at(-1)), false, key);
+    // Absent reads as "no additions", through the one reader that allows it.
+    assert.deepEqual(getOptionalList(key, config), [], key);
+    assert.throws(() => get(key, config), /no key/, `${key}: get() still refuses an absent key`);
+    assert.deepEqual([...getOptionalList(key)], FIXTURE.review.classRules[key.split(".").at(-1)], key);
+    const empty = scratch(t, (c) => withValue(c, key, []));
+    assert.deepEqual(getOptionalList(key, loadConfig(empty)), [], key);
+    for (const bad of ["docs/plans", ["docs/plans/"], ["{a,b}/**"], [7], null]) {
+      const wrong = scratch(t, (c) => withValue(c, key, bad));
+      assert.throws(() => loadConfig(wrong), (err) => err.message.includes(`${key} must be`), `${key} = ${JSON.stringify(bad)}`);
+    }
+  }
+  // The reader is for those keys alone: it must not become a way to read any
+  // absent key as an empty list.
+  for (const key of ["review.classRules.policy", "review.sourceGlobs", "tests.go", "review.classRules.nope", "nope"]) {
+    assert.throws(() => getOptionalList(key), /is not an optional list/, key);
+  }
+  // `prose` is matched last and routed off the code lenses: one entry that
+  // matches everything would leave no file in `code`.
+  const all = scratch(t, (c) => withValue(c, "review.classRules.prose", ["notes/**", "**"]));
+  assert.throws(() => loadConfig(all), /review\.classRules\.prose must not contain "\*\*"/);
+  const allSpec = scratch(t, (c) => withValue(c, "review.classRules.design-spec", ["**"]));
+  assert.deepEqual([...loadConfig(allSpec).review.classRules["design-spec"]], ["**"], "design-spec is read by MORE lenses than code, so this is only expensive");
+});
+
 test("loadConfig: a key that was renamed says what to write instead", (t) => {
   // What an adopter sees after syncing past the rename: `sync.mjs` prints
   // these lines as the edits the new core leaves for a person.
@@ -398,7 +433,7 @@ test("globProblem / compileGlob: syntax this dialect does not have is REFUSED, n
 });
 
 test("loadConfig: every glob list refuses a non-glob entry and names it; no list takes a blank or repeated entry", (t) => {
-  const globKeys = ["ci.definingPaths", "review.classRules.code-adjacent", "review.classRules.policy", "review.sourceGlobs", "fixGuard.replicatedRuleGlobs"];
+  const globKeys = ["ci.definingPaths", "review.classRules.code-adjacent", "review.classRules.policy", "review.classRules.design-spec", "review.classRules.prose", "review.sourceGlobs", "fixGuard.replicatedRuleGlobs"];
   let checked = 0;
   for (const key of globKeys) {
     for (const bad of ["./x", "x/", "{a,b}", "!x", "a?b", "/x", "**.md"]) {
@@ -411,7 +446,7 @@ test("loadConfig: every glob list refuses a non-glob entry and names it; no list
       checked++;
     }
   }
-  assert.equal(checked, 35);
+  assert.equal(checked, 49);
   // Blank, padded and repeated entries: in every list, glob or not.
   const lists = [...globKeys, "repo.botLogins", "repo.appLogins", "review.diffExcludes", "tests.rules", "tests.go.sharedSuiteDirs", "fixGuard.counterpartRepos", "redact.extraPatterns", "ask.permittedMcpTools"];
   for (const key of lists) {

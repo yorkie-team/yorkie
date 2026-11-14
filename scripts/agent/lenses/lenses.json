@@ -42,7 +42,7 @@
     "appliesWhen": [
       "$config:review.sourceGlobs",
       "scripts/**",
-      "docs/design/**"
+      "$class:design-spec"
     ],
     "scopeClasses": [
       "code",
@@ -96,11 +96,7 @@
     "gating": "blocking",
     "needsIssueSpec": false,
     "appliesWhen": [
-      "docs/**/*.md",
-      "docs/**/*.txt",
-      "*.md",
-      "*.txt",
-      "**/README.md"
+      "$class:prose"
     ],
     "scopeClasses": [
       "prose"
