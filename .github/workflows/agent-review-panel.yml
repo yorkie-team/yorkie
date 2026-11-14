@@ -2882,7 +2882,8 @@ jobs:
       #
       # A CONCURRENCY SUPERSEDE DOES NOT PAGE. The `active` group is only claimed
       # by a fresh `ci.yml` workflow_run, which requires a push — so a superseded
-      # round has always advanced the head. Data, not job status.
+      # round has always moved the head: during the fix (`advanced`), or before
+      # the fix job read BEFORE (the REVIEWED check below). Data, not job status.
       - name: Page if the fix produced no commit
         if: >-
           always() &&
@@ -2902,7 +2903,23 @@ jobs:
           ACTIONS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CI_RUN_ID: ${{ github.event.workflow_run.id }}
           CI_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          # The commit this round reviewed.
+          REVIEWED: ${{ github.event.workflow_run.head_sha }}
         run: |
+          # SOMEBODY ELSE PUSHED. The head left the commit this round reviewed,
+          # but not during the fix: it moved before the fix job read BEFORE, so
+          # BEFORE already equals AFTER and `advanced` cannot tell. That push
+          # starts its own CI and its own panel round (whose run is what usually
+          # cancels this one, through the `active` concurrency group), so a
+          # fresher round owns this PR. Paging here would latch
+          # `<!-- agent-review-paged -->` and freeze that round instead
+          # (wafflebase#1099: a push landed just before the fixer started, and
+          # the fixer was paged as timed out 25 seconds into its run). An empty
+          # AFTER or REVIEWED is not evidence of a push, and pages.
+          if [ -n "$AFTER" ] && [ -n "$REVIEWED" ] && [ "$AFTER" != "$REVIEWED" ]; then
+            echo "Branch head moved off the reviewed commit ($REVIEWED → $AFTER) by another push — a fresher round owns this PR. Not paging."
+            exit 0
+          fi
           # A CI RE-RUN IS THE ONE SUPERSEDE THAT LEAVES THE HEAD UNCHANGED, so
           # the head check cannot see it — and a page written through it is worse
           # than silence. The page body carries `<!-- agent-review-paged -->`,
