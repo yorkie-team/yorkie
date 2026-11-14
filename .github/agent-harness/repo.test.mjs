@@ -343,6 +343,21 @@ test("this is the repository the shared files are written in", () => {
   assert.deepEqual(upstream, { repository: null });
 });
 
+test("every file the issue-to-PR prompt names exists here", async () => {
+  // The prompt is shared, so it names the same paths in every repository:
+  // the two process documents, the task directory, the design template and
+  // index, the pull request template. `conventions.mjs` holds the list and
+  // the package's own test keeps it equal to the prompt.
+  const { IMPLEMENT_PROMPT_PATHS, missingImplementPaths } = await agent("conventions.mjs");
+  assert.ok(IMPLEMENT_PROMPT_PATHS.length >= 6, "the list was emptied");
+  assert.deepEqual(missingImplementPaths(ROOT), []);
+  // …and each is TRACKED, not merely on this machine's disk.
+  for (const entry of IMPLEMENT_PROMPT_PATHS) {
+    const tracked = execFileSync("git", ["ls-files", "--", entry.path], { cwd: ROOT, encoding: "utf8" }).trim();
+    assert.ok(tracked !== "", `${entry.path} exists here but git does not track it`);
+  }
+});
+
 test("no checkout converts the shared files' line endings", () => {
   // The manifest is over bytes. With `core.autocrlf` on and no attribute, git
   // rewrites every line ending on checkout and each shared file then hashes

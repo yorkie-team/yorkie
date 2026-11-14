@@ -329,10 +329,33 @@ repository that adopts the harness follows them:
   point the path elsewhere. The report job's scope check is the gate.
 - CI's lane reports, where `ci.laneReports` is true, are an artifact named
   `ci-lane-reports` rendered by `scripts/ci/summarize-ci.mjs`.
-- The issue-to-PR prompt names `CLAUDE.md`, `CONTRIBUTING.md`, `docs/tasks/`,
-  `docs/design/TEMPLATE.md` and `.github/PULL_REQUEST_TEMPLATE.md`.
-- The CI workflow is `.github/workflows/ci.yml`, named `CI`. The ready gate
-  reads that file's runs, and the panel and the CI-fix arm trigger on it.
+- The issue-to-PR prompt names six paths, and each has to exist before the
+  first run: `CLAUDE.md` and `CONTRIBUTING.md` ("follow … exactly"),
+  `docs/tasks/active/` (where the todo and lessons pair goes; a directory
+  exists in a checkout only with a tracked file in it),
+  `docs/design/TEMPLATE.md` and `docs/design/README.md` (what a new design
+  document starts from, and the index it is added to), and
+  `.github/PULL_REQUEST_TEMPLATE.md`. They are not configurable: a repository
+  that plans in another layout adopts this one. `conventions.mjs` holds the
+  list, and a repository's `repo.test.mjs` is required to check it — see
+  "Adopting and syncing".
+- The CI workflow is `.github/workflows/ci.yml`, and its `name:` is exactly
+  `CI`. The ready gate reads that file's runs by path. The panel and the
+  CI-fix arm are started by `workflow_run` with `workflows: ["CI"]`, which
+  matches a workflow's NAME, and with any other name they never start: no
+  error, no run. Whether GitHub compares that name case-insensitively is not
+  documented, and this was not tested; write `CI`, capitals included, and pin
+  it in `repo.test.mjs`. (Each of those jobs also asserts the run's path, so
+  a second workflow that calls itself `CI` starts them and is then refused.)
+- The issue-to-PR verb, and only it, refuses to run unless `main` requires a
+  human approval the agent App cannot get around (`check-protection.mjs`):
+  classic branch protection or an active ruleset with at least one required
+  approving review, re-approval required after the last push, and nobody
+  allowed to bypass — and the App must be able to read that (Administration:
+  read). A repository protected by nothing, or only against force pushes,
+  gets a refusal that says which of these is missing. Required status checks
+  are not looked at, and the verbs that work on an existing pull request do
+  not ask.
 - `.github/workflows/**`, `.github/actions/**`, `.github/CODEOWNERS`,
   `.github/agent-harness/**`, `scripts/setup.sh`, `scripts/hooks/**` and
   `.githooks/**` define CI. A pull request touching any of them is never
@@ -425,6 +448,22 @@ test("the shared files are a copy of owner/name", () => {
 ```
 
 The origin pins `{ repository: null }` the same way.
+
+**Required in every repository's `repo.test.mjs`: the files the issue-to-PR
+prompt names exist.** The prompt is shared, so it names the same six paths
+everywhere ("Conventions the core assumes"), and a repository without one of
+them learns it from an agent told to follow a file it cannot open:
+
+```js
+test("every file the issue-to-PR prompt names exists here", async () => {
+  const { missingImplementPaths } = await import(path.join(ROOT, "scripts", "agent", "conventions.mjs"));
+  assert.deepEqual(missingImplementPaths(ROOT), []);
+});
+```
+
+`conventions.test.mjs` keeps that list equal to what the prompt names, in
+both directions, so a path added to the prompt fails this test in every copy
+at its next sync.
 
 **Required in every repository's root `.gitattributes`:**
 
