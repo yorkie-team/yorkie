@@ -110,11 +110,23 @@ work here is porting plus the three repo-specific pieces named in §4.
     in `agent-implement.yml` a revocation that fails keeps the agent from
     starting; `setup-go` runs without its
     cache, whose post step would otherwise save the agent's module and build
-    caches under a key `main` restores. Closing the rest needs the narrow token
-    minted by a plain `run:` step (no post step, the key only in that step's
-    environment), the job's `GITHUB_TOKEN` read-only, and `sudo` dropped before
-    the agent — all three; dropping `sudo` alone closes none of the channels
-    above.
+    caches under a key `main` restores. **Where the key appears inside the job
+    does not close this.** The runner receives every secret a job references
+    when the job starts, and holds them until the job ends, whichever step names
+    them. A mint moved into a plain `run:` step loses its post step and its
+    environment, and the key is still in the runner. Dropping `sudo` does not
+    close it either: on a hosted runner the job's user has routes to the host's
+    memory that do not go through `sudo`. And the credential pick resolves its
+    secret by a computed name, so the set of secrets the job is sent may be
+    wider than the ones it names, which has not been checked. An earlier version
+    of this paragraph proposed those three changes together as the closure; none
+    of them, alone or together, keeps the key from the agent. The closure is to
+    keep the private key out of the job that runs the agent: the pre-agent App
+    calls (the protection check, the branch pre-flight, the acknowledgement)
+    move to a job before it, and the agent commits and hands a bundle across as
+    an artifact, which the trusted job validates and pushes. That is the same
+    change as the merge-endpoint residual above, and it closes both. Until it
+    lands, this residual stands.
   - **Branch protection on `main` is a setting, not a checked property.** It
     appears nowhere in the tree — no ruleset fixture, no `CODEOWNERS`, no test.
     Phase I's gate is the only thing that reads it at run time, and only for that
