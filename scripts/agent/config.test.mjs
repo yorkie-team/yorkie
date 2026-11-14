@@ -167,14 +167,17 @@ test("loadConfig: a value of the wrong type throws, and no value is coerced", (t
     ["tests.go.ciPlatform", "linux/amd64"],
     ["tests.go.ciPlatform.goos", ""],
     ["fixGuard.replicatedRuleGlobs", "lib/**"],
-    ["fixGuard.counterpartRepo", "fixture-counterpart"],
-    ["fixGuard.counterpartRepo", "fixture-org/fixture-counterpart#"],
-    ["fixGuard.counterpartRepo", "https://github.com/fixture-org/fixture-counterpart"],
-    ["fixGuard.counterpartRepo", "a/b/c"],
-    ["fixGuard.counterpartRepo", "fixture-org/.."],
-    ["fixGuard.counterpartRepo", "fixture-org/."],
-    ["fixGuard.counterpartRepo", "fixture--org/x"],
-    ["fixGuard.counterpartRepo", "fixture-org-/x"],
+    ["fixGuard.counterpartRepos", "fixture-org/fixture-counterpart"],
+    ["fixGuard.counterpartRepos", ["fixture-counterpart"]],
+    ["fixGuard.counterpartRepos", ["fixture-org/fixture-counterpart#"]],
+    ["fixGuard.counterpartRepos", ["https://github.com/fixture-org/fixture-counterpart"]],
+    ["fixGuard.counterpartRepos", ["a/b/c"]],
+    ["fixGuard.counterpartRepos", ["fixture-org/.."]],
+    ["fixGuard.counterpartRepos", ["fixture-org/."]],
+    ["fixGuard.counterpartRepos", ["fixture--org/x"]],
+    ["fixGuard.counterpartRepos", ["fixture-org-/x"]],
+    ["fixGuard.counterpartRepos", ["a/b", "a/b"]],
+    ["fixGuard.counterpartRepos", ["a/b", ""]],
     ["fixer.commitNote", "subject under 70"],
     ["redact.extraPatterns", null],
     ["ask.permittedMcpTools", [null]],
@@ -248,17 +251,33 @@ test("loadConfig: the optional fixer sentences may be empty, the others may not"
 });
 
 test("loadConfig: a replicated-rule glob needs its notice and its counterpart", (t) => {
-  for (const key of ["fixGuard.replicatedRuleNotice", "fixGuard.counterpartRepo"]) {
-    const dir = scratch(t, (c) => withValue(c, key, ""));
+  for (const [key, nothing] of [["fixGuard.replicatedRuleNotice", ""], ["fixGuard.counterpartRepos", []]]) {
+    const dir = scratch(t, (c) => withValue(c, key, nothing));
     assert.throws(() => loadConfig(dir), (err) => err.message.includes(`${key} must be non-empty`), key);
   }
   // A repository with no replicated rule says so with an empty list, and then
   // has nothing to say in the other two.
   const none = scratch(t, (c) => {
-    c.fixGuard = { replicatedRuleGlobs: [], replicatedRuleNotice: "", counterpartRepo: "" };
+    c.fixGuard = { replicatedRuleGlobs: [], replicatedRuleNotice: "", counterpartRepos: [] };
     return c;
   });
   assert.deepEqual([...loadConfig(none).fixGuard.replicatedRuleGlobs], []);
+  // More than one counterpart is the point of the list.
+  const two = scratch(t, (c) => withValue(c, "fixGuard.counterpartRepos", ["a/b", "a/c"]));
+  assert.deepEqual([...loadConfig(two).fixGuard.counterpartRepos], ["a/b", "a/c"]);
+});
+
+test("loadConfig: a key that was renamed says what to write instead", (t) => {
+  // What an adopter sees after syncing past the rename: `sync.mjs` prints
+  // these lines as the edits the new core leaves for a person.
+  const old = scratch(t, (c) => {
+    delete c.fixGuard.counterpartRepos;
+    c.fixGuard.counterpartRepo = "fixture-org/fixture-counterpart";
+    return c;
+  });
+  assert.throws(() => loadConfig(old), (err) =>
+    err.message.includes("fixGuard.counterpartRepos is missing") &&
+    err.message.includes('fixGuard.counterpartRepo is not a known key — it was renamed to fixGuard.counterpartRepos and is now a list: write ["owner/name"]'));
 });
 
 test("configDir: beside the package by default, the override when set, never a relative path", () => {
@@ -394,7 +413,7 @@ test("loadConfig: every glob list refuses a non-glob entry and names it; no list
   }
   assert.equal(checked, 35);
   // Blank, padded and repeated entries: in every list, glob or not.
-  const lists = [...globKeys, "repo.botLogins", "repo.appLogins", "review.diffExcludes", "tests.rules", "tests.go.sharedSuiteDirs", "redact.extraPatterns", "ask.permittedMcpTools"];
+  const lists = [...globKeys, "repo.botLogins", "repo.appLogins", "review.diffExcludes", "tests.rules", "tests.go.sharedSuiteDirs", "fixGuard.counterpartRepos", "redact.extraPatterns", "ask.permittedMcpTools"];
   for (const key of lists) {
     for (const value of [["a", " "], ["a", ""], ["a", " b"], ["a", "b "], ["a", "a"]]) {
       const dir = scratch(t, (c) => withValue(c, key, value));

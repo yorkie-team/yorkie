@@ -113,11 +113,15 @@ test("lintRound: scope and reviewer text block; assertions and CRDT warn", () =>
   const rendered = renderFixGuard(warnOnly);
   assert.ok(rendered.includes("fixture-counterpart must apply the same rule"), rendered);
   assert.ok(rendered.includes("- `lib/rules/root.go`"), rendered);
-  // A PR body pointing at the counterpart (`fixGuard.counterpartRepo`), in any
+  // A PR body pointing at a counterpart (`fixGuard.counterpartRepos`), in any
   // case, has made the parity question visible. Any other repository's name has not.
   const one = { files: [{ filename: "lib/rules/root.go" }], original: new Set(["lib/rules/root.go"]) };
   assert.equal(lintRound({ ...one, prBody: "Other side: Fixture-Counterpart#1442" }).crdt.length, 0);
   assert.equal(lintRound({ ...one, prBody: "Other side: fixture-org/fixture-counterpart#1442" }).crdt.length, 0);
+  // ANY ONE of the list is enough: the fixture names two.
+  assert.equal(lintRound({ ...one, prBody: "Server side: fixture-org/fixture-second.counterpart#7" }).crdt.length, 0);
+  assert.equal(lintRound({ ...one, prBody: "https://github.com/fixture-org/fixture-second.counterpart/pull/7" }).crdt.length, 0);
+  assert.equal(lintRound({ ...one, prBody: "Other side: fixture-org/fixture-second#7" }).crdt.length, 1, "a shorter name is another repository");
   assert.equal(lintRound({ ...one, prBody: "Other side: some-other-repo#1442" }).crdt.length, 1);
   assert.equal(lintRound({ ...one, prBody: "" }).crdt.length, 1);
   assert.equal(lintRound({ ...one }).crdt.length, 1);

@@ -48,13 +48,20 @@ else as JSON).
 | `review.diffExcludes` | the three reviewed-diff steps (panel, panel delta, on-demand) | wired |
 | `fixer.*` | the agents' prompts and two messages — see "What the prompts say" below | wired |
 | `tests.rules`, `tests.go.*` | `test-removals.mjs`, `fix-guard.mjs` | wired |
-| `fixGuard.replicatedRuleGlobs`, `fixGuard.replicatedRuleNotice`, `fixGuard.counterpartRepo` | `fix-guard.mjs`. `counterpartRepo` is `owner/name`; a PR body silences the warning by referring to it as `owner/name`, `owner/name#12`, `name#12` or a github.com link, never by merely containing the name | wired |
+| `fixGuard.replicatedRuleGlobs`, `fixGuard.replicatedRuleNotice`, `fixGuard.counterpartRepos` | `fix-guard.mjs`. `counterpartRepos` is a list of `owner/name`; a PR body silences the warning by referring to any one of them as `owner/name`, `owner/name#12`, `name#12` or a github.com link, never by merely containing the name | wired |
 | `redact.extraPatterns` | — | not wired yet |
 | `ask.permittedMcpTools` | — | not wired yet |
 
 The two keys marked "not wired yet" are required by the schema and read by
 nothing; editing one changes nothing. `repo.appSlug` must agree with the
 logins: `<slug>[bot]` has to be in both `repo.appLogins` and `repo.botLogins`.
+
+`fixGuard.counterpartRepos` was `fixGuard.counterpartRepo`, one `owner/name`
+string, until a rule turned up with two other homes (an SDK that ports from
+another SDK and must converge with a server). The old key is refused, not
+read: a copy that syncs past the rename writes `["owner/name"]` where it had
+`"owner/name"`, and `[]` where it had `""`. The loader says so, and `sync.mjs`
+prints what the loader says.
 
 `tests.rules` chooses from the rule sets that exist, `go` and `vitest`.
 Another test framework needs a rule set written in `test-removals.mjs` first;
@@ -286,7 +293,8 @@ Then it writes every file the manifest lists, deletes the tracked core files
 the source no longer has, writes `upstream.json` (the source's repository,
 its `HEAD`, the manifest's digest), and runs the new core's configuration
 loader against the existing `config.json`, printing each key the new schema
-requires and each it no longer knows. Only a filesystem error can stop it
+requires and each it no longer knows — with the new spelling, where a key
+was renamed. Only a filesystem error can stop it
 part-way; every file touched was tracked and unmodified, so
 `git restore --staged --worktree -- scripts/agent .github/workflows` undoes
 it. What it leaves to a person, and prints:

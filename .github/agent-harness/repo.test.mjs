@@ -324,9 +324,9 @@ test("every configured path and glob matches a file this repository tracks", () 
   // Guards on the guard: the lists were walked, and RESERVED holds nothing stale.
   assert.ok(checked >= 30, `expected every configured entry, checked ${checked}`);
   assert.deepEqual(reservedSeen.sort(), Object.entries(RESERVED).flatMap(([e, keys]) => keys.map((k) => `${k}: ${e}`)).sort());
-  assert.equal(CONFIG.fixGuard.counterpartRepo, "yorkie-team/yorkie-js-sdk");
+  assert.deepEqual([...CONFIG.fixGuard.counterpartRepos], ["yorkie-team/yorkie-js-sdk"]);
   // What a pull request here writes to point at the other side still counts.
-  const named = fixGuard.counterpartReference(CONFIG.fixGuard.counterpartRepo);
+  const named = fixGuard.counterpartReference(CONFIG.fixGuard.counterpartRepos[0]);
   for (const body of ["JS side: yorkie-js-sdk#1442", "yorkie-team/yorkie-js-sdk#1442", "https://github.com/yorkie-team/yorkie-js-sdk/pull/1442"]) {
     assert.equal(named(body), true, body);
   }

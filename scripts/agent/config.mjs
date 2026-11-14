@@ -323,12 +323,14 @@ const SCHEMA = {
   fixGuard: {
     replicatedRuleGlobs: globList,
     replicatedRuleNotice: optionalText,
-    // `owner/name`: the repository that must apply the same rule. A pull
-    // request body that refers to it — `owner/name`, `owner/name#12`,
-    // `name#12`, or a github.com link to it — has made the question visible.
-    // The full name, because a bare one is a substring of its neighbours
-    // (`yorkie` of `yorkie-js-sdk`) and would match nearly every body.
-    counterpartRepo: [(v) => v === "" || isRepoSlug(v), "empty, or a repository as `owner/name`"],
+    // `owner/name`, each: the repositories that must apply the same rule. A
+    // pull request body that refers to ANY of them — `owner/name`,
+    // `owner/name#12`, `name#12`, or a github.com link to it — has made the
+    // question visible. The full name, because a bare one is a substring of
+    // its neighbours (`yorkie` of `yorkie-js-sdk`) and would match nearly
+    // every body. A list, because a rule can have more than one other home: a
+    // client SDK ports it from another SDK and must converge with a server.
+    counterpartRepos: [(v) => isList(v) && v.every(isRepoSlug), "an array of repositories as `owner/name`, not repeated (may be empty)"],
   },
   redact: {
     extraPatterns: list,
@@ -339,6 +341,15 @@ const SCHEMA = {
 };
 
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+
+// A key this schema used to have under another name, and what to write now.
+// `sync.mjs` prints the loader's problems as the list of edits a newer core
+// leaves for a person; "is not a known key" alone would leave them to find
+// the new spelling by reading a diff.
+const RENAMED_KEYS = Object.freeze({
+  "fixGuard.counterpartRepo":
+    'it was renamed to fixGuard.counterpartRepos and is now a list: write ["owner/name"], or [] where it was ""',
+});
 
 function validate(value, schema, where, problems) {
   if (!isObject(value)) {
@@ -361,7 +372,9 @@ function validate(value, schema, where, problems) {
     }
   }
   for (const key of Object.keys(value)) {
-    if (!Object.hasOwn(schema, key)) problems.push(`${where ? `${where}.` : ""}${key} is not a known key`);
+    if (Object.hasOwn(schema, key)) continue;
+    const at = `${where ? `${where}.` : ""}${key}`;
+    problems.push(`${at} is not a known key${Object.hasOwn(RENAMED_KEYS, at) ? ` — ${RENAMED_KEYS[at]}` : ""}`);
   }
 }
 
@@ -391,8 +404,8 @@ function crossChecks(config, problems) {
     if (guard.replicatedRuleNotice.trim() === "") {
       problems.push("fixGuard.replicatedRuleNotice must be non-empty when fixGuard.replicatedRuleGlobs is");
     }
-    if (guard.counterpartRepo.trim() === "") {
-      problems.push("fixGuard.counterpartRepo must be non-empty when fixGuard.replicatedRuleGlobs is");
+    if (guard.counterpartRepos.length === 0) {
+      problems.push("fixGuard.counterpartRepos must be non-empty when fixGuard.replicatedRuleGlobs is");
     }
   }
 }

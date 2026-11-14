@@ -222,7 +222,10 @@ export function weakenedAssertions(files) {
 // keys throws here rather than leaving the lint with nothing to match.
 const REPLICATED_RULE = get("fixGuard.replicatedRuleGlobs").map(compileGlob);
 const REPLICATED_RULE_NOTICE = get("fixGuard.replicatedRuleNotice");
-const NAMES_COUNTERPART = counterpartReference(get("fixGuard.counterpartRepo"));
+// Any one of the counterparts: a rule ported from one repository and bound to
+// converge with another is visible to a human once either is linked.
+const COUNTERPARTS = get("fixGuard.counterpartRepos").map((repo) => counterpartReference(repo));
+const NAMES_COUNTERPART = (text) => COUNTERPARTS.some((names) => names(text));
 
 /**
  * A predicate: does this text refer to the repository `repo` (`owner/name`)?
@@ -270,9 +273,9 @@ export function lintRound({ files = [], original = null, prBody = "" } = {}) {
   const violations = original ? scopeViolations(files, original) : [];
   const reviewerDirected = reviewerDirectedHits(files);
   const weakened = weakenedAssertions(files);
-  // Asked only when nothing already points at the counterpart: a PR body that
-  // refers to it (see `counterpartReference`) has made the cross-repository
-  // change visible to a human.
+  // Asked only when nothing already points at a counterpart: a PR body that
+  // refers to one of them (see `counterpartReference`) has made the
+  // cross-repository change visible to a human.
   const named = NAMES_COUNTERPART(prBody);
   const crdt = named ? [] : [...new Set(crdtRuleChanges(files))];
   return {
