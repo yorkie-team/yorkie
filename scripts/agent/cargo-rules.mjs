@@ -411,6 +411,29 @@ export function testOnlyChange(before, after) {
   return true;
 }
 
+/**
+ * Does this parent module declare `name` as a test module, and as nothing
+ * else? True when the source has a top-level `#[cfg(test)] mod name;` with no
+ * `#[path]` on it, and no `mod name` anywhere in its product. It is what
+ * makes a file called `name.rs` test code: a file is compiled because a `mod`
+ * line reaches it, and compiled into the product when that line has no
+ * `cfg(test)`. False for a source that is missing or does not lex.
+ */
+export function declaresTestModule(src, name) {
+  const parsed = testRegions(src);
+  if (!parsed) return false;
+  const declared = parsed.regions.some((r) =>
+    r.kind === "declaration" && r.name === name && !parsed.tokens.slice(r.from, r.to + 1).some((t) => t.k === "w" && t.t === "path"));
+  if (!declared) return false;
+  let r = 0;
+  for (let i = 0; i + 1 < parsed.tokens.length; i++) {
+    while (r < parsed.regions.length && parsed.regions[r].to < i) r++;
+    if (r < parsed.regions.length && parsed.regions[r].from <= i) continue;
+    if (is(parsed.tokens[i], "w", "mod") && is(parsed.tokens[i + 1], "w", name)) return false;
+  }
+  return true;
+}
+
 /** A predicate over 1-based line numbers: is this line inside a test region? `null` when the file does not lex. */
 export function testRegionLines(src) {
   const parsed = testRegions(src);

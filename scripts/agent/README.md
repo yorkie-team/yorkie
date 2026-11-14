@@ -118,9 +118,38 @@ directly above it. That allows exactly three things:
 
 - lines inside an existing test module;
 - a new test module, at the top level of the file;
-- a new test file — in scope by its name, `tests.rs` or `*_tests.rs` under a
-  `src/` — and the `#[cfg(test)] mod name;` line that declares it in its
-  parent.
+- a new test file, `tests.rs` or `*_tests.rs` under a `src/`, together with
+  the `#[cfg(test)] mod name;` line that declares it in its parent.
+
+**A Rust path is what cargo makes of it, not what it is called.** With the
+cargo rules on, Rust source, `Cargo.toml`, `Cargo.lock` and `.cargo/**` are
+judged by these rules only; the `test/`, `tests/`, `__tests__/` and `docs/`
+directory names that open a path in other languages do not apply to them:
+
+- A manifest, a lockfile, a `build.rs` (anywhere) and a `.cargo/` file are
+  never in scope by their path. Each decides what gets compiled or run.
+- A file under `src/bin/`, `examples/` or `benches/` is a target cargo
+  builds by itself, whatever it is called: `src/bin/merge_tests.rs` is a
+  shipped binary.
+- A file under a `tests.cargo.integrationTestDirs` directory, or matching
+  `tests.cargo.testOnlyFileGlobs`, is test code because the repository says
+  so. That is the only way a Rust file is in scope by path alone.
+- A `tests.rs` / `*_tests.rs` file is test code by convention, and the
+  convention is checked: it is in scope when a parent module — `mod.rs` in
+  its directory, `<dir>.rs` beside the directory, or `lib.rs` / `main.rs`
+  for a file directly in `src/` — declares it `#[cfg(test)] mod name;`, with
+  no `#[path]`, and declares it nowhere else. The hook reads the parent at
+  the head being pushed and the report job at the round's head, so the
+  declaration may arrive in the same round. A file whose parent says plain
+  `mod name_tests;` is part of the library, and one nobody declares is
+  nothing yet. Unread means out of scope.
+
+Two layouts the check does not follow, to be listed in
+`tests.cargo.testOnlyFileGlobs` once a person has looked: a test module
+reached through `#[path = "…"]`, and files in a directory that is itself a
+test module (`src/client/tests/*.rs` under `#[cfg(test)] mod tests`). The
+removal record and the lints take a test file's name at its word; only the
+scope asks for the declaration.
 
 Anything else in the file, in any commit of the round, puts the file out of
 scope: the hook refuses the push and the report job pages. That includes
@@ -145,7 +174,7 @@ changed only the tests inside a rule file.
 | Key | |
 |---|---|
 | `tests.cargo.integrationTestDirs` | Directories, as globs, whose `.rs` files cargo builds as integration-test targets: `<dir>/<name>.rs` and `<dir>/<name>/main.rs`. Usually `crates/*/tests`, or `tests` for a single package. Name the directory, not `dir/**`. Everything under one is a test file; only the targets are "run by name" |
-| `tests.cargo.testOnlyFileGlobs` | Source files that are test code as a whole although neither their directory nor their name says so — a module declared `#[cfg(test)] mod sync_scenarios;`. May be empty |
+| `tests.cargo.testOnlyFileGlobs` | Source files that are test code as a whole although the rules above cannot tell: a module declared `#[cfg(test)] mod sync_scenarios;`, one reached through `#[path]`, the files of a test-module directory. Listing a file puts it in a fix round's scope, so list only what a `#[cfg(test)]` declaration reaches; `repo.test.mjs` should pin that. May be empty |
 
 ```json
 "tests": {

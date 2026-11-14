@@ -95,8 +95,21 @@ test("with the cargo rules: which Rust files are tests as a whole, and which car
     "crates/core/src/history/tests.rs": [true, false],
     "crates/core/src/merge_test.rs": [true, false],
     "src/test.rs": [true, false],
-    // A `tests/` directory under `src` (declared `#[cfg(test)] mod tests;`).
-    "crates/client/src/client/tests/reissue.rs": [true, false],
+    // CARGO'S RULES AND NOTHING ELSE decide what a Rust path is. The
+    // directory names that mean "test" in other languages do not: each of
+    // these was a test file, and so in a fix round's scope, by its name.
+    "crates/client/src/client/tests/reissue.rs": [false, false], // a module directory; list it in testOnlyFileGlobs
+    "crates/core/src/test/x.rs": [false, false],
+    "crates/core/src/__tests__/x.rs": [false, false],
+    "crates/core/src/bin/evil_tests.rs": [false, false], // cargo builds every file here as a BINARY
+    "crates/core/src/bin/tests/main.rs": [false, false],
+    "crates/core/src/bin/tests.rs": [false, false],
+    "crates/core/examples/merge_tests.rs": [false, false],
+    "crates/core/benches/tests.rs": [false, false],
+    "crates/core/tests/build.rs": [false, false],
+    "crates/core/tests/nested/Cargo.toml": [false, false],
+    "crates/core/tests/Cargo.lock": [false, false],
+    "tests/.cargo/config.toml": [false, false],
     // Named in `tests.cargo.testOnlyFileGlobs`.
     "crates/core/src/sync_scenarios.rs": [true, false],
     // Source files — where the inline tests are. Not test files.
@@ -247,21 +260,38 @@ test("with the cargo rules: a fix round may change the tests inside a Rust file 
   const LIB = "pub mod counter;\npub mod merge;\n";
   const LIB_DECLARES = "pub mod counter;\n#[cfg(test)]\nmod counter_tests;\npub mod merge;\n";
   const got = probe(dir, {
-    // By path, as before: the original files, test files, docs.
+    // By path: the original files, what the CONFIGURATION names as test
+    // code, docs, and test data that is not cargo's to build.
     paths: ["fix-guard", "scopeViolations", [
       { filename: "crates/core/src/merge.rs", status: "modified" },
-      { filename: "crates/core/src/counter_tests.rs", status: "added" },
       { filename: "crates/core/tests/merge.rs", status: "modified" },
+      { filename: "crates/core/tests/support/mod.rs", status: "added" },
+      { filename: "crates/core/tests/fixtures/pack.json", status: "added" },
       { filename: "crates/core/src/sync_scenarios.rs", status: "modified" },
       { filename: "docs/tasks/active/x-lessons.md", status: "modified" },
     ], original],
+    // NOT by path, though each has "test" or "docs" in it: what cargo builds
+    // into a binary, a library module, a build script or a package.
+    notByPath: ["fix-guard", "scopeViolations", [
+      "crates/core/src/bin/evil_tests.rs", "crates/core/src/bin/tests/main.rs", "crates/core/src/test/x.rs", "crates/core/src/docs/x.rs",
+      "docs/examples/demo.rs", "crates/core/tests/build.rs", "crates/core/tests/nested/Cargo.toml", "docs/Cargo.toml", "Cargo.lock",
+      "tests/.cargo/config.toml", "crates/core/examples/merge_tests.rs",
+    ].map((filename) => ({ filename, status: "added", declared: true })), original],
+    // A unit-test file named by convention is in scope when its parent
+    // module declares it under cfg(test) — read, not assumed.
+    byNameDeclared: ["fix-guard", "scopeViolations", [{ filename: "crates/core/src/counter_tests.rs", status: "added", declared: true }, { filename: "crates/core/src/history/tests.rs", status: "modified", declared: true }], original],
+    byNameUndeclared: ["fix-guard", "scopeViolations", [{ filename: "crates/core/src/counter_tests.rs", status: "added", declared: false }], original],
+    byNameUnread: ["fix-guard", "scopeViolations", [{ filename: "crates/core/src/counter_tests.rs", status: "added" }], original],
+    byNameRenamed: ["fix-guard", "scopeViolations", [{ filename: "crates/core/src/counter_tests.rs", status: "renamed", previous_filename: "crates/core/src/counter.rs", declared: true }], original],
+    // The hook's first answer is the same: not by the name.
+    hookByName: ["fix-guard", "prepushVerdict", { touched: ["crates/core/src/counter_tests.rs", "crates/core/src/bin/evil_tests.rs", "crates/core/tests/merge.rs"], allowed: original }],
     // THE THREE PLACES A RUST REPRODUCER GOES, none of them in the PR's diff:
     // an existing `mod tests`…
     inline: ["fix-guard", "scopeViolations", [modified(t, src, COUNTER, WITH_REPRODUCER)], original],
     // …a new file, with its one declaration line in the parent module…
     newFile: ["fix-guard", "scopeViolations", [
       modified(t, lib, LIB, LIB_DECLARES),
-      { filename: "crates/core/src/counter_tests.rs", status: "added", patch: "@@ -0,0 +1,2 @@\n+#[test]\n+fn a() {}" },
+      { filename: "crates/core/src/counter_tests.rs", status: "added", patch: "@@ -0,0 +1,2 @@\n+#[test]\n+fn a() {}", declared: true },
     ], original],
     // …and a first `mod tests` at the end of a file that had none.
     firstModule: ["fix-guard", "scopeViolations", [modified(t, lib, LIB, `${LIB}\n#[cfg(test)]\nmod tests {\n    #[test]\n    fn a() {}\n}\n`)], original],
@@ -285,7 +315,7 @@ test("with the cargo rules: a fix round may change the tests inside a Rust file 
       files: [
         modified(t, src, COUNTER, WITH_REPRODUCER),
         modified(t, lib, LIB, LIB_DECLARES),
-        { filename: "crates/core/src/counter_tests.rs", status: "added", patch: "@@ -0,0 +1,2 @@\n+#[test]\n+fn a() {}" },
+        { filename: "crates/core/src/counter_tests.rs", status: "added", patch: "@@ -0,0 +1,2 @@\n+#[test]\n+fn a() {}", declared: true },
         { filename: "crates/core/src/merge.rs", status: "modified", patch: "@@ -1 +1 @@\n-a\n+b" },
       ],
       original,
@@ -293,6 +323,15 @@ test("with the cargo rules: a fix round may change the tests inside a Rust file 
     badRound: ["fix-guard", "lintRound", { files: [modified(t, src, COUNTER, SMUGGLED)], original }],
   });
   assert.deepEqual(got.paths, []);
+  assert.deepEqual(got.notByPath, [
+    "Cargo.lock", "crates/core/examples/merge_tests.rs", "crates/core/src/bin/evil_tests.rs", "crates/core/src/bin/tests/main.rs", "crates/core/src/docs/x.rs",
+    "crates/core/src/test/x.rs", "crates/core/tests/build.rs", "crates/core/tests/nested/Cargo.toml", "docs/Cargo.toml", "docs/examples/demo.rs", "tests/.cargo/config.toml",
+  ]);
+  assert.deepEqual(got.byNameDeclared, []);
+  assert.deepEqual(got.byNameUndeclared, ["crates/core/src/counter_tests.rs"]);
+  assert.deepEqual(got.byNameUnread, ["crates/core/src/counter_tests.rs"], "no declaration read, no proof");
+  assert.deepEqual(got.byNameRenamed, ["crates/core/src/counter.rs", "crates/core/src/counter_tests.rs"]);
+  assert.deepEqual(got.hookByName, { ok: false, violations: ["crates/core/src/bin/evil_tests.rs", "crates/core/src/counter_tests.rs"] });
   assert.deepEqual(got.inline, []);
   assert.deepEqual(got.newFile, []);
   assert.deepEqual(got.firstModule, []);
@@ -310,6 +349,47 @@ test("with the cargo rules: a fix round may change the tests inside a Rust file 
   assert.deepEqual(got.round.violations, []);
   assert.equal(got.badRound.blocking, true);
   assert.deepEqual(got.badRound.violations, [src]);
+});
+
+test("with the cargo rules: a file named like a test is one only when its parent module says so", (t) => {
+  const dir = cargoConfig(t);
+  const file = "crates/core/src/rules/merge_tests.rs";
+  const at = (table) => ({ $read: Object.fromEntries(Object.entries(table).map(([k, v]) => [`${k}:undefined`, v])) });
+  const declared = "pub mod merge;\n#[cfg(test)]\nmod merge_tests;\n";
+  const got = probe(dir, {
+    // Each place a parent can be.
+    inModRs: ["fix-guard", "rustDeclared", file, at({ "crates/core/src/rules/mod.rs": declared })],
+    besideTheDirectory: ["fix-guard", "rustDeclared", file, at({ "crates/core/src/rules.rs": declared })],
+    inLibRs: ["fix-guard", "rustDeclared", "crates/core/src/merge_tests.rs", at({ "crates/core/src/lib.rs": declared })],
+    inMainRs: ["fix-guard", "rustDeclared", "src/tests.rs", at({ "src/main.rs": "#[cfg(test)]\nmod tests;\n" })],
+    // THE CASE THE NAME GOT WRONG: the parent compiles it into the library.
+    plain: ["fix-guard", "rustDeclared", file, at({ "crates/core/src/rules/mod.rs": "pub mod merge;\nmod merge_tests;\n" })],
+    // Declared twice, once for real.
+    both: ["fix-guard", "rustDeclared", file, at({ "crates/core/src/rules/mod.rs": `${declared}pub mod merge_tests;\n` })],
+    widened: ["fix-guard", "rustDeclared", file, at({ "crates/core/src/rules/mod.rs": '#[cfg(any(test, feature = "x"))]\nmod merge_tests;\n' })],
+    // A `#[path]` makes the name mean some other file.
+    repointed: ["fix-guard", "rustDeclared", file, at({ "crates/core/src/rules/mod.rs": '#[cfg(test)]\n#[path = "elsewhere.rs"]\nmod merge_tests;\n' })],
+    anotherName: ["fix-guard", "rustDeclared", file, at({ "crates/core/src/rules/mod.rs": "#[cfg(test)]\nmod other_tests;\n" })],
+    nested: ["fix-guard", "rustDeclared", file, at({ "crates/core/src/rules/mod.rs": "mod inner {\n    #[cfg(test)]\n    mod merge_tests;\n}\n" })],
+    noParent: ["fix-guard", "rustDeclared", file, at({})],
+    unlexable: ["fix-guard", "rustDeclared", file, at({ "crates/core/src/rules/mod.rs": `${declared}"` })],
+    // A parent that is not this file's parent does not speak for it.
+    wrongParent: ["fix-guard", "rustDeclared", file, at({ "crates/core/src/lib.rs": declared, "crates/core/src/rules/merge.rs": declared })],
+    // Only a by-name unit-test file is asked about at all.
+    notByName: ["fix-guard", "rustDeclared", "crates/core/src/bin/merge_tests.rs", at({ "crates/core/src/bin/mod.rs": declared })],
+    // The report job: one answer per path, at the round's head.
+    attached: ["fix-guard", "attachRustDeclarations", [
+      { filename: file, status: "added" }, { filename: file, status: "modified" },
+      { filename: "crates/core/src/counter_tests.rs", status: "added" },
+      { filename: "crates/core/src/counter.rs", status: "modified" },
+    ], { read: at({ "crates/core/src/rules/mod.rs": declared, "crates/core/src/lib.rs": "mod counter_tests;\n" }), budget: { left: 10 } }],
+    capped: ["fix-guard", "attachRustDeclarations", [{ filename: file, status: "added" }, { filename: "crates/core/src/counter_tests.rs", status: "added" }],
+      { read: at({ "crates/core/src/rules/mod.rs": declared }), budget: { left: 1 } }],
+  });
+  for (const key of ["inModRs", "besideTheDirectory", "inLibRs", "inMainRs"]) assert.equal(got[key], true, key);
+  for (const key of ["plain", "both", "widened", "repointed", "anotherName", "nested", "noParent", "unlexable", "wrongParent", "notByName"]) assert.equal(got[key], false, key);
+  assert.deepEqual(got.attached.map((f) => f.declared ?? null), [true, true, false, null]);
+  assert.deepEqual(got.capped.map((f) => f.declared ?? null), [true, null], "past the budget a file is unread, and so out of scope");
 });
 
 test("with the cargo rules: the page and the hook say what a Rust file allows", (t) => {
@@ -519,6 +599,27 @@ test("prepush CLI with the cargo rules: a reproducer in a file outside the scope
   write("crates/core/src/counter.rs", WITH_REPRODUCER);
   const reverted = commit("revert the product change");
   assert.equal(push(reverted).status, 1);
+
+  // A test-named file that nothing declares under cfg(test), and one cargo
+  // would build as a binary: neither is in scope by its name.
+  git("checkout", "-q", "-B", "names", good);
+  write("crates/core/src/extra_tests.rs", "pub fn shipped() {}\n");
+  const undeclared = push(commit("a test-named file nobody declares"));
+  assert.equal(undeclared.status, 1);
+  assert.match(undeclared.stderr, /crates\/core\/src\/extra_tests\.rs/);
+  git("checkout", "-q", "-B", "bins", good);
+  write("crates/core/src/bin/evil_tests.rs", "fn main() {}\n");
+  write("crates/core/tests/build.rs", "fn main() {}\n");
+  const binary = push(commit("an auto-discovered binary with a test's name"));
+  assert.equal(binary.status, 1);
+  assert.match(binary.stderr, /crates\/core\/src\/bin\/evil_tests\.rs[\s\S]*crates\/core\/tests\/build\.rs/);
+  assert.doesNotMatch(binary.stderr, /merge_tests\.rs/, "the declared one stays in scope");
+  // The declaration removed again: the file it reached is out of scope with it.
+  git("checkout", "-q", "-B", "undeclare", good);
+  write("crates/core/src/lib.rs", "pub mod counter;\npub mod merge;\nmod merge_tests;\n");
+  const plainMod = push(commit("declare it without cfg(test)"));
+  assert.equal(plainMod.status, 1);
+  assert.match(plainMod.stderr, /crates\/core\/src\/lib\.rs[\s\S]*crates\/core\/src\/merge_tests\.rs/);
 
   // Under the fixture configuration (no cargo rules) the first push is
   // refused as it always was: a Rust file is just a file outside the scope.

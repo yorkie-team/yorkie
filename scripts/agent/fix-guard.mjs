@@ -101,8 +101,8 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileGlob, get, TEST_RULE_SETS } from "./config.mjs";
-import { isTestFile, roundCommits, fixerHead, safePath } from "./test-removals.mjs";
-import { patchLines, testOnlyChange, testRegionLines } from "./cargo-rules.mjs";
+import { isCargoGoverned, isCargoUnitTestByName, isTestFile, roundCommits, fixerHead, safePath } from "./test-removals.mjs";
+import { declaresTestModule, patchLines, testOnlyChange, testRegionLines } from "./cargo-rules.mjs";
 import { frozenShaFrom } from "./review-surface.mjs";
 import { PAGED_LATCH } from "./rounds.mjs";
 
@@ -136,13 +136,53 @@ export function rustTestOnly(f) {
   return testOnlyChange(f.contents?.before, f.contents?.after);
 }
 
-/** May a fix round change this path, given the PR's original file set? */
+/**
+ * The parent modules that could declare `file`, a unit-test file named by
+ * convention: `dir/name.rs` is reached from `dir/mod.rs`, from `dir.rs`
+ * beside the directory, or from the crate root when the directory is `src`.
+ */
+function parentModules(file) {
+  const dir = path.posix.dirname(file);
+  const up = path.posix.dirname(dir);
+  const out = [`${dir}/mod.rs`];
+  if (dir !== "." && path.posix.basename(dir) !== "src") out.push(up === "." ? `${dir}.rs` : `${up}/${path.posix.basename(dir)}.rs`);
+  if (path.posix.basename(dir) === "src") out.push(`${dir}/lib.rs`, `${dir}/main.rs`);
+  return out;
+}
+
+/**
+ * Is this by-name unit-test file really test code? `read(path)` returns a
+ * parent module's source at the round's head, or `null`. True when one of the
+ * file's possible parents declares it `#[cfg(test)] mod name;` and nowhere
+ * else (`cargo-rules.mjs` `declaresTestModule`). A file called
+ * `merge_tests.rs` whose parent says plain `mod merge_tests;` is part of the
+ * library, and a new one is nothing until some parent declares it.
+ */
+export function rustDeclared(file, read) {
+  if (!isCargoUnitTestByName(file)) return false;
+  const name = path.posix.basename(str(file), ".rs");
+  return parentModules(str(file)).some((parent) => declaresTestModule(read(parent), name));
+}
+
+/**
+ * May a fix round change this path, given the PR's original file set?
+ *
+ * With the cargo rules, a path cargo decides the meaning of — Rust source, a
+ * manifest, a lockfile, `.cargo/` — is in scope by its path only where the
+ * CONFIGURATION says it is test code. A manifest never is. A unit-test file
+ * named by convention is not in scope by its name: `scopeViolations` and the
+ * hook admit it once its declaration has been read (`rustDeclared`).
+ */
 export function inScope(file, original) {
   const f = str(file);
   if (!f) return false;
   if (original instanceof Set ? original.has(f) : (Array.isArray(original) && original.includes(f))) return true;
+  if (isCargoGoverned(f)) return isTestFile(f) && !isCargoUnitTestByName(f);
   return isTestFile(f) || isDocFile(f);
 }
+
+/** An entry for a by-name unit-test file that exists after the commit and whose declaration was found. */
+const declaredTestFile = (f) => f?.declared === true && (f?.status === "added" || f?.status === "modified") && isCargoUnitTestByName(f?.filename);
 
 /**
  * Paths a round touched that are out of scope. `files` is a list of
@@ -157,7 +197,7 @@ export function scopeViolations(files, original) {
     const now = str(f?.filename);
     // A Rust file outside the scope is still fine when the commit changed
     // only its tests. One commit that did more puts the path on the list.
-    if (now && !inScope(now, original) && !rustTestOnly(f)) out.add(now);
+    if (now && !inScope(now, original) && !rustTestOnly(f) && !declaredTestFile(f)) out.add(now);
     if (f?.status === "renamed") {
       const was = str(f?.previous_filename);
       if (was && !inScope(was, original)) out.add(was);
@@ -458,7 +498,7 @@ export function unusualCommitProblem({ parents = [], onBase = () => false, bothS
 // Said only where the cargo rules are on, so every other repository's page
 // and hook message are the words they were.
 const RUST_SCOPE_NOTE = CARGO_RULES
-  ? " In a Rust file outside that diff, only a top-level `#[cfg(test)]` module may change — its body, or the `#[cfg(test)] mod name;` line that declares a test file — and a commit that changes anything else in the file puts it on this list."
+  ? " In a Rust file outside that diff, only a top-level `#[cfg(test)]` module may change — its body, or the `#[cfg(test)] mod name;` line that declares a test file — and a commit that changes anything else in the file puts it on this list. A `*_tests.rs` file is in scope only when its parent module declares it under `#[cfg(test)]`, and a manifest, lockfile, `build.rs` or `.cargo/` file only when the pull request already changed it."
   : "";
 
 const HANDOFF =
@@ -664,6 +704,27 @@ export function rustExemption(file, commits, read) {
 export const RUST_READ_CAP = 80;
 
 /**
+ * Put `declared: true|false` on each entry for a unit-test file named by
+ * convention: is it declared as a test module at the round's head?
+ * `read(path)` returns a file's text there or `null`. One answer per path,
+ * however many commits touched it; the budget is the round's.
+ */
+export function attachRustDeclarations(files, { read, budget }) {
+  const known = new Map();
+  for (const f of Array.isArray(files) ? files : []) {
+    const name = str(f?.filename);
+    if (!isCargoUnitTestByName(name)) continue;
+    if (!known.has(name)) {
+      if (budget.left <= 0) continue;
+      budget.left--;
+      known.set(name, rustDeclared(name, read));
+    }
+    f.declared = known.get(name);
+  }
+  return files;
+}
+
+/**
  * Put `contents: { before, after }` on each entry of one commit's file list
  * that needs it: a MODIFIED Rust source file (not a test file by its path —
  * those are in scope whole). `read(rev, file)` returns the file's text at a
@@ -776,8 +837,19 @@ function cmdPrepush(argv) {
   }
   // The cargo rules: a Rust file outside the scope may still have its tests
   // changed. Each pushed commit that touched it is read on both sides.
+  const show = (rev, path_) => {
+    try {
+      return execFileSync("git", ["show", `${rev}:${path_}`], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
+    } catch {
+      return null;
+    }
+  };
+  const heads = stdin.split("\n").map((line) => line.trim().split(/\s+/)[1]).filter((sha) => /^[0-9a-f]{40}$/.test(str(sha)) && !/^0{40}$/.test(sha));
   const exempt = (file) => {
     if (!CARGO_RULES) return false;
+    // A unit-test file named by convention: test code if a parent module at
+    // the head being pushed declares it under `#[cfg(test)]`.
+    if (isCargoUnitTestByName(file)) return heads.length > 0 && heads.every((head) => show(head, file) !== null && rustDeclared(file, (parent) => show(head, parent)));
     const commits = [];
     for (const line of stdin.split("\n")) {
       const [, localSha, , remoteSha] = line.trim().split(/\s+/);
@@ -790,14 +862,7 @@ function cmdPrepush(argv) {
         return false;
       }
     }
-    const read = (rev, path_) => {
-      try {
-        return execFileSync("git", ["show", `${rev}:${path_}`], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] });
-      } catch {
-        return null;
-      }
-    };
-    return rustExemption(file, commits, read);
+    return rustExemption(file, commits, show);
   };
   const v = prepushVerdict({ touched, allowed, exempt });
   if (v.ok) return;
@@ -813,7 +878,11 @@ function cmdPrepush(argv) {
           "In a Rust file outside that diff you may change ONLY a top-level `#[cfg(test)] mod`:",
           "its body, a new one at the end of the file, or the `#[cfg(test)] mod name;` line",
           "that declares a new `name.rs` test file (name it `*_tests.rs`). Nothing else in",
-          "the file, in any commit of this push: squash a commit that did more.",
+          "the file, in any commit of this push: squash a commit that did more. A",
+          "`*_tests.rs` file is in scope only when its parent module declares it with",
+          "`#[cfg(test)] mod name;` in this push or before it, and never under `src/bin/`,",
+          "`examples/` or `benches/`. A `Cargo.toml`, `Cargo.lock`, `build.rs` or `.cargo/`",
+          "file is in scope only if the pull request already changed it.",
         ]
         : []),
       "A finding that needs any other file is not this PR's to fix. Revert those files",
@@ -870,6 +939,10 @@ function cmdCheck(argv) {
       if (CARGO_RULES) attachRustContents(own, { sha, parent: () => readParent(sha), read: readAtRevision, budget });
       files.push(...own);
     }
+    // A unit-test file is one because its parent module says so. Read at
+    // the round's head: the declaration may come in a later commit than the
+    // file, and it is the head that gets merged.
+    if (CARGO_RULES) attachRustDeclarations(files, { read: (file) => readAtRevision(after, file), budget });
     prBody = str(ghJson(["api", `repos/{owner}/{repo}/pulls/${pr}`, "--jq", "{body}"]).body);
   } catch (err) {
     // AN UNREAD ROUND IS NOT A ROUND THAT STAYED IN SCOPE. This used to say

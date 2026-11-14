@@ -120,7 +120,23 @@ const CARGO_CONFIG = CARGO_RULES ? get("tests.cargo") : null;
  */
 export function isTestFile(file) {
   const f = str(file);
-  return /(^|\/)(test|tests|__tests__)\//.test(f) || isSharedGoSuite(f) || isRunnableTest(f) || isCargoTestSource(f);
+  // What cargo builds is decided by cargo's rules and nothing else. The
+  // directory names below were written for other languages: under them,
+  // `src/bin/tests/main.rs` is a shipped binary and `src/test/x.rs` a module
+  // of the library.
+  if (isCargoGoverned(f)) return isCargoTestSource(f);
+  return /(^|\/)(test|tests|__tests__)\//.test(f) || isSharedGoSuite(f) || isRunnableTest(f);
+}
+
+/**
+ * A path whose meaning cargo decides: Rust source, a manifest or lockfile,
+ * anything under `.cargo/`. With the cargo rules on, such a path is a test
+ * file only by those rules, and is never documentation — `docs/` and
+ * `tests/` in its path say nothing about what it is built into.
+ */
+export function isCargoGoverned(file) {
+  const f = str(file);
+  return CARGO_RULES && (/\.rs$/.test(f) || /(^|\/)Cargo\.(toml|lock)$/.test(f) || /(^|\/)\.cargo\//.test(f));
 }
 
 // Cargo. An INTEGRATION-TEST TARGET is a `.rs` file directly in a package's
@@ -134,16 +150,43 @@ const CARGO_TEST_ONLY = (CARGO_CONFIG?.testOnlyFileGlobs ?? []).map(compileGlob)
 // has: `tests.rs` / `test.rs`, and `<anything>_tests.rs` / `_test.rs`, under
 // a `src/`. The parent declares it `#[cfg(test)] mod <name>;`.
 const CARGO_UNIT_TEST_FILE = /(^|\/)src\/(.*\/)?(tests?|[^/]*_tests?)\.rs$/;
+// A package's build script runs at compile time, with the job's tokens in
+// reach. It is one only at a package's root, and telling a package root from
+// a path takes the manifests; so no file with this name is taken for a test,
+// wherever it is. (`tests/build.rs` is a real test target, refused: it pages.)
+const CARGO_BUILD_SCRIPT = /(^|\/)build\.rs$/;
+// Where cargo finds TARGETS by itself and builds each file as one: a file
+// there is a binary, an example or a benchmark whatever it is called.
+const CARGO_AUTO_TARGET_DIR = /(^|\/)(src\/bin|examples|benches)\//;
 
 /**
  * A Rust file that is test code as a WHOLE: under an integration-test
  * directory, named as a unit-test module, or listed in
- * `tests.cargo.testOnlyFileGlobs`. A source file with a `mod tests` at the
+ * `tests.cargo.testOnlyFileGlobs`. Never a `build.rs`. A source file with a `mod tests` at the
  * bottom is NOT one — see `cargo-rules.mjs` for how those are handled.
  */
 function isCargoTestSource(file) {
-  if (!CARGO_RULES || !/\.rs$/.test(file)) return false;
-  return CARGO_UNIT_TEST_FILE.test(file) || CARGO_TEST_TREES.some((re) => re.test(file)) || CARGO_TEST_ONLY.some((re) => re.test(file));
+  if (!CARGO_RULES || !/\.rs$/.test(file) || CARGO_BUILD_SCRIPT.test(file)) return false;
+  return isCargoTestByConfiguration(file) || isCargoUnitTestByName(file);
+}
+
+/** Named by the configuration: under an integration-test directory, or a listed test-only file. */
+function isCargoTestByConfiguration(file) {
+  return CARGO_TEST_TREES.some((re) => re.test(file)) || CARGO_TEST_ONLY.some((re) => re.test(file));
+}
+
+/**
+ * A Rust file that is a unit-test module BY ITS NAME ALONE: `tests.rs` or
+ * `*_tests.rs` under a `src/`, outside the directories cargo builds targets
+ * from, and not already named by the configuration. The name is a
+ * convention, not a fact — the file is test code only if its parent declares
+ * it under `#[cfg(test)]` — so the removal record and the lints take the
+ * name's word, and the fix guard's scope does not (`fix-guard.mjs`
+ * `rustDeclared`).
+ */
+export function isCargoUnitTestByName(file) {
+  const f = str(file);
+  return CARGO_RULES && CARGO_UNIT_TEST_FILE.test(f) && !CARGO_AUTO_TARGET_DIR.test(f) && !isCargoTestByConfiguration(f);
 }
 
 /** A file the cargo rules tally: any Rust source (cases identify themselves), and any `Cargo.toml`. */
@@ -193,7 +236,7 @@ function goTestInReach(file) {
 export function isRunnableTest(file) {
   const f = str(file);
   if (GO_RULES && /_test\.go$/.test(f)) return goTestInReach(f);
-  if (isRust(f)) return CARGO_TARGETS.some((re) => re.test(f));
+  if (isRust(f)) return !CARGO_BUILD_SCRIPT.test(f) && CARGO_TARGETS.some((re) => re.test(f));
   return JS_RULES && /[._](test|spec)\.[cm]?[jt]sx?$/.test(f);
 }
 
