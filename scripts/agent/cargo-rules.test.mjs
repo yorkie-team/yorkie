@@ -108,7 +108,7 @@ test("testRegions: the forms that are a region", () => {
   const src = "fn product() {} // trailing\n\n// Regression tests.\n/// For the counter.\n#[cfg(test)]\nmod tests {}\n";
   const region = one(src);
   assert.equal(region.startLine, 3);
-  assert.deepEqual(productTokens(src), ["wfn", "wproduct", "p(", "p)", "p{", "p}", "c// trailing"]);
+  assert.deepEqual(productTokens(src), ["wfn", "wproduct", "j(", "p)", "j{", "p}", "c// trailing"]);
   // Two regions in one file.
   assert.equal(testRegions("#[cfg(test)]\nmod a_tests;\nfn p() {}\n#[cfg(test)]\nmod tests {}\n").regions.length, 2);
 });
@@ -236,6 +236,75 @@ test("testOnlyChange: product code smuggled through a test region is refused", (
   assert.equal(testOnlyChange(undefined, undefined), false);
   refused(`${COUNTER}\n#[cfg(test)]\nmod broken {\n`, "unbalanced after");
   assert.equal(testOnlyChange(`${COUNTER}"`, `${COUNTER}"`), false, "identical, and neither side lexes");
+});
+
+// THE CASE THAT GOT THROUGH. With whitespace dropped and punctuation read one
+// character at a time, `a && b` and `a & &b` were the same tokens: a
+// short-circuit AND turned into an eager `bool & &bool`, which compiles
+// (rustc 1.100.0, warnings denied) and runs the right-hand side. Found by
+// review on a real `!node.is_removed() && node.remove(..)`.
+test("testOnlyChange: an operator split, or two operators joined, is a product change", () => {
+  const lazy = edit(COUNTER, "if *count > *mine {", "if *count > *mine && self.counts.len() > 0 {");
+  const eager = edit(lazy, "*mine && self", "*mine & &self");
+  assert.equal(testOnlyChange(lazy, eager), false, "&& split into & &");
+  assert.equal(testOnlyChange(eager, lazy), false, "& & joined into &&");
+  assert.equal(testOnlyChange(lazy, edit(lazy, "*mine && self", "*mine &\n                &self")), false, "split across a line");
+  assert.equal(testOnlyChange(lazy, edit(lazy, "*mine && self", "*mine & /* gap */ &self")), false, "split by a comment");
+  assert.equal(testOnlyChange(lazy, edit(lazy, "*mine && self", "*mine   &&\n   self")), true, "space AROUND an operator is still nothing");
+  // The same edit inside the test module is the test module's business.
+  const inTests = edit(COUNTER, "assert!(a.label().starts_with(\"count\"));", "assert!(true && a.label().starts_with(\"count\"));");
+  assert.equal(testOnlyChange(inTests, edit(inTests, "true && a", "true & &a")), true);
+
+  // EVERY operator Rust spells with more than one punctuation character
+  // (the reference's punctuation table). Split at each inner position, the
+  // pieces are other valid tokens, so each split is a different program or a
+  // different parse — and must be a different product, in both directions.
+  const operators = [
+    "&&", "||", "::", "->", "=>", "==", "!=", "<=", ">=", "<<", ">>", "..", "...", "..=",
+    "+=", "-=", "*=", "/=", "%=", "^=", "&=", "|=", "<<=", ">>=", "<-",
+  ];
+  let checked = 0;
+  for (const op of operators) {
+    const glued = `const X: T = a ${op} b;\n`;
+    assert.equal(testOnlyChange(glued, glued), true, op);
+    assert.equal(testOnlyChange(glued, `const X: T = a${op}b;\n`), true, `${op}: space around it is nothing`);
+    for (let at = 1; at < op.length; at++) {
+      for (const gap of [" ", "\n", "\t", " /* c */ ", " // c\n"]) {
+        const split = `const X: T = a ${op.slice(0, at)}${gap}${op.slice(at)} b;\n`;
+        assert.equal(testOnlyChange(glued, split), false, `${op} split after ${at} by ${JSON.stringify(gap)}`);
+        assert.equal(testOnlyChange(split, glued), false, `${op} joined at ${at} over ${JSON.stringify(gap)}`);
+        checked++;
+      }
+    }
+  }
+  assert.equal(checked, 145);
+  // Pairs that are two tokens either way, and still two ways to read: a
+  // unary operator against a binary one, and the closing of nested generics.
+  // Refusing these is the cost of the rule, and it is the safe side.
+  for (const [a, b] of [["a - -b", "a --b"], ["a & !b", "a &!b"], ["Vec<Vec<T>>", "Vec<Vec<T> >"], ["x = &y", "x =&y"], ["a < -b", "a <-b"], ["a..=b", "a.. =b"]]) {
+    assert.equal(testOnlyChange(`const X: T = ${a};\n`, `const X: T = ${b};\n`), false, `${a} / ${b}`);
+  }
+  // What a number or a word decides is in the token already.
+  assert.equal(testOnlyChange("const X: f64 = 1.0;\n", "const X: f64 = 1 .0;\n"), false);
+  assert.equal(testOnlyChange("const X: R = 1..2;\n", "const X: R = 1. .2;\n"), false);
+  assert.equal(testOnlyChange("const X: &'a T = y;\n", "const X: &' a T = y;\n"), false);
+  assert.equal(testOnlyChange('const X: &str = r#"a"#;\n', 'const X: &str = r #"a"#;\n'), false);
+  // A region does not lend its first character to the product: the token
+  // before it is joint with the region's `#` in one file and with nothing in
+  // the other, and that is a difference (a refusal, never an acceptance).
+  assert.equal(testOnlyChange("fn a() {}\n", "fn a() {}#[cfg(test)] mod t {}\n"), false);
+  assert.equal(testOnlyChange("fn a() {}\n", "fn a() {} #[cfg(test)] mod t {}\n"), true);
+});
+
+test("rustTokens: a punctuation token knows whether the next one touches it", () => {
+  const marks = (src) => rustTokens(src).filter((t) => t.k === "p").map((t) => `${t.t}${t.joint ? "+" : ""}`).join(" ");
+  assert.equal(marks("a && b"), "&+ &");
+  assert.equal(marks("a & &b"), "& &");
+  assert.equal(marks("a &/**/& b"), "& &");
+  assert.equal(marks("a >>= b"), ">+ >+ =");
+  assert.equal(marks("x.y()"), ". (+ )");
+  // A literal, a word or a lifetime after it is not punctuation.
+  assert.equal(marks("&'a x, &\"s\", &1, -x"), "& , & , & , -");
 });
 
 test("testOnlyChange: a known false page — a region added right under an own-line comment that was there", () => {

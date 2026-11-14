@@ -38,7 +38,12 @@
 //   `NAME_tests.rs` file, so a new test file's one line in its parent module
 //   is a test region too. Everything outside the regions is the product, and
 //   it must come out token for token identical. Whitespace is not a token;
-//   comments and doc comments are.
+//   comments and doc comments are. One thing whitespace decides is kept:
+//   whether two punctuation characters touch. `a && b` and `a & &b` are the
+//   same characters and different programs — the second evaluates both sides
+//   — so a punctuation token carries whether the next one is right against
+//   it, which is exactly what Rust's lexer tells its parser. The cost is a
+//   refusal where the gap means nothing (`Vec<Vec<T>>` to `Vec<Vec<T> >`).
 //
 //   That one comparison is what makes these all out of scope, without a rule
 //   for each:
@@ -111,7 +116,12 @@ const CLOSE = new Set(["}", ")", "]"]);
  * lex. Kinds: `w` a word (identifier, keyword, number), `p` one punctuation
  * character, `s` a string or character literal, `l` a lifetime, `c` a
  * comment, `d` an OUTER doc comment (`///`, `/** … *\/` — an attribute on the
- * item below), `D` an inner one (`//!`, `/*! … *\/`). Whitespace is dropped.
+ * item below), `D` an inner one (`//!`, `/*! … *\/`). Whitespace is dropped,
+ * except for the one thing it decides: a punctuation token is `joint` when
+ * the next character is punctuation too, with nothing between them. That is
+ * how Rust's own lexer hands punctuation to its parser — one character at a
+ * time, each marked joint or alone — so two sources with the same tokens and
+ * the same marks are the same program, and `a && b` is not `a & &b`.
  *
  * It is exact about the one thing its callers need: which `{`, `(`, `[` are
  * brackets. It does not check that the program is valid Rust.
@@ -126,7 +136,12 @@ export function rustTokens(src) {
   const emit = (k, from, to) => {
     const startLine = line;
     for (let p = from; p < to; p++) if (s.charCodeAt(p) === 10) line++;
-    out.push({ k, t: s.slice(from, to), line: startLine, endLine: line });
+    // JOINT: a punctuation character with another one right against it.
+    // Rust reads `&&` as one operator and `& &` as two, and which it is
+    // depends on nothing but this, so it is part of what the token IS.
+    const prev = out[out.length - 1];
+    if (k === "p" && prev !== undefined && prev.k === "p" && prev.end === from) prev.joint = true;
+    out.push({ k, t: s.slice(from, to), line: startLine, endLine: line, end: to, joint: false });
     i = to;
   };
   /** The index after the `"` that closes a string opened at `at`, or -1. */
@@ -375,7 +390,8 @@ export function productTokens(src) {
   for (let i = 0; i < parsed.tokens.length; i++) {
     while (r < parsed.regions.length && parsed.regions[r].to < i) r++;
     if (r < parsed.regions.length && parsed.regions[r].from <= i) continue;
-    out.push(`${parsed.tokens[i].k}${parsed.tokens[i].t}`);
+    const tok = parsed.tokens[i];
+    out.push(`${tok.joint ? "j" : tok.k}${tok.t}`);
   }
   return out;
 }
