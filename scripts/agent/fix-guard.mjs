@@ -45,6 +45,21 @@
 // cannot be shown to be test-only — a file that was not read, does not lex,
 // was added, renamed or deleted — stays out of scope, and pages.
 //
+// WHICH COMMITS ARE JUDGED, AND THE ONES THAT CANNOT BE. Both layers read the
+// round's ordinary commits: one parent each, on the branch's own line. A
+// change can also ride in a commit of another shape — typed into a merge
+// commit, made on a side branch and merged in, or carried by a commit with no
+// parent that is merged with `--allow-unrelated-histories` — and each of
+// those used to reach neither layer. A fix round has one reason to make a
+// merge: bringing the base branch in to resolve a conflict. So that one is
+// allowed, when every parent but the first is already on the base branch and
+// no file the merge left different from BOTH parents is out of scope (a file
+// that differs from both sides is where a conflict was resolved, or where
+// something was typed in). Any other merge, and any commit with no parent,
+// is refused by the hook and paged by the report. So is a round with more
+// commits than are read, and a round whose commits could not be listed: what
+// was not judged is not "in scope".
+//
 // WHY PAGE AND NOT STRIP. Reverting the out-of-scope paths from a trusted job
 // would need a second push path (the design doc names it as future work: the
 // agent hands a bundle to a trusted job that pushes), and the in-scope half of
@@ -375,7 +390,7 @@ export function crdtRuleChanges(files) {
  * is NOT enforced (an unknown scope must not page every round) and the record
  * says so.
  */
-export function lintRound({ files = [], original = null, prBody = "" } = {}) {
+export function lintRound({ files = [], original = null, prBody = "", unjudged = [] } = {}) {
   const violations = original ? scopeViolations(files, original) : [];
   const reviewerDirected = reviewerDirectedHits(files);
   const weakened = weakenedAssertions(files);
@@ -390,8 +405,54 @@ export function lintRound({ files = [], original = null, prBody = "" } = {}) {
     reviewerDirected,
     weakened,
     crdt,
-    blocking: violations.length > 0 || reviewerDirected.length > 0,
+    // Present only when there is something in it, so a round of ordinary
+    // commits is recorded exactly as it always was.
+    ...(unjudged.length > 0 ? { unjudged } : {}),
+    blocking: violations.length > 0 || reviewerDirected.length > 0 || unjudged.length > 0,
   };
+}
+
+/** How many of a round's commits the report job reads. A round with more is not judged whole, and pages. */
+export const ROUND_COMMIT_CAP = 50;
+
+/**
+ * The round's commits that are NOT ordinary — in the compare, in the pull
+ * request's own list, and with some number of parents other than one — as
+ * `{ sha, parents }`. `roundCommits` keeps the ordinary ones and these are
+ * the rest: they used to be dropped, which is how a change inside a merge
+ * commit was read by nothing.
+ */
+export function unusualCommits(compareCommits, prShas) {
+  if (!(prShas instanceof Set)) return [];
+  return (Array.isArray(compareCommits) ? compareCommits : [])
+    .filter((c) => c && prShas.has(c.sha) && Number(c.n) !== 1)
+    .map((c) => ({ sha: str(c.sha), parents: Array.isArray(c.parents) ? c.parents.map(str) : [] }));
+}
+
+/**
+ * Why a commit that is not ordinary cannot be accepted, or `""` when it is
+ * the one kind that can: a merge of the base branch that changed nothing out
+ * of scope on its own account.
+ *
+ *   parents     the commit's parents, first parent first
+ *   onBase(p)   is this parent already on the base branch? Asked of every
+ *               parent but the first
+ *   bothSides() the files the merge left different from BOTH its first and
+ *               its second parent, or `null` when that could not be listed
+ *   original    the scope set, or `null` when the scope is unknown — the
+ *               shape is still judged, the files are not
+ */
+export function unusualCommitProblem({ parents = [], onBase = () => false, bothSides = () => null, original = null, base = "main" } = {}) {
+  if (parents.length === 0) return "has no parent. A fix round's commits continue the branch; a commit with no history can carry anything in under a merge";
+  if (parents.length === 1) return "";
+  if (parents.length > 2) return `is a merge of ${parents.length} parents`;
+  if (!onBase(parents[1])) return `is a merge that brings in commits which are not on ${base}. The only merge a fix round makes is of ${base} itself`;
+  const files = bothSides();
+  if (!Array.isArray(files)) return `is a merge of ${base} whose own changes could not be listed`;
+  if (!original) return "";
+  const out = files.filter((f) => !inScope(f, original)).sort();
+  if (out.length === 0) return "";
+  return `is a merge of ${base} that left files outside the scope different from both of its parents — where a conflict was resolved or something was typed into the merge: ${out.slice(0, 10).map((f) => `\`${safePath(f)}\``).join(", ")}${out.length > 10 ? `, and ${out.length - 10} more` : ""}`;
 }
 
 // Said only where the cargo rules are on, so every other repository's page
@@ -417,6 +478,7 @@ export function renderFixGuard(result, { head = "", after = "" } = {}) {
     reviewerDirected: result.reviewerDirected.length,
     weakened: result.weakened.length,
     crdt: result.crdt.length,
+    ...(result.unjudged?.length ? { unjudged: result.unjudged.length } : {}),
   };
   const lines = [];
   if (result.blocking) lines.push(PAGED_LATCH);
@@ -425,6 +487,13 @@ export function renderFixGuard(result, { head = "", after = "" } = {}) {
     lines.push("🛑 **The fix round stepped outside what a fix round may change.** A human should look before the loop continues.", "");
   } else {
     lines.push("⚠️ **Fix-round lint** — warnings only; the loop continues.", "");
+  }
+  if (result.unjudged?.length) {
+    lines.push(
+      "**Commits the scope check could not judge.** It reads the round's ordinary commits, one parent each. A change that arrives any other way — in a merge that is not of the base branch, in a commit with no parent, past the number of commits it reads, or in a round it could not list — was read by nothing, so it is treated as out of scope rather than as fine:",
+      ...result.unjudged.slice(0, 20).map((u) => `- ${u.sha ? `\`${safePath(u.sha).slice(0, 12)}\` ` : ""}${q(u.problem).slice(0, 600)}`),
+      "",
+    );
   }
   if (result.violations.length) {
     lines.push(
@@ -644,6 +713,67 @@ function cmdPrepush(argv) {
       // Cannot list → do not block; the report job's check is the gate.
     }
   }
+  // The commits the listing above does not walk into: merges and commits
+  // with no parent. See "WHICH COMMITS ARE JUDGED" at the top.
+  const unjudged = [];
+  const gitOk = (args) => {
+    try {
+      execFileSync("git", args, { stdio: "ignore" });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const names = (args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).split("\n").map((s) => s.trim()).filter(Boolean);
+  for (const line of stdin.split("\n")) {
+    const [, localSha, , remoteSha] = line.trim().split(/\s+/);
+    const args = pushedLogArgs({ localSha, remoteSha, baseRef });
+    if (!args) continue;
+    let commits;
+    try {
+      commits = names(args.filter((a) => a !== "--name-only" && a !== "--no-merges").map((a) => (a === "--format=" ? "--format=%H %P" : a)));
+    } catch {
+      continue; // Cannot list → do not block; the report job's check is the gate.
+    }
+    for (const entry of commits) {
+      const [sha, ...parents] = entry.split(/\s+/);
+      if (parents.length === 1) continue;
+      const problem = unusualCommitProblem({
+        parents,
+        base: `origin/${baseName}`,
+        original: allowed,
+        onBase: (p) => baseRef !== "" && gitOk(["merge-base", "--is-ancestor", p, baseRef]),
+        bothSides: () => {
+          try {
+            const second = new Set(names(["diff", "--name-only", "--no-renames", parents[1], sha]));
+            return names(["diff", "--name-only", "--no-renames", parents[0], sha]).filter((f) => second.has(f));
+          } catch {
+            return null;
+          }
+        },
+      });
+      if (problem) unjudged.push({ sha, problem });
+    }
+  }
+  if (unjudged.length > 0) {
+    console.error(
+      [
+        "",
+        "fix-guard: PUSH REFUSED — this push holds commits a fix round does not make:",
+        ...unjudged.map((u) => `  ${u.sha.slice(0, 12)} ${u.problem.replace(/`/g, "")}`),
+        "",
+        "A fix round adds ordinary commits to the end of the branch. It may merge",
+        `origin/${baseName} to resolve a conflict, and that merge may change nothing outside the`,
+        "scope on its own account. No other merge, and no commit without a parent: the",
+        "scope check reads ordinary commits, so a change that arrives any other way is",
+        "read by nothing. Make the same change as ordinary commits on top of the",
+        "branch's pushed head and push that. Do not bypass this hook: the report job",
+        "checks the same rule and pages a human if it is broken.",
+        "",
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
   // The cargo rules: a Rust file outside the scope may still have its tests
   // changed. Each pushed commit that touched it is read on both sides.
   const exempt = (file) => {
@@ -721,11 +851,19 @@ function cmdCheck(argv) {
   }
   let files = [];
   let prBody = "";
+  let unusual = [];
+  const unjudged = [];
+  const base = flag(argv, "base") || "main";
   try {
-    const inRound = ghLines(["api", "--paginate", `repos/{owner}/{repo}/compare/${before}...${after}?per_page=100`, "--jq", ".commits[] | {sha, n: (.parents | length)}"]);
+    const inRound = ghLines(["api", "--paginate", `repos/{owner}/{repo}/compare/${before}...${after}?per_page=100`, "--jq", ".commits[] | {sha, n: (.parents | length), parents: [.parents[].sha]}"]);
     const prShas = new Set(ghLines(["api", "--paginate", `repos/{owner}/{repo}/pulls/${pr}/commits?per_page=100`, "--jq", ".[].sha | tojson"]));
+    const ordinary = roundCommits(inRound, prShas);
+    unusual = unusualCommits(inRound, prShas);
+    if (ordinary.length > ROUND_COMMIT_CAP) {
+      unjudged.push({ sha: "", problem: `the round has ${ordinary.length} commits and only the first ${ROUND_COMMIT_CAP} are read` });
+    }
     const budget = { left: RUST_READ_CAP };
-    for (const { sha } of roundCommits(inRound, prShas).slice(0, 50)) {
+    for (const { sha } of ordinary.slice(0, ROUND_COMMIT_CAP)) {
       const own = ghLines(["api", "--paginate", `repos/{owner}/{repo}/commits/${sha}?per_page=100`, "--jq", ".files[]"]);
       // The cargo rules judge a Rust source file by its contents, not its
       // patch. Read as data, through the API: nothing is checked out or run.
@@ -734,15 +872,49 @@ function cmdCheck(argv) {
     }
     prBody = str(ghJson(["api", `repos/{owner}/{repo}/pulls/${pr}`, "--jq", "{body}"]).body);
   } catch (err) {
-    // Unread round → nothing to say. The test-removals record makes the same call.
-    console.error(`fix-guard: could not read the round's commits (${err.message}); checking nothing.`);
-    out("blocking", "false");
-    return;
+    // AN UNREAD ROUND IS NOT A ROUND THAT STAYED IN SCOPE. This used to say
+    // `blocking=false` and nothing else, so failing this read was a way past
+    // the gate. It pages, and says it judged nothing.
+    console.error(`fix-guard: could not read the round's commits (${err.message}).`);
+    files = [];
+    unusual = [];
+    unjudged.length = 0;
+    unjudged.push({ sha: "", problem: "the round's commits could not be read, so nothing in it was checked" });
   }
   // `before` is validated above; it is the round's starting head, so a PR with
   // no dispatch ledger still gets its scope checked.
-  const original = readOriginalFiles(pr, { base: flag(argv, "base") || "main", fallbackHead: before });
-  const result = lintRound({ files, original, prBody });
+  const original = readOriginalFiles(pr, { base, fallbackHead: before });
+  for (const { sha, parents } of unusual) {
+    const problem = unusualCommitProblem({
+      parents,
+      base,
+      original,
+      // On the base branch: the base has nothing to gain from it.
+      onBase: (p) => {
+        try {
+          return Number(ghJson(["api", `repos/{owner}/{repo}/compare/${encodeURIComponent(base)}...${p}`, "--jq", "{ahead: .ahead_by}"]).ahead) === 0;
+        } catch {
+          return false;
+        }
+      },
+      // The merge against its first parent is what the base brought in, and
+      // can be long; against its second it is the branch's own diff, which
+      // the compare API caps. At the cap the list is incomplete: unknown.
+      bothSides: () => {
+        try {
+          const first = ghLines(["api", "--paginate", `repos/{owner}/{repo}/commits/${sha}?per_page=100`, "--jq", ".files[].filename | tojson"]);
+          const second = ghJson(["api", `repos/{owner}/{repo}/compare/${parents[1]}...${sha}?per_page=100`, "--jq", "[.files[].filename]"]);
+          if (!Array.isArray(second) || second.length >= COMPARE_FILE_CAP) return null;
+          const set = new Set(second);
+          return first.filter((f) => set.has(f));
+        } catch {
+          return null;
+        }
+      },
+    });
+    if (problem) unjudged.push({ sha, problem });
+  }
+  const result = lintRound({ files, original, prBody, unjudged });
   out("blocking", String(result.blocking));
   const anything = result.blocking || result.weakened.length || result.crdt.length;
   if (!anything) {

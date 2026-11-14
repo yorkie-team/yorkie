@@ -327,6 +327,14 @@ repository that adopts the harness follows them:
   `$RUNNER_TEMP/agent-hooks` with `core.hooksPath` pointed at it, which
   replaces whatever hooks the checkout would otherwise run, and the agent can
   point the path elsewhere. The report job's scope check is the gate.
+- A fix round adds ordinary commits to the end of the branch. The scope
+  check reads those, one parent each, so anything that arrives another way
+  is treated as out of scope: the hook refuses the push and the report job
+  pages. That is a merge of anything but the base branch, a commit with no
+  parent, a round of more than 50 commits, and a round whose commits the
+  report job could not list. A merge of the base branch is allowed — it is
+  how a fixer resolves a conflict — as long as no file it left different
+  from both of its parents is outside the scope.
 - CI's lane reports, where `ci.laneReports` is true, are an artifact named
   `ci-lane-reports` rendered by `scripts/ci/summarize-ci.mjs`.
 - The issue-to-PR prompt names six paths, and each has to exist before the
