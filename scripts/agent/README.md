@@ -360,18 +360,27 @@ copy it says it is — so the third check only warns, on a run nobody opens.
 maintainer dispatches it, `upstream-notify.mjs` compares the recorded digest
 with the manifest at the head of upstream's default branch:
 
-| The copy | An open sync issue | What the run does |
+| The copy | The sync issue | What the run does |
 |---|---|---|
 | is the origin (`repository: null`) | — | Says so. Nothing else |
 | fails the third check, or upstream's head cannot be read | — | Fails. No issue is opened, changed or closed: a wrong record is a different problem from "upstream moved", and a red weekly run is the right signal for it |
-| is behind | none | Opens one, labelled `agent:harness-sync` |
-| is behind | for the same recorded commit and upstream head | Nothing |
-| is behind | for an older one | Rewrites its body. No comment |
-| matches | one or more | One comment on each, then closes it |
-| matches | none | Nothing |
+| is in a repository with Issues turned off | — | Says so, as a notice, and passes |
+| is behind | open, for the same recorded commit and upstream head | Nothing |
+| is behind | open, for an older one | Rewrites its title and body. No comment |
+| is behind | none open; the latest closed one is for the same commit and head | Nothing. Someone closed it, which is read as "not now", until upstream moves again |
+| is behind | none open; the latest closed one is for an older one | Reopens that issue and rewrites its title and body |
+| is behind | none, open or closed | Opens one, labelled `agent:harness-sync` |
+| matches | one or more open | Closes each, then comments once on it |
+| matches | none open | Nothing |
+
+So a repository has one sync issue, reopened each time it falls behind,
+rather than a new one per upstream release. The only comment ever posted is
+the one on closing, and it is posted after the close: a close that fails is
+retried next week without having said anything twice, and a comment that
+fails does not fail the run.
 
 The issue gives the recorded commit, upstream's head, a link comparing the
-two and the two commands to run. It notifies and nothing more: there is no
+two, the commands to run and the upstream pin `sync.mjs` asks for. It notifies and nothing more: there is no
 sync pull request, because a sync ends in configuration edits and a test run
 that only the adopting repository can judge. `node
 scripts/agent/upstream-notify.mjs --dry-run` prints the decision and the
@@ -380,17 +389,30 @@ issue body and sends only `GET`s.
 The job holds `contents: read` and `issues: write`, uses its own
 `github.token`, and is started by the schedule or a dispatch only — it is a
 workflow of its own so that no pull request or push can start it. The trust
-guard below holds those three things. If the token may not create the label,
-the issue is opened without it; its title starts with `[agent:harness-sync]`
-either way.
+guard below holds those, and the workflow's whole shape. If the token may not
+create the label, the issue is opened without it; its title starts with
+`[agent:harness-sync]` either way.
 
-Which issue is "the" issue is decided by author and marker, never by title or
-label: it must be open, authored by `github-actions[bot]`, and have the
-marker comment as the first line of its body. An issue anyone else opens with
-that marker is ignored, so it can be neither rewritten nor closed by this
-job. Everything written into the issue is a value that was validated as an
+Which issue is "the" issue is never decided by label. It must be authored by
+`github-actions[bot]`, have a title starting `[agent:harness-sync]`, and have
+the marker comment — the whole of it, exactly as the script writes it — as
+the first line of its body. An issue anyone else opens with that marker is
+ignored, and so is one another workflow opens as the same bot, so neither can
+be rewritten or closed by this job. Two things follow for people:
+
+- A note put **above** the marker makes the issue no longer the script's. It
+  is left alone from then on, and a new one is opened.
+- Text **below** the marker is the script's, and is replaced when upstream
+  moves. Notes belong in comments.
+
+Everything written into the issue is a value that was validated as an
 `owner/name`, a 40-character commit id or a sha256 the script computed;
 nothing upstream wrote (a commit message, a branch name) is copied in.
+
+A read that is refused transiently — of upstream, or of this repository's
+issues — is retried; a write is sent once. The script gives itself eight
+minutes in all and fails with its own message after that; the job's timeout
+is longer, so a slow upstream is never a silent cancellation.
 
 It does not run in a repository where Actions or scheduled workflows are
 off, and GitHub stops a public repository's schedules after 60 days without
@@ -435,9 +457,21 @@ directory of a workspace that holds a pull request's tree must be preceded by
 an `rm -rf` of that path: the branch could have committed a symlink there.
 
 A job that runs `upstream-notify.mjs` is held to more, because it writes
-issues: its workflow may be started by `schedule` and `workflow_dispatch`
-only, the job's own `permissions:` must be exactly `contents: read` and
-`issues: write`, and nothing in it may name a secret.
+issues on a clock, with nobody watching:
+
+- its workflow may be started by `schedule` and `workflow_dispatch` only,
+  grants nothing by default (`permissions: {}`), and has no other job;
+- the job's own `permissions:` are exactly `contents: read` and
+  `issues: write`;
+- its steps are exactly three — the checkout, the Node setup, the script —
+  and every line of each is on a list: the checkout names the default branch
+  and sets `persist-credentials: false`, the script's step is the one
+  invocation with `GH_TOKEN: ${{ github.token }}`;
+- nothing in the file names a secret or a repository variable, or uses an
+  action other than `actions/checkout` and `actions/setup-node`.
+
+Adding a step to that workflow therefore means editing the list in the
+guard, in the same pull request, where a reviewer sees both.
 
 ### What this guard does not see
 

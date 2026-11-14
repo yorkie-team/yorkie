@@ -11,7 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { MANIFEST_PATH, RETRY_DELAYS_MS, manifestDigest } from "./manifest.mjs";
-import { BOT_LOGIN, LABEL, MARKER_PREFIX, closingComment, isOurIssue, issueBody, issueTitle, markerLine, notifyUpstream } from "./upstream-notify.mjs";
+import { BOT_LOGIN, BUDGET_MS, LABEL, MARKER_PREFIX, TITLE_PREFIX, closingComment, isOurIssue, issueBody, issueTitle, markerLine, notifyUpstream } from "./upstream-notify.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const H = (c) => c.repeat(64);
@@ -29,6 +29,7 @@ const COPY = { repository: "org/core", commit: RECORDED, manifestDigest: OLD_DIG
 const SELF = "me/copy";
 const UP = "https://api.github.com/repos/org/core";
 const ok = (text) => ({ status: 200, text });
+const HEAD_REF = `${UP}/git/ref/heads/trunk`;
 const manifestAt = (ref) => `${UP}/contents/${MANIFEST_PATH}?ref=${ref}`;
 
 /** Upstream answers for a copy that passes the pinned check, with the head at `head` carrying `manifest`. */
@@ -38,7 +39,7 @@ const upstreamAt = (head, manifest) => ({
   [manifestAt(RECORDED)]: ok(OLD_MANIFEST),
   // What `checkUpstream`'s own warning asks; the notifier does not use it.
   [`${UP}/contents/${MANIFEST_PATH}`]: ok(manifest),
-  [`${UP}/commits/trunk`]: ok(JSON.stringify({ sha: head, commit: { message: "<!-- agent:harness-sync --> $(rm -rf /)" } })),
+  [HEAD_REF]: ok(JSON.stringify({ ref: "refs/heads/trunk $(rm -rf /)", object: { type: "commit", sha: head } })),
   [manifestAt(head)]: ok(manifest),
 });
 const MOVED = upstreamAt(HEAD, NEW_MANIFEST);
@@ -55,7 +56,8 @@ const fetcher = (answers, seen = []) => async (url) => {
 // --- a fake repository -------------------------------------------------------------
 
 const STATE = { repository: "org/core", recordedCommit: RECORDED, recordedDigest: OLD_DIGEST, headCommit: HEAD, headDigest: NEW_DIGEST };
-const issue = (number, body, extra = {}) => ({ number, state: "open", user: { login: BOT_LOGIN }, body, ...extra });
+const TITLE = issueTitle("org/core");
+const issue = (number, body, extra = {}) => ({ number, state: "open", user: { login: BOT_LOGIN }, title: TITLE, body, ...extra });
 const OURS = issue(7, issueBody(STATE));
 const OURS_OLDER = issue(7, issueBody({ ...STATE, headCommit: OLDER_HEAD }));
 
@@ -69,8 +71,11 @@ function repo({ issues = [], labels = false, createLabel = 201 } = {}) {
     calls.push({ method, path: apiPath, body });
     const p = apiPath.replace(`/repos/${SELF}`, "");
     if (method === "GET" && p.startsWith("/issues?")) {
-      const page = Number(new URL(`https://x${p}`).searchParams.get("page"));
-      return { status: 200, json: issues.slice((page - 1) * 100, page * 100) };
+      const q = new URL(`https://x${p}`).searchParams;
+      const page = Number(q.get("page"));
+      // As GitHub lists them: one state, newest first.
+      const listed = issues.filter((i) => i.state === q.get("state")).sort((a, b) => b.number - a.number);
+      return { status: 200, json: listed.slice((page - 1) * 100, page * 100) };
     }
     if (method === "GET" && p === `/labels/${encodeURIComponent(LABEL)}`) return { status: labels ? 200 : 404, json: {} };
     if (method === "POST" && p === "/labels") return { status: createLabel, json: {} };
@@ -155,7 +160,8 @@ test("behind, an issue open for an older head: its body is rewritten, with no co
   const r = repo({ issues: [OURS_OLDER] });
   const result = await run(MOVED, r);
   assert.equal(result.action, "update");
-  assert.deepEqual(r.writes(), [{ method: "PATCH", path: `/repos/${SELF}/issues/7`, body: { body: issueBody(STATE) } }]);
+  // The title goes with it: a title someone reworded after the marker, or one naming an upstream since replaced, is put back.
+  assert.deepEqual(r.writes(), [{ method: "PATCH", path: `/repos/${SELF}/issues/7`, body: { title: TITLE, body: issueBody(STATE) } }]);
   // …and likewise when it is the copy that moved, to a commit that is still behind.
   const partial = repo({ issues: [issue(7, issueBody({ ...STATE, recordedCommit: OLDER_HEAD }))] });
   assert.equal((await run(MOVED, partial)).action, "update");
@@ -164,7 +170,7 @@ test("behind, an issue open for an older head: its body is rewritten, with no co
   assert.equal((await run(MOVED, crlf)).action, "unchanged");
 });
 
-test("current, an issue open: one comment, then closed", async () => {
+test("current, an issue open: closed, then one comment", async () => {
   const r = repo({ issues: [OURS_OLDER] });
   const result = await run(CURRENT, r);
   assert.equal(result.action, "close");
@@ -172,9 +178,79 @@ test("current, an issue open: one comment, then closed", async () => {
   const comment = closingComment({ repository: "org/core", headCommit: HEAD, headDigest: OLD_DIGEST });
   assert.equal(comment.includes("\n"), false);
   assert.deepEqual(r.writes(), [
-    { method: "POST", path: `/repos/${SELF}/issues/7/comments`, body: { body: comment } },
     { method: "PATCH", path: `/repos/${SELF}/issues/7`, body: { state: "closed", state_reason: "completed" } },
+    { method: "POST", path: `/repos/${SELF}/issues/7/comments`, body: { body: comment } },
   ]);
+});
+
+test("closing: a close that fails leaves no comment behind, and a comment that fails does not fail the run", async () => {
+  const refusing = (match, answer) => {
+    const r = repo({ issues: [OURS_OLDER] });
+    const inner = r.api;
+    r.api = async (method, apiPath, body) => {
+      if (!match(method, apiPath)) return inner(method, apiPath, body);
+      r.calls.push({ method, path: apiPath, body });
+      if (answer instanceof Error) throw answer;
+      return answer;
+    };
+    return r;
+  };
+  // The close is refused: the run fails, and nothing was said — so next week's run cannot say it twice.
+  const noClose = refusing((m) => m === "PATCH", { status: 403, json: null });
+  await assert.rejects(run(CURRENT, noClose), /closing #7 returned HTTP 403/);
+  assert.deepEqual(noClose.writes().map((c) => c.method), ["PATCH"]);
+  // The comment is refused, or the connection drops: the issue is closed, and the run passes and says so.
+  for (const answer of [{ status: 403, json: null }, new Error("socket hang up")]) {
+    const noComment = refusing((m, p) => m === "POST" && p.endsWith("/comments"), answer);
+    const result = await run(CURRENT, noComment);
+    assert.equal(result.action, "close");
+    assert.deepEqual(noComment.writes().map((c) => c.method), ["PATCH", "POST"]);
+    assert.ok(result.lines.some((l) => /Closed #7, but could not comment on it/.test(l)));
+  }
+});
+
+// --- an issue somebody closed --------------------------------------------------------
+
+test("behind, none open, one closed for this very state: it stays closed and none is opened", async () => {
+  // Four Mondays, and the issue a person closed after the first.
+  const r = repo({ issues: [issue(7, issueBody(STATE), { state: "closed" })] });
+  for (let week = 0; week < 4; week++) {
+    const result = await run(MOVED, r);
+    assert.equal(result.action, "unchanged");
+    assert.deepEqual(result.issues, [7]);
+    assert.match(result.lines.at(-1), /#7 says so and was closed; it stays closed until org\/core moves again/);
+  }
+  assert.deepEqual(r.writes(), []);
+});
+
+test("behind, none open, one closed for an older state: that issue is reopened and rewritten", async () => {
+  const r = repo({ issues: [issue(7, issueBody({ ...STATE, headCommit: OLDER_HEAD }), { state: "closed", title: `${TITLE_PREFIX} an older title` })] });
+  const result = await run(MOVED, r);
+  assert.equal(result.action, "reopen");
+  assert.deepEqual(result.issues, [7]);
+  assert.deepEqual(r.writes(), [{ method: "PATCH", path: `/repos/${SELF}/issues/7`, body: { state: "open", title: TITLE, body: issueBody(STATE) } }]);
+  // The one the run itself closed when the copy caught up is the same case: one issue, for good.
+  const caughtUp = repo({ issues: [issue(7, issueBody({ ...STATE, recordedCommit: OLDER_HEAD, headCommit: RECORDED }), { state: "closed" })] });
+  assert.equal((await run(MOVED, caughtUp)).action, "reopen");
+});
+
+test("closed issues: the most recently opened of ours decides, and nobody else's counts", async () => {
+  const older = issue(7, issueBody({ ...STATE, headCommit: OLDER_HEAD }), { state: "closed" });
+  const newer = issue(9, issueBody(STATE), { state: "closed" });
+  // #9 was closed for this state; #7, older, would otherwise be reopened.
+  const r = repo({ issues: [older, newer, issue(12, "an unrelated report", { state: "closed" })] });
+  const result = await run(MOVED, r);
+  assert.equal(result.action, "unchanged");
+  assert.deepEqual(result.issues, [9]);
+  assert.deepEqual(r.writes(), []);
+  // A closed issue carrying the marker that the bot did not write is not reopened; a new one is opened.
+  const forged = repo({ issues: [issue(7, issueBody({ ...STATE, headCommit: OLDER_HEAD }), { state: "closed", user: { login: "mallory" } })] });
+  assert.equal((await run(MOVED, forged)).action, "create");
+  assert.deepEqual(forged.writes().map((c) => c.path), [`/repos/${SELF}/labels`, `/repos/${SELF}/issues`]);
+  // Current: a closed issue is never touched.
+  const current = repo({ issues: [older] });
+  assert.equal((await run(CURRENT, current)).action, "none");
+  assert.deepEqual(current.calls.filter((c) => c.path.includes("state=closed")), []);
 });
 
 test("current, no issue open: nothing is written", async () => {
@@ -216,9 +292,11 @@ test("the pinned check fails: it throws, and this repository's API is never call
 
 test("upstream's head cannot be read: it throws, and this repository's API is never called", async () => {
   const cases = [
-    ["the branch's head", { ...MOVED, [`${UP}/commits/trunk`]: { status: 404, text: "" } }, /Could not read org\/core's default branch: .* returned HTTP 404/],
-    ["a head that is not a commit id", { ...MOVED, [`${UP}/commits/trunk`]: ok(JSON.stringify({ sha: "main; echo pwned" })) }, /did not name a commit/],
-    ["a head that is not JSON", { ...MOVED, [`${UP}/commits/trunk`]: ok("<html>") }, /did not name a commit/],
+    ["the branch's head", { ...MOVED, [HEAD_REF]: { status: 404, text: "" } }, /Could not read org\/core's default branch: .* returned HTTP 404/],
+    ["a head that is not a commit id", { ...MOVED, [HEAD_REF]: ok(JSON.stringify({ object: { type: "commit", sha: "main; echo pwned" } })) }, /did not name a commit/],
+    ["a ref that points at a tag object", { ...MOVED, [HEAD_REF]: ok(JSON.stringify({ object: { type: "tag", sha: HEAD } })) }, /did not name a commit/],
+    ["a prefix match, which the API answers with a list", { ...MOVED, [HEAD_REF]: ok(JSON.stringify([{ object: { type: "commit", sha: HEAD } }])) }, /did not name a commit/],
+    ["a head that is not JSON", { ...MOVED, [HEAD_REF]: ok("<html>") }, /did not name a commit/],
     ["the manifest at the head", { ...MOVED, [manifestAt(HEAD)]: { status: 404, text: "" } }, /Could not read org\/core's manifest at its head: .* returned HTTP 404/],
     ["a network error, after the retries", { ...MOVED, [manifestAt(HEAD)]: new Error("socket hang up") }, /failed \(socket hang up\)/],
   ];
@@ -234,10 +312,29 @@ test("upstream's head cannot be read: it throws, and this repository's API is ne
   assert.equal((await run({ ...MOVED, [manifestAt(HEAD)]: [{ status: 503, text: "" }, ok(NEW_MANIFEST)] }, flaky)).action, "create");
 });
 
-test("the head's manifest is read at the commit just named, not at the branch", async () => {
+test("the head is the BRANCH's, and its manifest is read at the commit just named", async () => {
   const seen = [];
   await run(MOVED, repo(), { seen });
-  assert.deepEqual(seen.slice(-2), [`${UP}/commits/trunk`, manifestAt(HEAD)]);
+  // `git/ref/heads/…`: a tag called `trunk` cannot answer for the branch.
+  assert.deepEqual(seen.slice(-2), [HEAD_REF, manifestAt(HEAD)]);
+});
+
+test("a default branch whose name would change the URL is refused before it is asked for", async () => {
+  for (const branch of ["../../../x/y", "a..b", "a//b", "/a", "a/", "./a"]) {
+    const answers = {
+      ...MOVED,
+      [UP]: ok(JSON.stringify({ default_branch: branch })),
+      [`${UP}/compare/${encodeURIComponent(branch)}...${RECORDED}`]: ok(JSON.stringify({ status: "behind" })),
+    };
+    const r = repo();
+    const seen = [];
+    await assert.rejects(run(answers, r, { seen }), /default branch has a name this script will not put into a URL/, branch);
+    assert.equal(seen.some((u) => u.includes("/git/ref/")), false, branch);
+    assert.deepEqual(r.calls, [], branch);
+  }
+  // A branch with a slash in it is an ordinary branch.
+  const nested = { ...MOVED, [UP]: ok(JSON.stringify({ default_branch: "release/v1" })), [`${UP}/compare/release%2Fv1...${RECORDED}`]: ok(JSON.stringify({ status: "behind" })), [`${UP}/git/ref/heads/release/v1`]: MOVED[HEAD_REF] };
+  assert.equal((await run(nested, repo())).action, "create");
 });
 
 // --- which issue is ours ------------------------------------------------------------
@@ -255,22 +352,73 @@ test("an issue carrying the marker that the bot did not write is ignored", async
   assert.deepEqual(current.writes(), []);
 });
 
-test("isOurIssue: open, not a pull request, by the bot, with the marker on the first line", () => {
+test("isOurIssue: by the bot, titled as ours, with the whole marker as the first line", () => {
   const body = issueBody(STATE);
   assert.equal(isOurIssue(issue(1, body)), true);
   assert.equal(isOurIssue(issue(1, body, { user: { login: "mallory" } })), false, "another author");
   assert.equal(isOurIssue(issue(1, body, { user: { login: "github-actions" } })), false, "a person may hold this login; the bot's ends in [bot]");
   assert.equal(isOurIssue(issue(1, body, { user: null })), false, "a deleted author");
-  assert.equal(isOurIssue(issue(1, body, { state: "closed" })), false, "closed");
   assert.equal(isOurIssue(issue(1, body, { pull_request: {} })), false, "a pull request");
-  // The bot posting somebody else's text: the marker is in it, not at its head.
-  assert.equal(isOurIssue(issue(1, `A report from a user:\n\n${body}`)), false, "the marker further down");
-  assert.equal(isOurIssue(issue(1, ` ${body}`)), false, "the marker not at the very start");
-  assert.equal(isOurIssue(issue(1, null)), false, "no body");
   assert.equal(isOurIssue(issue("1", body)), false, "a number that is not a number");
   assert.equal(isOurIssue(null), false);
-  // Title and label play no part: the same issue, retitled and relabelled, is still ours.
-  assert.equal(isOurIssue(issue(1, body, { title: "anything", labels: [] })), true);
+  // The state asked for, and only that one.
+  assert.equal(isOurIssue(issue(1, body, { state: "closed" })), false, "closed, asked as open");
+  assert.equal(isOurIssue(issue(1, body, { state: "closed" }), "closed"), true);
+  assert.equal(isOurIssue(issue(1, body), "closed"), false, "open, asked as closed");
+
+  // ANOTHER WORKFLOW'S ISSUE, by the same bot. Its first line begins like the
+  // marker; it is not the marker, and its title is its own.
+  const lookalike = `${MARKER_PREFIX}report for the week -->\nSomething else entirely.`;
+  assert.equal(isOurIssue(issue(1, lookalike)), false, "a first line that only starts like the marker");
+  assert.equal(isOurIssue(issue(1, body, { title: "Weekly report" })), false, "the marker, under a title that is not ours");
+  assert.equal(isOurIssue(issue(1, body, { title: ` ${TITLE}` })), false, "the title's marker not at its start");
+  assert.equal(isOurIssue(issue(1, body, { title: undefined })), false, "no title");
+  // Reworded after the marker is still ours (and the next rewrite puts the title back).
+  assert.equal(isOurIssue(issue(1, body, { title: `${TITLE_PREFIX} sync me, please`, labels: [] })), true);
+
+  // The marker, whole and first.
+  const marker = markerLine(STATE);
+  for (const [what, first] of [
+    ["something after it on the line", `${marker} trailing`],
+    ["a space before it", ` ${marker}`],
+    ["a byte-order mark before it", `\uFEFF${marker}`],
+    ["a short commit id", marker.replace(RECORDED, RECORDED.slice(0, 12))],
+    ["an upper-case commit id", marker.replace(HEAD, HEAD.toUpperCase())],
+    ["no head", marker.replace(` head=${HEAD}`, "")],
+    ["an upstream that is not owner/name", marker.replace("org/core", "org/core/x")],
+    ["an owner GitHub would not allow", marker.replace("org/core", "-org/core")],
+    ["an unclosed comment", marker.replace(" -->", "")],
+  ]) {
+    assert.equal(isOurIssue(issue(1, `${first}\nthe rest`)), false, what);
+  }
+  // The bot posting somebody else's text: the marker is in it, not at its head.
+  assert.equal(isOurIssue(issue(1, `A report from a user:\n\n${body}`)), false, "the marker further down");
+  assert.equal(isOurIssue(issue(1, null)), false, "no body");
+  // An issue for another upstream, from before the copy changed where it syncs from, is still ours to rewrite.
+  assert.equal(isOurIssue(issue(1, issueBody({ ...STATE, repository: "old-org/core" }))), true);
+});
+
+test("another workflow's bot issue that starts like the marker is neither rewritten nor closed", async () => {
+  const theirs = issue(3, `${MARKER_PREFIX}weekly -->\nA report.`, { title: "Weekly report" });
+  const behind = repo({ issues: [theirs] });
+  assert.equal((await run(MOVED, behind)).action, "create");
+  assert.deepEqual(behind.writes().map((c) => c.path), [`/repos/${SELF}/labels`, `/repos/${SELF}/issues`]);
+  const current = repo({ issues: [theirs] });
+  assert.equal((await run(CURRENT, current)).action, "none");
+  assert.deepEqual(current.writes(), []);
+});
+
+test("a note put above the marker makes the issue no longer ours: it is left alone and another is opened", async () => {
+  const noted = issue(7, `Assigned to me.\n${issueBody(STATE)}`);
+  const r = repo({ issues: [noted] });
+  assert.equal((await run(MOVED, r)).action, "create");
+  assert.equal(r.writes().some((c) => c.path.endsWith("/issues/7")), false);
+  // A note below it survives while the state is the same, and goes when the state changes.
+  const below = repo({ issues: [issue(7, `${issueBody(STATE)}\nNOTE: blocked on #12\n`)] });
+  assert.equal((await run(MOVED, below)).action, "unchanged");
+  const moved = repo({ issues: [issue(7, `${issueBody({ ...STATE, headCommit: OLDER_HEAD })}\nNOTE: blocked on #12\n`)] });
+  assert.equal((await run(MOVED, moved)).action, "update");
+  assert.equal(moved.writes()[0].body.body.includes("NOTE"), false);
 });
 
 test("the bot's issues are asked for by author, page by page, and a flood is refused", async () => {
@@ -278,7 +426,7 @@ test("the bot's issues are asked for by author, page by page, and a flood is ref
   const r = repo({ issues: [...others, OURS] });
   assert.equal((await run(MOVED, r)).action, "unchanged");
   const lists = r.calls.filter((c) => c.path.includes("/issues?"));
-  assert.deepEqual(lists.map((c) => c.path), [1, 2].map((p) => `/repos/${SELF}/issues?state=open&creator=github-actions%5Bbot%5D&per_page=100&page=${p}`));
+  assert.deepEqual(lists.map((c) => c.path), [1, 2].map((p) => `/repos/${SELF}/issues?state=open&creator=github-actions%5Bbot%5D&sort=created&direction=desc&per_page=100&page=${p}`));
   const flood = repo({ issues: Array.from({ length: 1000 }, (_, i) => issue(i + 1, "noise")) });
   await assert.rejects(run(MOVED, flood), /more than 1000 open issues by github-actions\[bot\]/);
   assert.deepEqual(flood.writes(), []);
@@ -293,10 +441,10 @@ test("two issues open: the older is kept current, and both close when the copy c
   const current = repo({ issues: [second, OURS_OLDER] });
   assert.deepEqual((await run(CURRENT, current)).issues, [7, 9]);
   assert.deepEqual(current.writes().map((c) => `${c.method} ${c.path.replace(`/repos/${SELF}`, "")}`), [
-    "POST /issues/7/comments",
     "PATCH /issues/7",
-    "POST /issues/9/comments",
+    "POST /issues/7/comments",
     "PATCH /issues/9",
+    "POST /issues/9/comments",
   ]);
 });
 
@@ -312,6 +460,54 @@ test("a refusal from this repository's API is an error, not a quiet pass", async
   await assert.rejects(run(MOVED, repo(), { self: "not a slug" }), /GITHUB_REPOSITORY must name this repository/);
 });
 
+test("a read of this repository is retried like a read of upstream; a write is sent once", async () => {
+  const flaky = (failures, match) => {
+    const r = repo();
+    const inner = r.api;
+    let left = failures;
+    r.api = async (method, apiPath, body) => {
+      if (match(method, apiPath) && left > 0) {
+        left--;
+        r.calls.push({ method, path: apiPath, body });
+        if (left % 2 === 0) throw new Error("socket hang up");
+        return { status: 502, json: null };
+      }
+      return inner(method, apiPath, body);
+    };
+    return r;
+  };
+  const isList = (m, p) => m === "GET" && p.includes("/issues?");
+  // Three bad answers, then a good one: the run goes on as if nothing happened.
+  slept.length = 0;
+  const recovered = flaky(3, isList);
+  assert.equal((await run(MOVED, recovered)).action, "create");
+  assert.deepEqual(slept, [...RETRY_DELAYS_MS]);
+  // Four: it fails, having written nothing.
+  const lasting = flaky(4, isList);
+  await assert.rejects(run(MOVED, lasting), /GET \/repos\/me\/copy\/issues\?.* (?:returned HTTP 502|failed \(socket hang up\))/);
+  assert.deepEqual(lasting.writes(), []);
+  // A write that is refused is not sent again: a second POST could be a second issue.
+  const once = flaky(1, (m, p) => m === "POST" && p.endsWith("/issues"));
+  await assert.rejects(run(MOVED, once), /POST \/repos\/me\/copy\/issues failed \(socket hang up\)/);
+  assert.equal(once.calls.filter((c) => c.method === "POST" && c.path.endsWith("/issues")).length, 1);
+});
+
+test("a repository with Issues turned off is told nothing, and the run passes", async () => {
+  for (const status of [410, 404]) {
+    const r = repo();
+    const inner = r.api;
+    r.api = async (method, apiPath, body) => (apiPath.includes("/issues?") ? { status, json: { message: "Issues are disabled for this repo" } } : inner(method, apiPath, body));
+    const result = await run(MOVED, r);
+    assert.equal(result.action, "disabled", `HTTP ${status}`);
+    assert.match(result.lines.at(-1), /me\/copy has Issues turned off/);
+    assert.deepEqual(r.writes(), []);
+  }
+  // …but only after the record was checked: a wrong record is still a red run there.
+  const r = repo();
+  r.api = async () => ({ status: 410, json: null });
+  await assert.rejects(run({ ...MOVED, [manifestAt(RECORDED)]: { status: 404, text: "" } }, r), /no issue was opened/);
+});
+
 // --- what is written -----------------------------------------------------------------
 
 test("the issue is built from the five validated values and nothing else", () => {
@@ -321,7 +517,10 @@ test("the issue is built from the five validated values and nothing else", () =>
   for (const value of [RECORDED, HEAD, OLD_DIGEST, NEW_DIGEST]) assert.ok(body.includes(`\`${value}\``), value);
   assert.ok(body.includes(`https://github.com/org/core/compare/${RECORDED}...${HEAD}\n`));
   assert.match(body, /Only the changes under `scripts\/agent\/` and to `\.github\/workflows\/agent-\*\.yml` are part of a sync/);
-  assert.ok(body.includes("git -C <upstream checkout> pull\nnode <upstream checkout>/scripts/agent/sync.mjs --from <upstream checkout> --to .\n"));
+  assert.ok(body.includes("git -C <upstream checkout> switch <its default branch> && git -C <upstream checkout> pull\nnode <upstream checkout>/scripts/agent/sync.mjs --from <upstream checkout> --to .\n"));
+  // sync.mjs's other to-do: the pin, without which a copy can declare itself the origin.
+  assert.ok(body.includes('`.github/agent-harness/repo.test.mjs` must assert that `.github/agent-harness/upstream.json`\'s `repository` is `"org/core"`'));
+  assert.ok(readFileSync(path.join(HERE, "sync.mjs"), "utf8").includes("Pin the upstream in"), "sync.mjs no longer asks for the pin; the issue body repeats it");
   assert.match(body, /what `sync\.mjs` prints under "To do:"/);
   assert.ok(body.includes("`git add scripts/agent .github/workflows .github/agent-harness`"));
   // The heading sync.mjs prints, and the command it tells the adopter to run, are the ones the body repeats.
@@ -365,6 +564,8 @@ test("a dry run decides the same and sends nothing but GETs", async () => {
     [MOVED, {}, "create"],
     [MOVED, { issues: [OURS_OLDER] }, "update"],
     [MOVED, { issues: [OURS] }, "unchanged"],
+    [MOVED, { issues: [{ ...OURS_OLDER, state: "closed" }] }, "reopen"],
+    [MOVED, { issues: [{ ...OURS, state: "closed" }] }, "unchanged"],
     [CURRENT, { issues: [OURS] }, "close"],
     [CURRENT, {}, "none"],
   ];
@@ -373,10 +574,19 @@ test("a dry run decides the same and sends nothing but GETs", async () => {
     const result = await run(answers, r, { dryRun: true });
     assert.equal(result.action, action);
     assert.deepEqual(r.writes(), [], action);
-    if (action === "create" || action === "update") assert.equal(result.body, issueBody(STATE));
+    if (action === "create" || action === "update" || action === "reopen") assert.equal(result.body, issueBody(STATE));
     if (action !== "none" && action !== "unchanged") assert.ok(result.lines.some((l) => l.startsWith("Dry run: would ")), action);
   }
   await assert.rejects(run({ ...MOVED, [manifestAt(RECORDED)]: { status: 404, text: "" } }, repo(), { dryRun: true }), /no issue was opened/);
+});
+
+test("the job is given longer than the script gives itself", () => {
+  const workflow = readFileSync(path.join(HERE, "..", "..", ".github", "workflows", "agent-upstream-notify.yml"), "utf8");
+  const minutes = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(workflow)?.[1]);
+  assert.ok(minutes * 60_000 > BUDGET_MS, `timeout-minutes is ${minutes}; the script's own budget is ${BUDGET_MS / 60_000} minutes and must end first`);
+  // …and the budget is more than one fetch's worst case, or it would cut off a fetch that was about to answer.
+  const oneFetch = 4 * 30_000 + RETRY_DELAYS_MS.reduce((a, b) => a + b, 0);
+  assert.ok(BUDGET_MS > 2 * oneFetch);
 });
 
 // --- the CLI ---------------------------------------------------------------------------

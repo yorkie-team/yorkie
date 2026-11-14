@@ -19,8 +19,9 @@
 # events by one `if:` line and one `ref:` line, in a file whose other job
 # exists to run untrusted code. Here the trigger list is the boundary: no
 # pull request and no push can start this workflow at all. The trust guard
-# (`config-wiring.test.mjs`) holds that, the two permissions and the absence
-# of any secret.
+# (`config-wiring.test.mjs`) holds that, and holds this file to its shape:
+# one job, these three steps and no other, the two permissions, no secret
+# and no variable. A step added here runs beside a token that can write.
 #
 # NOT BEHIND THE `AGENT_PIPELINE_ENABLED` SWITCH. That switch stops agents
 # acting on pull requests. A copy falls behind whether or not the agents are
@@ -53,7 +54,9 @@ env:
 jobs:
   notify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Longer than the script's own budget (`BUDGET_MS`, eight minutes), so a
+    # slow upstream ends in the script's message and not in a cancellation.
+    timeout-minutes: 10
     permissions:
       contents: read # the default branch's scripts/agent and upstream.json
       issues: write # the one issue, its label, and the closing comment
