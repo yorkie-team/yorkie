@@ -470,6 +470,47 @@ test("extraPatterns: an entry changes only the text it matches", () => {
   }
 });
 
+test("extraPatterns: a pattern for a key's prefix masks the whole key, past every later layer", () => {
+  // The layers after this one treat a value starting `<REDACTED` as done, so a
+  // label over only the prefix would publish the rest of the key: worse than
+  // no pattern at all, where Bearer and the field names would have caught it.
+  const patterns = [compileExtraPattern(String.raw`\bwfb_[a-z]+`)];
+  const cases = [
+    ["Bearer wfb_abcd1234efgh5678", "Bearer <REDACTED_API_KEY>"],
+    ["password: wfb_abcd1234efgh", "password: <REDACTED_API_KEY>"],
+    ['{"key":"wfb_abcd1234","n":1}', '{"key":"<REDACTED_API_KEY>","n":1}'],
+    ["see xwfb_abcd1234 here", "see xwfb_abcd1234 here"],
+  ];
+  for (const [input, want] of cases) {
+    assert.equal(redactSecrets(input, { extra: [], extraPatterns: patterns }), want, input);
+  }
+  // Without the pattern, the same texts lose the key to the later layers —
+  // the pattern never makes the result leak more.
+  for (const [input] of cases.slice(0, 2)) {
+    assert.ok(!/1234/.test(redactSecrets(input, { extra: [] })), input);
+  }
+});
+
+test("extraPatterns: a key past the first window of a long token is still found", () => {
+  const patterns = [compileExtraPattern(PREFIXED)];
+  const long = `${"x".repeat(1000)}.wfb_AbCd1234efgh.${"y".repeat(10)}`;
+  const out = redactSecrets(long, { extra: [], extraPatterns: patterns });
+  assert.ok(!out.includes("wfb_AbCd1234efgh"), "the key leaked");
+  assert.ok(out.includes("<REDACTED_API_KEY>"));
+});
+
+test("extraPatterns: the cost of masking is bounded by the window, not by the text", () => {
+  // The worst shape the loader admits — one varying quantifier and four `?` —
+  // over 100 KB in one token and in many: well under a second each here, where
+  // `(a+)+$` (refused by the loader) would not finish at all.
+  const patterns = [compileExtraPattern(String.raw`a?a?a?a?\w+!`)];
+  for (const text of ["a".repeat(100_000), `${"a".repeat(255)} `.repeat(400)]) {
+    const t0 = Date.now();
+    redactSecrets(text, { extra: [], extraPatterns: patterns });
+    assert.ok(Date.now() - t0 < 5_000, `took ${Date.now() - t0} ms`);
+  }
+});
+
 test("extraPatterns: a zero-length match writes no label", () => {
   // The loader refuses a source that matches "", but `(?=x)` matches the
   // empty string only before an `x`, which it cannot rule out. The mask skips

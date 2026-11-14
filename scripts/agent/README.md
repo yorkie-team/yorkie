@@ -74,10 +74,16 @@ Two keys let a repository widen something the core keeps closed, and both are
   which the core has no rule for: a key that is a bare identifier gives a
   pattern nothing to tell it apart by, so only a prefixed shape belongs here.
   Each entry is the source of a JavaScript regular expression, without slashes
-  or flags (`"\\bacme_[A-Za-z0-9_-]+"`). It is compiled with `g`, followed by
-  the whitespace continuation the built-in shapes carry, so a key broken by a
-  stray space is masked whole. The loader refuses an entry that does not
-  compile or that matches the empty string.
+  or flags (`"\\bacme_[A-Za-z0-9_-]+"`), compiled with `g`. It is run over one
+  whitespace-separated token at a time, in windows of 256 characters, and a
+  match is masked whole and widened to the run of key characters around it,
+  so a pattern for a key's prefix still masks the whole key; a key broken by a
+  stray space is followed as the built-in shapes follow one. The loader
+  refuses an entry that does not compile, matches whitespace or matches at
+  zero width (`\b`, a lone lookaround), and one whose matching cost is not
+  bounded: a repeating quantifier on a group holding a quantifier or an
+  alternation, more than one quantifier whose count varies (besides `?`),
+  more than four `?`, or a back-reference.
 - `ask.permittedMcpTools` names the in-process MCP tools — written in the
   repository, run in the session's own process — that a session may be
   granted. Each is an exact `mcp__<server>__<tool>`: the loader refuses a

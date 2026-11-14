@@ -199,22 +199,157 @@ export function isMcpToolName(value) {
   return typeof value === "string" && new RegExp(`^mcp__${part}__${part}$`).test(value);
 }
 /**
+ * The structure of a `redact.extraPatterns` source that makes its matching
+ * cost unbounded, or null. A pattern runs over every published text, and a
+ * backtracking pattern can take minutes on one long run of characters
+ * (`(a+)+$` on 100 KB). `redact.mjs` bounds the TEXT it runs on (tokens, in
+ * windows); this bounds the PATTERN, so that each window costs at most a
+ * square of its length:
+ *
+ *   - no repeating quantifier on a group that holds a quantifier or an
+ *     alternation (`(a+)+`, `(a|ab)*`, `(a|b){8}`): the classic exponential
+ *     shapes. `?` repeats nothing and may follow any group;
+ *   - at most ONE quantifier whose count varies, other than `?` (`+`, `*`,
+ *     `{n,}`, `{n,m}`; an exact `{n}` is free): two of them in a row
+ *     (`\w*\w*!`) are already cubic;
+ *   - at most four `?`;
+ *   - no back-reference.
+ *
+ * A credential shape — a fixed prefix and one run of key characters, perhaps
+ * an optional infix — fits inside all four.
+ */
+function redactPatternCost(source) {
+  const groups = [{ quant: false, alt: false }];
+  let varying = 0;
+  let optional = 0;
+  let lastAtom = null; // { group } for a just-closed group, {} for anything else
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    let quant = null;
+    let count = 0;
+    if (ch === "\\") {
+      const next = source[i + 1] ?? "";
+      if (/[1-9]/.test(next) || next === "k") return "uses a back-reference";
+      i++;
+      lastAtom = {};
+      continue;
+    }
+    if (ch === "[") {
+      i++;
+      if (source[i] === "^") i++;
+      if (source[i] === "]") i++;
+      while (i < source.length && source[i] !== "]") {
+        if (source[i] === "\\") i++;
+        i++;
+      }
+      lastAtom = {};
+      continue;
+    }
+    if (ch === "(") {
+      groups.push({ quant: false, alt: false });
+      // Skip the group's kind: `?:`, `?=`, `?!`, `?<=`, `?<!`, `?<name>`.
+      if (source[i + 1] === "?") {
+        i += 2;
+        if (source[i] === "<" && source[i + 1] !== "=" && source[i + 1] !== "!") {
+          while (i < source.length && source[i] !== ">") i++;
+        } else if (source[i] === "<") {
+          i++;
+        }
+      }
+      lastAtom = null;
+      continue;
+    }
+    if (ch === ")") {
+      const g = groups.length > 1 ? groups.pop() : { quant: false, alt: false };
+      // What the group held, its parent holds too.
+      const parent = groups[groups.length - 1];
+      parent.quant ||= g.quant;
+      parent.alt ||= g.alt;
+      lastAtom = { group: g };
+      continue;
+    }
+    if (ch === "|") {
+      groups[groups.length - 1].alt = true;
+      lastAtom = null;
+      continue;
+    }
+    if (ch === "*" || ch === "+") quant = "varying";
+    else if (ch === "?") quant = lastAtom ? "optional" : null;
+    else if (ch === "{") {
+      const m = /^\{(\d+)(,(\d*))?\}/.exec(source.slice(i));
+      if (m) {
+        quant = m[2] === undefined || m[3] === m[1] ? "exact" : "varying";
+        count = Number(m[1]);
+        i += m[0].length - 1;
+      }
+    }
+    if (quant && lastAtom) {
+      // `?` repeats nothing, so it may follow any group: `(?:live_|test_)?`.
+      const repeats = quant === "varying" || (quant === "exact" && count > 1);
+      if (repeats && lastAtom.group && (lastAtom.group.quant || lastAtom.group.alt)) {
+        return lastAtom.group.alt
+          ? "puts a quantifier on an alternation, which can take exponential time"
+          : "nests one quantifier inside another, which can take exponential time";
+      }
+      if (quant === "varying") varying++;
+      if (quant === "optional") optional++;
+      if (quant !== "exact") groups[groups.length - 1].quant = true;
+      if (source[i + 1] === "?") i++; // lazy
+      lastAtom = null;
+      continue;
+    }
+    lastAtom = {};
+  }
+  if (varying > 1) return `has ${varying} quantifiers whose count varies; at most one (\`+\`, \`*\`, \`{n,}\`, \`{n,m}\`) is allowed`;
+  if (optional > 4) return `has ${optional} \`?\`; at most four are allowed`;
+  return null;
+}
+
+/** Texts a source must not match at zero width anywhere in. */
+const ZERO_WIDTH_PROBES = Object.freeze([
+  "",
+  "a",
+  "the quick brown fox",
+  "key: wfb_AbC123-x_y.z, \"token\"='v'; 0 9 Z",
+  "<REDACTED_API_KEY> sk-ant-x ghp_x eyJx.y.z https://example.com/a?b=c#d",
+  "\t\n\r",
+]);
+
+/**
  * Why `source` cannot be a `redact.extraPatterns` entry, or null. It is the
  * source of a JavaScript regular expression, without slashes or flags:
- * `redact.mjs` compiles it with `g` and nothing else. It must compile, and it
- * must not match the empty string — a mask that matches nothing would be
- * written at every position of every published text.
+ * `redact.mjs` compiles it with `g` and nothing else, and runs it over one
+ * whitespace-separated token of a text at a time. So it:
+ *
+ *   - must compile;
+ *   - must contain no whitespace and no `\s`: it is never shown any;
+ *   - must not match at zero width ANYWHERE — `\b`, a lone lookaround, `x*` —
+ *     because what a match covers is masked, and a match of nothing at a word
+ *     boundary is a mask on the word beside it. Checked against probe texts,
+ *     which catches every assertion-only pattern a person would write;
+ *   - must have a bounded matching cost (`redactPatternCost`).
  */
 export function redactPatternProblem(source) {
   if (typeof source !== "string" || source === "") return "is not a pattern";
   if (/^\/.*\/[a-z]*$/.test(source)) return "is written as a literal: give the source alone, without the slashes or flags";
   let re;
   try {
-    re = new RegExp(source);
+    re = new RegExp(source, "g");
   } catch (err) {
     return `does not compile (${err.message})`;
   }
-  if (re.test("")) return "matches the empty string";
+  if (/\s/.test(source) || /\\[snrtvf]/.test(source.replace(/\\\\/g, ""))) {
+    return "matches whitespace, but it is run one whitespace-separated token at a time";
+  }
+  const cost = redactPatternCost(source);
+  if (cost) return cost;
+  for (const probe of ZERO_WIDTH_PROBES) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(probe)) !== null) {
+      if (m[0] === "") return "can match at zero width, which would mask the text beside the match";
+    }
+  }
   return null;
 }
 const fragment = [isFragment, FRAGMENT];
@@ -402,7 +537,7 @@ const SCHEMA = {
   redact: {
     extraPatterns: [
       (v) => isList(v) && v.every((x) => redactPatternProblem(x) === null),
-      `an array of JavaScript regular-expression sources, ${ENTRIES}, each compiling and matching no empty string (may be empty)`,
+      `an array of JavaScript regular-expression sources, ${ENTRIES}, each compiling, matching neither whitespace nor zero width, and of bounded cost (may be empty)`,
       (v) => {
         const bad = Array.isArray(v) ? v.find((x) => isEntry(x) && redactPatternProblem(x) !== null) : undefined;
         return bad === undefined ? "" : ` — ${JSON.stringify(bad)} ${redactPatternProblem(bad)}`;

@@ -190,6 +190,10 @@ test("loadConfig: a value of the wrong type throws, and no value is coerced", (t
     ["redact.extraPatterns", ["(?:)"]],
     ["redact.extraPatterns", ["x|"]],
     ["redact.extraPatterns", ["/wfb_[a-z]+/g"]],
+    ["redact.extraPatterns", ["(a+)+$"]],
+    ["redact.extraPatterns", ["Key: [a-z0-9]{20}"]],
+    ["redact.extraPatterns", [String.raw`\b`]],
+    ["redact.extraPatterns", ["(?=wfb)"]],
     ["ask.permittedMcpTools", [null]],
     ["ask.permittedMcpTools", ["Read"]],
     ["ask.permittedMcpTools", ["mcp__fixture"]],
@@ -212,18 +216,33 @@ test("loadConfig: a value of the wrong type throws, and no value is coerced", (t
 
 test("loadConfig: the two allow-lists take what their readers can use, and say which entry is not", (t) => {
   const fine = scratch(t, (c) => {
-    c.redact.extraPatterns = [String.raw`\bwfb_[A-Za-z0-9_-]+`, String.raw`\bacme-[a-z0-9]{12}\b`];
+    c.redact.extraPatterns = [
+      String.raw`\bwfb_[A-Za-z0-9_-]+`,
+      String.raw`\bacme-[a-z0-9]{12}\b`,
+      String.raw`\bsk_(?:live_|test_)?[A-Za-z0-9]{20,40}`,
+      String.raw`\bk(?:-[a-z]{4}){3}`,
+    ];
     c.ask.permittedMcpTools = ["mcp__wafflebase__run", "mcp__wafflebase__ui", "mcp__my-server__do_it"];
     return c;
   });
   const loaded = loadConfig(fine);
-  assert.equal(loaded.redact.extraPatterns.length, 2);
+  assert.equal(loaded.redact.extraPatterns.length, 4);
   assert.deepEqual([...loaded.ask.permittedMcpTools], ["mcp__wafflebase__run", "mcp__wafflebase__ui", "mcp__my-server__do_it"]);
 
   const cases = [
     ["redact.extraPatterns", "(", /does not compile/],
-    ["redact.extraPatterns", "a*", /matches the empty string/],
+    ["redact.extraPatterns", "a*", /zero width/],
     ["redact.extraPatterns", "/wfb_/", /without the slashes or flags/],
+    ["redact.extraPatterns", "(a+)+$", /nests one quantifier inside another/],
+    ["redact.extraPatterns", "(a|ab)*x", /quantifier on an alternation/],
+    ["redact.extraPatterns", String.raw`\w*\w*!`, /2 quantifiers whose count varies/],
+    ["redact.extraPatterns", "a?b?c?d?e?f", /at most four/],
+    ["redact.extraPatterns", String.raw`(\w)\1x`, /back-reference/],
+    ["redact.extraPatterns", "Key: [a-z0-9]{20}", /matches whitespace/],
+    ["redact.extraPatterns", String.raw`key\s[a-z]+`, /matches whitespace/],
+    ["redact.extraPatterns", String.raw`\b`, /zero width/],
+    ["redact.extraPatterns", "(?<=k)", /zero width/],
+    ["redact.extraPatterns", "x?", /zero width/],
     ["ask.permittedMcpTools", "mcp__fixture__*", /is not one/],
   ];
   for (const [key, bad, why] of cases) {
