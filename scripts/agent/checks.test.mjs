@@ -2120,13 +2120,20 @@ async function implementBoundaryProblems(text) {
   const narrow = /steps\.([\w-]+)\.outputs\.token/.exec(st[agentAt].text.match(/^\s+github_token:.*$/m)?.[0] ?? "")?.[1];
   // Action references are case-insensitive, so the match is too.
   const mints = st.slice(0, agentAt).filter((s) => /^actions\/create-github-app-token@/i.test(s.uses ?? ""));
-  // THE KEY, BY STEP. Every step that names the App's private key is one of
-  // the three that need it: the presence check and the two mints. Any other
-  // — a `run:` that mints through the API, a local or third-party action —
-  // is a token the checks above never see.
-  const KEY_STEPS = new Set(["app", "app-token", "agent-token"]);
-  for (const s of st) {
-    if (/\bAGENT_APP_PRIVATE_KEY\b/.test(s.text) && !KEY_STEPS.has(s.id)) problems.add(`"${s.name ?? s.id ?? s.uses}" holds the App's private key, and is not one of ${[...KEY_STEPS].join(", ")}`);
+  // THE KEY, ACROSS THE FILE. Every mention of the App's private key sits in
+  // a step that needs it: in `implement`, the presence check and the two
+  // mints; in `finish`, its own mint. Any other step — a `run:` that mints
+  // through the API, a local or third-party action — is a token the checks
+  // above never see, and a workflow- or job-level `env:` hands the key to
+  // every step, the agent's included, as a plain variable.
+  const KEY = /\bAGENT_APP_PRIVATE_KEY\b/g;
+  const KEY_STEPS = { implement: new Set(["app", "app-token", "agent-token"]), finish: new Set(["app-token"]) };
+  const keyed = [...jobs.values()].flatMap((j) => j.steps.filter((s) => KEY_STEPS[j.name]?.has(s.id)));
+  const allowed = keyed.reduce((n, s) => n + (s.text.match(KEY) ?? []).length, 0);
+  const everywhere = (text.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n").match(KEY) ?? []).length;
+  if (everywhere !== allowed) {
+    const where = [...jobs.values()].flatMap((j) => j.steps.filter((s) => /\bAGENT_APP_PRIVATE_KEY\b/.test(s.text) && !KEY_STEPS[j.name]?.has(s.id)).map((s) => `${j.name} "${s.name ?? s.id ?? s.uses}"`));
+    problems.add(`the App's private key is named outside the steps that mint with it${where.length ? `: ${where.join(", ")}` : " (a job- or workflow-level env)"}`);
   }
   // The agent's own condition names no status function: the implicit
   // `success()` is what stops it after a failed revocation, and any explicit
@@ -2373,6 +2380,10 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     revoke_fail_open_expression: [REVOKE, `${REVOKE}        continue-on-error: \${{ true }}\n`],
     revoke_or_true: [REVOKE_RUN, "        run: gh api -X DELETE installation/token || true\n"],
     revoke_through_another_variable: [REVOKE_RUN, "        run: GH_TOKEN=$GITHUB_TOKEN gh api -X DELETE installation/token\n"],
+    key_in_workflow_env: ["env:\n  GH_REPO: ${{ github.repository }}\n", "env:\n  GH_REPO: ${{ github.repository }}\n  K: ${{ secrets.AGENT_APP_PRIVATE_KEY }}\n"],
+    key_in_implement_env: ["    environment: agent\n    permissions:\n      contents: read #", "    environment: agent\n    env:\n      K: ${{ secrets.AGENT_APP_PRIVATE_KEY }}\n    permissions:\n      contents: read #"],
+    key_in_agent_step_env: ["      - name: Run Claude Code\n", "      - name: Run Claude Code\n        env:\n          K: ${{ secrets.AGENT_APP_PRIVATE_KEY }}\n"],
+    key_in_finish_step: ["      - name: Write implement session job summary\n", "      - name: Write implement session job summary\n        env:\n          K: ${{ secrets.AGENT_APP_PRIVATE_KEY }}\n"],
     second_mint_unrevoked: [SETUP_NODE, `      - name: Extra token\n        id: extra-token\n        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0\n        with:\n          app-id: \${{ secrets.AGENT_APP_ID }}\n          private-key: \${{ secrets.AGENT_APP_PRIVATE_KEY }}\n          permission-issues: write\n${SETUP_NODE}`],
     agent_token_widened: ["          permission-contents: write # commit and push the branch, and nothing else\n", "          permission-contents: write # commit and push the branch, and nothing else\n          permission-issues: write\n"],
     verify_warns_only: ["core.setFailed(`@${actor} lacks write access", "core.warning(`@${actor} lacks write access"],
