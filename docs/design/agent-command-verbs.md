@@ -563,6 +563,15 @@ withdrawn again) and have to pass.
     comment lets the agent post as `github-actions[bot]`, the author the no-PR
     report's dedupe trusts. The "App is not configured" reply and the no-PR
     report are posted by the `finish` job instead.
+
+    That login is not yet exclusive across the harness. The jobs that run an
+    agent in `agent-fix.yml` (`fix`), `agent-iterate-ci.yml` (`iterate`) and
+    the panel (`fix`) still give their own `GITHUB_TOKEN` `issues` and
+    `pull-requests` write, which their agents reach the same way. An agent
+    there can post as `github-actions[bot]` on any issue and pre-seed a
+    marker that suppresses an informational comment: a verb's help reply, or
+    a no-PR report. The impact is limited to suppressing those comments. The
+    gap closes when those jobs' tokens are read-only too.
 12. **Nothing after the agent in its own job is a trust boundary.** The draft
     copied `scripts/agent` to `$RUNNER_TEMP` and called it the trusted copy,
     then ran the agent with unrestricted `Bash` in the same job and executed
