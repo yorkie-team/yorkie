@@ -139,8 +139,10 @@ jobs:
     # REPORTED BY THE AGENT'S RUNNER, all the same. A job's outputs are
     # evaluated and sent by the runner the job ran on, and the agent had that
     # runner, so `finish` treats every one of them as attacker-influenced: it
-    # selects between fixed messages with them and posts none of them as text.
-    # The repository's own words reach `finish` from `route`, never from here.
+    # uses them only as gates and to choose between fixed messages. A forged
+    # value can withhold `finish`'s work or pick the wrong fixed message; it
+    # never puts text on the issue. The repository's own words reach `finish`
+    # from `route`, never from here.
     outputs:
       # Whether the commenter passed the write-access check, from a step that
       # runs only after it passed (or on a dispatch, where it does not apply).

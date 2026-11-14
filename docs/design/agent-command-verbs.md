@@ -106,14 +106,15 @@ work here is porting plus the three repo-specific pieces named in §4.
     markers are trusted by. What IS done: no agent job's `GITHUB_TOKEN` carries
     `contents: write`, and `agent-implement.yml`'s carries no write scope at
     all, so there it cannot post (and since the outputs of the agent's job are
-    reported by the agent's runner, its `finish` job uses them only to choose
-    between fixed messages, takes the repository's words from `route`, and
-    posts none of them as text); the pre-agent App tokens carry no
-    `contents: write` and are revoked by a step before the agent starts, and
-    in `agent-implement.yml` a revocation that fails keeps the agent from
-    starting; `setup-go` runs without its
-    cache, whose post step would otherwise save the agent's module and build
-    caches under a key `main` restores. **Where the key appears inside the job
+    reported by the agent's runner, its `finish` job uses them only as gates
+    and to choose between fixed messages, and takes the repository's words
+    from `route`: a forged value can withhold `finish`'s work or pick the
+    wrong fixed message, never put text on the issue); the pre-agent App
+    tokens carry no `contents: write` and are revoked by a step before the
+    agent starts, and in `agent-implement.yml` a revocation that fails keeps
+    the agent from starting; `setup-go` runs without its cache, whose post
+    step would otherwise save the agent's module and build caches under a key
+    `main` restores. **Where the key appears inside the job
     does not close this.** The runner receives every secret a job references
     when the job starts, and holds them until the job ends, whichever step names
     them. A mint moved into a plain `run:` step loses its post step and its
