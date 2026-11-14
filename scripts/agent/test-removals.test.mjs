@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   isTestFile, countCases, testRemovals, serializeTestRemovals, collectTestRemovals, aggregateCommits, roundCommits,
-  renderTestRemovals, TEST_REMOVALS_MARKER,
+  renderTestRemovals, TEST_REMOVALS_MARKER, capRoundCommits, describeRemoval, ROUND_COMMIT_CAP,
 } from "./test-removals.mjs";
 
 // #1426, e6900da: the fixer wrote a two-replica test for "the remote path does
@@ -432,4 +432,196 @@ test("fixerHead: unknown (empty) whenever the chain cannot be proven to start at
 test("fixerHead: a branch name or a full ref both match", async () => {
   const { fixerHead } = await import("./test-removals.mjs");
   assert.equal(fixerHead([push("a", "b", APP, "2026-10-01T10:10:00Z")], { ...opts, ref: "agent/x" }), sha("b"));
+});
+
+// --- JavaScript runners' other spellings -------------------------------------
+//
+// Ported from wafflebase's copy, which reads Jest (`*.spec.ts`) and node:test
+// suites beside Vitest. Each shape switches a test off without the line that
+// declares it disappearing, so the case count alone does not see it.
+
+test("countCases: Jest's spellings — `failing` runs, `xit`/`xtest` do not, `xdescribe` switches a suite off", () => {
+  const patch = [
+    "-  it('rejects an expired key', async () => {",
+    "+  xit('rejects an expired key', async () => {",
+    "-  test('lists folders', async () => {",
+    "+  xtest('lists folders', async () => {",
+    "+  test.failing('still reproduces the finding', async () => {",
+    "+  fit('focused', () => {});",
+    "+xdescribe('FolderController', () => {",
+  ].join("\n");
+  // The added `fit('focused')` is a case AND a focus (see the focus test below).
+  assert.deepEqual(countCases(patch), { removed: 2, added: 2, suitesOff: 1, focused: 1 });
+  // A layout helper named `fit` is not a case: only a string title makes one.
+  assert.deepEqual(countCases("+  fit();\n-  fit(board, 2);\n+  fitness(x);"), { removed: 0, added: 0, suitesOff: 0 });
+});
+
+test("countCases: an added focus is a disablement, kept apart from cases", () => {
+  assert.deepEqual(countCases("-  it('a', () => {});\n+  it.only('a', () => {});"), { removed: 1, added: 1, suitesOff: 0, focused: 1 });
+  assert.deepEqual(countCases("-  test('a', () => {});\n+  test.only('a', () => {});").focused, 1);
+  assert.deepEqual(countCases("-describe('s', () => {\n+describe.only('s', () => {"), { removed: 0, added: 0, suitesOff: 0, focused: 1 });
+  assert.deepEqual(countCases("-describe('s', () => {\n+fdescribe('s', () => {").focused, 1);
+  assert.deepEqual(countCases("-  it('a', () => {});\n+  fit('a', () => {});").focused, 1);
+  // The `fit()` helper is still not a case, nor a focus.
+  assert.deepEqual(countCases("+  fit();\n+  fit(board, 2);"), { removed: 0, added: 0, suitesOff: 0 });
+  // Editing an already-focused line is not a new focus; removing one offsets.
+  assert.deepEqual(countCases("-  it.only('a', () => {});\n+  it.only('b', () => {});"), { removed: 1, added: 1, suitesOff: 0 });
+  // Reported even though the case count is level.
+  assert.deepEqual(testRemovals([{ filename: "packages/react/src/useDoc.spec.tsx", status: "modified",
+    patch: "-  it('a', () => {});\n+  it.only('a', () => {});" }]).map((r) => [r.file, r.focused]),
+  [["packages/react/src/useDoc.spec.tsx", 1]]);
+});
+
+// node:test has no `.fails`; `{ todo }` runs and reports without failing, and
+// `{ skip }` does not run. Either is evidence the adjudicator should see.
+test("countCases: a newly added node:test `{ todo }` / `{ skip }` option is a disablement", () => {
+  assert.deepEqual(countCases("-test('x', async () => {\n+test('x', { todo: 'still reproduces: f' }, async () => {"),
+    { removed: 1, added: 1, suitesOff: 0, optionsOff: 1 });
+  assert.equal(countCases("-it('x', () => {\n+it('x', { skip: true }, () => {").optionsOff, 1);
+  assert.equal(countCases("-it('x', () => {\n+it('x', {skip: true}, () => {").optionsOff, 1);
+  // An existing guarded case edited in place is not a new disablement.
+  assert.deepEqual(countCases("-test('a', { skip: !shouldRun }, async () => {\n+test('b', { skip: !shouldRun }, async () => {"),
+    { removed: 1, added: 1, suitesOff: 0 });
+});
+
+// The option form does not fit on one line with a long title, and Prettier
+// wraps every argument onto its own line. These patches are `git diff` output
+// of Prettier's real formatting: the option line then matches no case pattern.
+test("countCases: a `{ todo }` / `{ skip }` option Prettier wrapped onto its own line is a disablement", () => {
+  const wrapped = [
+    " describe('suite', () => {",
+    "-  test('rejects a concurrent merge across a split boundary', async () => {",
+    "-    assert.equal(1, 1);",
+    "-  });",
+    "+  test(",
+    "+    'rejects a concurrent merge across a split boundary',",
+    "+    { todo: 'still reproduces: merge split boundary' },",
+    "+    async () => {",
+    "+      assert.equal(1, 1);",
+    "+    },",
+    "+  );",
+  ].join("\n");
+  assert.deepEqual(countCases(wrapped), { removed: 1, added: 1, suitesOff: 0, optionsOff: 1 });
+  // A case already wrapped (a long title) gains only the option line; the
+  // opener and title are context.
+  const lone = [
+    "@@ -5,6 +5,7 @@ describe('suite', () => {",
+    "   test(",
+    "     'rejects a concurrent merge across a split boundary that was already applied',",
+    "+    { todo: 'still reproduces: merge split boundary' },",
+    "     async () => {",
+    "       assert.equal(1, 1);",
+    "     },",
+  ].join("\n");
+  assert.deepEqual(countCases(lone), { removed: 0, added: 0, suitesOff: 0, optionsOff: 1 });
+  // A long option breaks the object too, one property per line.
+  const broken = [
+    "+test(",
+    "+  'rejects a concurrent merge',",
+    "+  {",
+    "+    timeout: 5000,",
+    "+    skip: process.platform === 'win32' && 'flaky on windows runners for now',",
+    "+  },",
+    "+  async () => {",
+  ].join("\n");
+  assert.equal(countCases(broken).optionsOff, 1);
+  // An existing option on a wrapped case gained a key.
+  assert.equal(countCases("   it(\n     'x',\n-    { timeout: 5000 },\n+    { timeout: 5000, skip: true },\n     async () => {").optionsOff, 1);
+});
+
+test("countCases: a wrapped option that was already there is not a new disablement", () => {
+  // Re-wrapped from one line (a longer title made it overflow).
+  assert.deepEqual(countCases([
+    "-  it('x', { skip: !shouldRun }, async () => {",
+    "+  it(",
+    "+    'x with a title long enough that Prettier now wraps every argument',",
+    "+    { skip: !shouldRun },",
+    "+    async () => {",
+  ].join("\n")), { removed: 1, added: 1, suitesOff: 0 });
+  // Re-indented (moved into a describe), the object broken over lines.
+  assert.deepEqual(countCases([
+    "-test(",
+    "-  'x',",
+    "-  {",
+    "-    skip: !shouldRun,",
+    "-  },",
+    "-  async () => {",
+    "+  test(",
+    "+    'x',",
+    "+    {",
+    "+      skip: !shouldRun,",
+    "+    },",
+    "+    async () => {",
+  ].join("\n")), { removed: 1, added: 1, suitesOff: 0 });
+  // Its title edited in place, the option line untouched context.
+  assert.deepEqual(countCases([
+    "   it(",
+    "-    'old title that is long enough to make Prettier wrap the call',",
+    "+    'new title that is long enough to make Prettier wrap the call',",
+    "     { skip: !shouldRun },",
+    "     async () => {",
+  ].join("\n")), { removed: 0, added: 0, suitesOff: 0 });
+});
+
+test("countCases: `todo`/`skip` keys outside a case's options are not disablements", () => {
+  for (const patch of [
+    // A `test.each` table: the first argument is data, not a title.
+    "+test.each([\n+  { skip: true, a: 1 },\n+  { skip: false, a: 2 },\n+])('row %o', ({ a }) => {});",
+    // A call that is not a case, shaped like one.
+    "+  register(\n+    'x',\n+    { skip: true },\n+    async () => {",
+    // An object in a case's body.
+    "+  test(\n+    'x',\n+    async () => {\n+      const opts = { skip: true };\n+      run({ todo: 1 });",
+    // A key in the callback's own object, after the options slot.
+    "+  test(\n+    'x',\n+    { timeout: 5 },\n+    async () => {\n+      const o = {\n+        todo: 1,\n+      };",
+  ]) assert.equal(countCases(patch).optionsOff, undefined, patch);
+});
+
+test("the JavaScript switches stay out of Go and Rust files", () => {
+  // A Go comment or string that reads like a focus or an option is not one,
+  // and a Go or Rust record carries neither key.
+  const go = { file: "pkg/x_test.go", status: "modified" };
+  assert.deepEqual(countCases("+\t// it.only('a', () => {});\n+\tt.Run(\"x\", func(t *testing.T) {", go), { removed: 0, added: 1, suitesOff: 0 });
+  assert.deepEqual(countCases("+  test(\n+    'x',\n+    { skip: true },\n+    async () => {", go), { removed: 0, added: 0, suitesOff: 0 });
+});
+
+test("aggregateCommits: a focus or an option added and taken out inside one round is not reported", () => {
+  const f = "scripts/agent/x.test.mjs";
+  const c = (sha, patch) => ({ sha, parents: [{}], files: [{ filename: f, status: "modified", patch }] });
+  assert.deepEqual(aggregateCommits([
+    c("c1", "-test('a', () => {\n+test.only('a', () => {"),
+    c("c2", "-test.only('a', () => {\n+test('a', () => {"),
+  ]), []);
+  assert.deepEqual(aggregateCommits([
+    c("c1", "-test('a', () => {\n+test('a', { skip: true }, () => {"),
+    c("c2", "-test('a', { skip: true }, () => {\n+test('a', () => {"),
+  ]), []);
+  // Left on at the end of the round: reported once, each in its own count.
+  const left = aggregateCommits([
+    c("c1", "-test('a', () => {\n+test.only('a', { todo: 'f' }, () => {"),
+    c("c2", " // nothing else"),
+  ]);
+  assert.deepEqual(left, [{ file: f, deleted: false, removed: 1, added: 1, suitesOff: 0, focused: 1, optionsOff: 1 }]);
+});
+
+test("records carry focuses and options, and say so in words", () => {
+  const removals = [{ file: "scripts/agent/x.test.mjs", deleted: false, removed: 1, added: 1, suitesOff: 0, focused: 1, optionsOff: 2 }];
+  const body = renderTestRemovals({ head: "h", after: "a", removals });
+  assert.deepEqual(collectTestRemovals([bot(body)])[0].removals, removals);
+  assert.match(describeRemoval(removals[0]), /1 focus\(es\) added .*which stops every sibling/);
+  assert.match(describeRemoval(removals[0]), /2 case\(s\) given a `\{ todo \}`\/`\{ skip \}` option/);
+  // Absent when zero, so a record without them is the bytes it always was.
+  const plain = serializeTestRemovals({ head: "h", after: "a", removals: [{ file: "x_test.go", deleted: true, removed: 1, added: 0, suitesOff: 0, focused: 0, optionsOff: 0 }] });
+  assert.ok(!/focused|optionsOff|truncated/.test(plain), plain);
+});
+
+test("capRoundCommits: commits past the cap are flagged, never silently dropped", () => {
+  const list = Array.from({ length: ROUND_COMMIT_CAP + 1 }, (_, i) => ({ sha: `c${i}`, n: 1 }));
+  const got = capRoundCommits(list);
+  assert.equal(got.commits.length, ROUND_COMMIT_CAP);
+  assert.equal(got.truncated, true);
+  assert.equal(capRoundCommits(list.slice(0, 3)).truncated, false);
+  const body = renderTestRemovals({ head: "h", after: "a", truncated: true, removals: [] });
+  assert.match(body, new RegExp(`more than ${ROUND_COMMIT_CAP} commits; only the first ${ROUND_COMMIT_CAP} were read`));
+  // A truncated record with nothing seen is still believable: it says the round was not fully read.
+  assert.equal(collectTestRemovals([bot(body)])[0].truncated, true);
 });

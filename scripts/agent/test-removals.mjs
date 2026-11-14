@@ -46,7 +46,11 @@
 //     rules cannot know: which directories hold shared suite bodies, and the
 //     platform CI runs on.
 //   - `vitest`: `*.test.*` / `*.spec.*` files with `it(`/`test(` cases — the
-//     shape of this package's own tests too.
+//     shape of this package's own tests too. The same rules read Jest and
+//     node:test, whose spellings differ: besides a case removed or a suite
+//     switched off, a FOCUS added (`.only`, `fit`, `fdescribe`), which stops
+//     every sibling, and a `{ skip }` / `{ todo }` OPTION added to a case,
+//     one-line or wrapped by a formatter, are recorded apart from cases.
 //   - `cargo`: Rust keeps most unit tests INSIDE the file they test, so
 //     there is no "test file" to find them in. A case is the `#[test]`
 //     attribute (and its family: `#[tokio::test]`, `#[rstest]`, …), which
@@ -70,7 +74,8 @@
 // the record is joined on; it defaults to `--before`. With `--pusher`, `--since`
 // and `--branch`, the round ends at the App's own last push (`fixerHead`)
 // rather than at `--after`, the live head. Posts only when something
-// was removed or history was rewritten. Always exits 0: an unread round is "no
+// was removed, history was rewritten, or the round had more commits than are
+// read (`ROUND_COMMIT_CAP`). Always exits 0: an unread round is "no
 // evidence", which is exactly the behaviour before this existed.
 
 import { execFileSync } from "node:child_process";
@@ -242,19 +247,114 @@ export function isRunnableTest(file) {
 
 const isGo = (file) => GO_RULES && /\.go$/.test(str(file));
 
-// JavaScript (the harness's own tests). An ACTIVE case declaration at the start
-// of a diff line: `it`/`test` with any
+// JavaScript (the harness's own tests, and Vitest, Jest and node:test suites).
+// An ACTIVE case declaration at the start of a diff line: `it`/`test` with any
 // chain of the modifiers that still RUN (`only`, `each`, `concurrent`, `fails`,
-// `sequential`, `for`), called or tagged (`test.each\`…\``). `.fails` runs and
-// asserts the failure — how a fixer should record a reproduction it could not
-// fix — so turning a case into `.fails` is not a removal. `.skip`, `.todo`,
-// `.skipIf(…)` and `.runIf(…)` may not run: a case rewritten to one stops
-// matching, which counts it removed.
-const CASE = /^[-+]\s*(?:it|test)(?:\.(?:only|each|concurrent|fails|sequential|for))*\s*[(`]/;
+// `sequential`, `for`; Jest's `failing`), called or tagged (`test.each\`…\``),
+// or Jest's focused `fit` — only with a string title, because a helper named
+// `fit()` is common in code that lays things out, and its calls are not cases.
+// `.fails` (Vitest) and `.failing` (Jest) run and assert the failure — how a
+// fixer should record a reproduction it could not fix — so turning a case into
+// one is not a removal. `.skip`, `.todo`, `.skipIf(…)`, `.runIf(…)` and Jest's
+// `xit`/`xtest` may not run: a case rewritten to one stops matching, which
+// counts it removed.
+const CASE = /^[-+]\s*(?:(?:it|test)(?:\.(?:only|each|concurrent|fails|failing|sequential|for))*\s*[(`]|fit\s*\(\s*['"`])/;
 // A suite that may not run. Counted apart from cases and never netted against
 // added ones: one `describe.skip` silences every case under it without those
 // lines changing, so "one suite off, one case added" must still be reported.
-const SUITE_OFF = /^[-+]\s*describe(?:\.\w+)*\.(?:skip|todo|skipIf|runIf)\s*[(`]/;
+// Jest's `xdescribe` is the same switch spelled as a prefix.
+const SUITE_OFF = /^[-+]\s*(?:describe(?:\.\w+)*\.(?:skip|todo|skipIf|runIf)|xdescribe(?:\.\w+)*)\s*[(`]/;
+// A FOCUS: the focused case runs, and every sibling silently stops. Jest has
+// no CI guard (`CI=true jest --ci` reports "1 skipped, 1 passed", exit 0), and
+// a repository need not lint for it. Vitest rejects `.only` under CI, but
+// counting it everywhere costs nothing. Counted apart from cases and netted
+// only against itself, like a suite switched off.
+const FOCUS = /^[-+]\s*(?:(?:it|test|describe)(?:\.\w+)*\.only|fdescribe|fit(?=\s*\(\s*['"`]))\s*[(`]/;
+// node:test's OPTION form, `test("x", { todo: … }, fn)` / `{ skip: … }`: the
+// case is skipped, or still runs and a failure no longer fails the suite. It is
+// the form a node:test file has instead of `.fails`, so a newly added one is
+// evidence, netted only against lines that already carried it.
+const OPTION_OFF = /,\s*\{[^}]*\b(?:todo|skip)\s*:/;
+// The same option once a formatter has WRAPPED the call: a long title and an
+// option overflow the line, and Prettier puts the opener, the title, the
+// options and the callback on lines of their own, the object itself broken
+// one key per line when long:
+//
+//   test(                                test(
+//     'long title',                        'long title',
+//     { todo: 'still reproduces: …' },     {
+//     async () => {                          timeout: 5000,
+//                                            skip: !shouldRun,
+//                                          },
+//
+// Recognised only in that slot — a bare case opener, a title that starts with
+// a quote, then the object — so a `test.each` table, a look-alike call or an
+// object in the body never counts (`wrappedOptions`).
+const WRAPPED_OPENER = /^\s*(?:it|test)(?:\.(?:only|concurrent|fails|failing|sequential))*\s*\(\s*$/;
+const WRAPPED_TITLE = /^\s*['"`]/;
+const OPTION_KEY = /(?:^|[{,])\s*(?:todo|skip)\s*:/;
+
+/**
+ * Options on WRAPPED case calls that a patch adds and removes. Each side of the
+ * diff is read as its own file (context lines belong to both), so a call whose
+ * opener and title are unchanged context still has its options slot found. An
+ * option counts on a side only when its key line CHANGED on that side: an
+ * existing `{ skip: !shouldRun },` left as context counts nowhere, and one
+ * re-indented or re-wrapped is removed on one side and added on the other,
+ * which nets to zero like the one-line form.
+ */
+function wrappedOptions(patch) {
+  const out = { added: 0, removed: 0 };
+  const sides = { "+": { phase: 0 }, "-": { phase: 0 } };
+  for (const line of str(patch).split("\n")) {
+    if (line.startsWith("---") || line.startsWith("+++")) continue;
+    if (line.startsWith("@@")) {
+      sides["+"].phase = 0;
+      sides["-"].phase = 0;
+      continue;
+    }
+    const mark = line[0];
+    if (mark !== " " && mark !== "+" && mark !== "-") continue;
+    const text = line.slice(1);
+    for (const side of mark === " " ? ["+", "-"] : [mark]) {
+      const st = sides[side];
+      const changed = mark === side;
+      const hit = () => {
+        if (changed && !st.counted) {
+          out[side === "+" ? "added" : "removed"]++;
+          st.counted = true;
+        }
+      };
+      if (st.phase === 1) {
+        st.phase = WRAPPED_TITLE.test(text) ? 2 : 0;
+        if (st.phase) continue;
+      } else if (st.phase === 2) {
+        st.phase = 0;
+        st.counted = false;
+        if (/^\s*\{.*\}\s*,?\s*$/.test(text)) {
+          if (OPTION_KEY.test(text)) hit();
+          continue;
+        }
+        if (/^\s*\{\s*$/.test(text)) {
+          st.phase = 3;
+          st.depth = 0;
+          continue;
+        }
+      } else if (st.phase === 3) {
+        // One key per line at the object's own depth; a nested object's keys
+        // are not the case's options.
+        if (st.depth === 0 && /^\s*(?:todo|skip)\s*:/.test(text)) hit();
+        const opens = (text.match(/[{[(]/g) ?? []).length;
+        const closes = (text.match(/[}\])]/g) ?? []).length;
+        st.depth += opens - closes;
+        if (st.depth < 0) st.phase = 0;
+        continue;
+      }
+      if (WRAPPED_OPENER.test(text)) st.phase = 1;
+    }
+  }
+  return out;
+}
 
 // Go. A top-level case is a `Test`/`Fuzz` function whose name continues with
 // anything but a lower-case letter (the `go test` rule) and whose parameter is
@@ -305,8 +405,12 @@ function tally(patch, { file = "", status = "" } = {}) {
   if (isCargoManifest(file)) return cargoManifestTally(patch, { status });
   const go = isGo(file);
   const shared = go && isSharedGoSuite(file);
-  let removed = 0, added = 0, offNet = 0;
+  let removed = 0, added = 0, offNet = 0, focusNet = 0, optNet = 0;
   const builds = { "+": new Set(), "-": new Set() };
+  if (!go && JS_RULES) {
+    const wrapped = wrappedOptions(patch);
+    optNet += wrapped.added - wrapped.removed;
+  }
   for (const line of str(patch).split("\n")) {
     if (line.startsWith("---") || line.startsWith("+++")) continue;
     const sign = line[0] === "+" ? 1 : -1;
@@ -322,28 +426,38 @@ function tally(patch, { file = "", status = "" } = {}) {
       }
       if (!GO_CASE.test(line) && !GO_SUBTEST.test(line) && !(shared && GO_SHARED_CASE.test(line))) continue;
     } else if (JS_RULES) {
+      if (FOCUS.test(line)) focusNet += sign;
       if (SUITE_OFF.test(line)) {
         offNet += sign;
         continue;
       }
       if (!CASE.test(line)) continue;
+      if (OPTION_OFF.test(line)) optNet += sign;
     } else {
       continue;
     }
     if (sign < 0) removed++;
     else added++;
   }
-  return { removed, added, offNet, buildsAdded: builds["+"], buildsRemoved: builds["-"], newFile: status === "added" };
+  return { removed, added, offNet, focusNet, optNet, buildsAdded: builds["+"], buildsRemoved: builds["-"], newFile: status === "added" };
 }
 
 // `never`: which gates count in a file that is new. The Go answer (the
 // `ignore` tag) is the default; the cargo tally brings its own.
 const suitesOffOf = (t) => Math.max(0, t.offNet) + constraintsOff(t.buildsAdded, t.buildsRemoved, t.newFile, t.never);
+// The JavaScript switches, each netted against itself only. Only the JS rules
+// count them, so for any other file both are 0.
+const switchesOf = (t) => ({ focused: Math.max(0, t.focusNet ?? 0), optionsOff: Math.max(0, t.optNet ?? 0) });
+/** `focused` / `optionsOff` as a record carries them: present only when non-zero. */
+const presentSwitches = ({ focused, optionsOff }) => ({ ...(focused ? { focused } : {}), ...(optionsOff ? { optionsOff } : {}) });
 
 /**
  * Active cases a unified diff removes and adds, and how many suites it newly
  * switches off. Suite lines are netted against THEMSELVES only, so editing an
  * already-skipped suite's title, or re-enabling one, is not a disablement.
+ * With the JS rules, `focused` and `optionsOff` count the focuses and the
+ * `{ skip }` / `{ todo }` options it newly adds, netted the same way, and are
+ * present only when non-zero.
  * `file` picks the language (a `.go` file gets the Go rules, a `.rs` file or a
  * `Cargo.toml` the cargo ones, anything else the JS ones); `status` is the
  * file's GitHub status, which only the gate rules read: a gate in a NEW file
@@ -351,7 +465,7 @@ const suitesOffOf = (t) => Math.max(0, t.offNet) + constraintsOff(t.buildsAdded,
  */
 export function countCases(patch, opts = {}) {
   const t = tally(patch, opts);
-  return { removed: t.removed, added: t.added, suitesOff: suitesOffOf(t) };
+  return { removed: t.removed, added: t.added, suitesOff: suitesOffOf(t), ...presentSwitches(switchesOf(t)) };
 }
 
 /** One commit's (or one compare's) files → per-path entries. Not yet filtered. */
@@ -373,11 +487,11 @@ function entries(files) {
     // "nothing removed". (A pure rename also carries no patch, but an unchanged
     // file is not a removal.)
     if (typeof f.patch !== "string" && !(f.status === "renamed" && !renamedAway)) {
-      if (deleted || f.status === "modified") out.push({ file: was, deleted, removed: 0, added: 0, suitesOff: 0, unreadable: true });
+      if (deleted || f.status === "modified") out.push({ file: was, deleted, removed: 0, added: 0, suitesOff: 0, focused: 0, optionsOff: 0, unreadable: true });
       continue;
     }
     const t = tally(f.patch, { file: was, status: f.status });
-    out.push({ file: was, deleted, renamedAway, removed: t.removed, added: t.added, suitesOff: suitesOffOf(t), raw: t });
+    out.push({ file: was, deleted, renamedAway, removed: t.removed, added: t.added, suitesOff: suitesOffOf(t), ...switchesOf(t), raw: t });
   }
   return out;
 }
@@ -386,10 +500,11 @@ function entries(files) {
 function removalsOf(list) {
   const out = [];
   for (const e of list) {
-    const hit = e.unreadable || e.renamedAway || e.suitesOff > 0 || (e.deleted ? e.removed > 0 : e.removed > e.added);
+    const hit = e.unreadable || e.renamedAway || e.suitesOff > 0 || e.focused > 0 || e.optionsOff > 0
+      || (e.deleted ? e.removed > 0 : e.removed > e.added);
     if (!hit) continue;
-    const { renamedAway: _r, raw: _t, ...rest } = e;
-    out.push(rest);
+    const { renamedAway: _r, raw: _t, focused, optionsOff, unreadable, ...rest } = e;
+    out.push({ ...rest, ...presentSwitches({ focused, optionsOff }), ...(unreadable ? { unreadable } : {}) });
   }
   return out;
 }
@@ -409,10 +524,11 @@ export function testRemovals(files) {
  * and deleted in a later one is a deletion that held cases — exactly what a
  * three-dot compare cannot see.
  *
- * Cases are summed; switch-offs are NETTED across the round before they are
- * clamped. The Go fixer is told to write skips, so a skip added in one commit
- * and taken out in a later one — or a constraint changed and changed back — is
- * no switch-off at all, and clamping per commit would report it.
+ * Cases are summed; switch-offs — and focuses and options — are NETTED across
+ * the round before they are clamped. The Go fixer is told to write skips, so a
+ * skip added in one commit and taken out in a later one — or a constraint
+ * changed and changed back — is no switch-off at all, and clamping per commit
+ * would report it.
  */
 export function aggregateCommits(commits) {
   const byFile = new Map();
@@ -421,8 +537,8 @@ export function aggregateCommits(commits) {
     for (const e of entries(c?.files)) {
       const fresh = !byFile.has(e.file);
       const cur = byFile.get(e.file) ?? {
-        file: e.file, deleted: false, removed: 0, added: 0, suitesOff: 0,
-        raw: { offNet: 0, buildsAdded: new Set(), buildsRemoved: new Set(), newFile: e.raw?.newFile === true, never: e.raw?.never },
+        file: e.file, deleted: false, removed: 0, added: 0, suitesOff: 0, focused: 0, optionsOff: 0,
+        raw: { offNet: 0, focusNet: 0, optNet: 0, buildsAdded: new Set(), buildsRemoved: new Set(), newFile: e.raw?.newFile === true, never: e.raw?.never },
       };
       if (fresh && !e.raw) cur.raw.newFile = false;
       cur.removed += e.removed;
@@ -430,10 +546,13 @@ export function aggregateCommits(commits) {
       if (e.raw) {
         cur.raw.never ??= e.raw.never;
         cur.raw.offNet += e.raw.offNet;
+        cur.raw.focusNet += e.raw.focusNet ?? 0;
+        cur.raw.optNet += e.raw.optNet ?? 0;
         for (const x of e.raw.buildsAdded) cur.raw.buildsAdded.add(x);
         for (const x of e.raw.buildsRemoved) cur.raw.buildsRemoved.add(x);
       }
       cur.suitesOff = suitesOffOf(cur.raw);
+      Object.assign(cur, switchesOf(cur.raw));
       cur.deleted = e.deleted || (cur.deleted && e.removed === 0 && e.added === 0);
       if (e.unreadable) cur.unreadable = true;
       if (e.renamedAway) cur.renamedAway = true;
@@ -499,19 +618,35 @@ export function fixerHead(activities, { before, pusher, since, ref } = {}) {
   return cur === start ? "" : cur;
 }
 
+/** Read at most this many of a round's commits; more is flagged `truncated`. */
+export const ROUND_COMMIT_CAP = 50;
+
+/**
+ * The first `cap` commits, and whether any were left unread. A round past the
+ * cap is recorded as not fully read rather than silently shortened: what the
+ * unread commits removed is unknown, not nothing.
+ */
+export function capRoundCommits(commits, cap = ROUND_COMMIT_CAP) {
+  const list = Array.isArray(commits) ? commits : [];
+  return { commits: list.slice(0, cap), truncated: list.length > cap };
+}
+
 /** The hidden record. The terminator is escaped, as every record here does. */
-export function serializeTestRemovals({ head = "", after = "", removals = [], rewritten = false } = {}) {
+export function serializeTestRemovals({ head = "", after = "", removals = [], rewritten = false, truncated = false } = {}) {
   const payload = {
     v: TEST_REMOVALS_VERSION,
     head: str(head).slice(0, 64),
     after: str(after).slice(0, 64),
     ...(rewritten ? { rewritten: true } : {}),
+    ...(truncated ? { truncated: true } : {}),
     removals: (Array.isArray(removals) ? removals : []).slice(0, 40).map((r) => ({
       file: safePath(r.file),
       deleted: r.deleted === true,
       removed: int(r.removed),
       added: int(r.added),
       suitesOff: int(r.suitesOff),
+      ...(int(r.focused) ? { focused: int(r.focused) } : {}),
+      ...(int(r.optionsOff) ? { optionsOff: int(r.optionsOff) } : {}),
       ...(r.unreadable === true ? { unreadable: true } : {}),
     })),
   };
@@ -530,6 +665,8 @@ export function describeRemoval(r) {
   const parts = [];
   if (int(r?.removed) || int(r?.added)) parts.push(`${int(r?.removed)} active case(s) removed or disabled, ${int(r?.added)} added`);
   if (int(r?.suitesOff)) parts.push(`${int(r.suitesOff)} test(s) or suite(s) switched off`);
+  if (int(r?.focused)) parts.push(`${int(r.focused)} focus(es) added (\`.only\`/\`fit\`/\`fdescribe\`), which stops every sibling`);
+  if (int(r?.optionsOff)) parts.push(`${int(r.optionsOff)} case(s) given a \`{ todo }\`/\`{ skip }\` option`);
   return `- ${file}: ${parts.join("; ")}`;
 }
 
@@ -540,6 +677,7 @@ export function renderTestRemovals(rec) {
     `🧪 **This fix round removed or disabled tests in ${list.length} file(s)** between \`${safePath(rec?.head).slice(0, 9)}\` and \`${safePath(rec?.after).slice(0, 9)}\`. ` +
       "Removing a test can be legitimate; this is passed to the next round's adjudicator as evidence.",
     ...(rec?.rewritten ? ["", "⚠️ The branch history was rewritten during the round, so commits it dropped could not be read."] : []),
+    ...(rec?.truncated ? ["", `⚠️ The round had more than ${ROUND_COMMIT_CAP} commits; only the first ${ROUND_COMMIT_CAP} were read.`] : []),
     "",
     ...list.map(describeRemoval),
   ].join("\n").replace(/<!--/g, "<!-‌-");
@@ -560,12 +698,14 @@ export function collectTestRemovals(comments) {
       continue;
     }
     if (!d || typeof d !== "object" || d.v !== TEST_REMOVALS_VERSION || !Array.isArray(d.removals)) continue;
-    // An EMPTY record is refused unless it says history was rewritten: an empty
-    // list could only ever hide a real record for the same head.
-    if (d.removals.length === 0 && d.rewritten !== true) continue;
+    // An EMPTY record is refused unless it says the round was not fully read
+    // (history rewritten, or commits past the cap): an empty list could only
+    // ever hide a real record for the same head.
+    if (d.removals.length === 0 && d.rewritten !== true && d.truncated !== true) continue;
     out.push({
       head: str(d.head), after: str(d.after),
       ...(d.rewritten === true ? { rewritten: true } : {}),
+      ...(d.truncated === true ? { truncated: true } : {}),
       removals: d.removals.map((r) => ({ ...r, file: safePath(r?.file) })),
     });
   }
@@ -604,6 +744,7 @@ function main() {
     .split("\n").filter((l) => l.trim() !== "").map((l) => JSON.parse(l));
   let commits;
   let rewritten = false;
+  let truncated = false;
   try {
     // The compare is used for its COMMIT list and status only — the commits
     // paginate cleanly; the file list does not (it is capped and lives on page 1).
@@ -612,7 +753,9 @@ function main() {
     const inRound = ghLines(["api", "--paginate", `repos/{owner}/{repo}/compare/${before}...${after}?per_page=100`, "--jq", ".commits[] | {sha, n: (.parents | length)}"]);
     const prShas = new Set(ghLines(["api", "--paginate", `repos/{owner}/{repo}/pulls/${pr}/commits?per_page=100`, "--jq", ".[].sha | tojson"]));
     commits = [];
-    for (const { sha } of roundCommits(inRound, prShas).slice(0, 50)) {
+    const capped = capRoundCommits(roundCommits(inRound, prShas));
+    truncated = capped.truncated;
+    for (const { sha } of capped.commits) {
       const files = ghLines(["api", "--paginate", `repos/{owner}/{repo}/commits/${sha}?per_page=100`, "--jq", ".files[]"]);
       commits.push({ sha, parents: [{}], files });
     }
@@ -621,15 +764,15 @@ function main() {
     return;
   }
   const removals = aggregateCommits(commits);
-  if (removals.length === 0 && !rewritten) {
+  if (removals.length === 0 && !rewritten && !truncated) {
     console.error("test-removals: the fix round removed no test.");
     return;
   }
   try {
     execFileSync("gh", ["pr", "comment", pr, "--body-file", "-"], {
-      input: renderTestRemovals({ head, after, removals, rewritten }), encoding: "utf8", maxBuffer: 32 * 1024 * 1024,
+      input: renderTestRemovals({ head, after, removals, rewritten, truncated }), encoding: "utf8", maxBuffer: 32 * 1024 * 1024,
     });
-    console.error(`test-removals: recorded ${removals.length} file(s)${rewritten ? " (history rewritten)" : ""}.`);
+    console.error(`test-removals: recorded ${removals.length} file(s)${rewritten ? " (history rewritten)" : ""}${truncated ? " (commits past the cap unread)" : ""}.`);
   } catch (err) {
     console.error(`test-removals: could not post (${err.message}).`);
   }
