@@ -525,6 +525,7 @@ test("the no-commit page stays quiet for every supersede, and pages otherwise", 
     stub("gh", [
       'case "$*" in',
       `  *git/ref/heads/*) [ -n "$STUB_AFTER" ] && printf '%s\\n' "$STUB_AFTER" || exit 1;;`,
+      `  *actions/runs?head_sha=*) [ "$STUB_CI_RUNS" = fail ] && exit 1; printf '%s\\n' "$STUB_CI_RUNS";;`,
       `  *actions/runs/*) printf '%s\\n' "$STUB_NOW_ATTEMPT";;`,
       `  *) echo "gh $*" >> "${log}"; cat >> "${log}";;`,
       "esac",
@@ -541,7 +542,8 @@ test("the no-commit page stays quiet for every supersede, and pages otherwise", 
       });
       assert.equal(r.status, 0, r.stderr);
     };
-    const run = ({ before, after, reviewed, outcome, ciAttempt = "1", nowAttempt = "1" }) => {
+    let posted = "";
+    const run = ({ before, after, reviewed, outcome, ciAttempt = "1", nowAttempt = "1", ciRuns = "1" }) => {
       writeFileSync(log, "");
       writeFileSync(out, "");
       bash(readAfter, { BRANCH: "b", BEFORE: before, STUB_AFTER: after });
@@ -549,9 +551,10 @@ test("the no-commit page stays quiet for every supersede, and pages otherwise", 
       if (got.advanced === "true") return false;
       bash(page, {
         PR: "1", BEFORE: before, AFTER: got.sha, REVIEWED: reviewed, FIXER_OUTCOME: outcome,
-        CI_RUN_ID: "9", CI_ATTEMPT: ciAttempt, STUB_NOW_ATTEMPT: nowAttempt,
+        CI_RUN_ID: "9", CI_ATTEMPT: ciAttempt, STUB_NOW_ATTEMPT: nowAttempt, STUB_CI_RUNS: ciRuns,
       });
-      return readFileSync(log, "utf8").includes("<!-- agent-review-paged -->");
+      posted = readFileSync(log, "utf8");
+      return posted.includes("<!-- agent-review-paged -->");
     };
 
     for (const [why, args, pages] of [
@@ -564,9 +567,16 @@ test("the no-commit page stays quiet for every supersede, and pages otherwise", 
       ["the fixer hit the wall with nothing pushed", { before: "aaa", after: "aaa", reviewed: "aaa", outcome: "cancelled" }, true],
       ["the head could not be read", { before: "aaa", after: "", reviewed: "aaa", outcome: "cancelled" }, true],
       ["the reviewed commit is unknown", { before: "aaa", after: "aaa", reviewed: "", outcome: "success" }, true],
+      // The other push started no CI (`[skip ci]`, a GITHUB_TOKEN push): no
+      // fresher round exists, and the sweep does not restart `agent:fixing`.
+      ["another push landed and started no CI", { before: "bbb", after: "bbb", reviewed: "aaa", outcome: "cancelled", ciRuns: "0" }, true],
+      ["another push landed, its CI could not be read", { before: "bbb", after: "bbb", reviewed: "aaa", outcome: "success", ciRuns: "fail" }, true],
     ]) {
       assert.equal(run(args), pages, `${why}: expected ${pages ? "a page" : "no page"}`);
     }
+    // And the page says why no round followed.
+    run({ before: "bbbbbbbbbbbb", after: "bbbbbbbbbbbb", reviewed: "aaaaaaaaaaaa", outcome: "success", ciRuns: "0" });
+    assert.match(posted, /moved to `bbbbbbbbb` \(not the `aaaaaaaaa` this round reviewed\) by another push, and no CI run was found/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
