@@ -186,6 +186,37 @@ export function isRepoSlug(value) {
     name !== ".."
   );
 }
+/**
+ * An MCP tool name as the SDK spells one, `mcp__<server>__<tool>`, and only an
+ * exact one: each part is letters and digits joined by single `-` or `_`, so a
+ * part holds no `__` and the name splits one way. A wildcard, a bare server
+ * (`mcp__server`, which grants all of its tools) and a permission rule
+ * (`mcp__server__run(...)`) are refused: the allow-list in `ask.mjs` matches
+ * names exactly, and none of those is a name.
+ */
+export function isMcpToolName(value) {
+  const part = "[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*";
+  return typeof value === "string" && new RegExp(`^mcp__${part}__${part}$`).test(value);
+}
+/**
+ * Why `source` cannot be a `redact.extraPatterns` entry, or null. It is the
+ * source of a JavaScript regular expression, without slashes or flags:
+ * `redact.mjs` compiles it with `g` and nothing else. It must compile, and it
+ * must not match the empty string — a mask that matches nothing would be
+ * written at every position of every published text.
+ */
+export function redactPatternProblem(source) {
+  if (typeof source !== "string" || source === "") return "is not a pattern";
+  if (/^\/.*\/[a-z]*$/.test(source)) return "is written as a literal: give the source alone, without the slashes or flags";
+  let re;
+  try {
+    re = new RegExp(source);
+  } catch (err) {
+    return `does not compile (${err.message})`;
+  }
+  if (re.test("")) return "matches the empty string";
+  return null;
+}
 const fragment = [isFragment, FRAGMENT];
 const optionalFragment = [(v) => v === "" || isFragment(v), `empty, or ${FRAGMENT}`];
 const sentences = [isSentences, SENTENCES];
@@ -365,11 +396,30 @@ const SCHEMA = {
     // client SDK ports it from another SDK and must converge with a server.
     counterpartRepos: [(v) => isList(v) && v.every(isRepoSlug), "an array of repositories as `owner/name`, not repeated (may be empty)"],
   },
+  // Credential shapes of this repository's own product, masked by
+  // `redact.mjs` beside the shapes it knows itself. Empty for a product whose
+  // keys have no shape a pattern could tell apart from an identifier.
   redact: {
-    extraPatterns: list,
+    extraPatterns: [
+      (v) => isList(v) && v.every((x) => redactPatternProblem(x) === null),
+      `an array of JavaScript regular-expression sources, ${ENTRIES}, each compiling and matching no empty string (may be empty)`,
+      (v) => {
+        const bad = Array.isArray(v) ? v.find((x) => isEntry(x) && redactPatternProblem(x) !== null) : undefined;
+        return bad === undefined ? "" : ` — ${JSON.stringify(bad)} ${redactPatternProblem(bad)}`;
+      },
+    ],
   },
+  // In-process MCP tools this repository implements itself, which `ask.mjs`
+  // may grant a session by exact name. Empty refuses every MCP name.
   ask: {
-    permittedMcpTools: list,
+    permittedMcpTools: [
+      (v) => isList(v) && v.every(isMcpToolName),
+      `an array of exact MCP tool names, \`mcp__<server>__<tool>\`, not repeated (may be empty)`,
+      (v) => {
+        const bad = Array.isArray(v) ? v.find((x) => isEntry(x) && !isMcpToolName(x)) : undefined;
+        return bad === undefined ? "" : ` — ${JSON.stringify(bad)} is not one`;
+      },
+    ],
   },
 };
 

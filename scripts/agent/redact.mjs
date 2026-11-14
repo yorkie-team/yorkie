@@ -53,6 +53,7 @@
 // so the env layer below is supplementary — every other layer works without
 // knowing a single variable name.
 
+import { get } from "./config.mjs";
 import { poolEnvNames } from "./token-pool.mjs";
 
 /**
@@ -142,6 +143,24 @@ export function secretsFromEnv(env = process.env) {
 }
 
 /**
+ * Compile one `redact.extraPatterns` source into the shape layer 3 uses: the
+ * repository's pattern for the credential's prefix and body, followed by the
+ * same whitespace-separated continuation the built-in shapes carry, so a key
+ * broken by a stray space is masked whole. `config.mjs` has already refused a
+ * source that does not compile or that matches the empty string.
+ */
+export function compileExtraPattern(source) {
+  return new RegExp(`(?:${source})(?:\\s+[A-Za-z0-9_-]{8,})*`, "g");
+}
+
+/**
+ * This repository's own credential shapes, from `redact.extraPatterns`. Empty
+ * unless the repository names some: the core has no shape rule for any
+ * product's keys (see layer 3).
+ */
+export const EXTRA_PATTERNS = Object.freeze(get("redact.extraPatterns").map(compileExtraPattern));
+
+/**
  * Mask a prefixed credential and any malformed tail it carries.
  *
  * `Header 'Authorization' has invalid value: sk-ant-oat01-AbC dEf123456` must not
@@ -151,6 +170,11 @@ export function secretsFromEnv(env = process.env) {
  */
 function maskPrefixed(text, pattern, label) {
   return text.replace(pattern, (match) => {
+    // A zero-length match is a position, not material. The built-in shapes
+    // cannot produce one; an `extraPatterns` entry that the loader could not
+    // prove non-empty (`(?=x)` matches "" only before an `x`) must not write a
+    // label into the text.
+    if (match === "") return match;
     // Walk the match chunk by chunk tracking the OFFSET each one ends at, rather
     // than rejoining the pieces with a single space. Rejoining silently assumes
     // the separators were one character wide, so `sk-ant-x␣␣␣dEf12345` would slice
@@ -181,7 +205,7 @@ function maskPrefixed(text, pattern, label) {
  * value the specific rule labels better, and the `(?!<REDACTED)` guards stop a
  * later rule rewriting an earlier, more precise label into a vaguer one.
  */
-export function redactSecrets(text, { extra = secretsFromEnv() } = {}) {
+export function redactSecrets(text, { extra = secretsFromEnv(), extraPatterns = EXTRA_PATTERNS } = {}) {
   let s = typeof text === "string" ? text : String(text ?? "");
 
   // LAYER 1 — live env values (supplementary; the only pool-aware layer).
@@ -208,17 +232,22 @@ export function redactSecrets(text, { extra = secretsFromEnv() } = {}) {
     /\b(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{20,})(?:\s+[A-Za-z0-9_-]{8,})*/g,
     "<REDACTED_GITHUB_TOKEN>",
   );
-  // NO SHAPE RULE FOR A PRODUCT'S OWN KEYS, deliberately. A key that is a bare
-  // short identifier — some twenty alphanumeric characters with no prefix —
-  // gives a shape rule nothing to match that would not also redact every
-  // commit sha and identifier in the text, and it sits below layer 5's entropy
-  // floor, so that net does not catch it either.
+  // NO BUILT-IN SHAPE RULE FOR A PRODUCT'S OWN KEYS, deliberately. A key that
+  // is a bare short identifier — some twenty alphanumeric characters with no
+  // prefix — gives a shape rule nothing to match that would not also redact
+  // every commit sha and identifier in the text, and it sits below layer 5's
+  // entropy floor, so that net does not catch it either.
   //
   // Layer 4's FIELD NAME is therefore the only thing standing between such a
   // key and a published comment, which is why `secret[-_]?key` is spelled out
   // there. An earlier revision of this comment claimed the bare `secret`
   // alternative covered a `secret_key` field. It does not — the separator
   // class has no `_`, so `secret_key: …` matched nothing and went out verbatim.
+  //
+  // A product whose keys DO have a shape (a fixed prefix, say) names it in
+  // `redact.extraPatterns`, and it is masked here, as an API key, beside the
+  // shapes above. A repository that names none gets exactly the other layers.
+  for (const pattern of extraPatterns) s = maskPrefixed(s, pattern, "<REDACTED_API_KEY>");
   // JWTs before the Bearer rule, so a bearer-carried JWT is labelled as a JWT
   // rather than swallowed by the broader pattern.
   s = s.replace(/\beyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*/g, "<REDACTED_JWT>");

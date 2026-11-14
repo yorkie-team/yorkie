@@ -107,6 +107,17 @@ test("snapshot: the bot identities each reader believes", () => {
   assert.deepEqual([...rebuttal.REBUTTAL_AUTHOR_LOGINS], SNAPSHOT.REBUTTAL_AUTHOR_LOGINS);
 });
 
+test("this repository grants no MCP tool and masks no product key shape of its own", async () => {
+  // yorkie implements no in-process MCP tool, and its project keys are bare
+  // identifiers a shape rule cannot tell from a sha (layer 4's field names
+  // catch them; see redact.test.mjs). Both lists stay empty, so the session
+  // grant and the redaction are exactly the core's own.
+  const { PERMITTED_MCP_TOOLS } = await agent("ask.mjs");
+  const { EXTRA_PATTERNS } = await agent("redact.mjs");
+  assert.deepEqual([...PERMITTED_MCP_TOOLS], []);
+  assert.deepEqual([...EXTRA_PATTERNS], []);
+});
+
 test("snapshot: the branch-protection decline message", () => {
   assert.equal(
     protection.decideProtection({ classicError: { status: 403 } }).reason,
