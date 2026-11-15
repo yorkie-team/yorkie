@@ -131,6 +131,7 @@ jobs:
       # write here goes through the App token minted below; the two comments
       # that must not depend on the App are posted by `finish`.
       contents: read
+      issues: read # a dispatched run's issue text, read with this job's own token
     outputs:
       # Whether the commenter passed the write-access check, from a step that
       # runs only after it passed (or on a dispatch, where it does not apply).
@@ -416,6 +417,12 @@ jobs:
       # It crosses to `implement` as an artifact, because that job's token
       # cannot read issues.
       #
+      # THE ARTIFACT REACHES THE AGENT, so this step holds nothing the agent
+      # must not have: no secret and no App token, only the event payload and,
+      # for a dispatch, this job's own read-only token, which lapses when this
+      # job ends — before the agent's job starts. checks.test.mjs holds it to
+      # that, and to being the only step that writes the file.
+      #
       # This narrows the window; it does not close the channel. The agent must
       # read the issue to implement it, and `Bash` can reach the network. See
       # docs/design/agent-command-verbs.md, Phase I, for what is and is not
@@ -423,7 +430,7 @@ jobs:
       - name: Fetch the issue text (trusted step, untrusted content)
         if: steps.app.outputs.configured == 'true'
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}
           # THE SNAPSHOT THE MAINTAINER AUTHORISED, from the immutable event
           # payload. A `gh issue view` here runs after the comment that

@@ -2501,6 +2501,70 @@ async function implementBoundaryProblems(text) {
       problems.add(`${where} runs something from the agent's output`);
     }
   }
+
+  // 11. The channels between the jobs, and the runners they run on.
+  //
+  // What `prepare` hands on is a fixed set, each from the step that decides
+  // it, and the agent's job reads only the base and the go-ahead — so no
+  // token minted in `prepare` can ride an output into it. The two steps whose
+  // outputs it reads hold nothing to leak.
+  const PREPARE_OUTPUTS = {
+    admitted: "steps.admitted.outputs.admitted",
+    configured: "steps.app.outputs.configured",
+    protection: "steps.protection.outcome",
+    base: "steps.base.outputs.base",
+    ready: "steps.ready.outputs.ready",
+  };
+  const declared = Object.fromEntries(Object.entries(prepare.outputs).map(([k, v]) => [k, /^\$\{\{\s*(.*?)\s*\}\}$/.exec(v)?.[1] ?? v]));
+  if (JSON.stringify(declared) !== JSON.stringify(PREPARE_OUTPUTS)) problems.add(`prepare's outputs are ${JSON.stringify(declared)}, not exactly ${JSON.stringify(PREPARE_OUTPUTS)}`);
+  for (const [, ref] of implement.lines.join("\n").matchAll(/\bneeds\.([\w-]+(?:\.outputs\.[\w-]+|\.\w+)?)/g)) {
+    if (!["prepare.outputs.base", "prepare.outputs.ready"].includes(ref)) problems.add(`the agent's job reads needs.${ref}; from prepare it may read the base and the go-ahead only`);
+  }
+  for (const id of ["base", "ready"]) {
+    const s = pst[at(pst, id)];
+    // Its condition may read the App check; what it is given to run with may not.
+    const body = s ? s.lines.filter((l) => !/^ {8}if:/.test(l)) : [];
+    if (s && (implSecrets(body).named.size > 0 || implSecrets(body).computed || /\b(?:steps|needs)\.[\w-]+\.outputs\./.test(body.join("\n")))) problems.add(`prepare "${id}", whose output the agent's job reads, holds a secret or another step's output`);
+  }
+  // A mint's own post step revokes its token when the job ends; nothing here
+  // turns that off.
+  for (const j of jobs.values()) {
+    for (const s of j.steps) if (/^\s+skip-token-revoke:/m.test(s.text)) problems.add(`${j.name} "${s.name ?? s.id}" keeps its App token alive past its job`);
+  }
+  // Fresh GitHub-hosted runners, so nothing the agent leaves on one is there
+  // when a trusted job starts.
+  for (const j of [prepare, implement, finish]) {
+    const head = j.lines.slice(0, j.lines.findIndex((l) => /^ {4}steps:\s*$/.test(l)));
+    const label = implKey(head, 4, "runs-on");
+    if (!/^ubuntu-[a-z0-9.-]+$/.test(label ?? "")) problems.add(`${j.name} runs on ${label ?? "an unnamed runner"}, not a GitHub-hosted ubuntu-* runner`);
+    if (j === implement && head.some((l) => /^ {4}(?:container|services):/.test(l))) problems.add("the agent's job declares a container or services, whose credentials no rule here reads");
+  }
+  // Artifacts by name, each exactly the one the job before uploaded.
+  const uploads = (j) => j.steps.filter((s) => /^actions\/upload-artifact@/.test(s.uses ?? "")).map((s) => ({ s, name: implKey(s.lines, 10, "name"), path: implKey(s.lines, 10, "path") }));
+  const downloads = (j) => j.steps.filter((s) => /^actions\/download-artifact@/.test(s.uses ?? "")).map((s) => ({ s, name: implKey(s.lines, 10, "name") }));
+  for (const [from, to] of [[prepare, implement], [implement, finish]]) {
+    const up = uploads(from).map((u) => u.name);
+    for (const d of downloads(to)) {
+      if (!d.name || !up.includes(d.name)) problems.add(`${to.name} downloads ${d.name ? `"${d.name}"` : "every artifact"}, not one ${from.name} uploaded`);
+      if (/^\s+(?:pattern|merge-multiple):/m.test(d.s.text)) problems.add(`${to.name} downloads artifacts by pattern`);
+    }
+  }
+  // The issue text reaches the agent, so the file it travels in is written by
+  // one step, from the event payload, and that step holds no secret and no
+  // App token: a dispatch reads the issue with `prepare`'s own token, which
+  // lapses when `prepare` ends.
+  const sent = uploads(prepare).filter((u) => downloads(implement).some((d) => d.name === u.name));
+  if (sent.length !== 1 || sent[0].path !== "${{ runner.temp }}/issue.md") problems.add("prepare does not hand the agent's job one file, the issue text");
+  const writers = pst.filter((s) => !/^actions\/upload-artifact@/.test(s.uses ?? "") && /\bissue\.md\b/.test(s.text));
+  if (writers.length !== 1) problems.add(`${writers.length} steps of prepare touch the issue file; one writes it`);
+  for (const w of writers) {
+    const env = w.lines.map((l) => /^ {10}([A-Z_]+):\s*(.*?)\s*$/.exec(l)).filter(Boolean);
+    for (const [, k, v] of env) {
+      if (!/^\$\{\{ (?:github\.event\.issue\.(?:title|body)|github\.event\.issue\.number \|\| github\.event\.inputs\.issue_number|github\.event_name == 'issue_comment'|github\.token) \}\}$/.test(v)) {
+        problems.add(`prepare "${w.name}" writes the agent's issue file holding ${k}: ${v}`);
+      }
+    }
+  }
   return [...problems];
 }
 
@@ -2615,6 +2679,27 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     download_into_the_workspace: [DOWNLOAD, "          name: claude-execution-output\n          path: scripts/agent\n"],
     prepare_local_action: ["      - name: Check out the gate (trusted, from the default branch)\n", "      - uses: ./.github/actions/agent-toolchain\n      - name: Check out the gate (trusted, from the default branch)\n"],
     prepare_checkout_follows_the_dispatcher: (t) => t.replace("      - name: Check out the gate (trusted, from the default branch)\n        if: steps.app.outputs.configured == 'true'\n        uses: actions/checkout@v4\n        with:\n          ref: main\n", "      - name: Check out the gate (trusted, from the default branch)\n        if: steps.app.outputs.configured == 'true'\n        uses: actions/checkout@v4\n        with:\n          ref: ${{ github.ref }}\n"),
+    // (h2) the channels between the jobs, and the runners (the review's list)
+    prepare_hands_on_a_token: (t) => t
+      .replace("      ready: ${{ steps.ready.outputs.ready }}\n", "      ready: ${{ steps.ready.outputs.ready }}\n      tok: ${{ steps.app-token.outputs.token }}\n")
+      .replace("      - name: Run Claude Code\n", "      - name: Use it\n        env:\n          GH_TOKEN: ${{ needs.prepare.outputs.tok }}\n        run: gh api user\n      - name: Run Claude Code\n"),
+    implement_reads_admission: ["      - name: Run Claude Code\n", "      - name: Run Claude Code\n        env:\n          A: ${{ needs.prepare.outputs.admitted }}\n"],
+    base_is_a_token: ["      base: ${{ steps.base.outputs.base }}\n", "      base: ${{ steps.app-token.outputs.token }}\n"],
+    base_step_given_a_token: ["        id: base\n        if: steps.app.outputs.configured == 'true'\n", "        id: base\n        if: steps.app.outputs.configured == 'true'\n        env:\n          T: ${{ steps.app-token.outputs.token }}\n"],
+    prepare_token_outlives_its_job: ["          permission-issues: write # answer on the issue\n", "          permission-issues: write # answer on the issue\n          skip-token-revoke: true\n"],
+    push_token_outlives_its_job: ["          permission-contents: write # push the verified branch, and nothing else\n", "          permission-contents: write # push the verified branch, and nothing else\n          skip-token-revoke: true\n"],
+    implement_self_hosted: ["      needs.prepare.outputs.ready == 'true'\n    runs-on: ubuntu-latest\n", "      needs.prepare.outputs.ready == 'true'\n    runs-on: self-hosted\n"],
+    finish_self_hosted: ["    if: always() && needs.prepare.outputs.admitted == 'true'\n    runs-on: ubuntu-latest\n", "    if: always() && needs.prepare.outputs.admitted == 'true'\n    runs-on: [self-hosted, linux]\n"],
+    prepare_self_hosted: (t) => t.replace(/( {2}prepare:\n(?: {4}.*\n)*? {4}runs-on: )ubuntu-latest/, "$1self-hosted"),
+    every_job_self_hosted: (t) => t.replaceAll("runs-on: ubuntu-latest", "runs-on: self-hosted"),
+    finish_downloads_everything: ["          name: claude-execution-output\n          path: ${{ runner.temp }}/agent-output\n", "          merge-multiple: true\n          path: ${{ runner.temp }}/agent-output\n"],
+    implement_downloads_everything: ["          name: implement-issue\n          path: ${{ runner.temp }}\n", "          path: ${{ runner.temp }}\n"],
+    implement_container_credentials: ["    environment: agent\n", "    environment: agent\n    container:\n      image: node:22\n      credentials:\n        username: x\n        password: ${{ github.token }}\n"],
+    implement_services: ["    environment: agent\n", "    environment: agent\n    services:\n      db:\n        image: mongo:8\n"],
+    issue_fetched_with_the_app_token: (t) => t.replace(/( {6}- name: Fetch the issue text \(trusted step, untrusted content\)\n(?: {8}.*\n)*? {10}GH_TOKEN: )\$\{\{ github\.token \}\}/, "$1${{ steps.app-token.outputs.token }}"),
+    issue_file_carries_a_token: (t) => t.replace("            } > \"$RUNNER_TEMP/issue.md\"\n", "            } > \"$RUNNER_TEMP/issue.md\"\n            printf '%s' \"$T\" >> \"$RUNNER_TEMP/issue.md\"\n").replace("          FROM_PAYLOAD: ${{ github.event_name == 'issue_comment' }}\n", "          FROM_PAYLOAD: ${{ github.event_name == 'issue_comment' }}\n          T: ${{ steps.app-token.outputs.token }}\n"),
+    issue_file_second_writer: ["      - name: Hand the issue text to the implement job\n", "      - name: Note\n        env:\n          T: ${{ steps.app-token.outputs.token }}\n        run: echo \"$T\" >> \"$RUNNER_TEMP/issue.md\"\n      - name: Hand the issue text to the implement job\n"],
+    issue_artifact_is_the_whole_temp_dir: ["          name: implement-issue\n          path: ${{ runner.temp }}/issue.md\n", "          name: implement-issue\n          path: ${{ runner.temp }}\n"],
     // (i) what finish takes from implement, whose runner was the agent's
     finish_reads_slug_from_implement: ["      agent: ${{ steps.agent.outcome }}\n", "      agent: ${{ steps.agent.outcome }}\n      app_slug: ${{ needs.route.outputs.app_slug }}\n"],
     reporter_slug_through_implement: ["          APP_SLUG: ${{ needs.route.outputs.app_slug }}\n          TOOLCHAIN_STEPS", "          APP_SLUG: ${{ needs.implement.outputs.app_slug }}\n          TOOLCHAIN_STEPS"],
