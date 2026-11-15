@@ -472,6 +472,10 @@ repository that adopts the harness follows them:
 - This package lives at `scripts/agent`, and nothing in it imports from
   outside it: workflows check it out or copy it without its parent directory.
   `command.mjs` imports nothing at all, because route jobs check it out alone.
+- No trusted job that holds a secret or a write-capable token restores an
+  Actions cache, in any workflow of the repository, not only the harness's.
+  `trusted-cache.test.mjs` checks it in `npm test`; "The Actions cache guard"
+  says what it requires.
 
 ## Adopting and syncing
 
@@ -752,3 +756,86 @@ around it, and these pass it:
 Workflow files are CI-defining and CODEOWNER-ed, so every edit to one still
 needs a human reviewer. The list above is what that reviewer has to look for,
 because the guard will not.
+
+## The Actions cache guard
+
+Every agent job runs on the default branch's ref, and whoever controls a
+job's runner can use the job's Actions runtime token to save cache entries in
+that ref's scope, under any key nobody has saved yet. A run restores entries
+from its own ref and from the default branch. So a default-branch entry is
+untrusted data, and a job that restores one runs what it holds (a toolchain,
+a module or build cache, a binary, an image layer) with that job's
+credentials.
+
+`trusted-cache.test.mjs` reads every `.github/workflows/*.yml` and `*.yaml`
+in the repository, the harness's and the repository's own, and fails on any
+step that restores a cache in a job that is both:
+
+- **trusted**: started by any event other than `pull_request`,
+  `pull_request_review`, `pull_request_review_comment` or `merge_group`. A
+  pull request's own jobs already run what the branch wrote, so a cache adds
+  nothing there. A job or step whose `if:` can only hold on those events
+  (`github.event_name == 'pull_request'`, alone, in a `||` of such
+  comparisons, or as one term of an `&&`) is treated as a pull request's own.
+- **privileged**: it references a secret other than `GITHUB_TOKEN`
+  (`secrets.X`, `secrets[...]`, in the job or the workflow's `env`), or its
+  token can write anything (`write-all`, or any scope at `write`,
+  `id-token` included). A job with no `permissions:` at job or workflow level
+  counts as write-capable, because the repository default may be.
+
+It follows `uses: ./.github/workflows/x.yml` into the called workflow, judged
+in its caller's trigger, with the caller's token as a ceiling and with
+secrets only if the caller passes some (`secrets: inherit` or a mapping). A
+reusable workflow that nothing in the repository calls is judged as if
+called from a trusted trigger with secrets. It follows `uses: ./path` into
+the local composite action and its nested ones; `./<dir>/.github/actions/x`,
+a checkout of this repository under a subdirectory, is read from this tree's
+`.github/actions/x`. A local action or workflow it cannot read is a failure.
+
+What it refuses in such a job, and what turns each off:
+
+| Step | Restores unless |
+|---|---|
+| `actions/cache`, `actions/cache/restore` | `lookup-only: true` |
+| `actions/setup-go` v4 and later, or a commit pin | `cache: false` |
+| `actions/setup-node` with `cache:` | the input is dropped |
+| `actions/setup-node` v5 and later, or a commit pin | `package-manager-cache: false` |
+| any other `actions/setup-*` with `cache:` | the input is dropped |
+| `ruby/setup-ruby` | no `bundler-cache:` |
+| `pnpm/action-setup` | no `cache:` |
+| `Swatinem/rust-cache` | `lookup-only: true` |
+| `cache-from` naming `type=gha`, in any input or in a `run:` line | it is removed |
+| `mozilla-actions/sccache-action` with `SCCACHE_GHA_ENABLED` set anywhere | the variable is removed |
+| `docker/setup-buildx-action` | `cache-binary: false` |
+| `docker/setup-qemu-action` | `cache-image: false` |
+| `oven-sh/setup-bun` | `no-cache: true` |
+| `anthropics/claude-code-action` (its own Bun install is cached) | `path_to_bun_executable` is set |
+
+An input set to an expression counts as on, except one that is off on every
+trusted event: a pull-request-only condition, or such a condition choosing a
+value with an `''` or `false` fallback
+(`${{ github.event_name == 'pull_request' && 'pnpm' || '' }}`). A commit-pinned
+action is read at the major version its trailing `# vN` comment names, and
+at the newest behaviour when it has none.
+
+Saving is not refused: `actions/cache/save` and `cache-to` write entries,
+they do not run them.
+
+A repository that adopts the harness therefore turns these off in its own
+publish, release and push-to-main jobs, or limits them to pull requests, or
+gives the job no secret and a read-only token. The agent workflows install
+Bun themselves with `no-cache: true` and hand it to claude-code-action, and
+the toolchain action sets `cache: false` on `setup-go`.
+
+### What the cache guard does not see
+
+- Actions from other repositories that cache internally and are not in the
+  table, and reusable workflows from other repositories.
+- A step that reads the cache service directly (`ACTIONS_CACHE_URL`,
+  `ACTIONS_RESULTS_URL`) or a tool that does so on its own.
+- What a job does with an artifact from another run. An artifact is not a
+  cache, but `actions/download-artifact` from a less trusted run carries the
+  same risk.
+- An `if:` it does not recognise is treated as able to run on a trusted
+  event, so it can refuse a step that only ever runs on a pull request. Make
+  the condition one of the recognised forms.
