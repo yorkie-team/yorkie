@@ -1966,12 +1966,23 @@ test("agent-implement opens a PR for every branch it pushes, in its own words wh
   const bin = path.join(root, "bin");
   mkdirSync(bin);
   const log = path.join(root, "gh.log");
-  writeFileSync(path.join(bin, "gh"), `#!/bin/sh\nprintf '%s\\n' "$@" >> "${log}"\nprintf -- '--end--\\n' >> "${log}"\nif [ "$1 $2" = "pr create" ]; then echo https://github.com/o/r/pull/42; fi\n`);
+  // GH_FAIL_AGENT: refuse any PR whose title is not the workflow's own, as
+  // GitHub would refuse an agent's text it cannot take.
+  writeFileSync(path.join(bin, "gh"), [
+    "#!/bin/sh",
+    `printf '%s\\n' "$@" >> "${log}"`,
+    `printf -- '--end--\\n' >> "${log}"`,
+    'if [ "$1 $2" = "pr create" ]; then',
+    '  if [ -n "$GH_FAIL_AGENT" ] && ! printf \'%s\\n\' "$@" | grep -qx "Implement #7"; then exit 1; fi',
+    "  echo https://github.com/o/r/pull/42",
+    "fi",
+    "",
+  ].join("\n"));
   writeFileSync(path.join(bin, "node"), "#!/bin/sh\nexit 0\n");
   chmodSync(path.join(bin, "gh"), 0o755);
   chmodSync(path.join(bin, "node"), 0o755);
   let n = 0;
-  const run = (prMd) => {
+  const run = (prMd, extraEnv = {}) => {
     const temp = path.join(root, `run-${n++}`);
     mkdirSync(path.join(temp, "agent-output"), { recursive: true });
     if (prMd !== null) writeFileSync(path.join(temp, "agent-output", "pr.md"), prMd);
@@ -1980,25 +1991,27 @@ test("agent-implement opens a PR for every branch it pushes, in its own words wh
     writeFileSync(out, "");
     const r = spawnSync("bash", ["-c", open.run], {
       encoding: "utf8",
-      env: { PATH: `${bin}:${process.env.PATH}`, RUNNER_TEMP: temp, ISSUE: "7", BRANCH: "agent/7-thing", GITHUB_OUTPUT: out, GITHUB_SERVER_URL: "https://github.com", GITHUB_REPOSITORY: "o/r", GITHUB_RUN_ID: "1" },
+      env: { PATH: `${bin}:${process.env.PATH}`, RUNNER_TEMP: temp, ISSUE: "7", BRANCH: "agent/7-thing", GITHUB_OUTPUT: out, GITHUB_SERVER_URL: "https://github.com", GITHUB_REPOSITORY: "o/r", GITHUB_RUN_ID: "1", ...extraEnv },
     });
     const calls = readFileSync(log, "utf8").split("--end--\n").filter(Boolean).map((c) => c.split("\n").filter((x) => x !== ""));
-    const create = calls.find((c) => c[0] === "pr" && c[1] === "create") ?? [];
+    const creates = calls.filter((c) => c[0] === "pr" && c[1] === "create");
+    const create = creates.at(-1) ?? [];
     const bodyFile = create[create.indexOf("--body-file") + 1];
     return {
       status: r.status,
+      attempts: creates.length,
       create,
       title: create[create.indexOf("--title") + 1],
       body: bodyFile && existsSync(bodyFile) ? readFileSync(bodyFile, "utf8") : "",
       output: readFileSync(out, "utf8"),
     };
   };
-  for (const [what, prMd] of [["no description at all", null], ["an empty file", ""], ["an empty title line", "\nbody only\n"]]) {
+  for (const [what, prMd] of [["no description at all", null], ["an empty file", ""], ["an empty title line", "\nbody only\n"], ["a title of blanks", " \t\r\nbody\n"]]) {
     const r = run(prMd);
     assert.equal(r.status, 0, what);
     assert.ok(r.create.includes("--draft"), `${what}: the PR must open as a draft`);
     assert.equal(r.title, "Implement #7", `${what}: the title is the workflow's`);
-    assert.match(r.body, /left no description/, what);
+    assert.match(r.body, /left no usable description/, what);
     assert.match(r.body, /Fixes #7\n$/, what);
     assert.match(r.output, /^number=42$/m, `${what}: the PR's number is handed on`);
   }
@@ -2007,6 +2020,23 @@ test("agent-implement opens a PR for every branch it pushes, in its own words wh
   assert.match(r.title, /^Add a thing /);
   for (const text of [r.title, r.body]) assert.ok(!text.includes("<!--"), `an agent-written marker survived: ${text}`);
   assert.match(r.body, /Fixes #7\n$/);
+
+  // The cap is applied AFTER the substitution, which lengthens the text it
+  // neutralises: a body of nothing but markers still fits.
+  const markers = run(`Title\n${"<!--".repeat(15000)}\n`);
+  assert.equal(markers.title, "Title");
+  assert.ok([...markers.body].length <= 50000 + "\n\nFixes #7\n".length, `the body is ${[...markers.body].length} characters`);
+  assert.ok(!markers.body.includes("<!--"));
+  // A title line far longer than any argument may be is cut, not passed whole.
+  const long = run(`${"t".repeat(300000)}\nbody\n`);
+  assert.equal(long.status, 0);
+  assert.equal(long.title, "t".repeat(200));
+  // And when GitHub refuses the agent's text, the PR opens in the workflow's.
+  const refused = run("A fine title\n\nA fine body.\n", { GH_FAIL_AGENT: "1" });
+  assert.equal(refused.status, 0);
+  assert.equal(refused.attempts, 2, "one attempt with the agent's text, one with the workflow's");
+  assert.equal(refused.title, "Implement #7");
+  assert.match(refused.output, /^number=42$/m);
 });
 
 // --- agent-implement's trust boundary, run rather than read ---------------------

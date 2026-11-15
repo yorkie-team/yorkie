@@ -1062,42 +1062,56 @@ jobs:
           # Plain names only, checked again where the name is used.
           [[ "$BRANCH" =~ ^agent/[0-9]+-[A-Za-z0-9._-]+$ ]] || { echo "::warning::refusing an unexpected branch name"; exit 0; }
           PR_FILE="$RUNNER_TEMP/agent-output/pr.md"
+          # THE WORKFLOW'S OWN WORDS, written first: the branch is pushed
+          # whether or not the agent described it, and a pushed branch with no
+          # PR refuses every later run on this issue until someone deletes it.
+          # So when the agent's title or description is unusable, or GitHub
+          # refuses them, the PR opens with these instead.
+          FALLBACK_TITLE="Implement #$ISSUE"
+          {
+            printf '%s\n\n' "The agent left no usable description for this change, so the workflow wrote this one."
+            printf "Read the change against the issue. The [run](%s) has the agent's transcript in its \`claude-execution-output\` artifact.\n\n" \
+              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            printf 'Fixes #%s\n' "$ISSUE"
+          } > "$RUNNER_TEMP/pr-body-fallback.md"
           # NEUTRALISE HTML COMMENTS in the title and the body alike. Both are
           # written by the agent and posted under the App identity, and the
           # pipeline's latches and dedupe markers are trusted BY AUTHOR — so
           # agent-authored text carried into an App-authored body is exactly how
           # a forged `<!-- agent-review-paged -->` gets believed. The same
-          # substitution `fix-report.mjs` makes, for the same reason. Capped, so
-          # an oversized file is cut rather than rejected by the API.
-          # Cut by CHARACTER, not byte: `cut -c` counts bytes, and half a
-          # multibyte character makes `gh pr create` fail after the push landed.
+          # substitution `fix-report.mjs` makes, for the same reason.
+          #
+          # THEN CAPPED, BY CHARACTER: the substitution adds a character per
+          # marker, so a cap applied before it can be pushed past GitHub's
+          # limit by the text it caps; and a byte count can cut a character in
+          # half. A byte cap comes first only to bound what is read, and it is
+          # the first reader of the file, so nothing upstream of it is cut off
+          # mid-write (which `pipefail` would turn into a failed step). Each cut
+          # is made in a subshell whose locale is UTF-8, on a variable rather
+          # than an argument, so no length limit on arguments applies.
           TITLE=""
           if [ -f "$PR_FILE" ] && [ -s "$PR_FILE" ]; then
-            TITLE="$(head -n 1 "$PR_FILE" | sed 's/<!--/<!\xe2\x80\x8c--/g')"
-            TITLE="$(LC_ALL=C.UTF-8 bash -c 'printf "%s" "${1:0:200}"' _ "$TITLE")"
+            TITLE="$(head -c 4000 "$PR_FILE" | head -n 1 | sed 's/<!--/<!\xe2\x80\x8c--/g')"
+            TITLE="$(LC_ALL=C.UTF-8; printf '%s' "${TITLE:0:200}")"
           fi
-          if [ -n "$TITLE" ]; then
-            {
-              tail -n +2 "$PR_FILE" | head -c 60000 | sed 's/<!--/<!\xe2\x80\x8c--/g'
-              printf '\n\nFixes #%s\n' "$ISSUE"
-            } > "$RUNNER_TEMP/pr-body.md"
-          else
-            # THE BRANCH IS PUSHED WHETHER OR NOT THE AGENT DESCRIBED IT, so the
-            # PR is opened either way: a pushed branch with no PR would refuse
-            # every later run on this issue until someone deleted it. With no
-            # usable description the words are the workflow's own.
-            TITLE="Implement #$ISSUE"
-            {
-              printf '%s\n\n' "The agent left no description for this change, so the workflow wrote this one."
-              printf "Read the change against the issue. The [run](%s) has the agent's transcript in its \`claude-execution-output\` artifact.\n\n" \
-                "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-              printf 'Fixes #%s\n' "$ISSUE"
-            } > "$RUNNER_TEMP/pr-body.md"
+          URL=""
+          # A title with nothing but blanks in it is no title.
+          if [[ $TITLE =~ [^[:space:]] ]]; then
+            BODY="$(head -c 400000 "$PR_FILE" | tail -n +2 | sed 's/<!--/<!\xe2\x80\x8c--/g')"
+            BODY="$(LC_ALL=C.UTF-8; printf '%s' "${BODY:0:50000}")"
+            printf '%s\n\nFixes #%s\n' "$BODY" "$ISSUE" > "$RUNNER_TEMP/pr-body.md"
+            # The number from `gh pr create`'s own output — the URL it prints —
+            # not a second query that could race or come back empty.
+            URL="$(gh pr create --draft --base main --head "$BRANCH" \
+              --title "$TITLE" --body-file "$RUNNER_TEMP/pr-body.md")" || {
+              echo "::warning::the PR could not be opened with the agent's title and description; opening it with the workflow's own"
+              URL=""
+            }
           fi
-          # The number from `gh pr create`'s own output — the URL it prints —
-          # not a second query that could race or come back empty.
-          URL="$(gh pr create --draft --base main --head "$BRANCH" \
-            --title "$TITLE" --body-file "$RUNNER_TEMP/pr-body.md")"
+          if [ -z "$URL" ]; then
+            URL="$(gh pr create --draft --base main --head "$BRANCH" \
+              --title "$FALLBACK_TITLE" --body-file "$RUNNER_TEMP/pr-body-fallback.md")"
+          fi
           NUM="${URL##*/}"
           case "$NUM" in ''|*[!0-9]*) echo "::error::gh pr create printed no PR URL: $URL"; exit 1 ;; esac
           echo "number=$NUM" >> "$GITHUB_OUTPUT"
