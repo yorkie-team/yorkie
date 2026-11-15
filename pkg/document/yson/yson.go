@@ -66,6 +66,16 @@ const (
 	// DefaultRootNodeType is the default type of root node.
 	DefaultRootNodeType = "root"
 
+	// tagKey is the object key under which preprocessing records which YSON
+	// constructor a rewritten value came from. It is deliberately not "type":
+	// a plain object is free to carry a "type" field of its own (for example
+	// {"type":"sheet","name":"Sheet1"}), and tagging typed values with that
+	// key made every such object parse as a typed value and fail. The key is
+	// internal to Unmarshal: Marshal always writes typed values as
+	// constructors, so it never appears in stored YSON, and input that uses
+	// it as an object key is rejected by checkTagKey.
+	tagKey = "$$yson$$type"
+
 	// counterTypeInt is the YSON token for 32-bit integer counters.
 	counterTypeInt = "Int"
 
@@ -426,7 +436,7 @@ func Unmarshal(data string, elem Element) error {
 		}
 		var counter Counter
 		var err error
-		if t, ok := rawMap["type"].(string); ok && t == "DedupCounter" {
+		if t, ok := rawMap[tagKey].(string); ok && t == "DedupCounter" {
 			counter, err = parseDedupCounter(rawMap)
 		} else {
 			counter, err = parseCounter(rawMap)
@@ -460,7 +470,7 @@ func parseIntValue(v any, bitSize int) (int64, error) {
 }
 
 func parseTypedValue(raw map[string]any) (any, error) {
-	t, ok := raw["type"].(string)
+	t, ok := raw[tagKey].(string)
 	if !ok {
 		return nil, ErrUnsupported
 	}
@@ -525,7 +535,7 @@ func parseObject(raw map[string]any) (Object, error) {
 	for k, v := range raw {
 		switch v := v.(type) {
 		case map[string]any:
-			if _, ok := v["type"].(string); ok {
+			if _, ok := v[tagKey].(string); ok {
 				val, err := parseTypedValue(v)
 				if err != nil {
 					return nil, err
@@ -579,7 +589,7 @@ func parseArray(raw []any) (Array, error) {
 	for _, item := range raw {
 		switch v := item.(type) {
 		case map[string]any:
-			if _, ok := v["type"].(string); ok {
+			if _, ok := v[tagKey].(string); ok {
 				val, err := parseTypedValue(v)
 				if err != nil {
 					return nil, err
@@ -612,7 +622,7 @@ func parseArray(raw []any) (Array, error) {
 func parseCounter(raw map[string]any) (Counter, error) {
 	counter := Counter{}
 	if value, ok := raw["value"].(map[string]any); ok {
-		if t, ok := value["type"].(string); ok {
+		if t, ok := value[tagKey].(string); ok {
 			switch t {
 			case counterTypeInt:
 				v, err := parseIntValue(value["value"], 32)
@@ -802,6 +812,13 @@ var ysonConstructors = []ysonConstructor{
 // interpreted as structure. Earlier revisions used global strings.ReplaceAll
 // calls (notably ")" → "}"), which silently corrupted such values.
 func preprocessTypeValues(data string) (string, error) {
+	// Reject the reserved tag key before anything is rewritten, while every
+	// object key in data is still one the caller wrote. Both passes below emit
+	// the key themselves, so this check cannot run after them.
+	if err := checkTagKey(data); err != nil {
+		return "", err
+	}
+
 	// DedupCounter is handled first by its precise regex. Its compound shape
 	// (Int(...) plus a bare base64 string argument) does not fit the generic
 	// Name(<arg>) rewrite, and the regex only matches at real DedupCounter
@@ -820,6 +837,54 @@ func preprocessTypeValues(data string) (string, error) {
 		return "", err
 	}
 	return b.String(), nil
+}
+
+// checkTagKey rejects input that carries tagKey as an object key. Preprocessing
+// tags rewritten constructors with that key, so an object already carrying it
+// would be read as a typed value. Only keys are rejected: a plain string value
+// equal to tagKey is ordinary data and cannot be confused with a tag.
+func checkTagKey(data string) error {
+	i := 0
+	for i < len(data) {
+		if data[i] != '"' {
+			i++
+			continue
+		}
+
+		end := scanStringLiteral(data, i)
+		literal := data[i:end]
+		i = end
+
+		// A literal is a key when the next non-space byte is ':'.
+		j := end
+		for j < len(data) && isJSONSpace(data[j]) {
+			j++
+		}
+		if j < len(data) && data[j] == ':' && isTagKeyLiteral(literal) {
+			return fmt.Errorf("%q is a reserved object key: %w", tagKey, ErrInvalidYSON)
+		}
+	}
+	return nil
+}
+
+// isTagKeyLiteral reports whether the given JSON string literal spells tagKey.
+// JSON can spell the same key in more than one way, so a literal carrying any
+// escape is decoded before it is compared.
+func isTagKeyLiteral(literal string) bool {
+	if !strings.Contains(literal, `\`) {
+		return literal == `"`+tagKey+`"`
+	}
+
+	var decoded string
+	if err := gojson.Unmarshal([]byte(literal), &decoded); err != nil {
+		return false
+	}
+	return decoded == tagKey
+}
+
+// isJSONSpace reports whether c is JSON insignificant whitespace.
+func isJSONSpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
 }
 
 // rewriteDedupCounters substitutes DedupCounter(Int(N),"b64") occurrences that
@@ -852,9 +917,14 @@ func rewriteDedupCounters(data string) (string, error) {
 					ErrInvalidYSON,
 				)
 			}
-			match := data[i : i+loc[1]]
-			b.WriteString(dedupCounterRe.ReplaceAllString(match,
-				`{"type":"DedupCounter","counterType":"Int","value":$1,"hll":"$2"}`))
+			// Both groups always participate in a match, so their indices are
+			// valid. They are read from loc rather than re-run through
+			// ReplaceAllString because the tag key contains '$', which the
+			// template expander would read as a capture reference.
+			value := data[i+loc[2] : i+loc[3]]
+			hll := data[i+loc[4] : i+loc[5]]
+			fmt.Fprintf(&b, `{"%s":"DedupCounter","counterType":"Int","value":%s,"hll":"%s"}`,
+				tagKey, value, hll)
 			i += loc[1]
 			continue
 		}
@@ -1026,12 +1096,12 @@ func constructorPrefix(name, typ, inner string) string {
 	if inner == "" {
 		switch name {
 		case ctorText:
-			return `{"type":"Text","value":[]`
+			return fmt.Sprintf(`{"%s":"Text","value":[]`, tagKey)
 		case ctorTree:
-			return `{"type":"Tree","value":{}`
+			return fmt.Sprintf(`{"%s":"Tree","value":{}`, tagKey)
 		}
 	}
-	return fmt.Sprintf(`{"type":"%s","value":`, typ)
+	return fmt.Sprintf(`{"%s":"%s","value":`, tagKey, typ)
 }
 
 // findMatchingParen returns the index of the ')' that closes the '(' whose

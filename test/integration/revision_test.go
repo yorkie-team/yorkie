@@ -216,6 +216,58 @@ func TestRevision(t *testing.T) {
 		assert.NoError(t, c1.Detach(ctx, doc))
 	})
 
+	t.Run("restore revision with a plain type field test", func(t *testing.T) {
+		ctx := context.Background()
+		doc := document.New(helper.TestKey(t))
+
+		// 01. Attach a document whose root holds a plain object carrying a
+		// string "type" field, which the snapshot parser used to read as a
+		// typed value and reject.
+		assert.NoError(t, c1.Attach(ctx, doc))
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewObject("tabs").SetNewObject("t1").
+				SetString("id", "t1").
+				SetString("name", "Sheet1").
+				SetString("type", "sheet")
+			return nil
+		}, "add tabs"))
+		assert.NoError(t, c1.Sync(ctx))
+		expected := doc.Marshal()
+
+		// 02. Create a revision of that state
+		docInfo, err := be.DB.FindDocInfoByKey(ctx, project.ID, doc.Key())
+		assert.NoError(t, err)
+
+		revision, err := revisions.Create(
+			ctx,
+			be,
+			types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID},
+			"v1.0",
+			"Tabs with a type field",
+		)
+		assert.NoError(t, err)
+
+		// 03. Move the document away from the revision
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetInteger("junk", 1)
+			return nil
+		}, "add junk"))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.NotEqual(t, expected, doc.Marshal())
+
+		// 04. Restore and verify the revision came back intact
+		assert.NoError(t, revisions.Restore(
+			ctx, be, project,
+			types.DocRefKey{ProjectID: project.ID, DocID: docInfo.ID},
+			revision.ID,
+		))
+		assert.NoError(t, c1.Sync(ctx))
+		assert.Equal(t, expected, doc.Marshal())
+
+		// 05. Clean up
+		assert.NoError(t, c1.Detach(ctx, doc))
+	})
+
 	t.Run("auto revision creation test", func(t *testing.T) {
 		ctx := context.Background()
 		doc := document.New(helper.TestKey(t))
