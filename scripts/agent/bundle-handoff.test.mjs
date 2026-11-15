@@ -408,6 +408,21 @@ test("verify: refuses a malformed base or issue number rather than guessing", (t
   assert.throws(() => branchPattern("4.2"));
 });
 
+test("every step of the check is bounded in time, and running out is not a verdict", (t) => {
+  // A bundle within the size limit can still unpack into far more, slowly.
+  // Each git call has a ceiling; reaching it throws, which the CLI reports as
+  // `error` — the check could not run — rather than a pass or a refusal.
+  const w = world(t);
+  run(w.up, "checkout", "-q", "-b", "agent/42-x");
+  commit(w.up, "a.txt", "a\n");
+  const file = bundle(w, "ok", "agent/42-x", `^${w.base}`);
+  assert.throws(() => verifyBundle({ gitDir: w.gitDir, bundle: file, base: w.base, issue: 42, timeoutMs: 1 }), /did not finish within 1 ms/);
+  assert.throws(() => prepareRepository({ gitDir: path.join(w.root, "slow.git"), remote: w.remote, base: w.base, timeoutMs: 1 }), /did not finish within 1 ms|ETIMEDOUT|timed out/i);
+  const r = verify(w, file);
+  assert.equal(r.verdict, "ok", "with time to run, the same bundle passes");
+  assert.throws(() => pushBranch({ gitDir: w.gitDir, remote: remote(w), branch: r.branch, head: r.head, issue: 42, timeoutMs: 1 }), /did not finish within 1 ms/);
+});
+
 // --- the push -----------------------------------------------------------------------------
 
 /** A bare remote holding main at the base; the test pushes to it. */

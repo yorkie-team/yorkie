@@ -2343,6 +2343,13 @@ async function implementBoundaryProblems(text) {
     problems.add("the push does not take its branch and commit from the verification");
   }
 
+  // 5b. The verification and the push are bounded in time, and the job leaves
+  // room after them for the report.
+  const wall = (i) => Number(fst[i]?.timeout);
+  if (!Number.isInteger(wall(bundleAt)) || !Number.isInteger(wall(pushAt)) || !(Number(finish.timeout) - wall(bundleAt) - wall(pushAt) >= 5)) {
+    problems.add(`the verification (${fst[bundleAt].timeout ?? "unbounded"}) and the push (${fst[pushAt].timeout ?? "unbounded"}) do not leave finish's ${finish.timeout ?? "unset"} minutes five for the report`);
+  }
+
   // 6. By running the conditions. Every step of `prepare` fails in turn, on
   // both entry points, with and without the App; where the agent's job
   // starts, every one of its steps fails in turn; and inside `finish`, every
@@ -2714,6 +2721,9 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     pack_not_after_a_wall: [PACK, "      - name: Pack the agent's commits (untrusted output)\n        if: ${{ !cancelled() && steps.stage.outcome == 'success' }}\n"],
     push_token_widened: ["          permission-contents: write # push the verified branch, and nothing else\n", "          permission-contents: write # push the verified branch, and nothing else\n          permission-pull-requests: write\n"],
     finish_token_holds_the_pair: ["          permission-contents: read\n          permission-pull-requests: write", "          permission-contents: write\n          permission-pull-requests: write"],
+    verify_unbounded: ["        timeout-minutes: 10\n", ""],
+    push_unbounded: ["        timeout-minutes: 5\n", ""],
+    finish_wall_too_short: (t) => t.replace(/( {2}finish:\n(?: {4}.*\n)*? {4}timeout-minutes: )\d+/, "$115"),
     push_takes_another_branch: ["          BRANCH: ${{ steps.bundle.outputs.branch }}\n          HEAD_SHA", "          BRANCH: ${{ needs.prepare.outputs.base }}\n          HEAD_SHA"],
     pr_without_push: [OPEN_IF, `        id: open-pr\n        if: \${{ ${STOP}steps.app-token.outcome == 'success' }}\n`],
     verify_without_ready: (t) => t.replace(/( {8}id: bundle\n {8}if: ).*\n/, "$1always()\n").replace(/( {8}id: app-token\n {8}if: always\(\) && )needs\.prepare\.outputs\.ready == 'true' && /, "$1"),

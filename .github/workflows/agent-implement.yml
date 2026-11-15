@@ -885,7 +885,9 @@ jobs:
     needs: [route, prepare, implement]
     if: always() && needs.prepare.outputs.admitted == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Room for the verification's and the push's own ceilings, and the report
+    # after them.
+    timeout-minutes: 25
     permissions:
       contents: read # fetch the base the agent's commits are checked against
       # The two comments that must not depend on the App: the "App is not
@@ -988,6 +990,9 @@ jobs:
       - name: Verify the agent's commits (untrusted data)
         id: bundle
         if: always() && steps.app-token.outcome == 'success'
+        # Each git call inside has a ceiling of its own; this bounds them
+        # together, so a slow bundle cannot take the report's time.
+        timeout-minutes: 10
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1022,6 +1027,7 @@ jobs:
       - name: Push the agent's branch
         id: push
         if: ${{ !cancelled() && vars.AGENT_PIPELINE_ENABLED == 'true' && steps.push-token.outcome == 'success' }}
+        timeout-minutes: 5
         continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.push-token.outputs.token }}

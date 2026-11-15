@@ -107,20 +107,34 @@ export function gitEnv({ remote, token } = {}) {
   return env;
 }
 
-function git(gitDir, args, env) {
-  return execFileSync("git", ["--git-dir", gitDir, ...args], {
-    encoding: "utf8",
-    env,
-    maxBuffer: 64 * 1024 * 1024,
-    stdio: ["ignore", "pipe", "pipe"],
-  }).trim();
+/** The longest any one git call may take. A small bundle can still be slow to unpack. */
+export const GIT_TIMEOUT_MS = 5 * 60 * 1000;
+
+/** A git call that ran out of time: not a verdict on the commits, so it is thrown, not returned. */
+class GitTimeout extends Error {}
+
+function git(gitDir, args, ctx) {
+  try {
+    return execFileSync("git", ["--git-dir", gitDir, ...args], {
+      encoding: "utf8",
+      env: ctx.env,
+      timeout: ctx.timeoutMs,
+      killSignal: "SIGKILL",
+      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+  } catch (e) {
+    if (e.code === "ETIMEDOUT" || e.signal === "SIGKILL") throw new GitTimeout(`git ${args[0]} did not finish within ${ctx.timeoutMs} ms`);
+    throw e;
+  }
 }
 
-/** Like `git`, but a non-zero exit is an answer, not an error. */
-function tryGit(gitDir, args, env) {
+/** Like `git`, but a non-zero exit is an answer, not an error. A timeout still throws. */
+function tryGit(gitDir, args, ctx) {
   try {
-    return { ok: true, out: git(gitDir, args, env) };
+    return { ok: true, out: git(gitDir, args, ctx) };
   } catch (e) {
+    if (e instanceof GitTimeout) throw e;
     return { ok: false, out: String(e.stdout ?? "").trim(), err: String(e.stderr ?? e.message ?? "").trim() };
   }
 }
@@ -130,13 +144,13 @@ function tryGit(gitDir, args, env) {
  * nothing else of the remote's. `gitDir` must not exist: a directory that
  * does is one this run did not make.
  */
-export function prepareRepository({ gitDir, remote, base, token }) {
+export function prepareRepository({ gitDir, remote, base, token, timeoutMs = GIT_TIMEOUT_MS }) {
   if (!SHA.test(String(base))) throw new Error(`not a commit id: ${JSON.stringify(base)}`);
   if (existsSync(gitDir)) throw new Error(`${gitDir} already exists`);
-  const env = gitEnv({ remote, token });
-  execFileSync("git", ["init", "--quiet", "--bare", gitDir], { env, stdio: ["ignore", "pipe", "pipe"] });
-  git(gitDir, ["fetch", "--quiet", "--no-tags", "--depth=1", remote, base], env);
-  git(gitDir, ["cat-file", "-e", `${base}^{commit}`], env);
+  const ctx = { env: gitEnv({ remote, token }), timeoutMs };
+  execFileSync("git", ["init", "--quiet", "--bare", gitDir], { env: ctx.env, timeout: timeoutMs, killSignal: "SIGKILL", stdio: ["ignore", "pipe", "pipe"] });
+  git(gitDir, ["fetch", "--quiet", "--no-tags", "--depth=1", remote, base], ctx);
+  git(gitDir, ["cat-file", "-e", `${base}^{commit}`], ctx);
 }
 
 /**
@@ -145,11 +159,11 @@ export function prepareRepository({ gitDir, remote, base, token }) {
  * `{ verdict: "none", reason }` when there is no bundle at all (the agent
  * committed nothing on an agent branch), or `{ verdict: "refused", reason }`.
  */
-export function verifyBundle({ gitDir, bundle, base, issue, maxBytes = MAX_BUNDLE_BYTES, maxCommits = MAX_COMMITS }) {
+export function verifyBundle({ gitDir, bundle, base, issue, maxBytes = MAX_BUNDLE_BYTES, maxCommits = MAX_COMMITS, timeoutMs = GIT_TIMEOUT_MS }) {
   const refuse = (reason) => ({ verdict: "refused", reason });
   if (!SHA.test(String(base))) return refuse(`the recorded base is not a commit id: ${shown(base)}`);
   if (!ISSUE.test(String(issue))) return refuse(`the issue number is not a number: ${shown(issue)}`);
-  const env = gitEnv();
+  const ctx = { env: gitEnv(), timeoutMs };
 
   let st;
   try {
@@ -163,7 +177,7 @@ export function verifyBundle({ gitDir, bundle, base, issue, maxBytes = MAX_BUNDL
   if (st.size > maxBytes) return refuse(`the bundle is ${st.size} bytes, over the ${maxBytes}-byte limit`);
 
   // The header, read by git. Exactly one ref, and the right one.
-  const heads = tryGit(gitDir, ["bundle", "list-heads", bundle], env);
+  const heads = tryGit(gitDir, ["bundle", "list-heads", bundle], ctx);
   if (!heads.ok) return refuse("git could not read it as a bundle");
   const lines = heads.out.split("\n").filter((l) => l !== "");
   if (lines.length !== 1) return refuse(`it carries ${lines.length} refs; the handoff is exactly one branch`);
@@ -171,11 +185,11 @@ export function verifyBundle({ gitDir, bundle, base, issue, maxBytes = MAX_BUNDL
   if (!m) return refuse(`its one ref is not a branch: ${shown(lines[0])}`);
   const [, tip, ref, branch] = m;
   if (!branchPattern(issue).test(branch)) return refuse(`its branch ${shown(branch)} is not agent/${issue}-<slug>`);
-  if (!tryGit(gitDir, ["check-ref-format", ref], env).ok) return refuse(`its branch ${shown(branch)} is not a valid ref name`);
+  if (!tryGit(gitDir, ["check-ref-format", ref], ctx).ok) return refuse(`its branch ${shown(branch)} is not a valid ref name`);
 
   // Its prerequisites must already be here — that is, in the base — and the
   // objects must pass git's own checks on the way in.
-  if (!tryGit(gitDir, ["bundle", "verify", "--quiet", bundle], env).ok) {
+  if (!tryGit(gitDir, ["bundle", "verify", "--quiet", bundle], ctx).ok) {
     return refuse("its prerequisites are not in the base, or it is not a valid bundle");
   }
   // `+` because HANDOFF_REF is this repository's own scratch ref, rewritten
@@ -183,7 +197,7 @@ export function verifyBundle({ gitDir, bundle, base, issue, maxBytes = MAX_BUNDL
   const fetched = tryGit(
     gitDir,
     ["-c", "transfer.fsckObjects=true", "-c", "fetch.fsckObjects=true", "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", bundle, `+${ref}:${HANDOFF_REF}`],
-    env,
+    ctx,
   );
   if (!fetched.ok) return refuse("git refused its objects");
   // AND AGAIN, OVER EVERYTHING NOW HERE, not left to whether a bundle fetch
@@ -191,13 +205,13 @@ export function verifyBundle({ gitDir, bundle, base, issue, maxBytes = MAX_BUNDL
   // workflows rule below reads a tree by path, and a tree carrying two entries
   // of one name answers with the first of them; git's object checks refuse
   // such a tree, so this one is load-bearing for that rule.
-  if (!tryGit(gitDir, ["fsck", "--strict", "--no-dangling", "--no-progress"], env).ok) return refuse("git's object check failed on its objects");
+  if (!tryGit(gitDir, ["fsck", "--strict", "--no-dangling", "--no-progress"], ctx).ok) return refuse("git's object check failed on its objects");
   const head = tip;
-  if (tryGit(gitDir, ["cat-file", "-t", head], env).out !== "commit") return refuse("its branch does not name a commit");
+  if (tryGit(gitDir, ["cat-file", "-t", head], ctx).out !== "commit") return refuse("its branch does not name a commit");
 
   // Descent: every commit's parents are the base or each other.
-  if (!tryGit(gitDir, ["merge-base", "--is-ancestor", base, head], env).ok) return refuse("its branch is not built on the base");
-  const listed = tryGit(gitDir, ["rev-list", "--parents", `${base}..${head}`], env);
+  if (!tryGit(gitDir, ["merge-base", "--is-ancestor", base, head], ctx).ok) return refuse("its branch is not built on the base");
+  const listed = tryGit(gitDir, ["rev-list", "--parents", `${base}..${head}`], ctx);
   if (!listed.ok) return refuse("its history could not be walked from the base");
   const rows = listed.out.split("\n").filter((l) => l !== "").map((l) => l.split(" "));
   if (rows.length === 0) return refuse("it holds no commit beyond the base");
@@ -213,7 +227,7 @@ export function verifyBundle({ gitDir, bundle, base, issue, maxBytes = MAX_BUNDL
   const treeOf = new Map();
   const tree = (c) => {
     if (!treeOf.has(c)) {
-      const r = tryGit(gitDir, ["rev-parse", "--verify", "--quiet", `${c}:${PROTECTED_TREE}`], env);
+      const r = tryGit(gitDir, ["rev-parse", "--verify", "--quiet", `${c}:${PROTECTED_TREE}`], ctx);
       treeOf.set(c, r.ok ? r.out : "");
     }
     return treeOf.get(c);
@@ -231,23 +245,23 @@ export function verifyBundle({ gitDir, bundle, base, issue, maxBytes = MAX_BUNDL
  * any `agent/<issue>-*` branch already exists there. Returns
  * `{ pushed: true }` or `{ pushed: false, reason }`.
  */
-export function pushBranch({ gitDir, remote, branch, head, issue, token }) {
+export function pushBranch({ gitDir, remote, branch, head, issue, token, timeoutMs = GIT_TIMEOUT_MS }) {
   if (!ISSUE.test(String(issue))) return { pushed: false, reason: `the issue number is not a number: ${shown(issue)}` };
   if (!branchPattern(issue).test(String(branch))) return { pushed: false, reason: `${shown(branch)} is not agent/${issue}-<slug>` };
-  const env = gitEnv({ remote, token });
+  const ctx = { env: gitEnv({ remote, token }), timeoutMs };
   // Only what `verify` fetched: the commit it checked, under the ref it wrote.
   // That equality is also what makes `head` a plain commit id below.
-  const verified = tryGit(gitDir, ["rev-parse", "--verify", "--quiet", HANDOFF_REF], env);
+  const verified = tryGit(gitDir, ["rev-parse", "--verify", "--quiet", HANDOFF_REF], ctx);
   if (!verified.ok || verified.out !== head) return { pushed: false, reason: "that commit is not the one the verification fetched" };
 
-  const listed = tryGit(gitDir, ["ls-remote", "--heads", remote], env);
+  const listed = tryGit(gitDir, ["ls-remote", "--heads", remote], ctx);
   if (!listed.ok) return { pushed: false, reason: "the remote's branches could not be listed" };
   const prefix = `refs/heads/agent/${issue}-`;
   const taken = listed.out.split("\n").map((l) => l.split("\t")[1] ?? "").filter((r) => r.startsWith(prefix));
   if (taken.length > 0) {
     return { pushed: false, reason: `${taken[0].replace("refs/heads/", "")} already exists for this issue; another run got there first` };
   }
-  const pushed = tryGit(gitDir, ["push", "--quiet", remote, `${head}:refs/heads/${branch}`], env);
+  const pushed = tryGit(gitDir, ["push", "--quiet", remote, `${head}:refs/heads/${branch}`], ctx);
   if (!pushed.ok) return { pushed: false, reason: `the push was refused: ${pushed.err.split("\n").slice(-3).join(" / ")}` };
   return { pushed: true };
 }
