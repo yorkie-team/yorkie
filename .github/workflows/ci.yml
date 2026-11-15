@@ -177,6 +177,13 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
+          # NO CACHE. Every job on main's ref, an agent's included, can
+          # write Actions cache entries that a push to main would restore
+          # here, and build, bench, complex-test and load-test all run with a
+          # write token, most with secrets too. The default restores nothing
+          # today only because checkout comes later; reordering the steps
+          # would turn it on. scripts/agent/trusted-cache.test.mjs refuses it.
+          cache: false
 
       - name: Set up Node
         # This job already depended on the runner image's ambient Node — the
@@ -413,6 +420,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: false # see the build job: no cache restore on main
 
       - name: Set up Node.js
         if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
@@ -655,6 +663,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: false # see the build job: no cache restore on main
 
       - name: Check out code
         uses: actions/checkout@v4
@@ -702,6 +711,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: false # see the build job: no cache restore on main
 
       - name: Set up Node.js
         if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
