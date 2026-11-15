@@ -335,7 +335,54 @@ test("verify: git's object checks refuse a tree that would write into .git", (t)
   const tree = runIn(w.up, `${listing}\n040000 tree ${inner}\t.git\n`, "mktree");
   const evil = run(w.up, "commit-tree", tree, "-p", w.base, "-m", "evil");
   run(w.up, "update-ref", "refs/heads/agent/42-evil", evil);
-  refused(verify(w, bundle(w, "dotgit", "agent/42-evil", `^${w.base}`)), /refused its objects/);
+  refused(verify(w, bundle(w, "dotgit", "agent/42-evil", `^${w.base}`)), /refused its objects|object check failed/);
+});
+
+test("verify: a tree with two .github entries is refused, not read by its first", (t) => {
+  // The workflows rule reads `<commit>:.github/workflows`, and a tree holding
+  // two `.github` entries answers that with the first. So the first is left
+  // unchanged and the second carries the edit; only git's object checks stand
+  // between that tree and the push.
+  const w = world(t);
+  run(w.up, "checkout", "-q", "-b", "edited", w.base);
+  commit(w.up, ".github/workflows/ci.yml", "on: workflow_dispatch\n");
+  const edited = run(w.up, "rev-parse", "HEAD:.github");
+  const original = run(w.up, "rev-parse", `${w.base}:.github`);
+  const readme = run(w.up, "rev-parse", `${w.base}:README.md`);
+  const entry = (mode, name, oid) => Buffer.concat([Buffer.from(`${mode} ${name}\0`), Buffer.from(oid, "hex")]);
+  const raw = Buffer.concat([entry("40000", ".github", original), entry("40000", ".github", edited), entry("100644", "README.md", readme)]);
+  const tree = execFileSync("git", ["hash-object", "-t", "tree", "--literally", "-w", "--stdin"], { cwd: w.up, env: envFor(w.up), input: raw, encoding: "utf8" }).trim();
+  const dup = run(w.up, "commit-tree", tree, "-p", w.base, "-m", "two .github entries");
+  run(w.up, "update-ref", "refs/heads/agent/42-dup", dup);
+  refused(verify(w, bundle(w, "dup", "agent/42-dup", `^${w.base}`)), /refused its objects|object check failed/);
+
+  // The same bundle, through a git that does not check objects on a bundle
+  // fetch — as some versions have not. The explicit check after the fetch is
+  // what refuses it then.
+  const bin = path.join(w.root, "lax-git");
+  execFileSync("mkdir", ["-p", bin]);
+  const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
+  writeFileSync(path.join(bin, "git"), [
+    `#!${process.execPath}`,
+    'const { spawnSync } = require("node:child_process");',
+    "const a = process.argv.slice(2);",
+    "const out = [];",
+    'for (let i = 0; i < a.length; i++) { if (a[i] === "-c" && /fsckObjects/.test(a[i + 1] ?? "")) { i++; continue; } out.push(a[i]); }',
+    `const r = spawnSync(${JSON.stringify(real)}, out, { stdio: "inherit" });`,
+    "process.exit(r.status ?? 1);",
+    "",
+  ].join("\n"));
+  execFileSync("chmod", ["+x", path.join(bin, "git")]);
+  const gitDir = path.join(w.root, "lax.git");
+  prepareRepository({ gitDir, remote: w.remote, base: w.base });
+  const file = bundle(w, "dup-again", "agent/42-dup", `^${w.base}`);
+  const path0 = process.env.PATH;
+  process.env.PATH = `${bin}:${path0}`;
+  try {
+    refused(verifyBundle({ gitDir, bundle: file, base: w.base, issue: 42 }), /object check failed/);
+  } finally {
+    process.env.PATH = path0;
+  }
 });
 
 test("verify: nothing in the bundle runs — hooks, attributes and filters stay data", (t) => {

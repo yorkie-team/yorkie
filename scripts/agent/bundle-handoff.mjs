@@ -17,8 +17,9 @@
 // have been steered by the issue text. Nothing here checks out a tree from it,
 // runs a hook, reads a configuration file from it or executes any of it. Git
 // reads it into a fresh bare repository with no configuration but its own and
-// checks every incoming object (`transfer.fsckObjects`), and then these must
-// hold, or nothing is pushed:
+// checks every object, as it arrives (`transfer.fsckObjects`) and again once
+// it is in (`git fsck --strict`), and then these must hold, or nothing is
+// pushed:
 //
 //   - it is a regular file, not empty, and no larger than `MAX_BUNDLE_BYTES`;
 //   - it carries exactly ONE ref, `refs/heads/agent/<issue>-<slug>`, for the
@@ -185,6 +186,12 @@ export function verifyBundle({ gitDir, bundle, base, issue, maxBytes = MAX_BUNDL
     env,
   );
   if (!fetched.ok) return refuse("git refused its objects");
+  // AND AGAIN, OVER EVERYTHING NOW HERE, not left to whether a bundle fetch
+  // honours the setting above — which has varied between git versions. The
+  // workflows rule below reads a tree by path, and a tree carrying two entries
+  // of one name answers with the first of them; git's object checks refuse
+  // such a tree, so this one is load-bearing for that rule.
+  if (!tryGit(gitDir, ["fsck", "--strict", "--no-dangling", "--no-progress"], env).ok) return refuse("git's object check failed on its objects");
   const head = tip;
   if (tryGit(gitDir, ["cat-file", "-t", head], env).out !== "commit") return refuse("its branch does not name a commit");
 
