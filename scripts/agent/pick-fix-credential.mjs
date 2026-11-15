@@ -39,8 +39,9 @@
 // slot the panel never touched, or one whose window closed after the panel
 // finished, reads as live. So with `--probe` each candidate gets a one-word query
 // before the round is recorded, and the first that answers is the one handed
-// out. Same two fail directions as above: every candidate REFUSED (quota or
-// auth) is a known-dead pool and `available=false`; anything inconclusive — an
+// out. Same two fail directions as above: every candidate REFUSED (a closed
+// usage window or a rejected credential) is a known-dead pool and
+// `available=false`; anything inconclusive — a transient overload, an
 // unclassified error, a timeout, an SDK that will not load — proceeds.
 //
 // It runs before the branch checkout, so the pool secrets it needs are never in
@@ -144,24 +145,60 @@ export function candidateNames(state, configuredNames) {
   return configured.filter((n) => live.has(n));
 }
 
-// After wafflebase's auth-smoke.mjs, NARROWED. A "refused" answer here pauses
-// the PR behind the paged latch until a human reruns it, so only a refusal that
-// STAYS refused counts: a closed usage window (until it resets) or a rejected
-// credential. A plain 429, "rate limit" or "overloaded" is transient — on an
-// API-wide blip every slot would read as dead and the PR would latch for
-// nothing — so it is `unknown`, which proceeds. The same line the panel's own
-// failover draws: `isAccountLimit` keys on USAGE_LIMIT, not on RATE_LIMITED.
-const QUOTA = [SESSION_LIMIT_RE];
-const AUTH = [
-  /\b401\b/, /\b403\b/, /unauthorized/i, /authentication[ _-]?(error|failed)/i,
-  /invalid[ _-]?(api[ _-]?key|token|credential)/i, /expired[ _-]?(token|credential)/i,
-  /not[ _-]?logged[ _-]?in/i, /please run \/login/i,
+// The vocabulary of wafflebase's pre-arm check (`auth-smoke.mjs`), NARROWED:
+// its transient-capacity list and its auth list, which that check keeps for
+// the WIDE form. Exported so a repo that keeps its own copy can hold the two to
+// one vocabulary pattern for pattern; an adopter's copy cannot import this one,
+// because the jobs run it from a staged copy of the core only.
+export const TRANSIENT = [
+  /rate[ _-]?limit/i,
+  /\b429\b/,
+  /overloaded/i,
+  /quota/i,
+  /capacity/i,
+  /too many requests/i,
+];
+export const AUTH = [
+  /\b401\b/,
+  /\b403\b/,
+  /unauthorized/i,
+  /authentication[ _-]?(error|failed)/i,
+  /invalid[ _-]?(api[ _-]?key|token|credential)/i,
+  /expired[ _-]?(token|credential)/i,
+  /not[ _-]?authenticated/i,
+  // Not a filesystem error. A failed probe is classified from the CLI's stderr
+  // tail, where the runner's own EACCES/EPERM ("EACCES: permission denied,
+  // mkdir …") or a shell's "/path: Permission denied" can appear; read as auth,
+  // a passing fault there would refuse every slot and page the PR.
+  /(?<!(?:E(?:ACCES|PERM)|\/[^\s:]*): )permission[ _-]?denied/i,
+  // What an unauthenticated Agent SDK says: "Not logged in · Please run /login".
+  /not[ _-]?logged[ _-]?in/i,
+  /please run \/login/i,
+  // The bare command only: not a URL's or a file's path (`…/oauth/login`,
+  // `/app/login.js`), which a network error or a stack frame can carry.
+  /(?<![\w./-])\/login(?![\w/-]|\.\w)/,
 ];
 
-/** "quota" | "auth" | "unknown". Quota first: it often arrives worded as auth. */
+/**
+ * "quota" | "auth" | "unknown" for a probe that did not answer.
+ *
+ * A "refused" answer from every slot pages the PR and pauses it until
+ * loop-sweep retries NO_LIVE_CREDENTIAL (60 minutes at the earliest) or a
+ * human reruns it, so only a refusal that STAYS refused counts: a closed usage window
+ * (until it resets) or a rejected credential. A plain 429, "rate limit",
+ * "overloaded" or "capacity" is transient — on an API-wide blip every slot would
+ * read as dead and the PR would latch for nothing — so it is `unknown`, which
+ * proceeds. The same line the panel's own failover draws: `isAccountLimit` keys
+ * on USAGE_LIMIT, not on RATE_LIMITED.
+ *
+ * Order: a closed usage window first (it often arrives worded as auth, and with
+ * a 429); then any transient capacity signal, which wins over auth words so a
+ * 429 that also says "403" or "unauthorized" cannot latch a PR; then auth.
+ */
 export function classifyProbeFailure(message) {
   const text = String(message ?? "");
-  if (QUOTA.some((re) => re.test(text))) return "quota";
+  if (SESSION_LIMIT_RE.test(text)) return "quota";
+  if (TRANSIENT.some((re) => re.test(text))) return "unknown";
   if (AUTH.some((re) => re.test(text))) return "auth";
   return "unknown";
 }
@@ -208,7 +245,7 @@ export function probeEnv(token, home) {
   return { PATH: process.env.PATH ?? "", HOME: home, CLAUDE_CONFIG_DIR: home, CLAUDE_CODE_OAUTH_TOKEN: token };
 }
 
-function sdkCheck(query, model, token, timeoutMs = 30_000) {
+export function sdkCheck(query, model, token, timeoutMs = 30_000) {
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), timeoutMs);
   const home = mkdtempSync(path.join(tmpdir(), "probe-"));
@@ -231,7 +268,10 @@ function sdkCheck(query, model, token, timeoutMs = 30_000) {
         failure = `${m.subtype ?? ""} ${m.api_error_status ?? ""} ${m.result ?? ""}`;
       }
     } catch (err) {
-      failure = abort.signal.aborted ? "timeout" : String(err?.message ?? err);
+      // Keep a result message the session already sent: the CLI can exit
+      // non-zero after it, and the exit error alone carries only stderr.
+      const thrown = abort.signal.aborted ? "timeout" : String(err?.message ?? err);
+      failure = failure === "(no result message)" ? thrown : `${failure} ${thrown}`;
     } finally {
       clearTimeout(timer);
       rmSync(home, { recursive: true, force: true });
