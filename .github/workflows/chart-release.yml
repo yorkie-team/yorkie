@@ -5,8 +5,14 @@ on:
     branches:
       - main
 
+# Nothing by default: the job below names the token scopes it needs, so a
+# job added later starts with none rather than the repository default.
+permissions: {}
+
 jobs:
   release:
+    # chart-releaser creates a GitHub release per chart and pushes the index
+    # to the gh-pages branch.
     permissions:
       contents: write
 
