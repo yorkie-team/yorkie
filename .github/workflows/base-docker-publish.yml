@@ -11,10 +11,16 @@ on:
         description: make command to run — `docker` or `docker-latest`
         required: true
         type: string
+# Nothing by default; a called workflow's token is also capped by its caller's.
+permissions: {}
+
 jobs:
   build:
     name: build
     runs-on: ubuntu-latest
+    # The checkout only. The image goes to Docker Hub with its own secrets.
+    permissions:
+      contents: read
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -23,6 +29,12 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: 1.26
+          # NO CACHE. A cache entry restored here could have been written by
+          # any job on main's ref, an agent's included, and this job runs
+          # with the Docker Hub credentials after `make tools` and `make build`
+          # execute what the cache holds. scripts/agent/trusted-cache.test.mjs
+          # refuses the default.
+          cache: false
 
       - name: Use docker buildx
         run: docker buildx create --use

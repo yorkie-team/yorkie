@@ -177,6 +177,53 @@ test("snapshot: what the test-removal record counts as a test, and as a case", (
   }
 });
 
+// --- token permissions -----------------------------------------------------------
+
+/**
+ * A workflow's top-level `permissions:` value, comments dropped, one entry per
+ * line: `{}`, `read-all`, or `scope: level` lines. `null` when there is none.
+ */
+function workflowPermissions(text) {
+  const lines = text.split("\n");
+  const at = lines.findIndex((l) => /^permissions:/.test(l));
+  if (at < 0) return null;
+  const block = [lines[at].slice("permissions:".length)];
+  for (const l of lines.slice(at + 1)) {
+    if (!/^(\s|$)/.test(l)) break;
+    block.push(l);
+  }
+  return block
+    .map((l) => l.replace(/(^|\s)#.*$/, "").trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+test("every workflow declares its token permissions at the workflow level, read-only", () => {
+  // The repository's default GITHUB_TOKEN is write-all until it is switched
+  // to read-only, so a job with no `permissions:` of its own and none at the
+  // workflow level gets a write token. A workflow-level block makes the
+  // default for every job in the file explicit, a job added later included.
+  // It grants reads or nothing; a job that writes says so in its own block,
+  // next to the steps that need it.
+  const readOnly = (perms) =>
+    perms === "{}" || perms === "read-all" || (perms !== "" && perms.split("\n").every((l) => /^[a-z-]+: (read|none)$/.test(l)));
+  // The parser and the predicate, against the shapes they must tell apart.
+  assert.equal(workflowPermissions("on: push\n\npermissions: {}\n\nenv:\n  A: b\n"), "{}");
+  assert.equal(workflowPermissions("on: push\n# c\npermissions:\n  contents: read # checkout\n  # why\n  issues: read\njobs:\n"), "contents: read\nissues: read");
+  assert.equal(workflowPermissions("on: push\njobs:\n  a:\n    permissions: {}\n"), null, "a job's block is not the workflow's");
+  for (const bad of ["", "write-all", "contents: write", "contents: read\nissues: write"]) {
+    assert.ok(!readOnly(bad), `accepted ${JSON.stringify(bad)}`);
+  }
+
+  const files = readdirSync(WORKFLOWS).filter((f) => /\.ya?ml$/.test(f));
+  assert.ok(files.includes("ci.yml") && files.some((f) => f.startsWith("agent-")), `expected the workflows, found ${files}`);
+  for (const file of files) {
+    const perms = workflowPermissions(readFileSync(path.join(WORKFLOWS, file), "utf8"));
+    assert.ok(perms !== null, `${file} has no workflow-level \`permissions:\`, so its jobs inherit the repository default`);
+    assert.ok(readOnly(perms), `${file}: workflow-level permissions must be \`{}\` or reads only, got ${JSON.stringify(perms)}`);
+  }
+});
+
 // --- the paths that define CI ---------------------------------------------------
 //
 // `ci.definingPaths`, entry by entry, with the reason each is on the list. The

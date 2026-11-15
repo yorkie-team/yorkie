@@ -960,14 +960,41 @@ test("no token-bearing job sets itself up by running the branch's build files", 
   // is meant to be every repository's. Scoped to SETUP: the agent itself runs
   // branch code by design, and holds the token by design, because it has to
   // push.
+  //
+  // Bun is exempt in one shape only: claude-code-action's own runtime, not this
+  // repository's toolchain, installed in the workflow with `no-cache` so the
+  // action does not restore it from the Actions cache (trusted-cache.test.mjs).
+  // That shape reads no branch file because the version is a literal. Without
+  // `bun-version`, or with `bun-version-file`, setup-bun reads the version from
+  // the checkout, which lets the branch choose the binary.
   const SETUP_ACTION = /uses:\s*(?:actions\/setup-(?!node@)[\w-]+|pnpm\/action-setup|oven-sh\/setup-bun|ruby\/setup-ruby|dtolnay\/rust-toolchain)@/;
+  const PINNED_BUN = /^ {8}uses: oven-sh\/setup-bun@[0-9a-f]{40}(?: #[^\n]*)?\n {8}with:\n(?: {10}bun-version: "?\d+\.\d+\.\d+"?\n {10}no-cache: true\n| {10}no-cache: true\n {10}bun-version: "?\d+\.\d+\.\d+"?\n)(?! {10})/gm;
   const INSTALL = /^\s*(?:run:\s*)?(?:make\s+tools|go\s+install|pnpm\s+install|yarn(?:\s+install)?|npm\s+install|pip\s+install|cargo\s+install)\b/m;
   for (const name of ["agent-fix.yml", "agent-implement.yml", "agent-iterate-ci.yml", "agent-review-panel.yml", "agent-review-reply.yml"]) {
     const code = WF(name).split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
     assert.match(code, /uses: \.\/(?:\.trusted-toolchain\/)?\.github\/actions\/agent-toolchain\n/, `${name}: no toolchain action`);
-    assert.ok(!SETUP_ACTION.test(code), `${name}: sets a language toolchain up in the workflow instead of in the agent-toolchain action`);
+    assert.equal(code.match(PINNED_BUN)?.length ?? 0, 1, `${name}: expected one pinned, uncached Bun install for the agent`);
+    assert.ok(!SETUP_ACTION.test(code.replace(PINNED_BUN, "")), `${name}: sets a language toolchain up in the workflow instead of in the agent-toolchain action`);
     assert.ok(!INSTALL.test(code), `${name}: installs tools or dependencies in the workflow instead of in the agent-toolchain action`);
   }
+});
+
+test("an agent job installs the package's runtime dependencies only", () => {
+  // The dev dependencies are for the package's own tests (`yaml`, for the
+  // cache guard). Every other install builds a tree that a job holding
+  // secrets runs, so it leaves them out; agent-scripts.yml runs the tests and
+  // keeps them.
+  const dir = path.dirname(fileURLToPath(new URL("../../.github/workflows/x", import.meta.url)));
+  let installs = 0;
+  for (const name of readdirSync(dir).filter((f) => /^agent-.*\.ya?ml$/.test(f) && f !== "agent-scripts.yml")) {
+    const code = WF(name).split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+    // A command line, not prose inside a script.
+    for (const m of code.matchAll(/^\s*(?:- )?(?:run: )?(?:cd \S+ && )?npm (?:ci|install)\b[^\n]*/gm)) {
+      installs++;
+      assert.match(m[0], /--omit=dev\b/, `${name}: \`${m[0].trim()}\` installs the dev dependencies too`);
+    }
+  }
+  assert.ok(installs >= 3, `expected the runtime installs, found ${installs}`);
 });
 
 test("every fixer prompt runs the same verification target", () => {
