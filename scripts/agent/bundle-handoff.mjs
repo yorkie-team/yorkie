@@ -40,8 +40,8 @@
 //
 // `push` then refuses when any `agent/<issue>-*` branch already exists on the
 // remote — another run for the same issue got there first — and pushes the
-// verified commit as a creation the server refuses if the branch exists by
-// then. It never forces.
+// verified commit as a creation, refused if the branch exists by then. It
+// never forces.
 //
 // Usage:
 //   node bundle-handoff.mjs verify --bundle <file> --base <sha> --issue <n> --git-dir <dir> [--remote <url>]
@@ -263,11 +263,13 @@ export function pushBranch({ gitDir, remote, branch, head, issue, token, timeout
   if (taken.length > 0) {
     return { pushed: false, reason: `${taken[0].replace("refs/heads/", "")} already exists for this issue; another run got there first` };
   }
-  // CREATE-ONLY, AND CHECKED BY THE SERVER. The listing above and this push
-  // are two round trips, and a plain push onto a branch that appeared between
-  // them would fast-forward it when its tip is a commit this repository has.
-  // A lease on the empty value refuses unless the branch does not exist, in
-  // the same update that would create it.
+  // CREATE-ONLY. The listing above and this push are two round trips, and a
+  // plain push onto a branch that appeared between them would fast-forward it
+  // when its tip is a commit this repository has. A lease on the empty value
+  // closes that in two halves: git refuses the push if the branch is in the
+  // push's own listing of the remote, and the update it sends names no old
+  // commit, which the server applies only if the branch still does not
+  // exist. The test exercises the first half.
   const pushed = tryGit(gitDir, ["push", "--quiet", `--force-with-lease=refs/heads/${branch}:`, remote, `${head}:refs/heads/${branch}`], ctx);
   if (!pushed.ok) {
     if (/stale info/.test(`${pushed.out}\n${pushed.err}`)) return { pushed: false, reason: `${branch} appeared on the remote after the check; another run got there first` };

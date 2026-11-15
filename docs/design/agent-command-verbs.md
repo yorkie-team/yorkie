@@ -178,7 +178,13 @@ work here is porting plus the three repo-specific pieces named in §4.
     trusted job treats every file it downloads as untrusted, downloads into a
     directory of its own outside the workspace, and runs nothing from it. It
     relies on `actions/download-artifact` to keep the archive's entries inside
-    that directory. That is as true of the fix family's report jobs.
+    that directory. That is as true of the fix family's report jobs. And what
+    passes between jobs through a file is outside what a guard reading the
+    workflow can pin: it sees which values a step is given, not what the step
+    writes to a file another job reads. So the step that writes the issue
+    text the agent's job downloads is held to holding nothing worth leaking —
+    the event payload and its own job's token — rather than to what it
+    writes.
   - **The issue-to-PR agent still holds the Claude credentials and a read-only
     token, and is not egress-controlled.** All nine pool slots are named in its
     job, so all nine are sent to its runner. It can read what those reach and

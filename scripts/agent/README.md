@@ -790,6 +790,10 @@ around it, and these pass it:
   `"uses":`), flow-style mappings, anchors.
 - What the toolchain action does once it runs. Where its file came from is
   checked; the actions it nests and the commands it runs are not.
+- What a step writes to a file another job reads. The guard sees the values
+  a step is given, not what it puts in an artifact; for the issue-to-PR
+  verb it holds the step that writes the agent's issue file to holding
+  nothing worth leaking instead.
 - What happens to `.trusted-toolchain` after the agent starts. The agent can
   rewrite the action's file before the job's post phase. The post steps that
   run were recorded when the action first ran, and an agent with a shell can

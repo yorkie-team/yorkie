@@ -629,7 +629,7 @@ jobs:
       # This narrows the waste and does not close it: the group covers only
       # this job, so the previous run's `finish` may still be verifying when
       # this looks. `finish` looks again before it pushes, and its push is
-      # refused by the server if the branch exists by then.
+      # refused if the branch exists by then.
       - name: Stop if another run already pushed a branch for this issue
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1019,8 +1019,8 @@ jobs:
 
       # The App pushes, so the push re-triggers CI — a `GITHUB_TOKEN`-authored
       # push would not, which would leave the PR with no CI at all. No force:
-      # not over any `agent/<issue>-*` branch already there, and a creation the
-      # server refuses if this branch appears in between. Two runs' branches
+      # not over any `agent/<issue>-*` branch already there, and a creation
+      # that is refused if this branch appears in between. Two runs' branches
       # under DIFFERENT names can both land if their `finish` jobs overlap;
       # the concurrency group on the agent's job keeps that window narrow.
       - name: Push the agent's branch
