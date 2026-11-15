@@ -691,7 +691,9 @@ test("each verb that needs the App answers the commenter when it is missing", ()
       text,
       // The App's name is the repository's (`repo.appSlug`), read from the
       // configuration and never written into the workflow.
-      /needs the `' \+ APP_SLUG \+ '` GitHub App/,
+      // Either spelling: the slug inline, or a phrase built from it that
+      // falls back to a general one when the slug is not a slug.
+      /needs the (?:`' \+ APP_SLUG \+ '` GitHub App|' \+ APP \+ ',)/,
       `${file}: must tell the commenter the App is missing, not just skip`,
     );
     // ...and it must come after the trust gate, so an account without write
@@ -1742,10 +1744,16 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
   //
   // TWO LINES NOW, because the reporter moved to the `finish` job: every step
   // after the agent in the agent's own job runs in an environment the agent can
-  // rewrite, and a reporter is no exception. The App check keys the JOB, and the
-  // step keeps `always()` so it survives every failure before it in that job.
-  const APPROVED = "        if: always() && github.event_name == 'issue_comment'";
-  const APPROVED_JOB = "always() && needs.implement.outputs.configured == 'true'";
+  // rewrite, and a reporter is no exception. The step keeps `always()` so it
+  // survives every failure before it in that job.
+  //
+  // AND THE APP CHECK MOVED FROM THE JOB TO THE STEP. The job is keyed on the
+  // commenter having been admitted by the write-access check, which is upstream
+  // of the App check, because the "App is not configured" reply runs there too.
+  // The reporter still names the App check itself: without the App every
+  // outcome it reads is `skipped`, which it would report as a dead credential.
+  const APPROVED = "        if: always() && github.event_name == 'issue_comment' && needs.implement.outputs.configured == 'true'";
+  const APPROVED_JOB = "always() && needs.implement.outputs.admitted == 'true'";
   const wf = WF("agent-implement.yml");
   const at = wf.indexOf("- name: Report a run that ended without a PR");
   assert.ok(at > 0, "agent-implement.yml has no reporter step");
@@ -1768,7 +1776,7 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
   );
 
   const finishIf = (wf.match(/^ {2}finish:\n(?:.*\n)*? {4}if: (.*)$/m) || [])[1];
-  assert.equal(finishIf, APPROVED_JOB, "the finish job must be keyed on the App check and nothing downstream");
+  assert.equal(finishIf, APPROVED_JOB, "the finish job must be keyed on admission and nothing downstream");
 
   // And it must still be able to NAME the cause, or it reports the wrong one —
   // which it has also done, telling an `npm ci` failure that main was unprotected.
@@ -1776,6 +1784,7 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
   assert.match(step, /needs\.implement\.outputs\.staged/, "a setup failure must be distinguishable from a refusal");
   // ...through job outputs that carry the step outcomes across, unrenamed.
   for (const [out, expr] of [
+    ["admitted", "steps.admitted.outputs.admitted"],
     ["configured", "steps.app.outputs.configured"],
     ["protection", "steps.protection.outcome"],
     ["staged", "steps.stage.outcome"],
@@ -1789,7 +1798,7 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
   // leaves every assertion above green while `steps.protection.outcome` becomes
   // the empty string, so every termination reports the same wrong cause. Cheap,
   // and not brittle — it asserts existence, not form.
-  for (const id of ["protection", "stage", "agent"]) {
+  for (const id of ["admitted", "protection", "stage", "agent"]) {
     assert.match(
       wf,
       new RegExp(`^ {8}id: ${id}$`, "m"),
@@ -1801,7 +1810,8 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
   // and that job must wait for the implement job whose outcomes it reads.
   const headers = [...wf.matchAll(/\n {2}([A-Za-z0-9_-]+):\n/g)].filter((m) => m.index < at);
   assert.equal(headers.at(-1)?.[1], "finish", "the reporter must live in the finish job");
-  assert.match(wf, /^ {2}finish:\n {4}needs: \[implement\]$/m, "the finish job must run after implement");
+  const needs = (/^ {2}finish:\n {4}needs: \[([^\]]*)\]$/m.exec(wf)?.[1] ?? "").split(",").map((x) => x.trim()).sort();
+  assert.deepEqual(needs, ["implement", "route"], "the finish job must run after implement, and read route's words");
 
   // NOTHING MAY RETURN EXCEPT THESE TWO LINES. An early
   // `if (steps.X.outcome !== 'success') return;` inside the script reinstates
@@ -1852,6 +1862,630 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
     `two report branches share a marker key (${keys.join(", ")}), so one suppresses the other`,
   );
   assert.ok(keys.length >= 6, `expected a key per report branch, found ${keys.length}`);
+});
+
+test("agent-implement's no-PR report finds the acknowledgement under the login that posts it", skipWithout("agent-implement.yml"), async () => {
+  // THE ACKNOWLEDGEMENT-AWARE DEDUPE NEVER SAW AN ACKNOWLEDGEMENT. "On it" is
+  // posted with the App token, so its author is the App's login; the report
+  // looked for it under `github-actions[bot]`, found nothing, and deduped
+  // against the whole history — so a second run that failed the same way
+  // left "On it" standing, the case the dedupe was written for.
+  const { VALUES } = await import("./workflow-values.mjs");
+  const { loadConfig } = await import("./config.mjs");
+  const login = VALUES.app_bot_login(loadConfig());
+  const jobs = implJobs(WF("agent-implement.yml"));
+  const route = jobs.get("route");
+  const implement = jobs.get("implement");
+  const finish = jobs.get("finish");
+
+  // Who posts the acknowledgement: a token minted from the App, so the login
+  // the configuration names.
+  const ack = implement.steps.find((s) => /🤖 On it — implementing this issue/.test(s.script ?? ""));
+  assert.ok(ack, "no acknowledgement step");
+  const tokenId = /^\$\{\{\s*steps\.([\w-]+)\.outputs\.token\s*\}\}$/.exec(ack.githubToken ?? "")?.[1];
+  assert.ok(tokenId, `the acknowledgement posts with ${ack.githubToken ?? "the job token"}, not an App token`);
+  const mint = implement.steps.find((s) => s.id === tokenId);
+  assert.match(mint?.uses ?? "", /^actions\/create-github-app-token@/, "the acknowledgement's token is not the App's");
+
+  // Where the report learns that login: route's configuration read, straight
+  // into the report's env — not through implement, whose runner was the agent's.
+  const reporter = finish.steps.find((s) => s.name === "Report a run that ended without a PR");
+  assert.equal(implKey(reporter.lines, 10, "APP_BOT_LOGIN"), "${{ needs.route.outputs.app_bot_login }}");
+  assert.equal(route.outputs.app_bot_login, "${{ steps.cfg.outputs.app_bot_login }}");
+  assert.match(route.steps.find((s) => s.id === "cfg")?.run ?? "", /workflow-values\.mjs\b[^\n]*\bapp_bot_login\b/);
+
+  // And what it does with it, run against threads.
+  const MARKER = "<!-- agent-implement-no-pr:agent -->";
+  const report = { user: { login: "github-actions[bot]" }, body: `${MARKER}\n🛑 earlier report` };
+  const ackBy = (who) => ({ user: { login: who }, body: "🤖 On it — implementing this issue. [Run](x)" });
+  const posts = async (thread) => {
+    let posted = 0;
+    const github = {
+      rest: { pulls: { list: "pulls" }, issues: { listComments: "comments", createComment: async () => { posted++; } } },
+      paginate: async (what) => (what === "comments" ? thread : []),
+    };
+    const context = { payload: { issue: { number: 7 } }, repo: { owner: "o", repo: "r" }, serverUrl: "https://x", runId: 1 };
+    const env = { APP_SLUG: "app", TOOLCHAIN_STEPS: "t", APP_BOT_LOGIN: login, AGENT_OUTCOME: "success", STAGED: "success", PROTECTION: "success" };
+    await new AsyncFunction("github", "context", "core", "process", reporter.script)(github, context, { warning() {} }, { env });
+    return posted;
+  };
+  assert.equal(await posts([report, ackBy(login)]), 1, "a new run's acknowledgement after an old report must be answered");
+  assert.equal(await posts([ackBy(login), report]), 0, "a report already made since the acknowledgement must not be repeated");
+  // A report marker is believed only from this step's own login.
+  assert.equal(await posts([ackBy(login), { ...report, user: { login } }]), 1, "a marker under the App's login must not suppress the report");
+  // An "On it" from anyone else is not an acknowledgement: it must not open a
+  // window that hides the report already made since the real one.
+  assert.equal(await posts([ackBy(login), report, ackBy("someone")]), 0, "a look-alike acknowledgement must not reopen the window");
+});
+
+// --- agent-implement's trust boundary, run rather than read ---------------------
+//
+// THREE PROPERTIES THAT ARE ABOUT WHEN THINGS RUN, so they are checked by
+// running the job's conditions over every way the job can go, not by matching
+// the lines that state them. Each was looser here than in a copy that had
+// already tightened it, and each loosening was one ordinary-looking line:
+//
+//   - the agent's job token could comment on an issue, and that token reaches
+//     the agent (checkout persists it, and its post step runs after the agent);
+//   - the pre-agent token's revocation was `continue-on-error`, so the agent
+//     started beside a token that might still be live;
+//   - `finish` was keyed on the App check, which only IMPLIED that the
+//     commenter had passed the write-access check — one `if:` on a later step
+//     away from posting for a commenter the check refused.
+//
+// The simulation models the runner's rules and nothing more: a step with no
+// status function in its `if:` gets an implicit `success()`, a failure in a
+// `continue-on-error` step does not count as one, a step that does not run
+// reads `skipped`, and a job's outputs are read through its `outputs:` map.
+
+/** A job's or step's scalar key, a folded `>-` value joined onto one line. */
+function implKey(lines, indent, key) {
+  const re = new RegExp(`^(?: {${indent}}| {${indent - 2}}- )${key}:\\s*(.*?)\\s*$`);
+  const at = lines.findIndex((l) => re.test(l));
+  if (at < 0) return undefined;
+  const value = re.exec(lines[at])[1];
+  if (!/^[>|][+-]?$/.test(value)) return value.replace(/\s+#\s.*$/, "");
+  const more = [];
+  for (const l of lines.slice(at + 1)) {
+    if (l.trim() !== "" && /^(\s*)/.exec(l)[1].length <= indent) break;
+    more.push(l.trim());
+  }
+  return more.join(value.startsWith(">") ? " " : "\n").trim();
+}
+
+/** A `key:` block of `name: value` lines, or the scalar it was given instead. */
+function implMap(lines, indent, key) {
+  const at = lines.findIndex((l) => new RegExp(`^ {${indent}}${key}:`).test(l));
+  if (at < 0) return undefined;
+  const inline = new RegExp(`^ {${indent}}${key}:\\s*(.*?)\\s*(?:#.*)?$`).exec(lines[at])[1];
+  if (inline !== "") return inline;
+  const map = {};
+  for (const l of lines.slice(at + 1)) {
+    if (l.trim() === "") continue;
+    if (/^(\s*)/.exec(l)[1].length <= indent) break;
+    const m = /^\s*([\w-]+):\s*(.*?)\s*(?:\s#\s.*)?$/.exec(l);
+    if (m) map[m[1]] = m[2];
+  }
+  return map;
+}
+
+/** Every job of a workflow, its head keys and its steps. Full-line comments dropped. */
+function implJobs(text) {
+  const lines = text.split("\n").filter((l) => !/^\s*#/.test(l));
+  const jobs = new Map();
+  let cur = null;
+  for (const l of lines.slice(lines.findIndex((x) => /^jobs:\s*$/.test(x)) + 1)) {
+    const h = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(l);
+    if (h) jobs.set(h[1], (cur = { name: h[1], lines: [] }));
+    else if (cur) cur.lines.push(l);
+  }
+  for (const j of jobs.values()) {
+    const at = j.lines.findIndex((l) => /^ {4}steps:\s*$/.test(l));
+    const head = at < 0 ? j.lines : j.lines.slice(0, at);
+    j.if = implKey(head, 4, "if");
+    j.permissions = implMap(head, 4, "permissions");
+    j.outputs = implMap(head, 4, "outputs") ?? {};
+    j.needs = String(implKey(head, 4, "needs") ?? "").replace(/[[\]\s]/g, "").split(",").filter(Boolean);
+    const raw = [];
+    for (const l of at < 0 ? [] : j.lines.slice(at + 1)) {
+      if (/^ {6}- /.test(l)) raw.push([]);
+      raw.at(-1)?.push(l);
+    }
+    j.steps = raw.map((ls) => ({
+      lines: ls,
+      text: ls.join("\n"),
+      name: implKey(ls, 8, "name"),
+      id: implKey(ls, 8, "id"),
+      if: implKey(ls, 8, "if"),
+      uses: implKey(ls, 8, "uses"),
+      run: implKey(ls, 8, "run"),
+      // Anything but a literal `false` may evaluate true at run time, an
+      // expression included, so it counts as letting a failure through.
+      failOpen: ![undefined, "false"].includes(implKey(ls, 8, "continue-on-error")),
+      githubToken: implKey(ls, 10, "github-token"),
+      ghToken: implKey(ls, 10, "GH_TOKEN"),
+      script: implKey(ls, 10, "script"),
+    }));
+  }
+  return jobs;
+}
+
+/** Whether an `if:` admits, under the runner's rules. Throws on anything it does not model. */
+function implAdmits(cond, ctx) {
+  let c = String(cond ?? "").trim().replace(/^\$\{\{\s*([\s\S]*?)\s*\}\}$/, "$1");
+  if (c === "") c = "success()";
+  if (!/\b(?:always|success|failure|cancelled)\(\)/.test(c)) c = `success() && (${c})`;
+  const js = c
+    .replace(/\balways\(\)/g, "true")
+    .replace(/\bsuccess\(\)/g, "!FAILED")
+    .replace(/\bfailure\(\)/g, "FAILED")
+    .replace(/\bcancelled\(\)/g, "false")
+    .replace(/\bsteps\.([\w-]+)\.outcome\b/g, (_, id) => `OUT(${JSON.stringify(id)})`)
+    .replace(/\bsteps\.([\w-]+)\.outputs\.([\w-]+)/g, (_, id, k) => `STEP(${JSON.stringify(id)}, ${JSON.stringify(k)})`)
+    .replace(/\bneeds\.([\w-]+)\.outputs\.([\w-]+)/g, (_, j, k) => `NEED(${JSON.stringify(j)}, ${JSON.stringify(k)})`)
+    .replace(/\bgithub\.event_name\b/g, "EVENT")
+    .replace(/([^!=])==(?!=)/g, "$1===");
+  return Boolean(new Function("FAILED", "OUT", "STEP", "NEED", "EVENT", `return (${js});`)(
+    ctx.failed, ctx.out, ctx.step, ctx.need, ctx.event,
+  ));
+}
+
+/** One job run: which steps ran, how each ended, and the job's outputs. */
+function implRun(job, { event, configured = true, fails = -1, need = () => "", failed = false }) {
+  const outcome = [];
+  const byId = {};
+  const outputs = {};
+  for (const [i, s] of job.steps.entries()) {
+    const runs = implAdmits(s.if, {
+      failed,
+      event,
+      need,
+      out: (id) => byId[id] ?? "",
+      step: (id, k) => outputs[id]?.[k] ?? "",
+    });
+    const o = !runs ? "skipped" : i === fails ? "failure" : "success";
+    outcome.push(o);
+    if (s.id) byId[s.id] = o;
+    if (o === "failure" && !s.failOpen) failed = true;
+    if (o !== "success" || !s.id) continue;
+    // The App check writes one of two values; every other step's output is
+    // whatever its `echo "k=v" >> "$GITHUB_OUTPUT"` lines say.
+    if (s.id === "app") outputs.app = { configured: configured ? "true" : "false" };
+    else {
+      for (const m of String(s.run ?? "").matchAll(/echo "([\w-]+)=([^"$]*)" >> "\$GITHUB_OUTPUT"/g)) {
+        (outputs[s.id] ??= {})[m[1]] = m[2];
+      }
+    }
+  }
+  const jobOut = {};
+  for (const [k, v] of Object.entries(job.outputs)) {
+    const st = /^\$\{\{\s*steps\.([\w-]+)\.outputs\.([\w-]+)\s*\}\}$/.exec(v);
+    const oc = /^\$\{\{\s*steps\.([\w-]+)\.outcome\s*\}\}$/.exec(v);
+    jobOut[k] = st ? outputs[st[1]]?.[st[2]] ?? "" : oc ? byId[oc[1]] ?? "" : "";
+  }
+  return { outcome, failed, jobOut };
+}
+
+const IMPL_WRITES = /\bgithub\.rest\.\w+\.(?:create|update|delete|add|remove|set|lock|merge)\w*\(/;
+const IMPL_REVOKE = "gh api -X DELETE installation/token";
+const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+
+/**
+ * Which repository roles the write-access check's script fails the step for,
+ * by running it. A throw fails a github-script step as surely as `setFailed`.
+ */
+async function implRefusedRoles(script) {
+  const refused = [];
+  for (const permission of ["admin", "maintain", "write", "triage", "read", "none"]) {
+    let failed = false;
+    const core = { setFailed: () => { failed = true; }, info() {}, notice() {}, warning() {}, error() {}, setOutput() {} };
+    // The role belongs to the COMMENTER, in this repository; anyone else asked
+    // about — the issue's author, say — has none. A check that asks about the
+    // wrong person would otherwise read the commenter's role and pass.
+    const github = {
+      rest: {
+        repos: {
+          getCollaboratorPermissionLevel: async ({ owner, repo, username }) => ({
+            data: { permission: owner === "o" && repo === "r" && username === "someone" ? permission : "none" },
+          }),
+        },
+      },
+    };
+    const context = {
+      payload: { comment: { user: { login: "someone" } }, issue: { user: { login: "maintainer" } }, sender: { login: "maintainer" } },
+      repo: { owner: "o", repo: "r" },
+    };
+    try {
+      await new AsyncFunction("github", "context", "core", script)(github, context, core);
+    } catch {
+      failed = true;
+    }
+    if (failed) refused.push(permission);
+  }
+  return refused;
+}
+
+/** Every way agent-implement.yml leaves its trust boundary, as sentences; empty when it holds. */
+async function implementBoundaryProblems(text) {
+  const problems = new Set();
+  const jobs = implJobs(text);
+  const implement = jobs.get("implement");
+  const finish = jobs.get("finish");
+  if (!implement || !finish) return ["no implement or no finish job"];
+  const st = implement.steps;
+  const agentAt = st.findIndex((s) => /^anthropics\/claude-code-action@/.test(s.uses ?? ""));
+  const verifyAt = st.findIndex((s) => /getCollaboratorPermissionLevel/.test(s.script ?? ""));
+  const admittedAt = st.findIndex((s) => s.id === "admitted");
+  if (agentAt < 0 || verifyAt < 0) return ["the agent step or the write-access check is missing"];
+  // EVERY App token minted before the agent is either the agent's own narrow
+  // one or revoked before it starts. Not only `app-token`: a second mint added
+  // beside it lives into the agent's runtime through its action's post step.
+  const narrow = /steps\.([\w-]+)\.outputs\.token/.exec(st[agentAt].text.match(/^\s+github_token:.*$/m)?.[0] ?? "")?.[1];
+  // Action references are case-insensitive, so the match is too.
+  const mints = st.slice(0, agentAt).filter((s) => /^actions\/create-github-app-token@/i.test(s.uses ?? ""));
+  // THE KEY, ACROSS THE FILE. Every mention of the App's private key sits in
+  // a step that needs it: in `implement`, the presence check and the two
+  // mints; in `finish`, its own mint. Any other step — a `run:` that mints
+  // through the API, a local or third-party action — is a token the checks
+  // above never see, and a workflow- or job-level `env:` hands the key to
+  // every step, the agent's included, as a plain variable.
+  const KEY = /\bAGENT_APP_PRIVATE_KEY\b/g;
+  const KEY_STEPS = { implement: new Set(["app", "app-token", "agent-token"]), finish: new Set(["app-token"]) };
+  const keyed = [...jobs.values()].flatMap((j) => j.steps.filter((s) => KEY_STEPS[j.name]?.has(s.id)));
+  const allowed = keyed.reduce((n, s) => n + (s.text.match(KEY) ?? []).length, 0);
+  const everywhere = (text.split("\n").filter((l) => !/^\s*#/.test(l)).join("\n").match(KEY) ?? []).length;
+  if (everywhere !== allowed) {
+    const where = [...jobs.values()].flatMap((j) => j.steps.filter((s) => /\bAGENT_APP_PRIVATE_KEY\b/.test(s.text) && !KEY_STEPS[j.name]?.has(s.id)).map((s) => `${j.name} "${s.name ?? s.id ?? s.uses}"`));
+    problems.add(`the App's private key is named outside the steps that mint with it${where.length ? `: ${where.join(", ")}` : " (a job- or workflow-level env)"}`);
+  }
+  // The agent's own condition names no status function: the implicit
+  // `success()` is what stops it after a failed revocation, and any explicit
+  // one (`always()`, `cancelled()`, even `success() || …`) can start it past one.
+  // Case-insensitive: expression function names are.
+  if (/\b(?:always|success|failure|cancelled)\s*\(\s*\)/i.test(st[agentAt].if ?? "")) problems.add(`the agent step's condition names a status function: ${st[agentAt].if}`);
+  if (!mints.some((m) => m.id === "app-token")) return ["the pre-agent mint is missing"];
+  for (const m of mints.filter((m) => m.id === narrow)) {
+    const asked = m.lines.map((l) => /^\s+permission-([a-z-]+):\s*(\S+)/.exec(l)).filter(Boolean).map((x) => `${x[1]}: ${x[2]}`);
+    if (asked.join() !== "contents: write") problems.add(`the agent's own token asks for ${asked.join(", ") || "the installation's full scope"}, not contents: write alone`);
+  }
+  // The pre-agent token writes nothing but issue comments. It never holds
+  // `contents: write` (the boundary table says so) or `pull-requests: write`
+  // (the approving half of the approve-and-merge pair). Reads are free: a new
+  // one is an ordinary change, not a guard edit.
+  for (const m of mints.filter((m) => m.id === "app-token")) {
+    const asked = m.lines.map((l) => /^\s+permission-([a-z-]+):\s*(\S+)/.exec(l)).filter(Boolean);
+    if (asked.length === 0) problems.add("the pre-agent token asks for the installation's full scope");
+    for (const [, scope, level] of asked) {
+      if (level === "read" || (scope === "issues" && level === "write")) continue;
+      const why = { contents: ", which the design says it never holds", "pull-requests": ", the approving half of approve-and-merge" }[scope] ?? "";
+      problems.add(`the pre-agent token asks for ${scope}: ${level}${why}; it may write issues and read anything`);
+    }
+  }
+  const wide = mints.filter((m) => m.id !== narrow).map((m) => {
+    const at = m.id ? st.findIndex((s) => /installation\/token/.test(s.run ?? "") && (s.ghToken ?? "") === `\${{ steps.${m.id}.outputs.token }}`) : -1;
+    return { mint: m, mintAt: st.indexOf(m), revokeAt: at };
+  });
+  for (const { mint, revokeAt } of wide) {
+    const name = mint.id ?? mint.name ?? "an unnamed mint";
+    if (revokeAt < 0) problems.add(`nothing revokes ${name} before the agent`);
+    // The one command, so its exit status is the revocation's: an `|| true`, a
+    // second command or a token swapped in through the shell all hide a failure.
+    else if (String(st[revokeAt].run).trim() !== IMPL_REVOKE) problems.add(`the revocation of ${name} runs \`${String(st[revokeAt].run).trim()}\`, not \`${IMPL_REVOKE}\` alone`);
+    if (revokeAt >= 0) {
+      // THE KEYS THAT CHANGE WHAT RUNS, refused. `shell:` can turn the command
+      // into an argument of something else, `working-directory:` and an extra
+      // `env:` change what it runs against, `continue-on-error:` and `uses:`
+      // stop it being this command's exit status at all; each leaves the step
+      // green and the token live. `id:`, `timeout-minutes:` and the like are
+      // ordinary and fail closed.
+      const r = st[revokeAt];
+      const keys = r.lines.map((l) => /^(?: {6}- | {8})([\w-]+):/.exec(l)?.[1]).filter(Boolean);
+      const env = r.lines.map((l) => /^ {10}([\w-]+):/.exec(l)?.[1]).filter(Boolean);
+      const denied = keys.filter((k) => ["shell", "working-directory", "continue-on-error", "uses", "with"].includes(k));
+      if (denied.length) problems.add(`the revocation of ${name} sets ${denied.join(", ")}`);
+      if (env.join() !== "GH_TOKEN") problems.add(`the revocation of ${name} has env [${env.join(", ")}], not GH_TOKEN alone`);
+    }
+  }
+  // The write-access check must FAIL the step for a role below write, or
+  // every commenter is admitted; it is run here, not read.
+  const refused = await implRefusedRoles(st[verifyAt].script ?? "");
+  if (refused.join() !== "triage,read,none") problems.add(`the write-access check fails the step for [${refused.join(", ")}], not for exactly the roles below write`);
+  if (st[verifyAt].failOpen) problems.add("the write-access check is continue-on-error, so a refusal admits");
+  const allSteps = [...jobs.values()].flatMap((j) => j.steps.map((s) => ({ job: j, s })));
+  const noApp = allSteps.find(({ s }) => /needs the (?:`' \+ APP_SLUG \+ '` GitHub App|' \+ APP \+ ',)/.test(s.script ?? ""));
+  const reporter = finish.steps.find((s) => s.name === "Report a run that ended without a PR");
+  if (!noApp) problems.add("nothing answers a commenter when the App is missing");
+  if (!reporter) problems.add("finish has no no-PR reporter");
+
+  // 1. The agent's job token reads only — declared, so nothing is inherited.
+  const perms = implement.permissions;
+  if (typeof perms !== "object") problems.add(`the implement job's token is ${perms === undefined ? "undeclared" : perms}, not a read-only list`);
+  else for (const [scope, level] of Object.entries(perms)) if (level !== "read") problems.add(`the implement job's token holds ${scope}: ${level}`);
+  // ...so no step there may write through it.
+  for (const s of st) {
+    if (/^actions\/github-script@/.test(s.uses ?? "") && !s.githubToken && IMPL_WRITES.test(s.script ?? "")) {
+      problems.add(`"${s.name ?? s.id}" writes with the implement job's own token`);
+    }
+    if (/(^|[\s;|&(])gh\s/.test(s.run ?? "") && !s.ghToken) problems.add(`"${s.name ?? s.id}" runs gh on the implement job's own token`);
+  }
+
+  // 2-4, by running the conditions. Every step of `implement` fails in turn,
+  // on both entry points, with and without the App.
+  for (const event of ["issue_comment", "workflow_dispatch"]) {
+    for (const configured of [true, false]) {
+      for (let fails = -1; fails < st.length; fails++) {
+        const failing = fails < 0 ? "nothing" : `"${st[fails].name ?? st[fails].id ?? st[fails].uses}"`;
+        const when = `when ${failing} fails (${event}, App ${configured ? "configured" : "missing"})`;
+        const run = implRun(implement, { event, configured, fails });
+        const o = run.outcome;
+        for (const { mint, mintAt, revokeAt } of wide) {
+          const name = mint.id ?? mint.name;
+          // 2. Fail-closed revocation: the agent starts only after it succeeded.
+          if (o[agentAt] !== "skipped" && o[mintAt] === "success") {
+            if (revokeAt < 0 || revokeAt > agentAt || o[revokeAt] !== "success") {
+              problems.add(`the agent starts with ${name}'s revocation ${revokeAt < 0 ? "absent" : revokeAt > agentAt ? "after it" : o[revokeAt]} ${when}`);
+            }
+          }
+          // ...and a token that was minted is revoked whatever failed after it.
+          if (o[mintAt] === "success" && fails !== revokeAt && (revokeAt < 0 || o[revokeAt] === "skipped")) {
+            problems.add(`${name} is left live ${when}`);
+          }
+        }
+        // 3. Admission: `finish` runs exactly for a commenter the check admitted.
+        const refused = event === "issue_comment" && fails === verifyAt;
+        const need = (j, k) => (j === "implement" ? run.jobOut[k] ?? "" : "");
+        const finishRuns = implAdmits(finish.if, { failed: run.failed, event, need, out: () => "", step: () => "" });
+        if (refused && finishRuns) problems.add(`finish runs for a commenter the write-access check refused ${when}`);
+        if (!refused && fails !== admittedAt && !finishRuns) problems.add(`finish does not run for an admitted commenter ${when}`);
+        if (!finishRuns) continue;
+        // 4. Inside it: the App-missing reply, and the reporter, each on its own side of the App check.
+        const fin = implRun(finish, { event, need });
+        const ran = (s) => s && fin.outcome[finish.steps.indexOf(s)] === "success";
+        const say = event === "issue_comment" && run.jobOut.configured === "false";
+        if (noApp && noApp.job === finish && ran(noApp.s) !== say) {
+          problems.add(`the App-missing reply ${say ? "is not posted" : "is posted"} ${when}`);
+        }
+        if (reporter && ran(reporter) && run.jobOut.configured !== "true") {
+          problems.add(`the no-PR reporter runs without the App and names a cause it did not see ${when}`);
+        }
+        if (reporter && event === "issue_comment" && configured && fails < 0 && !ran(reporter)) {
+          problems.add(`the no-PR reporter does not run ${when}`);
+        }
+      }
+    }
+  }
+  if (noApp && noApp.job !== finish) problems.add(`the App-missing reply is posted from job ${noApp.job.name}, not finish`);
+  if (noApp && noApp.job.permissions?.issues !== "write") problems.add("the App-missing reply's job cannot comment on an issue");
+
+  // 5. Nothing is spliced into code. `finish` reads what the implement job, on
+  // the runner the agent had, left behind; the dispatcher's issue number is
+  // free text. Both reach a script through `env:` only.
+  for (const j of [implement, finish]) {
+    for (const s of j.steps) {
+      if (/\$\{\{/.test(`${s.run ?? ""}\n${s.script ?? ""}`)) problems.add(`${j.name} "${s.name ?? s.id}" splices an expression into its script`);
+    }
+  }
+  // The dispatcher's issue number is checked as a number before any step
+  // takes it, in each job, and a failed check stops what would use it.
+  const NUMERIC = /case "\$(ISSUE(?:_NUMBER)?)" in\n\s*''\|\*\[!0-9\]\*\) [^\n]*exit 1 ;;/;
+  for (const j of [implement, finish]) {
+    // The check is of the number the steps use, not of whatever its env says.
+    const checkAt = j.steps.findIndex((s) => {
+      const m = NUMERIC.exec(s.run ?? "");
+      return m && !s.failOpen && implKey(s.lines, 10, m[1]) === "${{ github.event.issue.number || github.event.inputs.issue_number }}";
+    });
+    const firstUse = j.steps.findIndex((s, i) => i !== checkAt && /github\.event\.inputs\.issue_number/.test(s.text));
+    if (checkAt < 0) problems.add(`${j.name} never checks that the issue number is a number`);
+    else if (firstUse >= 0 && firstUse < checkAt) problems.add(`${j.name} "${j.steps[firstUse].name ?? j.steps[firstUse].id}" takes the issue number before it is checked`);
+  }
+  {
+    const checkAt = finish.steps.findIndex((s) => NUMERIC.test(s.run ?? ""));
+    const mint = finish.steps.findIndex((s) => s.id === "app-token");
+    const need = (j, k) => (j === "implement" ? ({ admitted: "true", configured: "true", staged: "success" })[k] ?? "" : "");
+    if (checkAt >= 0 && mint >= 0 && implRun(finish, { event: "workflow_dispatch", need, fails: checkAt }).outcome[mint] !== "skipped") {
+      problems.add("finish mints its token, and uses the issue number, after the number failed its check");
+    }
+  }
+
+  // 6. What `finish` takes from `implement`, whose outputs the agent's runner
+  // reports: outcomes and flags that pick between fixed messages, never text.
+  // The repository's words come from `route`, which the agent never had.
+  const OUTCOMES = new Set(["admitted", "configured", "protection", "staged", "agent"]);
+  for (const [k, v] of Object.entries(implement.outputs)) {
+    if (!OUTCOMES.has(k)) problems.add(`implement outputs ${k}, which is not one of its outcomes or flags`);
+    if (!/^\$\{\{\s*steps\.[\w-]+\.(?:outcome|outputs\.[\w-]+)\s*\}\}$/.test(v)) problems.add(`implement's output ${k} is ${v}, not a step's own outcome or output`);
+  }
+  for (const s of finish.steps) {
+    for (const [, k] of s.text.matchAll(/needs\.implement\.outputs\.([\w-]+)/g)) {
+      if (!OUTCOMES.has(k)) problems.add(`finish "${s.name ?? s.id}" reads ${k} from implement`);
+    }
+  }
+  if ([...finish.needs].sort().join() !== "implement,route") problems.add(`finish needs [${finish.needs.join(", ")}], not route and implement: the repository's words come from route`);
+  // Run the two comments with each value from `implement` set to text that
+  // must never be posted, and the App slug set to a forged marker.
+  const SENTINEL = "SENTINEL-FROM-IMPLEMENT";
+  const FORGED_SLUG = "x` <!-- agent-issue-help:fix --> @someone";
+  for (const step of [noApp?.s, reporter].filter(Boolean)) {
+    const fromImplement = step.lines.map((l) => /^ {10}([A-Z_]+):\s*\$\{\{\s*needs\.implement\.outputs\.[\w-]+\s*\}\}/.exec(l)?.[1]).filter(Boolean);
+    const cases = [
+      ...["success", "failure", "skipped", "cancelled"].map((o) => ({ AGENT_OUTCOME: o, STAGED: "success", PROTECTION: "success" })),
+      { AGENT_OUTCOME: "", STAGED: "failure", PROTECTION: "success" },
+      ...["failure", "skipped", "cancelled", ""].map((p) => ({ AGENT_OUTCOME: "", STAGED: "", PROTECTION: p })),
+    ].flatMap((base) => [
+      { ...base, APP_SLUG: FORGED_SLUG },
+      ...fromImplement.map((k) => ({ ...base, APP_SLUG: "app", [k]: SENTINEL })),
+    ]);
+    for (const env of cases) {
+      const bodies = [];
+      const github = {
+        rest: { pulls: { list: "pulls" }, issues: { listComments: "comments", createComment: async ({ body }) => { bodies.push(body); } } },
+        paginate: async () => [],
+      };
+      const context = { payload: { issue: { number: 7 } }, repo: { owner: "o", repo: "r" }, serverUrl: "https://x", runId: 1 };
+      try {
+        await new AsyncFunction("github", "context", "core", "process", step.script ?? "")(github, context, { warning() {} }, { env: { TOOLCHAIN_STEPS: "t", APP_BOT_LOGIN: "app[bot]", ...env } });
+      } catch (e) {
+        problems.add(`finish "${step.name}" throws when run: ${e.message}`);
+      }
+      for (const b of bodies) {
+        if (b.includes(SENTINEL)) problems.add(`finish "${step.name}" posts a value from implement as text`);
+        if (b.includes("agent-issue-help")) problems.add(`finish "${step.name}" posts an App slug it did not check`);
+        if (env.APP_SLUG === FORGED_SLUG && b.includes("`agent`")) problems.add(`finish "${step.name}" names its fallback as though it were an App`);
+      }
+    }
+  }
+
+  // 7. Finish runs main's scripts from a checkout that keeps no credential,
+  // and nothing in it lets what it downloaded steer a later step.
+  const checkouts = finish.steps.filter((s) => /^actions\/checkout@/.test(s.uses ?? ""));
+  if (checkouts.length !== 1) problems.add(`finish has ${checkouts.length} checkouts`);
+  for (const s of checkouts) {
+    if (implKey(s.lines, 10, "ref") !== "main") problems.add("finish checks out something other than main");
+    if (implKey(s.lines, 10, "persist-credentials") !== "false") problems.add("finish's checkout persists a credential");
+    if (implKey(s.lines, 10, "path") !== undefined) problems.add("finish checks main out beside the workspace, not into it");
+  }
+  for (const s of finish.steps) {
+    const where = `finish "${s.name ?? s.id ?? s.uses}"`;
+    if (/^\.\//.test(s.uses ?? "")) problems.add(`${where} runs a local action`);
+    for (const m of String(s.run ?? "").matchAll(/(?:^|[\s;|&(])node\s+(\S+)/g)) {
+      if (!/^scripts\/agent\/[\w-]+\.mjs$/.test(m[1])) problems.add(`${where} runs ${m[1]}, not one of main's scripts`);
+    }
+    if (/\bGITHUB_(?:ENV|PATH)\b/.test(s.run ?? "") || /\b(?:exportVariable|addPath)\b/.test(s.script ?? "")) {
+      problems.add(`${where} writes the environment or PATH of later steps`);
+    }
+    if (/\b(?:require|import)\s*\(/.test(s.script ?? "")) problems.add(`${where} loads a module from github-script`);
+  }
+  return [...problems];
+}
+
+test("agent-implement's token, revocation and finish gate hold when its conditions are run", skipWithout("agent-implement.yml"), async () => {
+  assert.deepEqual(await implementBoundaryProblems(WF("agent-implement.yml")), []);
+});
+
+test("agent-implement's trust boundary refuses each named loosening", skipWithout("agent-implement.yml"), async () => {
+  const text = WF("agent-implement.yml");
+  const REVOKE = "      - name: Revoke the pre-agent token\n        if: always() && steps.app-token.outcome == 'success'\n";
+  const AGENT = "      - name: Run Claude Code\n        if: steps.app.outputs.configured == 'true'\n";
+  const ADMIT = '      - name: Record that the commenter was admitted\n        id: admitted\n        run: echo "admitted=true" >> "$GITHUB_OUTPUT"\n';
+  const PERMS = "    permissions:\n      contents: read # the trusted checkout of the protection check\n";
+  const REVOKE_RUN = "        run: gh api -X DELETE installation/token\n";
+  const SETUP_NODE = "      - uses: actions/setup-node@v4\n        if: steps.app.outputs.configured == 'true'\n";
+  const VERIFY = "        if: github.event_name == 'issue_comment'\n        uses: actions/github-script@v7\n        with:\n          retries: 3\n          script: |\n            const actor";
+  const FINISH_IF = "    if: always() && needs.implement.outputs.admitted == 'true'\n";
+  const REPORTER = "        if: always() && github.event_name == 'issue_comment' && needs.implement.outputs.configured == 'true'\n";
+  const FINISH_CO = "          sparse-checkout-cone-mode: false\n          persist-credentials: false\n      - uses: actions/setup-node@v4\n        if: always() && needs.implement.outputs.staged == 'success'\n";
+  const SUMMARY = '          node scripts/agent/session-job-summary.mjs \\\n';
+  // The reply as it was, in the agent's job on its own token.
+  const NO_APP_IN_IMPLEMENT = [
+    "      - name: Say so, and stop",
+    "        if: steps.app.outputs.configured != 'true' && github.event_name == 'issue_comment'",
+    "        uses: actions/github-script@v7",
+    "        with:",
+    "          script: |",
+    "            await github.rest.issues.createComment({ owner: 'o', repo: 'r', issue_number: 1, body: 'x' });",
+    "",
+  ].join("\n");
+  const edits = {
+    // (a) the job token
+    job_token_issues_write: [PERMS, `${PERMS}      issues: write\n`],
+    job_token_inherited: [PERMS, ""],
+    job_token_write_all: [PERMS, "    permissions: write-all\n"],
+    ambient_comment_in_implement: [ADMIT, `${ADMIT}${NO_APP_IN_IMPLEMENT}`],
+    // (b) the revocation
+    revoke_fail_open: [REVOKE, `${REVOKE}        continue-on-error: true\n`],
+    revoke_fail_open_expression: [REVOKE, `${REVOKE}        continue-on-error: \${{ true }}\n`],
+    revoke_or_true: [REVOKE_RUN, "        run: gh api -X DELETE installation/token || true\n"],
+    revoke_through_another_variable: [REVOKE_RUN, "        run: GH_TOKEN=$GITHUB_TOKEN gh api -X DELETE installation/token\n"],
+    key_in_workflow_env: ["env:\n  GH_REPO: ${{ github.repository }}\n", "env:\n  GH_REPO: ${{ github.repository }}\n  K: ${{ secrets.AGENT_APP_PRIVATE_KEY }}\n"],
+    key_in_implement_env: ["    environment: agent\n    permissions:\n      contents: read #", "    environment: agent\n    env:\n      K: ${{ secrets.AGENT_APP_PRIVATE_KEY }}\n    permissions:\n      contents: read #"],
+    key_in_agent_step_env: ["      - name: Run Claude Code\n", "      - name: Run Claude Code\n        env:\n          K: ${{ secrets.AGENT_APP_PRIVATE_KEY }}\n"],
+    key_in_finish_step: ["      - name: Write implement session job summary\n", "      - name: Write implement session job summary\n        env:\n          K: ${{ secrets.AGENT_APP_PRIVATE_KEY }}\n"],
+    second_mint_unrevoked: [SETUP_NODE, `      - name: Extra token\n        id: extra-token\n        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0\n        with:\n          app-id: \${{ secrets.AGENT_APP_ID }}\n          private-key: \${{ secrets.AGENT_APP_PRIVATE_KEY }}\n          permission-issues: write\n${SETUP_NODE}`],
+    agent_token_widened: ["          permission-contents: write # commit and push the branch, and nothing else\n", "          permission-contents: write # commit and push the branch, and nothing else\n          permission-issues: write\n"],
+    verify_warns_only: ["core.setFailed(`@${actor} lacks write access", "core.warning(`@${actor} lacks write access"],
+    verify_fail_open_expression: [VERIFY, VERIFY.replace("        uses:", "        continue-on-error: ${{ true }}\n        uses:")],
+    pre_agent_token_widened: ["          permission-issues: write # answer on the issue\n", "          permission-issues: write # answer on the issue\n          permission-pull-requests: write\n          permission-contents: write\n"],
+    pre_agent_token_contents_write: ["          permission-issues: write # answer on the issue\n", "          permission-issues: write # answer on the issue\n          permission-contents: write\n"],
+    // Anchored on the step, not on neighbouring lines, so an ordinary key added to it does not move the anchor.
+    revoke_extra_env: (t) => t.replace(/( {6}- name: Revoke the pre-agent token\n(?: {8}.*\n)*? {10}GH_TOKEN: [^\n]*\n)/, "$1          GH_HOST: example.invalid\n"),
+    number_check_of_a_constant: (t) => t.replace("      - name: Check the issue number\n        env:\n          ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue_number }}\n", "      - name: Check the issue number\n        env:\n          ISSUE_NUMBER: 1\n"),
+    revoke_through_another_shell: [REVOKE_RUN, `        shell: true {0}\n${REVOKE_RUN}`],
+    revoke_elsewhere: [REVOKE_RUN, `        working-directory: /tmp\n${REVOKE_RUN}`],
+    key_in_a_run_step: [SETUP_NODE, `      - name: Mint by hand\n        env:\n          KEY: \${{ secrets.AGENT_APP_PRIVATE_KEY }}\n        run: node -e 1\n${SETUP_NODE}`],
+    mint_mixed_case: [SETUP_NODE, `      - name: Extra token\n        id: extra-token\n        uses: Actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0\n        with:\n          app-id: \${{ secrets.AGENT_APP_ID }}\n          private-key: \${{ secrets.AGENT_APP_PRIVATE_KEY }}\n          permission-issues: write\n${SETUP_NODE}`],
+    mint_local_action: [SETUP_NODE, `      - name: Extra token\n        id: extra-token\n        uses: ./.github/actions/app-token\n        with:\n          app-id: \${{ secrets.AGENT_APP_ID }}\n          private-key: \${{ secrets.AGENT_APP_PRIVATE_KEY }}\n${SETUP_NODE}`],
+    agent_success_or_cancelled: [AGENT, "      - name: Run Claude Code\n        if: (success() || cancelled()) && steps.app.outputs.configured == 'true'\n"],
+    agent_explicit_success: [AGENT, "      - name: Run Claude Code\n        if: success() && steps.app.outputs.configured == 'true'\n"],
+    verify_asks_about_someone_else: (t) => t.replace("repo: context.repo.repo, username: actor,", "repo: context.repo.repo, username: context.payload.issue?.user?.login ?? actor,"),
+    revoke_never: [REVOKE, "      - name: Revoke the pre-agent token\n        if: false\n"],
+    revoke_only_with_the_agent: [REVOKE, "      - name: Revoke the pre-agent token\n        if: steps.app.outputs.configured == 'true'\n"],
+    revoke_removed: (t) => t.replace(/ {6}- name: Revoke the pre-agent token\n(?: {8}.*\n)+/, ""),
+    agent_always: [AGENT, "      - name: Run Claude Code\n        if: always() && steps.app.outputs.configured == 'true'\n"],
+    agent_not_cancelled: [AGENT, "      - name: Run Claude Code\n        if: ${{ !cancelled() && steps.app.outputs.configured == 'true' }}\n"],
+    // (c) admission
+    finish_on_the_app_check: [FINISH_IF, "    if: always() && needs.implement.outputs.configured == 'true'\n"],
+    finish_ungated: [FINISH_IF, "    if: always()\n"],
+    finish_not_always: [FINISH_IF, "    if: needs.implement.outputs.admitted == 'true'\n"],
+    admitted_always: [ADMIT, ADMIT.replace("        id: admitted\n", "        id: admitted\n        if: always()\n")],
+    admitted_removed: [ADMIT, ""],
+    admitted_before_the_check: (t) => t.replace(ADMIT, "").replace("      - name: Verify actor has write access\n", `${ADMIT}      - name: Verify actor has write access\n`),
+    // the two comments `finish` now carries
+    reporter_without_the_app: [REPORTER, "        if: always() && github.event_name == 'issue_comment'\n"],
+    // `!= 'true'` also fires when the App check never ran, which is not a missing App.
+    no_app_reply_on_empty: ["          needs.implement.outputs.configured == 'false' &&\n", "          needs.implement.outputs.configured != 'true' &&\n"],
+    // finish's own hygiene
+    finish_persists: [FINISH_CO, FINISH_CO.replace("persist-credentials: false", "persist-credentials: true")],
+    finish_runs_output: [SUMMARY, '          node "$RUNNER_TEMP/agent-output/x.mjs" \\\n'],
+    finish_github_env: [SUMMARY, `          echo "NODE_OPTIONS=x" >> "$GITHUB_ENV"\n${SUMMARY}`],
+    // what finish takes from implement, whose runner was the agent's
+    finish_reads_slug_from_implement: [
+      "      agent: ${{ steps.agent.outcome }}\n",
+      "      agent: ${{ steps.agent.outcome }}\n      app_slug: ${{ needs.route.outputs.app_slug }}\n",
+    ],
+    reporter_slug_through_implement: ["          APP_SLUG: ${{ needs.route.outputs.app_slug }}\n          TOOLCHAIN_STEPS", "          APP_SLUG: ${{ needs.implement.outputs.app_slug }}\n          TOOLCHAIN_STEPS"],
+    finish_without_route: (t) => t.replace(/^( {2}finish:\n {4}needs: )\[[^\]]*\]$/m, "$1[implement]"),
+    reporter_posts_outcome: ["${agentOutcome === 'failure' ? 'failed' : 'ended'}", "${agentOutcome}"],
+    reporter_slug_unchecked: ["            const app = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '') ? `\\`${process.env.APP_SLUG}\\` GitHub App` : 'agent GitHub App';", "            const app = `\\`${process.env.APP_SLUG}\\` GitHub App`;"],
+    no_app_slug_unchecked: ["            const APP = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '')\n              ? '`' + process.env.APP_SLUG + '` GitHub App' : 'agent GitHub App';", "            const APP = '`' + process.env.APP_SLUG + '` GitHub App';"],
+    // what crosses into a script, and when the issue number is trusted
+    finish_splices_output: ["            const agentOutcome = process.env.AGENT_OUTCOME;", "            const agentOutcome = '${{ needs.implement.outputs.agent }}';"],
+    implement_splices_issue: ["            const issue = Number(process.env.ISSUE_NUMBER);", "            const issue = Number(context.payload.issue?.number || '${{ github.event.inputs.issue_number }}');"],
+    implement_number_unchecked: [`          case "$ISSUE_NUMBER" in\n            ''|*[!0-9]*) echo "Invalid issue number: '$ISSUE_NUMBER'" >&2; exit 1 ;;\n          esac\n\n      - name: Is`, "          true\n\n      - name: Is"],
+    finish_mint_ignores_check: ["        if: always() && needs.implement.outputs.staged == 'success' && steps.issue.outcome == 'success'\n", "        if: always() && needs.implement.outputs.staged == 'success'\n"],
+  };
+  for (const [name, edit] of Object.entries(edits)) {
+    let edited;
+    if (typeof edit === "function") edited = edit(text);
+    else {
+      assert.equal(text.split(edit[0]).length, 2, `${name}: the anchor is not unique`);
+      edited = text.replace(edit[0], edit[1]);
+    }
+    assert.notEqual(edited, text, `${name} changed nothing`);
+    assert.ok((await implementBoundaryProblems(edited)).length > 0, `${name} was accepted`);
+  }
+});
+
+test("agent-implement's trust boundary accepts ordinary edits", skipWithout("agent-implement.yml"), async () => {
+  // A guard that refuses every change is one a maintainer learns to edit
+  // around. These are ordinary and fail closed, so each must pass as it is.
+  const text = WF("agent-implement.yml");
+  const REVOKE = "      - name: Revoke the pre-agent token\n        if: always() && steps.app-token.outcome == 'success'\n";
+  const edits = {
+    revoke_gets_an_id: [REVOKE, `${REVOKE}        id: revoke\n`],
+    revoke_gets_a_timeout: [REVOKE, `${REVOKE}        timeout-minutes: 2\n`],
+    pre_agent_token_reads_more: ["          permission-issues: write # answer on the issue\n", "          permission-issues: write # answer on the issue\n          permission-metadata: read\n"],
+    finish_needs_reordered: (t) => t.replace(/^( {2}finish:\n {4}needs: )\[([^,\]]+), ([^\]]+)\]$/m, "$1[$3, $2]"),
+  };
+  for (const [name, edit] of Object.entries(edits)) {
+    let edited;
+    if (typeof edit === "function") edited = edit(text);
+    else {
+      assert.equal(text.split(edit[0]).length, 2, `${name}: the anchor is not unique`);
+      edited = text.replace(edit[0], edit[1]);
+    }
+    assert.notEqual(edited, text, `${name} changed nothing`);
+    assert.deepEqual(await implementBoundaryProblems(edited), [], `${name} was refused`);
+  }
 });
 
 test("agent-implement's two agent-branch lookups keep their approved form", skipWithout("agent-implement.yml"), () => {
