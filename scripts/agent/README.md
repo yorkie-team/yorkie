@@ -401,14 +401,27 @@ repository that adopts the harness follows them:
 
 - The default branch is `main`. Workflows check trusted code out with
   `ref: main`, and the scripts' base-branch arguments default to it.
-- The issue-to-PR job's own token holds `contents: read` and nothing else,
-  which reads `main` in a private repository as well as a public one. It is
-  read-only because the agent runs in that job and the token reaches it.
-  Every write there goes through an App token; the two comments that must
-  not depend on the App (the "App is not configured" reply and the no-PR
-  report) are posted by its `finish` job, which runs only for a commenter
-  the write-access check admitted. The pre-agent App token is revoked before
-  the agent starts, and if the revocation fails the agent does not start.
+- The issue-to-PR verb runs in three jobs, and its agent's job holds no
+  write credential. `prepare` makes every App call before the agent (the
+  write-access check, the protection gate, the duplicate-branch pre-flight,
+  the "On it" reply, the issue text) and records the base commit. `implement`
+  runs the agent with the Claude credentials, each named, and a token that
+  holds `contents: read` and nothing else, which reads `main` in a private
+  repository as well as a public one; no App secret is referenced there,
+  because a runner is sent every secret its job references and the agent has
+  that runner. The agent commits and does not push. `finish` checks those
+  commits (`bundle-handoff.mjs`, below), pushes them with an App token it
+  mints only after they pass, opens the draft PR, and posts the two comments
+  that must not depend on the App (the "App is not configured" reply and the
+  no-PR report); it runs only for a commenter the write-access check
+  admitted.
+- The issue-to-PR agent hands over ONE branch, `agent/<issue>-<slug>`, built
+  on the commit it was given. `bundle-handoff.mjs` refuses the whole branch,
+  and nothing is pushed, if there is more than one, if any commit does not
+  descend from that base, if the bundle is over 32 MiB or the branch over 100
+  commits, or if any commit changes `.github/workflows` — a deletion
+  included. Its own step stops at 50 minutes, and what it committed by then
+  is still handed over.
 - `agent-scripts.yml` triggers on the harness's own paths and weekly. It
   cannot trigger on a repository's lane files (a `paths:` filter is not
   configurable), so drift between the toolchain action — and anything it
@@ -724,6 +737,33 @@ issues on a clock, with nobody watching:
 
 Adding a step to that workflow therefore means editing the list in the
 guard, in the same pull request, where a reviewer sees both.
+
+### The issue-to-PR boundary
+
+`checks.test.mjs` holds `agent-implement.yml` to its layout by reading what
+each job is sent and by running the jobs' step conditions, not by matching
+their text:
+
+- every secret a job references is read out of its `${{ }}` expressions, the
+  workflow's own `env:` included: the agent's job may name the Claude pool
+  credentials and nothing else, no job may look a secret up by a computed
+  name or read the whole context, and the App's private key appears only in
+  the steps that mint with it;
+- the agent's job token is exactly `contents: read`, the agent is handed that
+  token, and nothing in that job mints or uses an App token;
+- with every step of `prepare` failing in turn, on both entry points, with
+  and without the App — and, where the agent's job starts, every step of it,
+  and inside `finish` every step of that — the agent never starts past a
+  failed gate, `finish` runs exactly for an admitted commenter, and the push
+  happens only after verification passed, with its token minted after that;
+- the base `finish` verifies against comes from `prepare`, and `finish`
+  downloads the agent's output outside the workspace, runs no git itself and
+  no command from that output.
+
+`bundle-handoff.test.mjs` builds real bundles, most of them hostile, and runs
+the checks against them. Each named loosening of the workflow is a mutation
+the guard must refuse, and a handful of ordinary edits are mutations it must
+accept.
 
 ### What this guard does not see
 
