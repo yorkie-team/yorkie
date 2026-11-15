@@ -162,11 +162,11 @@ func FuzzParseKeyPath(f *testing.F) {
 
 func FuzzYSONUnmarshal(f *testing.F) {
 	// typeSelector chooses which YSON Element type the data is decoded into.
-	f.Add(byte(0), `{"key":"value"}`)                    // Object
-	f.Add(byte(1), `[1,2,3]`)                            // Array
-	f.Add(byte(2), `{"value":{"type":"root"}}`)          // Tree
-	f.Add(byte(3), `{"value":[{"val":"hello"}]}`)        // Text
-	f.Add(byte(4), `{"value":{"type":"Int","value":1}}`) // Counter
+	f.Add(byte(0), `{"key":"value"}`)             // Object
+	f.Add(byte(1), `[1,2,3]`)                     // Array
+	f.Add(byte(2), `{"value":{"type":"root"}}`)   // Tree
+	f.Add(byte(3), `{"value":[{"val":"hello"}]}`) // Text
+	f.Add(byte(4), `Counter(Int(1))`)             // Counter
 	f.Add(byte(0), "")
 	f.Add(byte(0), `{"n":Int(1),"c":Counter(Int(1))}`)     // YSON constructor syntax
 	f.Add(byte(1), `[Int(1.5),Int(2147483648)]`)           // fractional / out-of-range Int
