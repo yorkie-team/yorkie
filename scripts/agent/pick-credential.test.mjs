@@ -131,7 +131,9 @@ test("every claude-code-action step selects a slot, or is a documented exception
     const text = readFileSync(path.join(WORKFLOWS, f), "utf8");
     if (!text.includes("claude-code-action")) continue;
     const bare = text.includes("claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}");
-    const picked = text.includes("steps.cred.outputs.slot != ''");
+    // Either form: the computed lookup, or the chain of named slots that
+    // replaces it where a job must name every secret it is sent.
+    const picked = text.includes("steps.cred.outputs.slot != ''") || text.includes("steps.cred.outputs.slot == '1'");
     if (bare) ambient.push(f);
     if (picked) wired++;
   }
@@ -155,6 +157,49 @@ test("every claude-code-action step selects a slot, or is a documented exception
     files.filter((f) => readFileSync(path.join(WORKFLOWS, f), "utf8").includes("claude-code-action")).length,
     "a claude-code-action workflow is neither wired to the picker nor a documented exception",
   );
+});
+
+test("a chain of named slots resolves exactly as the computed lookup did", () => {
+  // `secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', slot)]` names its secret by
+  // a value known only at run time, so which secrets the job is sent cannot be
+  // read off the file. A job that must name every secret it holds spells the
+  // pool out instead, one slot per alternative. This runs that expression for
+  // every value the picker can write — and some it cannot — against the
+  // lookup it replaces.
+  const chained = readdirSync(WORKFLOWS).filter((f) => f.endsWith(".yml"))
+    .map((f) => [f, readFileSync(path.join(WORKFLOWS, f), "utf8")])
+    .filter(([, text]) => text.includes("steps.cred.outputs.slot == '1'"));
+  for (const [f, text] of chained) {
+    const lines = text.split("\n");
+    const at = lines.findIndex((l) => /^\s+claude_code_oauth_token: >-$/.test(l));
+    assert.ok(at > 0, `${f}: the chain must be a folded \`claude_code_oauth_token: >-\` value`);
+    const indent = /^(\s*)/.exec(lines[at])[1].length;
+    const body = [];
+    for (const l of lines.slice(at + 1)) {
+      if (l.trim() !== "" && /^(\s*)/.exec(l)[1].length <= indent) break;
+      body.push(l.trim());
+    }
+    const expr = /^\$\{\{([\s\S]*)\}\}$/.exec(body.join(" "))?.[1];
+    assert.ok(expr, `${f}: the value is not one expression`);
+    assert.doesNotMatch(expr, /secrets\s*\[/, `${f}: the chain must name each secret, not look one up`);
+    const run = new Function("SLOT", "S", `return (${expr
+      .replace(/steps\.cred\.outputs\.slot/g, "SLOT")
+      .replace(/\bsecrets\.([A-Z0-9_]+)/g, "S.$1")
+      .replace(/([^!=])==(?!=)/g, "$1===")});`);
+    const lookup = (slot, S) => (slot !== "" && S[`${TOKEN_ENV}_${slot}`]) || S[TOKEN_ENV];
+    const full = Object.fromEntries([TOKEN_ENV, ...Array.from({ length: MAX_SLOTS }, (_, i) => `${TOKEN_ENV}_${i + 1}`)].map((n) => [n, `value-of-${n}`]));
+    const named = new Set([...expr.matchAll(/\bsecrets\.([A-Z0-9_]+)/g)].map((m) => m[1]));
+    assert.deepEqual([...named].sort(), Object.keys(full).sort(), `${f}: the chain must name every pool slot and nothing else`);
+    for (const slot of ["", ...Array.from({ length: MAX_SLOTS }, (_, i) => String(i + 1))]) {
+      assert.equal(run(slot, full), lookup(slot, full), `${f}: slot ${JSON.stringify(slot)}`);
+      // A slot whose secret is unset falls back to slot zero, as before.
+      const hole = { ...full, [`${TOKEN_ENV}_${slot}`]: "" };
+      if (slot !== "") assert.equal(run(slot, hole), full[TOKEN_ENV], `${f}: unset slot ${slot}`);
+    }
+    // A value the picker never writes reaches slot zero, never another secret.
+    for (const junk of ["0", String(MAX_SLOTS + 1), "1 ", "x"]) assert.equal(run(junk, full), full[TOKEN_ENV], `${f}: slot ${JSON.stringify(junk)}`);
+  }
+  assert.ok(chained.length > 0, "no workflow uses the chain — this guard would be vacuous");
 });
 
 test("each wired workflow guards the picker and fails open", () => {

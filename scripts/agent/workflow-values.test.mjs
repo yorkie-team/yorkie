@@ -330,7 +330,7 @@ test("every configured value a workflow reads was asked for, by a step that can 
 test("the wiring check inspected the sites it is expected to", () => {
   // A guard that finds nothing passes. Adding or removing a reader or a read
   // changes a count; that is the prompt to look at the new site.
-  assert.deepEqual({ readers: WIRING.readers, reads: WIRING.reads }, { readers: 11, reads: 65 });
+  assert.deepEqual({ readers: WIRING.readers, reads: WIRING.reads }, { readers: 12, reads: 65 });
 });
 
 test("no workflow names the repository's values itself", () => {

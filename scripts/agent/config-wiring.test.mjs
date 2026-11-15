@@ -124,11 +124,11 @@ const EXPECTED = {
   // `cp -R … scripts/agent …/agent-tools`, each with its configuration.
   stagingCopies: 4,
   // Places a harness script is run, and how many of them read the configuration.
-  invocations: 114,
-  configReadingInvocations: 90,
+  invocations: 117,
+  configReadingInvocations: 91,
   // …by the kind of tree each runs from.
-  fromWorkspace: 66,
-  fromSideDirectory: 27,
+  fromWorkspace: 71,
+  fromSideDirectory: 25,
   fromStagedCopy: 21,
   // Jobs that run the upstream notifier, each held to `notifierProblems`.
   notifierJobs: 1,
@@ -1230,7 +1230,7 @@ const MUTATIONS = [
     name: "the dispatcher's ref, not `main`, under the workspace the toolchain action is used from",
     files: () =>
       edit("agent-implement.yml", (t) =>
-        replaceOnce(t, "          ref: main # not the dispatcher's ref: the prompt says \"the checkout is on `main`\"\n", "")),
+        replaceOnce(t, "          ref: main # not the dispatcher's ref: the prompt says the checkout is `main`\n", "")),
     expect: /agent-implement\.yml › implement: uses the toolchain action from the workspace, which is not trusted at that step: it has no ref, and the workflow runs on workflow_dispatch/,
   },
   {
