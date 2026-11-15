@@ -2,6 +2,9 @@ name: docker-publish
 on:
   release:
     types: [published]
+# Nothing by default: the one job grants what base-docker-publish.yml needs.
+permissions: {}
+
 jobs:
   call-base-docker-publish:
     # NOT FOR A RELEASE THE AGENT APP CREATED. `contents: write` is one
@@ -14,6 +17,9 @@ jobs:
     # refuse. See docs/design/agent-command-verbs.md, Phase I.
     if: github.event.release.author.login != 'yorkie-team-agent[bot]'
     uses: ./.github/workflows/base-docker-publish.yml
+    # The ceiling for the called workflow's token: its checkout reads the tree.
+    permissions:
+      contents: read
     secrets: inherit
     with:
       command: docker

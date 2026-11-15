@@ -32,12 +32,21 @@ on:
   pull_request:
     branches: [main]
 
+# Nothing by default: each job below names the token scopes it needs, so a
+# job added later starts with none rather than the repository default.
+permissions: {}
+
 env:
   GO_VERSION: "1.26"
 
 jobs:
   ci-target-check:
     runs-on: ubuntu-latest
+    # The checkout, and dorny/paths-filter, which lists a pull request's files
+    # through the API.
+    permissions:
+      contents: read
+      pull-requests: read
 
     outputs:
       build: ${{ steps.code-changed.outputs.build }}
@@ -143,6 +152,10 @@ jobs:
     # that image never gets a database. ubuntu-22.04 is on 6.8. Move back once
     # ubuntu-latest carries 7.0.14 or later.
     runs-on: ubuntu-22.04
+    # The checkout. buf's download reads a public release, and Codecov takes
+    # its own secret.
+    permissions:
+      contents: read
 
     needs: ci-target-check
     if: ${{ github.ref == 'refs/heads/main' || needs.ci-target-check.outputs.build == 'true' }}
@@ -638,6 +651,9 @@ jobs:
     # sharded MongoDB that can fail to come up. Healthy runs take 4-5 minutes on
     # main (Oct 2026); 30 is six times that and still far inside a working day.
     timeout-minutes: 30
+    # The checkout only.
+    permissions:
+      contents: read
 
     needs: ci-target-check
     if: ${{ github.ref == 'refs/heads/main' || (needs.ci-target-check.outputs.build == 'true' && needs.ci-target-check.outputs.complex-test == 'true') }}
