@@ -23,6 +23,12 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: 1.26
+          # NO CACHE. A cache entry restored here could have been written by
+          # any job on main's ref, an agent's included, and this job runs
+          # with the Docker Hub credentials after `make tools` and `make build`
+          # execute what the cache holds. scripts/agent/trusted-cache.test.mjs
+          # refuses the default.
+          cache: false
 
       - name: Use docker buildx
         run: docker buildx create --use
