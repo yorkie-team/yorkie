@@ -285,7 +285,7 @@ brackets is then left out whole.
 | `todoTrackingLine` | sentences, optional | issue-to-PR: "The todo starts with a `**Created**: YYYY-MM-DD` line.[ `<todoTrackingLine>`]" | empty |
 | `implementVerifyStep` | sentences | issue-to-PR, the whole of step 5: "5. `<implementVerifyStep>`". Say what to run, what not to run, and that CI runs the rest | LET CI VERIFY — do NOT run `make test`, `make test-complex`, `make bench` or `make coverage`: … |
 | `replyVerifyInstruction` | fragment, optional | review-reply: "Act on it if it is right: edit the branch,[ `<replyVerifyInstruction>`,] commit with the trailer…" | empty |
-| `toolchainSteps` | fragment | the issue-to-PR job's report: "This run stopped after setup and before the agent started — `<toolchainSteps>`, fetching the issue, or revoking the pre-agent token." | the Go toolchain, the linter install |
+| `toolchainSteps` | fragment | the issue-to-PR job's report: "This run stopped after setup and before the agent started — `<toolchainSteps>`, checking out the base, collecting the issue, or finding that another run had already pushed a branch for this issue." | the Go toolchain, the linter install |
 | `lastResortDiagnosis` | sentences | CI-fix, when nothing could be read: "No failed-step log could be read for run N. `<lastResortDiagnosis>`" | Re-run the failing lane locally: `make verify` (…), then `make build`. |
 
 The three issue-to-PR values may use that prompt's own placeholders, which
@@ -414,10 +414,12 @@ repository that adopts the harness follows them:
   because a runner is sent every secret its job references and the agent has
   that runner. The agent commits and does not push. `finish` checks those
   commits (`bundle-handoff.mjs`, below), pushes them with an App token it
-  mints only after they pass, opens the draft PR, and posts the two comments
-  that must not depend on the App (the "App is not configured" reply and the
-  no-PR report); it runs only for a commenter the write-access check
-  admitted.
+  mints only after they pass, and opens the draft PR. It is `!cancelled()`,
+  so a maintainer's Cancel stops the push: a step's own `cancelled()` sees
+  only its job's cancellation, never the run's. `report` posts the two
+  comments that must not depend on the App (the "App is not configured" reply
+  and the no-PR report), and is `always()`, so they survive a cancelled run.
+  Both run only for a commenter the write-access check admitted.
 - The issue-to-PR agent hands over ONE branch, `agent/<issue>-<slug>`, built
   on the commit it was given. `bundle-handoff.mjs` refuses the whole branch,
   and nothing is pushed, if there is more than one, if any commit does not
@@ -757,8 +759,10 @@ their text:
 - with every step of `prepare` failing in turn, on both entry points, with
   and without the App — and, where the agent's job starts, every step of it,
   and inside `finish` every step of that — the agent never starts past a
-  failed gate, `finish` runs exactly for an admitted commenter, and the push
-  happens only after verification passed, with its token minted after that;
+  failed gate, `finish` and `report` run exactly for an admitted commenter,
+  the push happens only after verification passed, with its token minted
+  after that, and never on a run cancelled at any point or with the pipeline
+  switched off, while the report still runs;
 - the base `finish` verifies against comes from `prepare`, and `finish`
   downloads the agent's output outside the workspace, runs no git itself and
   no command from that output.

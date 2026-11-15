@@ -32,7 +32,10 @@
 #               `git bundle` for the next job.
 #   finish    — trusted, on a fresh runner. Checks the bundle as untrusted data
 #               (scripts/agent/bundle-handoff.mjs), pushes it with an App token
-#               minted there, opens the draft PR, and reports.
+#               minted there, and opens the draft PR. Skipped, or cancelled, on
+#               a run a maintainer cancels.
+#   report    — trusted. The two comments that must not depend on the App,
+#               posted on every run, a cancelled one included.
 #
 # The App's private key is named in `prepare` and `finish` and nowhere else;
 # `checks.test.mjs` holds the file to that.
@@ -879,65 +882,39 @@ jobs:
           if-no-files-found: warn
 
   # THE TRUSTED HALF AFTER THE AGENT: check the agent's commits, push them, open
-  # the PR, disclose, record the cost, and say so when no PR came of the run. A
-  # fresh runner, main's scripts, and App tokens minted here.
+  # the PR, disclose and record the cost. A fresh runner, main's scripts, and
+  # App tokens minted here. The two comments that must not depend on the App
+  # are the `report` job's, below.
   #
-  # `always()`, keyed on the commenter having been ADMITTED by the write-access
-  # check in `prepare`: the no-PR reporter must survive every failure it
-  # reports, including the protection gate refusing and the job being
-  # cancelled, and a commenter the check refused gets nothing at all. Inside,
-  # the "App is not configured" reply and the reporter are keyed on the App
-  # check, and everything that pushes or opens a PR on `prepare` having found
-  # every gate passed.
+  # `!cancelled()`, NOT `always()`, and that is what makes a Cancel stop the
+  # push. A step's `cancelled()` sees only its own job's cancellation, not the
+  # run's; a job's condition is re-evaluated when the run is cancelled, and a
+  # job whose condition still holds is not cancelled. So under `always()` a
+  # maintainer's Cancel during the agent left this job to start as normal, and
+  # one during this job left it running: the push went ahead either way. With
+  # `!cancelled()` a Cancel before this job skips it, and one during it
+  # cancels it, after which the push steps' own `!cancelled()` skips them. An
+  # agent that hits its wall times out its own step, or at worst its own job;
+  # neither cancels the run, so its commits are still handed over and pushed.
   #
-  # `route` TOO, for the repository's words the two comments use: the App's
-  # name and login, and what the toolchain setup consists of. Read there, on a
-  # runner the agent never had. Empty on `workflow_dispatch`, where `route`
-  # does not run and neither comment is posted; `always()` keeps this job
-  # running when `route` was skipped.
+  # Keyed on the commenter having been ADMITTED by the write-access check in
+  # `prepare`, and everything that pushes or opens a PR on `prepare` having
+  # found every gate passed.
   finish:
-    needs: [route, prepare, implement]
-    if: always() && needs.prepare.outputs.admitted == 'true'
+    needs: [prepare, implement]
+    if: ${{ !cancelled() && needs.prepare.outputs.admitted == 'true' }}
     runs-on: ubuntu-latest
-    # Room for the verification's and the push's own ceilings, and the report
+    # Room for the verification's and the push's own ceilings, and the steps
     # after them.
     timeout-minutes: 25
     permissions:
       contents: read # fetch the base the agent's commits are checked against
-      # The two comments that must not depend on the App: the "App is not
-      # configured" reply and the no-PR report.
-      issues: write
-      pull-requests: read # pulls.list, to find the PR this run opened
+    # For the `report` job: whether the commits passed, and whether the push
+    # landed. This job ran only `main`'s code, so these are its own words.
+    outputs:
+      verdict: ${{ steps.bundle.outputs.verdict }}
+      pushed: ${{ steps.push.outcome }}
     steps:
-      # A misconfiguration, turned into a sentence. A locked issue must not
-      # turn it back into a red X with an API error in it. `== 'false'`, not
-      # `!= 'true'`: an empty value means the check never ran (a cancelled
-      # run), and that is not a missing App.
-      - name: Say the App is not configured
-        if: >-
-          always() &&
-          needs.prepare.outputs.configured == 'false' &&
-          github.event_name == 'issue_comment'
-        continue-on-error: true
-        uses: actions/github-script@v7
-        env:
-          # From `route`: this step is `issue_comment` only, where it ran.
-          APP_SLUG: ${{ needs.route.outputs.app_slug }}
-        with:
-          retries: 3
-          script: |
-            // An App's slug, or the general phrase: nothing else is posted.
-            const APP = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '')
-              ? '`' + process.env.APP_SLUG + '` GitHub App' : 'agent GitHub App';
-            await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.payload.issue.number,
-              body: '⏸️ `@claude fix` needs the ' + APP + ', which is not configured on '
-                + 'this repository — it pushes a branch and opens a pull request, and `GITHUB_TOKEN` can do '
-                + 'neither in a way that re-triggers CI.\n\nOn a pull request, `@claude review` and '
-                + '`@claude summarize` work today; they post with `GITHUB_TOKEN` and need no App.',
-            });
-
       - uses: actions/checkout@v4
         if: always() && needs.prepare.outputs.ready == 'true'
         with:
@@ -1026,9 +1003,11 @@ jobs:
       #
       # NOT `always()`, unlike every other step of this job. A maintainer who
       # cancels the run, or turns the pipeline off, while watching the agent
-      # misbehave must stop the push as well as the agent; the report below
-      # still runs. A run that hit the agent's wall is not cancelled, so it
-      # still hands over and pushes.
+      # misbehave must stop the push as well as the agent. A Cancel reaches
+      # these steps through the JOB's `!cancelled()` (see its comment): a
+      # cancelled `finish` is skipped, or cancelled mid-way, and then these
+      # read their own `cancelled()` as true. The pipeline switch is read when
+      # this job starts. The `report` job still runs either way.
       - name: Generate the push token
         id: push-token
         if: ${{ !cancelled() && vars.AGENT_PIPELINE_ENABLED == 'true' && steps.bundle.outcome == 'success' }}
@@ -1174,6 +1153,59 @@ jobs:
             --execution "$RUNNER_TEMP/agent-output/claude-execution-output.json" \
             --kind implement ${PR:+--pr "$PR"} --issue "$ISSUE"
 
+  # THE TWO COMMENTS THAT MUST NOT DEPEND ON THE APP: the "App is not
+  # configured" reply and the no-PR report, posted with this job's own token.
+  #
+  # `always()`, keyed on the commenter having been ADMITTED by the write-access
+  # check in `prepare`: the no-PR report must survive every failure it
+  # reports, a cancelled run included, and a commenter the check refused gets
+  # nothing at all. That is why these are not `finish`'s steps: `finish` is
+  # `!cancelled()` so that a Cancel stops the push, and a report there would
+  # stop with it. Inside, the reply and the report are keyed on the App check.
+  #
+  # `route` TOO, for the repository's words the two comments use: the App's
+  # name and login, and what the toolchain setup consists of. Read there, on a
+  # runner the agent never had. Empty on `workflow_dispatch`, where `route`
+  # does not run and neither comment is posted; `always()` keeps this job
+  # running when `route` was skipped.
+  report:
+    needs: [route, prepare, implement, finish]
+    if: always() && needs.prepare.outputs.admitted == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write # the two comments
+      pull-requests: read # pulls.list, to find the PR this run opened
+    steps:
+      # A misconfiguration, turned into a sentence. A locked issue must not
+      # turn it back into a red X with an API error in it. `== 'false'`, not
+      # `!= 'true'`: an empty value means the check never ran (a cancelled
+      # run), and that is not a missing App.
+      - name: Say the App is not configured
+        if: >-
+          always() &&
+          needs.prepare.outputs.configured == 'false' &&
+          github.event_name == 'issue_comment'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          # From `route`: this step is `issue_comment` only, where it ran.
+          APP_SLUG: ${{ needs.route.outputs.app_slug }}
+        with:
+          retries: 3
+          script: |
+            // An App's slug, or the general phrase: nothing else is posted.
+            const APP = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '')
+              ? '`' + process.env.APP_SLUG + '` GitHub App' : 'agent GitHub App';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: '⏸️ `@claude fix` needs the ' + APP + ', which is not configured on '
+                + 'this repository — it pushes a branch and opens a pull request, and `GITHUB_TOKEN` can do '
+                + 'neither in a way that re-triggers CI.\n\nOn a pull request, `@claude review` and '
+                + '`@claude summarize` work today; they post with `GITHUB_TOKEN` and need no App.',
+            });
+
       # THE ONE SILENT TERMINATION LEFT. The run dies, or exhausts its turns,
       # before opening a PR — and the issue keeps the "On it" acknowledgement
       # forever, looking in progress to anyone watching.
@@ -1223,10 +1255,12 @@ jobs:
           AGENT_OUTCOME: ${{ needs.implement.outputs.agent }}
           STAGED: ${{ needs.implement.outputs.staged }}
           IMPLEMENT_RESULT: ${{ needs.implement.result }}
-          # This job's own steps: whether the agent's commits passed, and
-          # whether the push landed.
-          VERDICT: ${{ steps.bundle.outputs.verdict }}
-          PUSHED: ${{ steps.push.outcome }}
+          # From `finish`, which ran only `main`'s code: whether the agent's
+          # commits passed, whether the push landed, and whether the job ran
+          # at all — it does not on a run a maintainer cancelled.
+          VERDICT: ${{ needs.finish.outputs.verdict }}
+          PUSHED: ${{ needs.finish.outputs.pushed }}
+          FINISH_RESULT: ${{ needs.finish.result }}
         with:
           retries: 3
           # GITHUB_TOKEN, NOT THE APP TOKEN, and that is the point. Both secrets
@@ -1262,8 +1296,8 @@ jobs:
             // KEYED BY CAUSE, not by run. A bare marker meant one no-PR report
             // per issue EVER: a protection refusal claimed it, the maintainer
             // fixed protection and retried exactly as that comment told them to,
-            // `npm ci` failed, and the reporter returned silently. Adding the run
-            // id as well would go too far the other way — three maintainers
+            // a dependency install failed, and the reporter returned silently.
+            // Adding the run id as well would go too far the other way — three maintainers
             // hitting the same refusal would get three identical comments, and a
             // re-run of the same job would repeat itself. The cause is what
             // distinguishes a report worth making from one already on the page.
@@ -1333,6 +1367,12 @@ jobs:
               why = '🛑 This run stopped while setting up, after the checks passed and before any work began — '
                 + 'a checkout or dependency install failed, or the job that runs the agent did not start. '
                 + `See the [run](${runUrl}); this is usually transient, so \`@claude fix\` is worth trying again.`;
+            } else if (['skipped', 'cancelled'].includes(process.env.FINISH_RESULT)) {
+              // `finish` skips, or is cancelled, only on a cancelled run.
+              key = 'stopped';
+              why = `⏹️ This run was cancelled, so nothing the agent committed was pushed. See the [run](${runUrl}); `
+                + 'its `claude-execution-output` artifact has what the agent did. `@claude fix` again when you '
+                + 'want it to retry.';
             } else if (agentOutcome === 'skipped' || agentOutcome === '') {
               key = 'presetup';
               // Between staging and the agent: the toolchain setup

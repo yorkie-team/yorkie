@@ -1774,8 +1774,8 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
       "if this needs to change, change APPROVED here in the same commit and say why",
   );
 
-  const finishIf = (wf.match(/^ {2}finish:\n(?:.*\n)*? {4}if: (.*)$/m) || [])[1];
-  assert.equal(finishIf, APPROVED_JOB, "the finish job must be keyed on admission and nothing downstream");
+  const reportIf = (wf.match(/^ {2}report:\n(?:.*\n)*? {4}if: (.*)$/m) || [])[1];
+  assert.equal(reportIf, APPROVED_JOB, "the report job must be keyed on admission and nothing downstream");
 
   // And it must still be able to NAME the cause, or it reports the wrong one —
   // which it has also done, telling an `npm ci` failure that main was unprotected.
@@ -1809,9 +1809,9 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
   // The reporter must sit in the `finish` job — the nearest job header above it —
   // and that job must wait for the jobs whose outcomes it reads.
   const headers = [...wf.matchAll(/\n {2}([A-Za-z0-9_-]+):\n/g)].filter((m) => m.index < at);
-  assert.equal(headers.at(-1)?.[1], "finish", "the reporter must live in the finish job");
-  const needs = (/^ {2}finish:\n {4}needs: \[([^\]]*)\]$/m.exec(wf)?.[1] ?? "").split(",").map((x) => x.trim()).sort();
-  assert.deepEqual(needs, ["implement", "prepare", "route"], "the finish job must run after prepare and implement, and read route's words");
+  assert.equal(headers.at(-1)?.[1], "report", "the reporter must live in the report job");
+  const needs = (/^ {2}report:\n {4}needs: \[([^\]]*)\]$/m.exec(wf)?.[1] ?? "").split(",").map((x) => x.trim()).sort();
+  assert.deepEqual(needs, ["finish", "implement", "prepare", "route"], "the report job must run after every job it reports on, and read route's words");
 
   // NOTHING MAY RETURN EXCEPT THESE TWO LINES. An early
   // `if (steps.X.outcome !== 'success') return;` inside the script reinstates
@@ -1861,7 +1861,7 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
     keys.length,
     `two report branches share a marker key (${keys.join(", ")}), so one suppresses the other`,
   );
-  assert.ok(keys.length >= 9, `expected a key per report branch, found ${keys.length}`);
+  assert.ok(keys.length >= 10, `expected a key per report branch, found ${keys.length}`);
 });
 
 test("agent-implement's no-PR report finds the acknowledgement under the login that posts it", skipWithout("agent-implement.yml"), async () => {
@@ -1876,7 +1876,7 @@ test("agent-implement's no-PR report finds the acknowledgement under the login t
   const jobs = implJobs(WF("agent-implement.yml"));
   const route = jobs.get("route");
   const prepare = jobs.get("prepare");
-  const finish = jobs.get("finish");
+  const reportJob = jobs.get("report");
 
   // Who posts the acknowledgement: a token minted from the App, so the login
   // the configuration names.
@@ -1889,7 +1889,7 @@ test("agent-implement's no-PR report finds the acknowledgement under the login t
 
   // Where the report learns that login: route's configuration read, straight
   // into the report's env — not through implement, whose runner was the agent's.
-  const reporter = finish.steps.find((s) => s.name === "Report a run that ended without a PR");
+  const reporter = reportJob.steps.find((s) => s.name === "Report a run that ended without a PR");
   assert.equal(implKey(reporter.lines, 10, "APP_BOT_LOGIN"), "${{ needs.route.outputs.app_bot_login }}");
   assert.equal(route.outputs.app_bot_login, "${{ steps.cfg.outputs.app_bot_login }}");
   assert.match(route.steps.find((s) => s.id === "cfg")?.run ?? "", /workflow-values\.mjs\b[^\n]*\bapp_bot_login\b/);
@@ -1923,8 +1923,7 @@ test("agent-implement's no-PR report names a refused handoff and a run cancelled
   // `finish`, which is not "the agent ran and opened nothing"; and the "On it"
   // reply is posted by `prepare`, before the agent's job waits its turn, so a
   // run cancelled in that wait must say so rather than blame a setup step.
-  const finish = implJobs(WF("agent-implement.yml")).get("finish");
-  const reporter = finish.steps.find((s) => s.name === "Report a run that ended without a PR");
+  const reporter = implJobs(WF("agent-implement.yml")).get("report").steps.find((s) => s.name === "Report a run that ended without a PR");
   const keyFor = async (env) => {
     const bodies = [];
     const github = {
@@ -1944,10 +1943,14 @@ test("agent-implement's no-PR report names a refused handoff and a run cancelled
   assert.equal(await keyFor({ ...ran, VERDICT: "ok", PUSHED: "success" }), "orphan");
   assert.equal(await keyFor({ STAGED: "", IMPLEMENT_RESULT: "cancelled" }), "cancelled");
   assert.equal(await keyFor({ STAGED: "", IMPLEMENT_RESULT: "skipped" }), "setup");
-  // Every value it reads that `finish` did not produce itself is a job
-  // output or result of the agent's job, or one of `prepare`'s and `route`'s.
+  // A maintainer's Cancel after the agent started: finish skipped, or cut short.
+  assert.equal(await keyFor({ ...ran, AGENT_OUTCOME: "cancelled", FINISH_RESULT: "skipped" }), "stopped");
+  assert.equal(await keyFor({ ...ran, FINISH_RESULT: "cancelled" }), "stopped");
+  assert.equal(await keyFor({ ...ran, FINISH_RESULT: "success" }), "agent");
+  // Every value it reads is another job's output or result: `finish`'s,
+  // `prepare`'s and `route`'s, or — only to choose a message — the agent's.
   for (const l of reporter.lines.filter((x) => /^ {10}[A-Z_]+: \$\{\{/.test(x))) {
-    assert.match(l, /\$\{\{ (?:needs\.(?:route|prepare|implement)\.(?:outputs\.[\w-]+|result)|steps\.(?:bundle|push)\.(?:outputs\.verdict|outcome)) \}\}$/, l);
+    assert.match(l, /\$\{\{ needs\.(?:route|prepare|implement|finish)\.(?:outputs\.[\w-]+|result) \}\}$/, l);
   }
 });
 
@@ -2239,7 +2242,8 @@ async function implementBoundaryProblems(text) {
   const prepare = jobs.get("prepare");
   const implement = jobs.get("implement");
   const finish = jobs.get("finish");
-  if (!prepare || !implement || !finish) return ["no prepare, implement or finish job"];
+  const report = jobs.get("report");
+  if (!prepare || !implement || !finish || !report) return ["no prepare, implement, finish or report job"];
   const isAgent = (s) => /^anthropics\/claude-code-action@/i.test(s.uses ?? "");
   const agentJobs = [...jobs.values()].filter((j) => j.steps.some(isAgent));
   if (agentJobs.length !== 1 || agentJobs[0] !== implement) {
@@ -2248,6 +2252,7 @@ async function implementBoundaryProblems(text) {
   const pst = prepare.steps;
   const st = implement.steps;
   const fst = finish.steps;
+  const rst = report.steps;
   const agentAt = st.findIndex(isAgent);
   const at = (steps, id) => (id === undefined ? -1 : steps.findIndex((s) => s.id === id));
   const verifyAt = pst.findIndex((s) => /getCollaboratorPermissionLevel/.test(s.script ?? ""));
@@ -2361,9 +2366,9 @@ async function implementBoundaryProblems(text) {
   if ([...GATES].some((i) => i < 0)) problems.add("prepare lacks the protection gate or the duplicate-branch pre-flight");
   const allSteps = [...jobs.values()].flatMap((j) => j.steps.map((s) => ({ job: j, s })));
   const noApp = allSteps.find(({ s }) => /needs the (?:`' \+ APP_SLUG \+ '` GitHub App|' \+ APP \+ ',)/.test(s.script ?? ""));
-  const reporter = fst.find((s) => s.name === "Report a run that ended without a PR");
+  const reporter = rst.find((s) => s.name === "Report a run that ended without a PR");
   if (!noApp) problems.add("nothing answers a commenter when the App is missing");
-  if (!reporter) problems.add("finish has no no-PR reporter");
+  if (!reporter) problems.add("report has no no-PR reporter");
   const name = (s) => `"${s.name ?? s.id ?? s.uses}"`;
   for (const event of ["issue_comment", "workflow_dispatch"]) {
     for (const configured of [true, false]) {
@@ -2396,53 +2401,75 @@ async function implementBoundaryProblems(text) {
             for (const s of handoff) if (imp.outcome[st.indexOf(s)] === "skipped") problems.add(`${name(s)} does not run ${whenI}`);
           }
           const need = (j, k) => (j === "prepare" ? pre.jobOut[k] ?? "" : j === "implement" ? imp.jobOut[k] ?? "" : "");
-          // Admission: `finish` runs exactly for a commenter the check admitted.
-          const finishRuns = implAdmits(finish.if, { failed: pre.failed || imp.failed, event, need, out: () => "", step: () => "" });
-          if (refused && finishRuns) problems.add(`finish runs for a commenter the write-access check refused ${whenI}`);
-          if (!refused && fails !== admittedAt && !finishRuns) problems.add(`finish does not run for an admitted commenter ${whenI}`);
-          if (!finishRuns) continue;
-          for (let ffail = -1; ffail < fst.length; ffail++) {
-            const fin = implRun(finish, { event, need, fails: ffail });
-            const o = fin.outcome;
-            const whenF = `${whenI}, and ${ffail < 0 ? "nothing" : name(fst[ffail])} fails in finish`;
-            // The push: only after `prepare` passed every gate and the commits
-            // passed verification, with the token minted after that.
-            if (o[pushTokenAt] !== "skipped" && o[bundleAt] !== "success") problems.add(`the push token is minted before the commits passed ${whenF}`);
-            if (o[pushAt] !== "skipped") {
-              if (pre.jobOut.ready !== "true") problems.add(`finish pushes for a run prepare did not clear ${whenF}`);
-              if (o[bundleAt] !== "success" || bundleAt > pushAt) problems.add(`finish pushes commits that did not pass verification ${whenF}`);
-              if (o[pushTokenAt] !== "success") problems.add(`finish pushes without its push token ${whenF}`);
-            }
-            if (o[openAt] !== "skipped" && o[pushAt] !== "success") problems.add(`finish opens a PR without having pushed ${whenF}`);
-            if (ffail >= 0) continue;
-            // A maintainer who cancels the run, or turns the pipeline off,
-            // stops the push and the PR too; the report still runs.
-            const cancels = [-1, ...fst.keys()].map((i) => [`the run was cancelled ${i < 0 ? "before finish" : `after ${name(fst[i])}`}`, { cancelledAfter: i }]);
-            for (const [how, opts] of [...cancels, ["the pipeline was switched off", { enabled: "false" }]]) {
-              const stopped = implRun(finish, { event, need, ...opts }).outcome;
-              const after = opts.cancelledAfter ?? -1;
+          const base = { failed: pre.failed || imp.failed, event, need, out: () => "", step: () => "" };
+          // Admission: `finish` and `report` run exactly for a commenter the
+          // check admitted.
+          const finishRuns = implAdmits(finish.if, base);
+          const reportRuns = implAdmits(report.if, base);
+          for (const [j, runs] of [[finish, finishRuns], [report, reportRuns]]) {
+            if (refused && runs) problems.add(`${j.name} runs for a commenter the write-access check refused ${whenI}`);
+            if (!refused && fails !== admittedAt && !runs) problems.add(`${j.name} does not run for an admitted commenter ${whenI}`);
+          }
+          // A CANCELLED RUN, as the runner sees one. A job's condition is
+          // evaluated again with the run's `cancelled()`, and a job whose
+          // condition still holds is neither skipped nor cancelled; a step's
+          // `cancelled()` sees only its own job's cancellation. So a cancel
+          // before `finish` skips it unless its condition holds, and then it
+          // runs as on any other run; a cancel during it cancels it only if its
+          // condition no longer holds, and only then do its later steps read
+          // `cancelled()` as true. Either way no push may follow, and the
+          // report still runs.
+          if (finishRuns) {
+            const goesOn = implAdmits(finish.if, { ...base, cancelled: true });
+            for (let after = -1; after < fst.length; after++) {
+              if (after < 0 && !goesOn) continue; // skipped altogether
+              const how = after < 0 ? "before finish started" : `after ${name(fst[after])}`;
+              const c = implRun(finish, { event, need, ...(goesOn ? {} : { cancelledAfter: after }) }).outcome;
               for (const [what, i] of [["mints the push token", pushTokenAt], ["pushes", pushAt], ["opens a PR", openAt]]) {
-                if (i > after && stopped[i] !== "skipped") problems.add(`finish ${what} after ${how} ${whenI}`);
-              }
-              if (reporter && fst.indexOf(reporter) > after && event === "issue_comment" && configured && fails < 0 && ifail === -1 && stopped[fst.indexOf(reporter)] !== "success") {
-                problems.add(`the no-PR reporter does not run after ${how} ${whenI}`);
+                if (i > after && c[i] !== "skipped") problems.add(`finish ${what} when the run was cancelled ${how} ${whenI}`);
               }
             }
-            // Inside it: the App-missing reply, and the reporter, each on its own side of the App check.
-            const ran = (s) => s && o[fst.indexOf(s)] === "success";
+            const off = implRun(finish, { event, need, enabled: "false" }).outcome;
+            for (const [what, i] of [["mints the push token", pushTokenAt], ["pushes", pushAt], ["opens a PR", openAt]]) {
+              if (off[i] !== "skipped") problems.add(`finish ${what} with the pipeline switched off ${whenI}`);
+            }
+          }
+          if (reportRuns && !implAdmits(report.if, { ...base, cancelled: true })) problems.add(`the report does not run on a cancelled run ${whenI}`);
+          for (const ffail of finishRuns ? [...Array(fst.length + 1).keys()].map((k) => k - 1) : [null]) {
+            const fin = ffail === null ? { outcome: fst.map(() => "skipped"), jobOut: {} } : implRun(finish, { event, need, fails: ffail });
+            const o = fin.outcome;
+            if (ffail !== null) {
+              const whenF = `${whenI}, and ${ffail < 0 ? "nothing" : name(fst[ffail])} fails in finish`;
+              // The push: only after `prepare` passed every gate and the commits
+              // passed verification, with the token minted after that.
+              if (o[pushTokenAt] !== "skipped" && o[bundleAt] !== "success") problems.add(`the push token is minted before the commits passed ${whenF}`);
+              if (o[pushAt] !== "skipped") {
+                if (pre.jobOut.ready !== "true") problems.add(`finish pushes for a run prepare did not clear ${whenF}`);
+                if (o[bundleAt] !== "success" || bundleAt > pushAt) problems.add(`finish pushes commits that did not pass verification ${whenF}`);
+                if (o[pushTokenAt] !== "success") problems.add(`finish pushes without its push token ${whenF}`);
+              }
+              if (o[openAt] !== "skipped" && o[pushAt] !== "success") problems.add(`finish opens a PR without having pushed ${whenF}`);
+              if (ffail >= 0) continue;
+              // And when everything passed, it does push — after an agent that
+              // hit its wall too, since that stops its job and not the run.
+              if (configured && fails < 0 && [-1, agentAt, "wall"].includes(ifail) && o[pushAt] !== "success") problems.add(`finish does not push ${whenI}`);
+            }
+            // The report job: the App-missing reply and the no-PR report, each
+            // on its own side of the App check.
+            if (!reportRuns) continue;
+            const needR = (j, k) => (j === "finish" ? fin.jobOut[k] ?? "" : need(j, k));
+            const r = implRun(report, { event, need: needR }).outcome;
+            const ran = (s) => s && r[rst.indexOf(s)] === "success";
             const say = event === "issue_comment" && pre.jobOut.configured === "false";
-            if (noApp && noApp.job === finish && ran(noApp.s) !== say) problems.add(`the App-missing reply ${say ? "is not posted" : "is posted"} ${whenI}`);
+            if (noApp && noApp.job === report && ran(noApp.s) !== say) problems.add(`the App-missing reply ${say ? "is not posted" : "is posted"} ${whenI}`);
             if (reporter && ran(reporter) && pre.jobOut.configured !== "true") problems.add(`the no-PR reporter runs without the App and names a cause it did not see ${whenI}`);
             if (reporter && event === "issue_comment" && configured && fails < 0 && ifail === -1 && !ran(reporter)) problems.add(`the no-PR reporter does not run ${whenI}`);
-            // And when everything passed, it does push — after an agent that hit
-            // its wall too, since that cancels its job and not the run.
-            if (configured && fails < 0 && [-1, agentAt, "wall"].includes(ifail) && o[pushAt] !== "success") problems.add(`finish does not push ${whenI}`);
           }
         }
       }
     }
   }
-  if (noApp && noApp.job !== finish) problems.add(`the App-missing reply is posted from job ${noApp.job.name}, not finish`);
+  if (noApp && noApp.job !== report) problems.add(`the App-missing reply is posted from job ${noApp.job.name}, not report`);
   if (noApp && noApp.job.permissions?.issues !== "write") problems.add("the App-missing reply's job cannot comment on an issue");
 
   // 7. The write-access check must FAIL the step for a role below write, or
@@ -2454,7 +2481,7 @@ async function implementBoundaryProblems(text) {
   // 8. Nothing is spliced into code. `finish` reads what the agent's job, on
   // the runner the agent had, left behind; the dispatcher's issue number is
   // free text. Both reach a script through `env:` only.
-  for (const j of [prepare, implement, finish]) {
+  for (const j of [prepare, implement, finish, report]) {
     for (const s of j.steps) {
       if (/\$\{\{/.test(`${s.run ?? ""}\n${s.script ?? ""}`)) problems.add(`${j.name} "${s.name ?? s.id}" splices an expression into its script`);
     }
@@ -2488,12 +2515,15 @@ async function implementBoundaryProblems(text) {
     if (!OUTCOMES.has(k)) problems.add(`implement outputs ${k}, which is not one of its outcomes`);
     if (!/^\$\{\{\s*steps\.[\w-]+\.(?:outcome|outputs\.[\w-]+)\s*\}\}$/.test(v)) problems.add(`implement's output ${k} is ${v}, not a step's own outcome or output`);
   }
-  for (const s of fst) {
-    for (const [, k] of s.text.matchAll(/needs\.implement\.outputs\.([\w-]+)/g)) {
-      if (!OUTCOMES.has(k)) problems.add(`finish "${s.name ?? s.id}" reads ${k} from implement`);
+  for (const j of [finish, report]) {
+    for (const s of j.steps) {
+      for (const [, k] of s.text.matchAll(/needs\.implement\.outputs\.([\w-]+)/g)) {
+        if (!OUTCOMES.has(k)) problems.add(`${j.name} "${s.name ?? s.id}" reads ${k} from implement`);
+      }
     }
   }
-  if ([...finish.needs].sort().join() !== "implement,prepare,route") problems.add(`finish needs [${finish.needs.join(", ")}], not route, prepare and implement`);
+  if ([...finish.needs].sort().join() !== "implement,prepare") problems.add(`finish needs [${finish.needs.join(", ")}], not prepare and implement`);
+  if ([...report.needs].sort().join() !== "finish,implement,prepare,route") problems.add(`report needs [${report.needs.join(", ")}], not every job it reports on and route`);
   // Run the two comments with each value from `implement` set to text that
   // must never be posted, and the App slug set to a forged marker.
   const SENTINEL = "SENTINEL-FROM-IMPLEMENT";
@@ -2521,12 +2551,12 @@ async function implementBoundaryProblems(text) {
       try {
         await new AsyncFunction("github", "context", "core", "process", step.script ?? "")(github, context, { warning() {} }, { env: { TOOLCHAIN_STEPS: "t", APP_BOT_LOGIN: "app[bot]", ...env } });
       } catch (e) {
-        problems.add(`finish "${step.name}" throws when run: ${e.message}`);
+        problems.add(`report "${step.name}" throws when run: ${e.message}`);
       }
       for (const b of bodies) {
-        if (b.includes(SENTINEL)) problems.add(`finish "${step.name}" posts a value from implement as text`);
-        if (b.includes("agent-issue-help")) problems.add(`finish "${step.name}" posts an App slug it did not check`);
-        if (env.APP_SLUG === FORGED_SLUG && b.includes("`agent`")) problems.add(`finish "${step.name}" names its fallback as though it were an App`);
+        if (b.includes(SENTINEL)) problems.add(`report "${step.name}" posts a value from implement as text`);
+        if (b.includes("agent-issue-help")) problems.add(`report "${step.name}" posts an App slug it did not check`);
+        if (env.APP_SLUG === FORGED_SLUG && b.includes("`agent`")) problems.add(`report "${step.name}" names its fallback as though it were an App`);
       }
     }
   }
@@ -2537,9 +2567,9 @@ async function implementBoundaryProblems(text) {
   // `finish` treats what it downloaded as data: it lands outside the
   // workspace, no command is run from it, and git reads it only through
   // bundle-handoff.mjs.
-  for (const j of [prepare, finish]) {
+  for (const j of [prepare, finish, report]) {
     const checkouts = j.steps.filter((s) => /^actions\/checkout@/.test(s.uses ?? ""));
-    if (checkouts.length !== 1) problems.add(`${j.name} has ${checkouts.length} checkouts`);
+    if (checkouts.length !== (j === report ? 0 : 1)) problems.add(`${j.name} has ${checkouts.length} checkouts`);
     for (const s of checkouts) {
       if (implKey(s.lines, 10, "ref") !== "main") problems.add(`${j.name} checks out something other than main`);
       if (implKey(s.lines, 10, "repository") !== undefined) problems.add(`${j.name} checks out another repository`);
@@ -2600,7 +2630,7 @@ async function implementBoundaryProblems(text) {
   }
   // Fresh GitHub-hosted runners, so nothing the agent leaves on one is there
   // when a trusted job starts.
-  for (const j of [prepare, implement, finish]) {
+  for (const j of [prepare, implement, finish, report]) {
     const head = j.lines.slice(0, j.lines.findIndex((l) => /^ {4}steps:\s*$/.test(l)));
     const label = implKey(head, 4, "runs-on");
     if (!/^ubuntu-[a-z0-9.-]+$/.test(label ?? "")) problems.add(`${j.name} runs on ${label ?? "an unnamed runner"}, not a GitHub-hosted ubuntu-* runner`);
@@ -2656,7 +2686,8 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
   const IMPLEMENT_IF = "      !cancelled() &&\n      needs.prepare.outputs.ready == 'true'\n";
   const SETUP_NODE = "      - uses: actions/setup-node@v4\n        if: steps.app.outputs.configured == 'true'\n";
   const VERIFY = "        if: github.event_name == 'issue_comment'\n        uses: actions/github-script@v7\n        with:\n          retries: 3\n          script: |\n            const actor";
-  const FINISH_IF = "    if: always() && needs.prepare.outputs.admitted == 'true'\n";
+  const FINISH_IF = "    if: ${{ !cancelled() && needs.prepare.outputs.admitted == 'true' }}\n";
+  const REPORT_IF = "    if: always() && needs.prepare.outputs.admitted == 'true'\n";
   const REPORTER = "        if: always() && github.event_name == 'issue_comment' && needs.prepare.outputs.configured == 'true'\n";
   const FINISH_CO = "          sparse-checkout-cone-mode: false\n          persist-credentials: false\n      - uses: actions/setup-node@v4\n        if: always() && needs.prepare.outputs.ready == 'true'\n";
   const SUMMARY = "          node scripts/agent/session-job-summary.mjs \\\n";
@@ -2740,9 +2771,23 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     pr_without_push: [OPEN_IF, `        id: open-pr\n        if: \${{ ${STOP}steps.app-token.outcome == 'success' }}\n`],
     verify_without_ready: (t) => t.replace(/( {8}id: bundle\n {8}if: ).*\n/, "$1always()\n").replace(/( {8}id: app-token\n {8}if: always\(\) && )needs\.prepare\.outputs\.ready == 'true' && /, "$1"),
     // (g) admission
-    finish_on_the_app_check: [FINISH_IF, "    if: always() && needs.prepare.outputs.configured == 'true'\n"],
-    finish_ungated: [FINISH_IF, "    if: always()\n"],
-    finish_not_always: [FINISH_IF, "    if: needs.prepare.outputs.admitted == 'true'\n"],
+    finish_on_the_app_check: [FINISH_IF, "    if: ${{ !cancelled() && needs.prepare.outputs.configured == 'true' }}\n"],
+    finish_ungated: [FINISH_IF, "    if: ${{ !cancelled() }}\n"],
+    // The round-2 finding: under `always()` a maintainer's Cancel neither
+    // skips nor cancels `finish`, so its steps never see `cancelled()`.
+    finish_always: [FINISH_IF, "    if: always() && needs.prepare.outputs.admitted == 'true'\n"],
+    finish_on_success_only: [FINISH_IF, "    if: needs.prepare.outputs.admitted == 'true'\n"],
+    report_on_the_app_check: [REPORT_IF, "    if: always() && needs.prepare.outputs.configured == 'true'\n"],
+    report_ungated: [REPORT_IF, "    if: always()\n"],
+    report_not_on_a_cancel: [REPORT_IF, "    if: ${{ !cancelled() && needs.prepare.outputs.admitted == 'true' }}\n"],
+    // The report moved back into `finish`, where a Cancel would now stop it.
+    reporter_back_in_finish: (t) => {
+      const at = t.indexOf("      - name: Report a run that ended without a PR\n");
+      const end = t.indexOf("\n  help:\n");
+      const step = t.slice(at, end).trimEnd();
+      const rest = t.slice(0, at) + t.slice(end);
+      return rest.replace("      - name: Write implement session job summary\n", `${step}\n      - name: Write implement session job summary\n`);
+    },
     admitted_always: [ADMIT, ADMIT.replace("        id: admitted\n", "        id: admitted\n        if: always()\n")],
     admitted_removed: [ADMIT, ""],
     admitted_before_the_check: (t) => t.replace(ADMIT, "").replace("      - name: Verify actor has write access\n        if: github.event_name == 'issue_comment'\n", `${ADMIT}      - name: Verify actor has write access\n        if: github.event_name == 'issue_comment'\n`),
@@ -2784,7 +2829,8 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     // (i) what finish takes from implement, whose runner was the agent's
     finish_reads_slug_from_implement: ["      agent: ${{ steps.agent.outcome }}\n", "      agent: ${{ steps.agent.outcome }}\n      app_slug: ${{ needs.route.outputs.app_slug }}\n"],
     reporter_slug_through_implement: ["          APP_SLUG: ${{ needs.route.outputs.app_slug }}\n          TOOLCHAIN_STEPS", "          APP_SLUG: ${{ needs.implement.outputs.app_slug }}\n          TOOLCHAIN_STEPS"],
-    finish_without_prepare: (t) => t.replace(/^( {2}finish:\n {4}needs: )\[[^\]]*\]$/m, "$1[route, implement]"),
+    finish_without_prepare: (t) => t.replace(/^( {2}finish:\n {4}needs: )\[[^\]]*\]$/m, "$1[implement]"),
+    report_without_finish: (t) => t.replace(/^( {2}report:\n {4}needs: )\[[^\]]*\]$/m, "$1[route, prepare, implement]"),
     reporter_posts_outcome: ["${agentOutcome === 'failure' ? 'failed' : 'ended'}", "${agentOutcome}"],
     reporter_slug_unchecked: ["            const app = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '') ? `\\`${process.env.APP_SLUG}\\` GitHub App` : 'agent GitHub App';", "            const app = `\\`${process.env.APP_SLUG}\\` GitHub App`;"],
     no_app_slug_unchecked: ["            const APP = /^[a-z0-9][a-z0-9-]*$/.test(process.env.APP_SLUG ?? '')\n              ? '`' + process.env.APP_SLUG + '` GitHub App' : 'agent GitHub App';", "            const APP = '`' + process.env.APP_SLUG + '` GitHub App';"],
@@ -2812,7 +2858,7 @@ test("agent-implement's trust boundary accepts ordinary edits", skipWithout("age
   const text = WF("agent-implement.yml");
   const edits = {
     pre_agent_token_reads_more: ["          permission-issues: write # answer on the issue\n", "          permission-issues: write # answer on the issue\n          permission-metadata: read\n"],
-    finish_needs_reordered: (t) => t.replace(/^( {2}finish:\n {4}needs: )\[([^,\]]+), ([^,\]]+), ([^\]]+)\]$/m, "$1[$4, $2, $3]"),
+    report_needs_reordered: (t) => t.replace(/^( {2}report:\n {4}needs: )\[([^,\]]+), ([^,\]]+), ([^,\]]+), ([^\]]+)\]$/m, "$1[$5, $4, $3, $2]"),
     agent_wall_shortened: ["        timeout-minutes: 50\n", "        timeout-minutes: 40\n"],
     pack_gets_an_id: ["      - name: Pack the agent's commits (untrusted output)\n", "      - name: Pack the agent's commits (untrusted output)\n        id: pack\n"],
     ready_gets_a_timeout: ["        id: ready\n", "        id: ready\n        timeout-minutes: 1\n"],
@@ -3209,11 +3255,15 @@ test("every step of a trusted post-agent job survives a cancelled run", () => {
   // setup step without `always()` silently turned the whole report into a
   // no-op on exactly the runs it exists for.
   //
-  // WITH ONE EXCEPTION, and it is the point of it. agent-implement's `finish`
-  // pushes the agent's commits and opens the PR. A maintainer who cancels the
-  // run, or turns the pipeline off, must stop that as well as the agent, so
-  // those three steps are `!cancelled()` and check the switch; everything else
-  // there, the report included, still runs.
+  //
+  // agent-implement's report job is one of these. Its `finish` is not, and
+  // that is the point of it: it pushes the agent's commits and opens the PR,
+  // and a maintainer who cancels the run, or turns the pipeline off, must stop
+  // that as well as the agent. A step's `cancelled()` sees only its own job's
+  // cancellation, so the run's reaches `finish` through the job's condition:
+  // `!cancelled()`, which skips it, or cancels it part-way. Its three push
+  // steps then stop on `!cancelled()` and the switch; every other step there
+  // still runs past an earlier step's failure.
   const HERE = path.dirname(fileURLToPath(import.meta.url));
   const dir = path.join(HERE, "..", "..", ".github", "workflows");
   const JOBS = {
@@ -3221,31 +3271,42 @@ test("every step of a trusted post-agent job survives a cancelled run", () => {
     "agent-iterate-ci.yml": "report",
     "agent-review-reply.yml": "report",
     "agent-review-panel.yml": "fix-report",
-    "agent-implement.yml": "finish",
+    "agent-implement.yml": "report",
   };
-  const STOPS = { "agent-implement.yml": new Set(["push-token", "push", "open-pr"]) };
+  const jobLines = (wf, job) => {
+    const at = wf.indexOf(`\n  ${job}:\n`);
+    if (at < 0) return null;
+    const next = /\n {2}[A-Za-z0-9_-]+:\n/.exec(wf.slice(at + 1));
+    return wf.slice(at, next ? at + 1 + next.index : wf.length).split("\n");
+  };
+  const stepsOf = (lines) => {
+    const stepAt = lines.map((l, i) => (/^ {6}- /.test(l) ? i : -1)).filter((i) => i >= 0);
+    return stepAt.map((s, k) => ({ head: lines[s].trim(), text: lines.slice(s, stepAt[k + 1] ?? lines.length).filter((l) => !/^\s*#/.test(l)).join("\n") }));
+  };
   for (const [file, job] of Object.entries(JOBS)) {
     const wf = readFileSync(path.join(dir, file), "utf8");
-    const at = wf.indexOf(`\n  ${job}:\n`);
-    assert.ok(at > 0, `${file}: no ${job} job`);
-    const next = /\n {2}[A-Za-z0-9_-]+:\n/.exec(wf.slice(at + 1));
-    const lines = wf.slice(at, next ? at + 1 + next.index : wf.length).split("\n");
+    const lines = jobLines(wf, job);
+    assert.ok(lines, `${file}: no ${job} job`);
     assert.match(lines.slice(0, 8).join("\n"), /if: (>-\n\s+)?always\(\)/, `${file} ${job}: the job itself must be always()`);
-    const stepAt = lines.map((l, i) => (/^ {6}- /.test(l) ? i : -1)).filter((i) => i >= 0);
-    assert.ok(stepAt.length > 3, `${file} ${job}: expected steps`);
-    const stops = new Set();
-    stepAt.forEach((s, k) => {
-      const step = lines.slice(s, stepAt[k + 1] ?? lines.length).filter((l) => !/^\s*#/.test(l)).join("\n");
-      const id = /^ {8}id: (\S+)$/m.exec(step)?.[1];
-      if (STOPS[file]?.has(id)) {
-        stops.add(id);
-        assert.match(step, /^ {8}if: \$\{\{ !cancelled\(\) && vars\.AGENT_PIPELINE_ENABLED == 'true' && /m, `${file} ${job}: "${id}" must stop when the run is cancelled or the pipeline is off`);
-      } else {
-        assert.match(step, /^ {8}if: (>-\n {10})?always\(\)/m, `${file} ${job}: "${lines[s].trim()}" is skipped in a cancelled run`);
-      }
-    });
-    assert.deepEqual([...stops].sort(), [...(STOPS[file] ?? [])].sort(), `${file} ${job}: the steps that stop on a cancel are not where they were`);
+    const steps = stepsOf(lines);
+    assert.ok(steps.length >= (file === "agent-implement.yml" ? 2 : 4), `${file} ${job}: expected steps`);
+    for (const st of steps) assert.match(st.text, /^ {8}if: (>-\n {10})?always\(\)/m, `${file} ${job}: "${st.head}" is skipped in a cancelled run`);
   }
+  const STOPS = new Set(["push-token", "push", "open-pr"]);
+  const finish = jobLines(readFileSync(path.join(dir, "agent-implement.yml"), "utf8"), "finish");
+  assert.ok(finish, "agent-implement.yml: no finish job");
+  assert.match(finish.slice(0, 8).join("\n"), /^ {4}if: \$\{\{ !cancelled\(\) && /m, "agent-implement.yml finish: the job must be !cancelled(), so that a Cancel reaches it");
+  const stops = new Set();
+  for (const st of stepsOf(finish)) {
+    const id = /^ {8}id: (\S+)$/m.exec(st.text)?.[1];
+    if (STOPS.has(id)) {
+      stops.add(id);
+      assert.match(st.text, /^ {8}if: \$\{\{ !cancelled\(\) && vars\.AGENT_PIPELINE_ENABLED == 'true' && /m, `agent-implement.yml finish: "${id}" must stop when the run is cancelled or the pipeline is off`);
+    } else {
+      assert.match(st.text, /^ {8}if: (>-\n {10})?always\(\)/m, `agent-implement.yml finish: "${st.head}" does not run past an earlier failure`);
+    }
+  }
+  assert.deepEqual([...stops].sort(), [...STOPS].sort(), "agent-implement.yml finish: the steps that stop on a cancel are not where they were");
 });
 
 test("nothing an agent wrote is posted verbatim under the App identity", () => {

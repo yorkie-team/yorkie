@@ -68,7 +68,22 @@ work here is porting plus the three repo-specific pieces named in §4.
   | --- | --- | --- |
   | `prepare`, before the agent | an App token (`administration`, `contents` and `pull-requests` read, `issues` write); a GITHUB_TOKEN with `contents: read` | the write-access check, the protection gate, the duplicate-branch pre-flight, the "On it" reply, the issue text, the base commit — all from `main` |
   | `implement` | the Claude credentials, each named; a GITHUB_TOKEN with `contents: read`; the runtime token every job gets, for the Actions cache and artifacts; no App secret | the agent, which commits on a local branch; after it, packing those commits into a `git bundle` and uploading it, as the agent's own output |
-  | `finish`, on a fresh runner | an App token for the PR and the comments (no `contents: write`), and — only after the bundle passes — a push token with `contents: write` alone | checking the bundle, pushing it, the draft PR, disclosure, metrics, the no-PR report — `main`'s scripts |
+  | `finish`, on a fresh runner | an App token for the PR and its comments (no `contents: write`), and — only after the bundle passes — a push token with `contents: write` alone | checking the bundle, pushing it, the draft PR, disclosure, metrics — `main`'s scripts |
+  | `report`, on a fresh runner | a GITHUB_TOKEN with `issues: write` | the "App is not configured" reply and the no-PR report |
+
+  **A Cancel stops the push.** A maintainer who cancels the run while
+  watching the agent misbehave must stop what follows it too. A step's
+  `cancelled()` sees only its own job's cancellation, not the run's, and a
+  job whose condition still holds when the run is cancelled is neither
+  skipped nor cancelled — so a `finish` keyed on `always()` pushed after a
+  Cancel exactly as before one. `finish` is keyed on `!cancelled()`: a Cancel
+  before it starts skips it, and one while it runs cancels it, after which
+  its push steps, themselves `!cancelled()`, are skipped. The two comments
+  that must survive a cancelled run are the `report` job's, which is
+  `always()`. The pipeline switch is read by the push steps, and takes effect
+  for a `finish` that starts after it is turned off. An agent that reaches its
+  wall stops its own step, or at worst its own job; neither cancels the run,
+  so what it committed is still handed over and pushed.
 
   **Why a separate job and not a re-staged copy.** The previous correction
   re-checked-out `scripts/agent` after the agent stopped, and called the steps
@@ -665,18 +680,19 @@ withdrawn again) and have to pass.
     the agent's job any more — `prepare`'s never meets the agent — and what
     the rule left is the agent step's condition: it names no status function,
     so the runner's implicit `success()` skips it after any earlier failure.
-15. **`finish` runs only for a commenter the write-access check admitted.**
-    It was keyed on the App check, which implied admission only because that
-    step happens to carry no condition of its own. An `admitted` output,
-    written in `prepare` by the step directly after the check, keys it now,
-    and the App check keys the steps inside: the "App is not configured" reply
-    on one side, the no-PR report on the other.
+15. **`finish` and `report` run only for a commenter the write-access check
+    admitted.** `finish` was keyed on the App check, which implied admission
+    only because that step happens to carry no condition of its own. An
+    `admitted` output, written in `prepare` by the step directly after the
+    check, keys both now, and the App check keys the two steps of `report`:
+    the "App is not configured" reply on one side, the no-PR report on the
+    other.
 16. **The agent's job holds no credential that writes to the repository, and
     names each secret it is sent.** A runner is sent every secret its job
     references when the job starts, and the agent has that runner. So no App
     secret is referenced in the agent's job: the pre-agent App calls run in
-    `prepare`, a job of their own that runs only `main`'s code. The job's token is `contents: read` and
-    is the one the agent is handed. The credential pick names each pool slot
+    `prepare`, a job of their own that runs only `main`'s code. The job's
+    token is `contents: read` and is the one the agent is handed. The credential pick names each pool slot
     rather than computing a name, so what the runner is sent can be read off
     the file — the nine Claude credentials and nothing else. It can still
     write Actions cache entries and artifacts; that is a residual, not a
@@ -690,7 +706,8 @@ withdrawn again) and have to pass.
     only then. The push is not forced, and not made over an
     `agent/<issue>-*` branch another run pushed. The agent's own step stops at
     50 minutes, and packing and uploading run after it however it ended, so a
-    run that hit its wall still hands over what it committed.
+    run that hit its wall still hands over what it committed. A run a
+    maintainer cancelled pushes nothing (above: "A Cancel stops the push").
 18. **The base is one the agent could not choose.** `prepare` records `main`'s
     commit; the agent's job checks it out and packs against it, and `finish`
     verifies against it — read from `prepare`'s outputs, never from the agent's
