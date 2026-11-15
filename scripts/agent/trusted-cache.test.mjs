@@ -165,6 +165,62 @@ test("a job is privileged by a secret, by any write scope, or by declaring no pe
   for (const opts of accepted) assert.deepEqual(oneStep(SETUP_GO, opts), [], JSON.stringify(opts));
 });
 
+test("a job is privileged when a job that needs it, directly or not, holds credentials", () => {
+  // Its outputs and artifacts reach that job, so a cache it restores does too.
+  const RESTORE = { uses: "actions/cache@v4", with: { path: "x", key: "k" } };
+  const NONE = { permissions: {} };
+  const SECRET = { permissions: {}, env: { T: "${{ secrets.NPM_TOKEN }}" }, steps: [{ run: "echo" }] };
+  const jobs = (on, defs) =>
+    check({
+      ".github/workflows/w.yml": stringify({
+        on,
+        jobs: Object.fromEntries(Object.entries(defs).map(([id, j]) => [id, { "runs-on": "ubuntu-latest", steps: [{ run: "echo" }], ...j }])),
+      }),
+    });
+
+  const direct = jobs("push", { warm: { ...NONE, steps: [RESTORE] }, publish: { ...SECRET, needs: "warm" } });
+  assert.equal(direct.length, 1, JSON.stringify(direct));
+  assert.match(direct[0], /› job warm \(needed by job publish, which holds credentials\) › step /);
+
+  const transitive = jobs("push", {
+    warm: { ...NONE, steps: [RESTORE] },
+    build: { ...NONE, needs: ["warm"] },
+    publish: { ...SECRET, needs: ["build"] },
+  });
+  assert.equal(transitive.length, 1, JSON.stringify(transitive));
+  assert.match(transitive[0], /› job warm \(needed by job publish, /);
+
+  // Nothing with credentials needs it: still accepted.
+  assert.deepEqual(jobs("push", { warm: { ...NONE, steps: [RESTORE] }, report: { ...NONE, needs: "warm" } }), []);
+  // The consumer runs only on a pull request's own event.
+  assert.deepEqual(
+    jobs(["push", "pull_request"], {
+      warm: { ...NONE, steps: [RESTORE] },
+      publish: { ...SECRET, needs: "warm", if: "github.event_name == 'pull_request'" },
+    }),
+    [],
+  );
+  // The whole workflow runs only on pull requests.
+  assert.deepEqual(jobs("pull_request", { warm: { ...NONE, steps: [RESTORE] }, publish: { ...SECRET, needs: "warm" } }), []);
+
+  // A reusable workflow called by a job that a privileged job needs.
+  const called = check({
+    ".github/workflows/base.yml": stringify({
+      on: { workflow_call: {} },
+      jobs: { inner: { "runs-on": "ubuntu-latest", steps: [RESTORE] } },
+    }),
+    ".github/workflows/w.yml": stringify({
+      on: "push",
+      jobs: {
+        warm: { uses: "./.github/workflows/base.yml", permissions: {} },
+        publish: { "runs-on": "ubuntu-latest", ...SECRET, needs: "warm" },
+      },
+    }),
+  });
+  assert.equal(called.length, 1, JSON.stringify(called));
+  assert.match(called[0], /base\.yml › job inner \(needed by \.github\/workflows\/w\.yml#publish, which holds credentials\) › /);
+});
+
 test("every trigger but a pull request's own is trusted", () => {
   for (const on of ["push", "release", "workflow_run", "schedule", "workflow_dispatch", "issue_comment", "pull_request_target", "workflow_call", "repository_dispatch"]) {
     assert.equal(oneStep(SETUP_GO, { on }).length, 1, on);

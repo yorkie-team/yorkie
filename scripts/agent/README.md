@@ -781,7 +781,10 @@ step that restores a cache in a job that is both:
   (`secrets.X`, `secrets[...]`, in the job or the workflow's `env`), or its
   token can write anything (`write-all`, or any scope at `write`,
   `id-token` included). A job with no `permissions:` at job or workflow level
-  counts as write-capable, because the repository default may be.
+  counts as write-capable, because the repository default may be. A job is
+  privileged too when a job that `needs` it, directly or through others,
+  is: its outputs and artifacts reach that job, and a cache it restored
+  with them.
 
 It follows `uses: ./.github/workflows/x.yml` into the called workflow, judged
 in its caller's trigger, with the caller's token as a ceiling and with
@@ -841,9 +844,10 @@ the toolchain action sets `cache: false` on `setup-go`.
   table, and reusable workflows from other repositories.
 - A step that reads the cache service directly (`ACTIONS_CACHE_URL`,
   `ACTIONS_RESULTS_URL`) or a tool that does so on its own.
-- What a job does with an artifact from another run. An artifact is not a
-  cache, but `actions/download-artifact` from a less trusted run carries the
-  same risk.
+- What a job does with an artifact from another run (`workflow_run`, or
+  `actions/download-artifact` with a `run-id`). An artifact is not a cache,
+  but one from a less trusted run carries the same risk. Within a run, only
+  `needs:` is followed.
 - An `if:` it does not recognise is treated as able to run on a trusted
   event, so it can refuse a step that only ever runs on a pull request. Make
   the condition one of the recognised forms.

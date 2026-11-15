@@ -360,21 +360,56 @@ export function checkWorkflows({ workflowPaths, readText, parse }) {
     }
   };
 
-  // ctx: { trusted, callerPerms (undefined = none declared), callerHasSecrets, chain }
+  // ctx: { trusted, callerPerms (undefined = none declared), callerHasSecrets,
+  //        chain, consumer (a job outside this workflow that holds credentials
+  //        and needs the job calling it, or undefined) }
   const scanWorkflow = (rel, ctx) => {
     const wf = load(rel);
     if (!wf) {
       findings.push(`${ctx.chain.join(" → ")}: reusable workflow ${rel} cannot be read`);
       return;
     }
-    for (const [jobId, job] of Object.entries(wf.jobs ?? {})) {
-      if (!job || typeof job !== "object") continue;
-      const where = `${[...ctx.chain, rel].join(" → ")} › job ${jobId}`;
-      if (!ctx.trusted || onlyOnPullRequest(job.if)) continue;
+    const jobs = Object.entries(wf.jobs ?? {}).filter(([, job]) => job && typeof job === "object");
+
+    // What each job holds itself.
+    const info = new Map();
+    for (const [jobId, job] of jobs) {
+      const skip = !ctx.trusted || onlyOnPullRequest(job.if);
       const declared = job.permissions ?? wf.permissions;
       // A called workflow's token is capped by its caller's.
       const writes = canWrite(declared) && (ctx.callerPerms === undefined || canWrite(ctx.callerPerms));
       const effective = declared ?? ctx.callerPerms;
+      const passes = job.secrets === "inherit" || (job.secrets && typeof job.secrets === "object" && Object.keys(job.secrets).length > 0);
+      const secrets = ctx.callerHasSecrets ? secretsReferenced({ env: wf.env, job }) : [];
+      const own = typeof job.uses === "string" ? writes || (ctx.callerHasSecrets && Boolean(passes)) : writes || secrets.length > 0;
+      info.set(jobId, { skip, own, effective, passes });
+    }
+
+    // A job with no credentials of its own still hands its outputs and
+    // artifacts to every job that `needs` it. If one of those, directly or
+    // through others, holds credentials, a cache this job restores reaches
+    // them, so it is judged as holding them.
+    const fedBy = new Map();
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const [jobId, job] of jobs) {
+        const me = info.get(jobId);
+        if (me.skip || !(me.own || fedBy.has(jobId))) continue;
+        for (const dep of [].concat(job.needs ?? []).map(String)) {
+          if (info.has(dep) && !info.get(dep).own && !fedBy.has(dep)) {
+            fedBy.set(dep, fedBy.get(jobId) ?? jobId);
+            changed = true;
+          }
+        }
+      }
+    }
+
+    for (const [jobId, job] of jobs) {
+      const { skip, own, effective, passes } = info.get(jobId);
+      if (skip) continue;
+      const fed = fedBy.has(jobId) ? `job ${fedBy.get(jobId)}` : ctx.consumer;
+      const where = `${[...ctx.chain, rel].join(" → ")} › job ${jobId}` +
+        (!own && fed ? ` (needed by ${fed}, which holds credentials)` : "");
 
       if (typeof job.uses === "string") {
         const callee = localWorkflow(job.uses);
@@ -384,18 +419,17 @@ export function checkWorkflows({ workflowPaths, readText, parse }) {
           findings.push(`${where}: calls ${callee}, which is already in its call chain`);
           continue;
         }
-        const passes = job.secrets === "inherit" || (job.secrets && typeof job.secrets === "object" && Object.keys(job.secrets).length > 0);
         scanWorkflow(callee, {
           trusted: true,
           callerPerms: effective,
           callerHasSecrets: ctx.callerHasSecrets && Boolean(passes),
           chain: [...ctx.chain, `${rel}#${jobId}`],
+          consumer: fedBy.has(jobId) ? `${rel}#${fedBy.get(jobId)}` : ctx.consumer,
         });
         continue;
       }
 
-      const secrets = ctx.callerHasSecrets ? secretsReferenced({ env: wf.env, job }) : [];
-      if (!writes && secrets.length === 0) continue;
+      if (!own && !fed) continue;
       const scc = sccacheGhaEnabled(wf.env, job.env) ||
         (job.steps ?? []).some((s) => typeof s?.run === "string" && /SCCACHE_GHA_ENABLED=(?!false\b)/.test(s.run));
       scanSteps(job.steps, where, scc, new Set());
