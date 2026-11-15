@@ -170,6 +170,22 @@ work here is porting plus the three repo-specific pieces named in §4.
     send it anywhere; a runner egress policy is what would bound that. And the
     handoff checks bound the SHAPE of what is pushed, not its content: what the
     commits do is for CI and the required human review.
+
+    The next change narrows that to one credential: the agent's job moves into
+    a reusable workflow that is passed exactly one Claude credential, picked
+    in `prepare` (the picker needs only which slots are set and the run id).
+    A job that calls a reusable workflow has no runner of its own, and the
+    secret it passes is resolved when the call is made, so the called job's
+    runner should be sent that one secret alone. That is to be confirmed on a
+    live run — a marker value in a slot that was not picked must not reach
+    the called job's runner — before anything relies on it. Two constraints
+    come with it: secrets of an environment cannot be passed into a reusable
+    workflow, so a pool kept in the `agent` environment moves to repository
+    or organization secrets (or the called job names every slot again under
+    its own `environment:`, which gives the narrowing back); and the called
+    workflow is one more file to keep identical across the repositories, which
+    the boundary guard has to follow into. The one credential that does reach
+    the agent is still the agent's to read, so it needs a rotation plan.
   - **Branch protection on `main` is a setting, not a checked property.** It
     appears nowhere in the tree — no ruleset fixture, no `CODEOWNERS`, no test.
     Phase I's gate is the only thing that reads it at run time, and only for that
