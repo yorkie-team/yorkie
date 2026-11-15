@@ -402,7 +402,10 @@ repository that adopts the harness follows them:
 - The default branch is `main`. Workflows check trusted code out with
   `ref: main`, and the scripts' base-branch arguments default to it.
 - The issue-to-PR verb runs in three jobs, and its agent's job holds no
-  write credential. `prepare` makes every App call before the agent (the
+  credential that writes to the repository. (Every job is still given a
+  runtime token for the Actions cache and its run's artifacts, which
+  `permissions:` does not govern; the design doc's residuals say what that
+  leaves open.) `prepare` makes every App call before the agent (the
   write-access check, the protection gate, the duplicate-branch pre-flight,
   the "On it" reply, the issue text) and records the base commit. `implement`
   runs the agent with the Claude credentials, each named, and a token that

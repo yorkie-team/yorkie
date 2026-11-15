@@ -60,13 +60,14 @@ work here is porting plus the three repo-specific pieces named in §4.
   | A separate job (`report`, `fix-report`) on a fresh runner | a wide App token minted there | posting, disclosure, paging, metrics — `main`'s scripts |
 
   **`agent-implement.yml` goes further: its agent does not push.** Its agent's
-  job holds no write credential at all, so the App's private key is never sent
-  to the runner the agent has:
+  job holds no credential that writes to the repository, so the App's private
+  key is never sent to the runner the agent has. It can still write Actions
+  cache entries and its run's artifacts (see the residuals below):
 
   | Job | Holds | Runs |
   | --- | --- | --- |
   | `prepare`, before the agent | an App token (`administration`, `contents` and `pull-requests` read, `issues` write); a GITHUB_TOKEN with `contents: read` | the write-access check, the protection gate, the duplicate-branch pre-flight, the "On it" reply, the issue text, the base commit — all from `main` |
-  | `implement` | the Claude credentials, each named; a GITHUB_TOKEN with `contents: read`; no App secret | the agent, which commits on a local branch; after it, packing those commits into a `git bundle` and uploading it, as the agent's own output |
+  | `implement` | the Claude credentials, each named; a GITHUB_TOKEN with `contents: read`; the runtime token every job gets, for the Actions cache and artifacts; no App secret | the agent, which commits on a local branch; after it, packing those commits into a `git bundle` and uploading it, as the agent's own output |
   | `finish`, on a fresh runner | an App token for the PR and the comments (no `contents: write`), and — only after the bundle passes — a push token with `contents: write` alone | checking the bundle, pushing it, the draft PR, disclosure, metrics, the no-PR report — `main`'s scripts |
 
   **Why a separate job and not a re-staged copy.** The previous correction
@@ -143,6 +144,20 @@ work here is porting plus the three repo-specific pieces named in §4.
     `main`, and with the fix-scope check (§7.3) applied before the push rather
     than after it — and the credential named slot by slot. Until each lands,
     this residual stands for it.
+  - **The agent's job can still write the Actions cache and its run's
+    artifacts.** Every job is given a runtime token for those services along
+    with its runner, `permissions:` does not govern it, and the agent can read
+    it like anything else on that runner. A run started by `issue_comment`
+    executes in the default branch's context, and a `workflow_dispatch` in
+    that of the ref it was started on, usually `main`. So a cache entry the
+    agent writes is scoped to `main`, where later runs on `main` — jobs that
+    hold secrets or publish among them — and pull requests can restore it
+    under a key they compute. Closing this needs every job on the
+    default branch that holds a secret or can write to restore no cache
+    (tracked separately, across the repositories that run this harness), or
+    the agent to run under a ref other than the default branch's, so that
+    what it writes is not `main`'s. Until one of those lands, a cache
+    restored on `main` is input the issue-to-PR agent may have written.
   - **The agent's artifact is the agent's to write, all of it.** It can upload
     to its run's artifact store without the workflow's upload step, so the
     trusted job treats every file it downloads as untrusted, downloads into a
@@ -640,14 +655,16 @@ withdrawn again) and have to pass.
     written in `prepare` by the step directly after the check, keys it now,
     and the App check keys the steps inside: the "App is not configured" reply
     on one side, the no-PR report on the other.
-16. **The agent's job holds no write credential, and names each secret it is
-    sent.** A runner is sent every secret its job references when the job
-    starts, and the agent has that runner. So no App secret is referenced in
-    the agent's job: the pre-agent App calls run in `prepare`, a job of their
-    own that runs only `main`'s code. The job's token is `contents: read` and
+16. **The agent's job holds no credential that writes to the repository, and
+    names each secret it is sent.** A runner is sent every secret its job
+    references when the job starts, and the agent has that runner. So no App
+    secret is referenced in the agent's job: the pre-agent App calls run in
+    `prepare`, a job of their own that runs only `main`'s code. The job's token is `contents: read` and
     is the one the agent is handed. The credential pick names each pool slot
     rather than computing a name, so what the runner is sent can be read off
-    the file — the nine Claude credentials and nothing else.
+    the file — the nine Claude credentials and nothing else. It can still
+    write Actions cache entries and artifacts; that is a residual, not a
+    criterion this meets.
 17. **The agent does not push; `finish` pushes what passes.** The agent
     commits on a local branch, and a bundle of those commits crosses as an
     artifact. `finish` reads it as attacker-controlled data with
@@ -690,8 +707,9 @@ public, so a comment posted mid-run is reachable by any agent that decides to
 look. It narrows the honest agent's behaviour and bounds nothing. Neither is a
 control on egress, and the residual risk is accepted knowingly: what the agent's
 job holds can read this repository and spend model budget, and nothing it holds
-writes. The control that would actually close the channel is a runner egress
-policy, and it is the next thing to add here.
+writes to the repository — though it can write Actions cache entries and its
+run's artifacts, a residual stated above. The control that would actually close
+the channel is a runner egress policy, and it is the next thing to add here.
 
 
 ### 3. The kill switch

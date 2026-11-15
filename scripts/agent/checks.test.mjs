@@ -2292,7 +2292,10 @@ async function implementBoundaryProblems(text) {
     problems.add(`the App's private key is named outside the steps that mint with it${where.length ? `: ${where.join(", ")}` : " (a job- or workflow-level env)"}`);
   }
 
-  // 2. The agent's job holds nothing that writes. Its own token reads
+  // 2. The agent's job holds no credential that writes to the repository. (It
+  // is still given the runtime token every job gets, for the Actions cache
+  // and artifacts; `permissions:` does not govern that, and nothing here
+  // can.) Its own token reads
   // `contents` and nothing else — declared, so nothing is inherited — no App
   // token is minted there, and the agent is handed that read-only token.
   if (JSON.stringify(implement.permissions) !== JSON.stringify({ contents: "read" })) {
@@ -2640,7 +2643,7 @@ async function implementBoundaryProblems(text) {
   return [...problems];
 }
 
-test("agent-implement's agent holds no write credential, and its trusted jobs gate what lands", skipWithout("agent-implement.yml"), async () => {
+test("agent-implement's agent holds no repository-write credential, and its trusted jobs gate what lands", skipWithout("agent-implement.yml"), async () => {
   assert.deepEqual(await implementBoundaryProblems(WF("agent-implement.yml")), []);
 });
 
@@ -3192,7 +3195,8 @@ test("in a job that runs a pushing agent, nothing after the agent but the handof
     }
   }
   // Four: the fix family. `agent-implement.yml`'s agent no longer pushes — it
-  // holds no write credential, so nothing after it in its job holds one either
+  // holds no credential that writes to the repository, so nothing after it in
+  // its job holds one either
   // — and the implement boundary guard below holds it to that instead.
   assert.ok(checked >= 4, `expected every pushing agent job to be checked, got ${checked}`);
 });

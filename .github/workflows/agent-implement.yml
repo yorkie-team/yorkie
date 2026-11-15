@@ -12,11 +12,14 @@
 # only reason the App carries `Administration: read`, and why that grant is
 # read-only: the App can see protection exists and cannot change it.
 #
-# THE AGENT'S JOB HOLDS NO WRITE CREDENTIAL, and that is what the job layout is
-# for. A job's runner receives every secret the job references when the job
-# starts, and the agent has its runner to itself — a shell, root through
-# passwordless `sudo`, the docker group — so whatever its job references, the
-# agent can recover, whichever step names it. So:
+# THE AGENT'S JOB HOLDS NO CREDENTIAL THAT WRITES TO THE REPOSITORY, and that
+# is what the job layout is for. A job's runner receives every secret the job
+# references when the job starts, and the agent has its runner to itself — a
+# shell, root through passwordless `sudo`, the docker group — so whatever its
+# job references, the agent can recover, whichever step names it. (It can
+# still write Actions cache entries and its run's artifacts: every job is
+# given a runtime token for those services that `permissions:` does not
+# govern. The design doc's residuals say what that leaves open.) So:
 #
 #   prepare   — trusted, before the agent. Every App call the run needs before
 #               the agent: the write-access check, the protection gate, the
@@ -475,9 +478,13 @@ jobs:
         if: steps.app.outputs.configured == 'true'
         run: echo "ready=true" >> "$GITHUB_OUTPUT"
 
-  # THE AGENT'S JOB, AND IT HOLDS NO WRITE CREDENTIAL. No App secret is named
-  # here, the job's own token reads, and the only secrets named are the Claude
-  # credentials the agent runs on. The agent commits on a local branch; a step
+  # THE AGENT'S JOB, AND IT HOLDS NO CREDENTIAL THAT WRITES TO THE REPOSITORY.
+  # No App secret is named here, the job's own token reads, and the only
+  # secrets named are the Claude credentials the agent runs on. It can still
+  # write Actions cache entries and its run's artifacts, through the runtime
+  # token every job is given — which is why `finish` treats the artifact as
+  # the agent's, and why a cache on `main` is not to be trusted (see the
+  # design doc's residuals). The agent commits on a local branch; a step
   # after it packs those commits into a `git bundle`, and `finish` decides
   # whether they are pushed.
   implement:
@@ -539,7 +546,8 @@ jobs:
       # this workspace starts TRUSTED. It does not stay that way: the agent
       # below writes to it, including to `scripts/agent/**` if it wants to —
       # which is why nothing after the agent runs a script from it, and why
-      # this job holds nothing worth taking. `persist-credentials: false`: the
+      # this job holds no credential that writes to the repository.
+      # `persist-credentials: false`: the
       # agent neither fetches nor pushes, so `.git/config` keeps no token.
       - uses: actions/checkout@v4
         with:

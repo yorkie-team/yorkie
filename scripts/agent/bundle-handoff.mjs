@@ -6,8 +6,9 @@
 // references when it starts, and the agent has the runner to itself — a shell,
 // root through passwordless `sudo`, the docker group. So a credential in the
 // agent's job is a credential the agent holds, whichever step names it. The
-// agent's job (`implement` in agent-implement.yml) therefore holds no write
-// credential at all: it commits on a local branch, a step after it packs the
+// agent's job (`implement` in agent-implement.yml) therefore holds no
+// credential that writes to the repository: it commits on a local branch, a
+// step after it packs the
 // commits since the base into a `git bundle`, and the bundle crosses to the
 // `finish` job as an artifact. `finish` runs this file, on a fresh runner,
 // from `main`'s checkout, and only then mints the token that pushes.
