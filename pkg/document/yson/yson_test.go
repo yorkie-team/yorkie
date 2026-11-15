@@ -1182,3 +1182,180 @@ func TestYSONConstructorArgumentValidation(t *testing.T) {
 		assert.Len(t, arr, 3)
 	})
 }
+
+func TestYSONPlainTypeField(t *testing.T) {
+	t.Run("object with a string type field round-trips", func(t *testing.T) {
+		obj := yson.Object{"tabs": yson.Object{
+			"t1": yson.Object{"id": "t1", "name": "Sheet1", "type": "sheet"},
+		}}
+		marshalled, err := obj.Marshal()
+		assert.NoError(t, err)
+
+		actual := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &actual))
+		assert.Equal(t, obj, actual)
+	})
+
+	t.Run("type field naming a known constructor is plain data", func(t *testing.T) {
+		for _, name := range []string{
+			"Int", "Long", "BinData", "Date", "Counter", "DedupCounter", "Text", "Tree", "sheet",
+		} {
+			obj := yson.Object{"e": yson.Object{"type": name, "value": "x"}}
+			marshalled, err := obj.Marshal()
+			assert.NoError(t, err)
+
+			actual := yson.Object{}
+			assert.NoError(t, yson.Unmarshal(marshalled, &actual), name)
+			assert.Equal(t, obj, actual, name)
+		}
+	})
+
+	t.Run("type field survives inside an array", func(t *testing.T) {
+		arr := yson.Array{}
+		assert.NoError(t, yson.Unmarshal(`[{"type":"sheet","name":"Sheet1"},{"type":"Int","value":1}]`, &arr))
+		assert.Equal(t, yson.Array{
+			yson.Object{"type": "sheet", "name": "Sheet1"},
+			yson.Object{"type": "Int", "value": float64(1)},
+		}, arr)
+	})
+
+	t.Run("typed values beside a plain type field still parse", func(t *testing.T) {
+		obj := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(`{
+			"meta": {"type":"sheet","value":"ignored"},
+			"cnt": Counter(Int(10)),
+			"num": Int(42),
+			"when": Date("2025-01-02T15:04:05.058Z"),
+			"txt": Text([{"val":"a"}]),
+			"tr": Tree({"type":"p","children":[{"type":"text","value":"hello"}]})
+		}`, &obj))
+
+		assert.Equal(t, yson.Object{"type": "sheet", "value": "ignored"}, obj["meta"])
+		assert.Equal(t, yson.Counter{Type: crdt.IntegerCnt, Value: int32(10)}, obj["cnt"])
+		assert.Equal(t, int32(42), obj["num"])
+		assert.Equal(t, gotime.Date(2025, 1, 2, 15, 4, 5, 58000000, gotime.UTC), obj["when"])
+		assert.Equal(t, yson.Text{Nodes: []yson.TextNode{{Value: "a"}}}, obj["txt"])
+		assert.Equal(t, yson.Tree{Root: yson.TreeNode{
+			Type:     "p",
+			Children: []yson.TreeNode{{Type: "text", Value: "hello"}},
+		}}, obj["tr"])
+	})
+
+	t.Run("reserved tag key is data, not a tag", func(t *testing.T) {
+		expected := yson.Object{"$$yson$$type": "Int", "value": float64(1)}
+
+		obj := yson.Object{}
+		err := yson.Unmarshal(`{"$$yson$$type":"Int","value":1}`, &obj)
+		assert.NoError(t, err)
+		assert.Equal(t, expected, obj)
+
+		// Padding with whitespace before the colon still reads as a key.
+		obj = yson.Object{}
+		err = yson.Unmarshal(`{"$$yson$$type" : "Int","value":1}`, &obj)
+		assert.NoError(t, err)
+		assert.Equal(t, expected, obj)
+
+		// Spelling the same key with escapes decodes to the same member, so
+		// escaping must decode the literal rather than compare raw bytes.
+		obj = yson.Object{}
+		err = yson.Unmarshal(`{"\u0024\u0024yson$$type":"Int","value":1}`, &obj)
+		assert.NoError(t, err)
+		assert.Equal(t, expected, obj)
+
+		// The escape marker itself is not privileged: a key spelling it comes
+		// back unchanged rather than losing a prefix.
+		obj = yson.Object{}
+		assert.NoError(t, yson.Unmarshal(`{"$$yson$$~$$yson$$type":"x"}`, &obj))
+		assert.Equal(t, yson.Object{"$$yson$$~$$yson$$type": "x"}, obj)
+	})
+
+	t.Run("reserved tag key round-trips through Marshal", func(t *testing.T) {
+		obj := yson.Object{
+			"$$yson$$type":   "Int",
+			"$$yson$$~x":     "escape marker",
+			"nested":         yson.Object{"$$yson$$type": "Tree"},
+			"arr":            yson.Array{yson.Object{"$$yson$$type": "Counter"}},
+			"plain":          yson.Object{"type": "sheet"},
+			"$$yson$$cnt":    yson.Counter{Type: crdt.IntegerCnt, Value: int32(3)},
+			"$$yson$$number": int32(7),
+		}
+		marshalled, err := obj.Marshal()
+		assert.NoError(t, err)
+
+		actual := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &actual))
+		assert.Equal(t, obj, actual)
+
+		// A second trip is stable, so escaping never accumulates.
+		remarshalled, err := actual.Marshal()
+		assert.NoError(t, err)
+		assert.Equal(t, marshalled, remarshalled)
+	})
+
+	t.Run("reserved tag key round-trips as text and tree attributes", func(t *testing.T) {
+		obj := yson.Object{
+			"txt": yson.Text{Nodes: []yson.TextNode{
+				{Value: "a", Attributes: map[string]string{"$$yson$$type": "Int"}},
+			}},
+			"tr": yson.Tree{Root: yson.TreeNode{
+				Type:       "p",
+				Attributes: map[string]string{"$$yson$$type": "Tree"},
+				Children:   []yson.TreeNode{{Type: "text", Value: "hello"}},
+			}},
+		}
+		marshalled, err := obj.Marshal()
+		assert.NoError(t, err)
+
+		actual := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &actual))
+		assert.Equal(t, obj, actual)
+	})
+
+	t.Run("reserved tag key survives a document round-trip", func(t *testing.T) {
+		doc := document.New("reserved-key")
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetNewObject("tabs").SetString("$$yson$$type", "sheet")
+			return nil
+		}))
+
+		root, err := yson.FromCRDT(doc.RootObject())
+		assert.NoError(t, err)
+		marshalled, err := root.(yson.Object).Marshal()
+		assert.NoError(t, err)
+
+		// This is the snapshot path revisions.Restore reads back.
+		restored := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &restored))
+
+		newDoc := document.New("reserved-key")
+		assert.NoError(t, newDoc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetYSON(restored)
+			return nil
+		}))
+		assert.Equal(t, doc.Marshal(), newDoc.Marshal())
+	})
+
+	t.Run("reserved tag key is allowed as a string value", func(t *testing.T) {
+		obj := yson.Object{}
+		assert.NoError(t, yson.Unmarshal(`{"k":"$$yson$$type"}`, &obj))
+		assert.Equal(t, yson.Object{"k": "$$yson$$type"}, obj)
+
+		// A value that looks like a key — colon and all — is still a value,
+		// so the scan must not reach inside the literal.
+		obj = yson.Object{}
+		assert.NoError(t, yson.Unmarshal(`{"k":"{\"$$yson$$type\":\"Int\"}","n":Int(1)}`, &obj))
+		assert.Equal(t, yson.Object{"k": `{"$$yson$$type":"Int"}`, "n": int32(1)}, obj)
+	})
+
+	t.Run("bare constructor does not leak the tag key into an object", func(t *testing.T) {
+		obj := yson.Object{}
+		err := yson.Unmarshal(`Int(1)`, &obj)
+		assert.ErrorIs(t, err, yson.ErrUnsupported)
+		assert.Empty(t, obj)
+
+		obj = yson.Object{}
+		err = yson.Unmarshal(`Counter(Int(1))`, &obj)
+		assert.ErrorIs(t, err, yson.ErrUnsupported)
+		assert.Empty(t, obj)
+	})
+}

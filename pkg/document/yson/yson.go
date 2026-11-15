@@ -66,6 +66,29 @@ const (
 	// DefaultRootNodeType is the default type of root node.
 	DefaultRootNodeType = "root"
 
+	// tagKeyPrefix is the object-key namespace reserved for preprocessing's own
+	// bookkeeping. Document data may use keys in this namespace: Unmarshal
+	// escapes them on the way in (escapeReservedKeys) and restores them on the
+	// way out (unescapeKey), so the namespace is private to preprocessing
+	// without being denied to callers.
+	tagKeyPrefix = "$$yson$$"
+
+	// tagKeyEscape is the marker escapeReservedKeys prepends to a caller's key
+	// that already lies in the reserved namespace. It lies in the namespace
+	// itself, so escaping is injective: unescapeKey strips exactly one marker,
+	// recovering keys that happen to spell tagKey or tagKeyEscape verbatim.
+	tagKeyEscape = tagKeyPrefix + "~"
+
+	// tagKey is the object key under which preprocessing records which YSON
+	// constructor a rewritten value came from. It is deliberately not "type":
+	// a plain object is free to carry a "type" field of its own (for example
+	// {"type":"sheet","name":"Sheet1"}), and tagging typed values with that
+	// key made every such object parse as a typed value and fail. The key is
+	// internal to Unmarshal: Marshal always writes typed values as
+	// constructors, so it never appears in stored YSON, and a caller's key of
+	// the same spelling is escaped out of the way before any rewrite runs.
+	tagKey = tagKeyPrefix + "type"
+
 	// counterTypeInt is the YSON token for 32-bit integer counters.
 	counterTypeInt = "Int"
 
@@ -426,7 +449,7 @@ func Unmarshal(data string, elem Element) error {
 		}
 		var counter Counter
 		var err error
-		if t, ok := rawMap["type"].(string); ok && t == "DedupCounter" {
+		if t, ok := rawMap[tagKey].(string); ok && t == "DedupCounter" {
 			counter, err = parseDedupCounter(rawMap)
 		} else {
 			counter, err = parseCounter(rawMap)
@@ -460,7 +483,7 @@ func parseIntValue(v any, bitSize int) (int64, error) {
 }
 
 func parseTypedValue(raw map[string]any) (any, error) {
-	t, ok := raw["type"].(string)
+	t, ok := raw[tagKey].(string)
 	if !ok {
 		return nil, ErrUnsupported
 	}
@@ -521,24 +544,35 @@ func parseTypedValue(raw map[string]any) (any, error) {
 }
 
 func parseObject(raw map[string]any) (Object, error) {
+	// A map carrying tagKey is a marker object preprocessing produced for a
+	// constructor, never an object: a caller's key of that spelling was escaped
+	// before the rewrite ran. Reached only at the top level, where it means the
+	// input was a bare constructor such as Int(1) decoded into an Object; the
+	// nested callers below already checked for the tag. Without this, the tag
+	// would be stored as an ordinary member and leak into document state.
+	if _, ok := raw[tagKey].(string); ok {
+		return nil, fmt.Errorf("unmarshal object: %w", ErrUnsupported)
+	}
+
 	obj := Object{}
 	for k, v := range raw {
+		key := unescapeKey(k)
 		switch v := v.(type) {
 		case map[string]any:
-			if _, ok := v["type"].(string); ok {
+			if _, ok := v[tagKey].(string); ok {
 				val, err := parseTypedValue(v)
 				if err != nil {
 					return nil, err
 				}
 
-				obj[k] = val
+				obj[key] = val
 			} else {
 				val, err := parseObject(v)
 				if err != nil {
 					return nil, err
 				}
 
-				obj[k] = val
+				obj[key] = val
 			}
 		case []any:
 			val, err := parseArray(v)
@@ -546,13 +580,13 @@ func parseObject(raw map[string]any) (Object, error) {
 				return nil, err
 			}
 
-			obj[k] = val
+			obj[key] = val
 		default:
 			val, err := parsePlainValue(v)
 			if err != nil {
 				return nil, err
 			}
-			obj[k] = val
+			obj[key] = val
 		}
 	}
 	return obj, nil
@@ -579,7 +613,7 @@ func parseArray(raw []any) (Array, error) {
 	for _, item := range raw {
 		switch v := item.(type) {
 		case map[string]any:
-			if _, ok := v["type"].(string); ok {
+			if _, ok := v[tagKey].(string); ok {
 				val, err := parseTypedValue(v)
 				if err != nil {
 					return nil, err
@@ -612,7 +646,7 @@ func parseArray(raw []any) (Array, error) {
 func parseCounter(raw map[string]any) (Counter, error) {
 	counter := Counter{}
 	if value, ok := raw["value"].(map[string]any); ok {
-		if t, ok := value["type"].(string); ok {
+		if t, ok := value[tagKey].(string); ok {
 			switch t {
 			case counterTypeInt:
 				v, err := parseIntValue(value["value"], 32)
@@ -704,7 +738,7 @@ func parseText(raw []any) (Text, error) {
 				if !ok {
 					return text, fmt.Errorf("parse text attribute: %w", ErrInvalidYSON)
 				}
-				textNode.Attributes[k] = s
+				textNode.Attributes[unescapeKey(k)] = s
 			}
 		}
 
@@ -745,7 +779,7 @@ func parseTreeNode(raw map[string]any) (TreeNode, error) {
 			if !ok {
 				return TreeNode{}, fmt.Errorf("parse tree node attribute: %w", ErrInvalidYSON)
 			}
-			node.Attributes[k] = s
+			node.Attributes[unescapeKey(k)] = s
 		}
 	}
 
@@ -802,6 +836,11 @@ var ysonConstructors = []ysonConstructor{
 // interpreted as structure. Earlier revisions used global strings.ReplaceAll
 // calls (notably ")" → "}"), which silently corrupted such values.
 func preprocessTypeValues(data string) (string, error) {
+	// Escape keys in the reserved namespace before anything is rewritten, while
+	// every object key in data is still one the caller wrote. Both passes below
+	// emit tagKey themselves, so this cannot run after them.
+	data = escapeReservedKeys(data)
+
 	// DedupCounter is handled first by its precise regex. Its compound shape
 	// (Int(...) plus a bare base64 string argument) does not fit the generic
 	// Name(<arg>) rewrite, and the regex only matches at real DedupCounter
@@ -820,6 +859,88 @@ func preprocessTypeValues(data string) (string, error) {
 		return "", err
 	}
 	return b.String(), nil
+}
+
+// escapeReservedKeys prefixes every object key that lies in the reserved
+// tagKeyPrefix namespace with tagKeyEscape, so that preprocessing's own tagKey
+// cannot be spoofed by document data. The alternative — rejecting such input —
+// would be one-sided: Marshal writes member and attribute keys verbatim, so a
+// document carrying the key would marshal into YSON that could never be read
+// back, turning ordinary content into an unrestorable snapshot. parseObject,
+// parseText and parseTreeNode run unescapeKey over the decoded keys, so the
+// round trip is transparent.
+//
+// Only keys are escaped: a plain string value spelling tagKey is ordinary data
+// and cannot be confused with a tag. A literal counts as a key when the next
+// non-space byte is ':', matching how encoding/json reads the same bytes.
+func escapeReservedKeys(data string) string {
+	var b strings.Builder
+	i, copied := 0, 0
+	for i < len(data) {
+		if data[i] != '"' {
+			i++
+			continue
+		}
+
+		start := i
+		end := scanStringLiteral(data, i)
+		literal := data[start:end]
+		i = end
+
+		j := end
+		for j < len(data) && isJSONSpace(data[j]) {
+			j++
+		}
+		if j >= len(data) || data[j] != ':' || !isReservedKeyLiteral(literal) {
+			continue
+		}
+
+		// The marker needs no escaping of its own, and the remainder of the
+		// literal is already a well-formed body, so splicing the two keeps the
+		// literal valid whatever escapes the caller used.
+		b.WriteString(data[copied:start])
+		b.WriteString(`"` + tagKeyEscape)
+		b.WriteString(literal[1:])
+		copied = end
+	}
+	if copied == 0 {
+		return data
+	}
+
+	b.WriteString(data[copied:])
+	return b.String()
+}
+
+// isReservedKeyLiteral reports whether the given JSON string literal decodes to
+// a key in the reserved tagKeyPrefix namespace. JSON can spell the same key in
+// more than one way, so a literal that does not carry the prefix in plain bytes
+// is decoded before it is compared.
+func isReservedKeyLiteral(literal string) bool {
+	if strings.HasPrefix(literal, `"`+tagKeyPrefix) {
+		return true
+	}
+	if !strings.Contains(literal, `\`) {
+		return false
+	}
+
+	var decoded string
+	if err := gojson.Unmarshal([]byte(literal), &decoded); err != nil {
+		return false
+	}
+	return strings.HasPrefix(decoded, tagKeyPrefix)
+}
+
+// unescapeKey undoes escapeReservedKeys for a single decoded object key.
+func unescapeKey(key string) string {
+	if rest, ok := strings.CutPrefix(key, tagKeyEscape); ok {
+		return rest
+	}
+	return key
+}
+
+// isJSONSpace reports whether c is JSON insignificant whitespace.
+func isJSONSpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
 }
 
 // rewriteDedupCounters substitutes DedupCounter(Int(N),"b64") occurrences that
@@ -852,9 +973,14 @@ func rewriteDedupCounters(data string) (string, error) {
 					ErrInvalidYSON,
 				)
 			}
-			match := data[i : i+loc[1]]
-			b.WriteString(dedupCounterRe.ReplaceAllString(match,
-				`{"type":"DedupCounter","counterType":"Int","value":$1,"hll":"$2"}`))
+			// Both groups always participate in a match, so their indices are
+			// valid. They are read from loc rather than re-run through
+			// ReplaceAllString because the tag key contains '$', which the
+			// template expander would read as a capture reference.
+			value := data[i+loc[2] : i+loc[3]]
+			hll := data[i+loc[4] : i+loc[5]]
+			fmt.Fprintf(&b, `{"%s":"DedupCounter","counterType":"Int","value":%s,"hll":"%s"}`,
+				tagKey, value, hll)
 			i += loc[1]
 			continue
 		}
@@ -947,12 +1073,12 @@ func matchingOpen(closer byte) byte {
 // parentheses, is a single well-formed argument.
 //
 // Both checks close a hole in the rewrite. Because arg is interpolated into
-// {"type":...,"value":<arg>}, a second argument becomes a sibling key of the
-// marker object: Int(42,"type":"Long") would emit a duplicate "type" key and
-// decode as a Long. And because findMatchingParen balances only parentheses, a
-// stray '}' inside them would close the marker object early, so the text after
-// it would escape into the parent: Int(1},"y":{"a":2) would decode to an object
-// carrying a "y" key that was never in the document.
+// {"<tagKey>":...,"value":<arg>}, a second argument becomes a sibling key of
+// the marker object: Int(42,"value":1) would emit a duplicate "value" key and
+// decode as the second one. And because findMatchingParen balances only
+// parentheses, a stray '}' inside them would close the marker object early, so
+// the text after it would escape into the parent: Int(1},"y":{"a":2) would
+// decode to an object carrying a "y" key that was never in the document.
 func validateConstructorArg(name, arg string) error {
 	if arg == "" {
 		if allowsEmptyArg(name) {
@@ -1026,12 +1152,12 @@ func constructorPrefix(name, typ, inner string) string {
 	if inner == "" {
 		switch name {
 		case ctorText:
-			return `{"type":"Text","value":[]`
+			return fmt.Sprintf(`{"%s":"Text","value":[]`, tagKey)
 		case ctorTree:
-			return `{"type":"Tree","value":{}`
+			return fmt.Sprintf(`{"%s":"Tree","value":{}`, tagKey)
 		}
 	}
-	return fmt.Sprintf(`{"type":"%s","value":`, typ)
+	return fmt.Sprintf(`{"%s":"%s","value":`, tagKey, typ)
 }
 
 // findMatchingParen returns the index of the ')' that closes the '(' whose
