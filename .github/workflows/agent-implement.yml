@@ -485,7 +485,8 @@ jobs:
           # workspace, and name it for every later step.
           cp -R .github/agent-harness "$RUNNER_TEMP/agent-harness"
           echo "AGENT_HARNESS_CONFIG_DIR=$RUNNER_TEMP/agent-harness" >> "$GITHUB_ENV"
-          npm ci --no-audit --no-fund --ignore-scripts --prefix "$RUNNER_TEMP/agent-tools"
+          # Runtime dependencies only: the dev ones are for the package's tests.
+          npm ci --omit=dev --no-audit --no-fund --ignore-scripts --prefix "$RUNNER_TEMP/agent-tools"
 
       # The toolchain the agent verifies with — this repository's own, defined in
       # `.github/actions/agent-toolchain`. Same untrusted-setup rule as every

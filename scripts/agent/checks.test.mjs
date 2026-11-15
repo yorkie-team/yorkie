@@ -983,6 +983,24 @@ test("no token-bearing job sets itself up by running the branch's build files", 
   }
 });
 
+test("an agent job installs the package's runtime dependencies only", () => {
+  // The dev dependencies are for the package's own tests (`yaml`, for the
+  // cache guard). Every other install builds a tree that a job holding
+  // secrets runs, so it leaves them out; agent-scripts.yml runs the tests and
+  // keeps them.
+  const dir = path.dirname(fileURLToPath(new URL("../../.github/workflows/x", import.meta.url)));
+  let installs = 0;
+  for (const name of readdirSync(dir).filter((f) => /^agent-.*\.ya?ml$/.test(f) && f !== "agent-scripts.yml")) {
+    const code = WF(name).split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
+    // A command line, not prose inside a script.
+    for (const m of code.matchAll(/^\s*(?:- )?(?:run: )?(?:cd \S+ && )?npm (?:ci|install)\b[^\n]*/gm)) {
+      installs++;
+      assert.match(m[0], /--omit=dev\b/, `${name}: \`${m[0].trim()}\` installs the dev dependencies too`);
+    }
+  }
+  assert.ok(installs >= 3, `expected the runtime installs, found ${installs}`);
+});
+
 test("every fixer prompt runs the same verification target", () => {
   // THE LANE THE AUTONOMOUS ARM VERIFIES WITH, named once: `fixer.verifyCommand`
   // in the repository's configuration.

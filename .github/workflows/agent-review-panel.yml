@@ -392,8 +392,10 @@ jobs:
       # is untarred and executed in `review-panel`, which has the `agent`
       # environment, `checks: write` and nine OAuth secrets. A dependency's
       # install hook running here writes into exactly that tree, so keeping the
-      # hooks out is the half that carries into the privileged job.
-      - run: cd scripts/agent && npm ci --no-audit --no-fund --ignore-scripts # reproducible: exact tree from the committed lockfile
+      # hooks out is the half that carries into the privileged job. `--omit=dev`
+      # for the same reason: the dev dependencies are for the package's tests,
+      # nothing the panel runs imports them, so they stay out of that tree.
+      - run: cd scripts/agent && npm ci --omit=dev --no-audit --no-fund --ignore-scripts # reproducible: exact tree from the committed lockfile
       # Tar before uploading. actions/upload-artifact does NOT preserve Unix file
       # permissions (or symlinks), so a raw node_modules upload strips the +x bit
       # from the SDK's bundled native binaries (the `claude` CLI, ripgrep). The
