@@ -2659,11 +2659,15 @@ async function implementBoundaryProblems(text) {
     for (const s of j.steps) if (/^\s+skip-token-revoke:/m.test(s.text)) problems.add(`${j.name} "${s.name ?? s.id}" keeps its App token alive past its job`);
   }
   // Fresh GitHub-hosted runners, so nothing the agent leaves on one is there
-  // when a trusted job starts.
+  // when a trusted job starts. BY NAME, from GitHub's own list: a self-hosted
+  // runner can carry any label its admin gives it, `ubuntu-…` included. A
+  // larger hosted runner has a name its organization chose, and is added here
+  // by that name when one is used.
+  const HOSTED = new Set(["ubuntu-latest", "ubuntu-24.04", "ubuntu-22.04", "ubuntu-24.04-arm", "ubuntu-22.04-arm"]);
   for (const j of [prepare, implement, finish, report]) {
     const head = j.lines.slice(0, j.lines.findIndex((l) => /^ {4}steps:\s*$/.test(l)));
     const label = implKey(head, 4, "runs-on");
-    if (!/^ubuntu-[a-z0-9.-]+$/.test(label ?? "")) problems.add(`${j.name} runs on ${label ?? "an unnamed runner"}, not a GitHub-hosted ubuntu-* runner`);
+    if (!HOSTED.has(label ?? "")) problems.add(`${j.name} runs on ${label ?? "an unnamed runner"}, not one of GitHub's hosted runners (${[...HOSTED].join(", ")})`);
     if (j === implement && head.some((l) => /^ {4}(?:container|services):/.test(l))) problems.add("the agent's job declares a container or services, whose credentials no rule here reads");
   }
   // No job here restores an Actions cache. The agent can write cache entries
@@ -2862,6 +2866,8 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     finish_self_hosted: ["    if: always() && needs.prepare.outputs.admitted == 'true'\n    runs-on: ubuntu-latest\n", "    if: always() && needs.prepare.outputs.admitted == 'true'\n    runs-on: [self-hosted, linux]\n"],
     prepare_self_hosted: (t) => t.replace(/( {2}prepare:\n(?: {4}.*\n)*? {4}runs-on: )ubuntu-latest/, "$1self-hosted"),
     every_job_self_hosted: (t) => t.replaceAll("runs-on: ubuntu-latest", "runs-on: self-hosted"),
+    implement_self_hosted_ubuntu_label: ["      needs.prepare.outputs.ready == 'true'\n    runs-on: ubuntu-latest\n", "      needs.prepare.outputs.ready == 'true'\n    runs-on: ubuntu-mybox\n"],
+    report_self_hosted: (t) => t.replace(/( {2}report:\n(?: {4}.*\n)*? {4}runs-on: )ubuntu-latest/, "$1self-hosted"),
     finish_downloads_everything: ["          name: claude-execution-output\n          path: ${{ runner.temp }}/agent-output\n", "          merge-multiple: true\n          path: ${{ runner.temp }}/agent-output\n"],
     // a cache restored where the agent may have written it
     finish_restores_a_cache: [SUMMARY, `          true\n      - uses: actions/cache@v4\n        with:\n          path: scripts/agent/node_modules\n          key: deps\n      - name: x\n        if: always()\n        run: |\n${SUMMARY}`],
@@ -2914,6 +2920,7 @@ test("agent-implement's trust boundary accepts ordinary edits", skipWithout("age
     agent_wall_shortened: ["        timeout-minutes: 50\n", "        timeout-minutes: 40\n"],
     pack_gets_an_id: ["      - name: Pack the agent's commits (untrusted output)\n", "      - name: Pack the agent's commits (untrusted output)\n        id: pack\n"],
     ready_gets_a_timeout: ["        id: ready\n", "        id: ready\n        timeout-minutes: 1\n"],
+    a_pinned_hosted_image: ["      needs.prepare.outputs.ready == 'true'\n    runs-on: ubuntu-latest\n", "      needs.prepare.outputs.ready == 'true'\n    runs-on: ubuntu-24.04\n"],
     a_cache_turned_off: (t) => t.replace("      - uses: actions/setup-node@v4\n        if: always() && needs.prepare.outputs.ready == 'true'\n        with:\n          node-version: 22.x\n", "      - uses: actions/setup-node@v4\n        if: always() && needs.prepare.outputs.ready == 'true'\n        with:\n          node-version: 22.x\n          cache: false\n"),
     a_pool_secret_beside_the_agent: ["          github_token: ${{ github.token }}\n", "          github_token: ${{ github.token }}\n          extra: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_3 }}\n"],
   };
