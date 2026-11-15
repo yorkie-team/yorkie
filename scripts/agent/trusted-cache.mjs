@@ -301,13 +301,28 @@ export function checkWorkflows({ workflowPaths, readText, parse }) {
     return null;
   };
 
+  // The workflow file of this repository a job-level `uses:` calls, or null for
+  // another repository's. `./.github/workflows/x.yml` is local. So is
+  // `<owner>/<repo>/.github/workflows/x.yml@ref` whenever this tree has that
+  // file: the configuration names the repository but not its owner, and the
+  // checker reads nothing from the environment, so it cannot tell this
+  // repository's full name from another's. Reading such a call as local can
+  // only put the file under a caller's trigger and credentials; a same-named
+  // workflow elsewhere is judged by this tree's copy.
+  const known = new Set(workflowPaths);
+  const localWorkflow = (uses) => {
+    if (uses.startsWith("./")) return path.posix.normalize(uses.slice(2).replace(/@.*$/, ""));
+    const m = /^[^/]+\/[^/]+\/(\.github\/workflows\/[^@]+)@/.exec(uses);
+    return m && known.has(path.posix.normalize(m[1])) ? path.posix.normalize(m[1]) : null;
+  };
+
   // Callers of each local reusable workflow, so a callee is judged in its callers' context.
   const callers = new Map();
   for (const rel of workflowPaths) {
     const wf = load(rel);
     for (const [jobId, job] of Object.entries(wf?.jobs ?? {})) {
-      if (typeof job?.uses === "string" && job.uses.startsWith("./")) {
-        const callee = path.posix.normalize(job.uses.slice(2).replace(/@.*$/, ""));
+      const callee = typeof job?.uses === "string" ? localWorkflow(job.uses) : null;
+      if (callee !== null) {
         if (!callers.has(callee)) callers.set(callee, []);
         callers.get(callee).push(`${rel}#${jobId}`);
       }
@@ -354,9 +369,13 @@ export function checkWorkflows({ workflowPaths, readText, parse }) {
       const effective = declared ?? ctx.callerPerms;
 
       if (typeof job.uses === "string") {
-        if (!job.uses.startsWith("./")) continue; // another repository's workflow: not visible here
-        const callee = path.posix.normalize(job.uses.slice(2).replace(/@.*$/, ""));
-        if (ctx.chain.includes(callee)) continue;
+        const callee = localWorkflow(job.uses);
+        if (callee === null) continue; // another repository's workflow: not visible here
+        // GitHub refuses a workflow that calls itself, directly or not; so does this.
+        if ([...ctx.chain.map((c) => c.split("#")[0]), rel].includes(callee)) {
+          findings.push(`${where}: calls ${callee}, which is already in its call chain`);
+          continue;
+        }
         const passes = job.secrets === "inherit" || (job.secrets && typeof job.secrets === "object" && Object.keys(job.secrets).length > 0);
         scanWorkflow(callee, {
           trusted: true,
@@ -388,8 +407,10 @@ export function checkWorkflows({ workflowPaths, readText, parse }) {
         chain: [],
       });
     }
-    // Reusable with no caller here: someone elsewhere may call it on a trusted
-    // trigger with secrets, and nothing here says what token they pass.
+    // Reusable with no caller in this repository: nothing here says on what
+    // trigger, with what token or which secrets it runs, so it is judged as
+    // trusted, with secrets, and with the default token. (A call from another
+    // repository runs in that repository's cache scope, not this one's.)
     if (events.includes("workflow_call") && !callers.has(rel)) {
       scanWorkflow(rel, { trusted: true, callerPerms: undefined, callerHasSecrets: true, chain: [] });
     }

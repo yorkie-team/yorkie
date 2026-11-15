@@ -233,6 +233,31 @@ test("a local reusable workflow is checked in its callers' trigger, secrets and 
   assert.equal(check({ ".github/workflows/base.yml": callee() }).length, 1);
   // A caller pointing at a file that is not there cannot be checked.
   assert.match(check({ ".github/workflows/push.yml": caller("push", {}) })[0], /cannot be read/);
+
+  // Called by its full name: a file this tree has is read as this repository's,
+  // even when a pull-request-only caller also reaches it by `./`.
+  const full = (on, ref) => stringify({ on, jobs: { call: { uses: ref, secrets: "inherit" } } });
+  const byName = check({
+    ".github/workflows/base.yml": stringify({
+      on: { workflow_call: {} },
+      jobs: { publish: { "runs-on": "ubuntu-latest", steps: [{ uses: "actions/cache@v4", with: { path: "x", key: "k" } }] } },
+    }),
+    ".github/workflows/pr.yml": caller("pull_request", { secrets: "inherit" }),
+    ".github/workflows/push.yml": full("push", "yorkie-team/yorkie/.github/workflows/base.yml@main"),
+  });
+  assert.equal(byName.length, 1, JSON.stringify(byName));
+  assert.match(byName[0], /^\.github\/workflows\/push\.yml#call → \.github\/workflows\/base\.yml › job publish › /);
+  // Another repository's workflow, with no file of that name here: not visible, not an error.
+  assert.deepEqual(check({ ".github/workflows/push.yml": full("push", "other/repo/.github/workflows/nope.yml@v1") }), []);
+
+  // A workflow in its own call chain is reported, not followed forever.
+  const cycle = check({
+    ".github/workflows/self.yml": stringify({
+      on: { push: {}, workflow_call: {} },
+      jobs: { again: { uses: "./.github/workflows/self.yml", secrets: "inherit" } },
+    }),
+  });
+  assert.ok(cycle.length > 0 && cycle.every((f) => /already in its call chain/.test(f)), JSON.stringify(cycle));
 });
 
 test("a local composite action's steps are checked as the job's own", () => {

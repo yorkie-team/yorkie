@@ -786,8 +786,12 @@ step that restores a cache in a job that is both:
 It follows `uses: ./.github/workflows/x.yml` into the called workflow, judged
 in its caller's trigger, with the caller's token as a ceiling and with
 secrets only if the caller passes some (`secrets: inherit` or a mapping). A
-reusable workflow that nothing in the repository calls is judged as if
-called from a trusted trigger with secrets. It follows `uses: ./path` into
+call by full name, `<owner>/<repo>/.github/workflows/x.yml@ref`, is followed
+the same way whenever this tree has that file: the configuration does not
+name the repository's owner, so any same-named file is read as this
+repository's, which can only add callers. A reusable workflow that nothing in
+the repository calls is judged as if called from a trusted trigger with
+secrets. A workflow that reaches itself through its calls is a failure. It follows `uses: ./path` into
 the local composite action and its nested ones; `./<dir>/.github/actions/x`,
 a checkout of this repository under a subdirectory, is read from this tree's
 `.github/actions/x`. A local action or workflow it cannot read is a failure.
