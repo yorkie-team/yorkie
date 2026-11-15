@@ -32,8 +32,13 @@ the tag up under that reserved key in `parseObject`, `parseArray`,
 always user data, and `parseTreeNode` keeps reading the plain `type` key
 because tree-node types are user data too.
 
-To keep the reserved key genuinely unambiguous, reject input that uses it as
-an object key (after JSON unescaping) before any rewriting happens.
+To keep the reserved key genuinely unambiguous, escape — not reject — input
+that uses the reserved `$$yson$$` namespace as an object key, before any
+rewriting happens: such a key is prefixed with `$$yson$$~` on the way in and
+the prefix is stripped on the way out. Rejecting would be one-sided, because
+`Marshal` writes member and attribute keys verbatim: a document that
+legitimately holds a `$$yson$$type` member would marshal into a snapshot that
+could never be read back.
 
 No stored data changes: `Marshal` always emits typed values as constructors
 (`Int(…)`, `Counter(…)`, `Date(…)`, `BinData(…)`, `Text(…)`, `Tree(…)`), never
@@ -44,9 +49,13 @@ unchanged.
 
 - [x] Reserve a tag key and rewrite preprocessing to emit it
 - [x] Read the tag under the reserved key in every parse path
-- [x] Reject the reserved key when it appears as an input object key
+- [x] Escape the reserved namespace when it appears as an input object key,
+      and unescape it in `parseObject`, `parseText` and `parseTreeNode`
+- [x] Reject a bare constructor decoded into an `Object`, so the tag key is
+      never stored as an ordinary member
 - [x] Unit tests: plain objects with `type`, with `type`+`value`, nested in
-      arrays/objects, round-trip through `Marshal`; reserved-key rejection
+      arrays/objects, round-trip through `Marshal`; reserved-key round-trip
+      as a member, as text/tree attributes and through a document
 - [x] Integration test: restore a revision whose root holds
       `{ id, name, type: "sheet" }`
 - [x] `make lint`, `go test ./pkg/document/yson/...`

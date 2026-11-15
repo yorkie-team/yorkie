@@ -66,15 +66,28 @@ const (
 	// DefaultRootNodeType is the default type of root node.
 	DefaultRootNodeType = "root"
 
+	// tagKeyPrefix is the object-key namespace reserved for preprocessing's own
+	// bookkeeping. Document data may use keys in this namespace: Unmarshal
+	// escapes them on the way in (escapeReservedKeys) and restores them on the
+	// way out (unescapeKey), so the namespace is private to preprocessing
+	// without being denied to callers.
+	tagKeyPrefix = "$$yson$$"
+
+	// tagKeyEscape is the marker escapeReservedKeys prepends to a caller's key
+	// that already lies in the reserved namespace. It lies in the namespace
+	// itself, so escaping is injective: unescapeKey strips exactly one marker,
+	// recovering keys that happen to spell tagKey or tagKeyEscape verbatim.
+	tagKeyEscape = tagKeyPrefix + "~"
+
 	// tagKey is the object key under which preprocessing records which YSON
 	// constructor a rewritten value came from. It is deliberately not "type":
 	// a plain object is free to carry a "type" field of its own (for example
 	// {"type":"sheet","name":"Sheet1"}), and tagging typed values with that
 	// key made every such object parse as a typed value and fail. The key is
 	// internal to Unmarshal: Marshal always writes typed values as
-	// constructors, so it never appears in stored YSON, and input that uses
-	// it as an object key is rejected by checkTagKey.
-	tagKey = "$$yson$$type"
+	// constructors, so it never appears in stored YSON, and a caller's key of
+	// the same spelling is escaped out of the way before any rewrite runs.
+	tagKey = tagKeyPrefix + "type"
 
 	// counterTypeInt is the YSON token for 32-bit integer counters.
 	counterTypeInt = "Int"
@@ -531,8 +544,19 @@ func parseTypedValue(raw map[string]any) (any, error) {
 }
 
 func parseObject(raw map[string]any) (Object, error) {
+	// A map carrying tagKey is a marker object preprocessing produced for a
+	// constructor, never an object: a caller's key of that spelling was escaped
+	// before the rewrite ran. Reached only at the top level, where it means the
+	// input was a bare constructor such as Int(1) decoded into an Object; the
+	// nested callers below already checked for the tag. Without this, the tag
+	// would be stored as an ordinary member and leak into document state.
+	if _, ok := raw[tagKey].(string); ok {
+		return nil, fmt.Errorf("unmarshal object: %w", ErrUnsupported)
+	}
+
 	obj := Object{}
 	for k, v := range raw {
+		key := unescapeKey(k)
 		switch v := v.(type) {
 		case map[string]any:
 			if _, ok := v[tagKey].(string); ok {
@@ -541,14 +565,14 @@ func parseObject(raw map[string]any) (Object, error) {
 					return nil, err
 				}
 
-				obj[k] = val
+				obj[key] = val
 			} else {
 				val, err := parseObject(v)
 				if err != nil {
 					return nil, err
 				}
 
-				obj[k] = val
+				obj[key] = val
 			}
 		case []any:
 			val, err := parseArray(v)
@@ -556,13 +580,13 @@ func parseObject(raw map[string]any) (Object, error) {
 				return nil, err
 			}
 
-			obj[k] = val
+			obj[key] = val
 		default:
 			val, err := parsePlainValue(v)
 			if err != nil {
 				return nil, err
 			}
-			obj[k] = val
+			obj[key] = val
 		}
 	}
 	return obj, nil
@@ -714,7 +738,7 @@ func parseText(raw []any) (Text, error) {
 				if !ok {
 					return text, fmt.Errorf("parse text attribute: %w", ErrInvalidYSON)
 				}
-				textNode.Attributes[k] = s
+				textNode.Attributes[unescapeKey(k)] = s
 			}
 		}
 
@@ -755,7 +779,7 @@ func parseTreeNode(raw map[string]any) (TreeNode, error) {
 			if !ok {
 				return TreeNode{}, fmt.Errorf("parse tree node attribute: %w", ErrInvalidYSON)
 			}
-			node.Attributes[k] = s
+			node.Attributes[unescapeKey(k)] = s
 		}
 	}
 
@@ -812,12 +836,10 @@ var ysonConstructors = []ysonConstructor{
 // interpreted as structure. Earlier revisions used global strings.ReplaceAll
 // calls (notably ")" → "}"), which silently corrupted such values.
 func preprocessTypeValues(data string) (string, error) {
-	// Reject the reserved tag key before anything is rewritten, while every
-	// object key in data is still one the caller wrote. Both passes below emit
-	// the key themselves, so this check cannot run after them.
-	if err := checkTagKey(data); err != nil {
-		return "", err
-	}
+	// Escape keys in the reserved namespace before anything is rewritten, while
+	// every object key in data is still one the caller wrote. Both passes below
+	// emit tagKey themselves, so this cannot run after them.
+	data = escapeReservedKeys(data)
 
 	// DedupCounter is handled first by its precise regex. Its compound shape
 	// (Int(...) plus a bare base64 string argument) does not fit the generic
@@ -839,47 +861,81 @@ func preprocessTypeValues(data string) (string, error) {
 	return b.String(), nil
 }
 
-// checkTagKey rejects input that carries tagKey as an object key. Preprocessing
-// tags rewritten constructors with that key, so an object already carrying it
-// would be read as a typed value. Only keys are rejected: a plain string value
-// equal to tagKey is ordinary data and cannot be confused with a tag.
-func checkTagKey(data string) error {
-	i := 0
+// escapeReservedKeys prefixes every object key that lies in the reserved
+// tagKeyPrefix namespace with tagKeyEscape, so that preprocessing's own tagKey
+// cannot be spoofed by document data. The alternative — rejecting such input —
+// would be one-sided: Marshal writes member and attribute keys verbatim, so a
+// document carrying the key would marshal into YSON that could never be read
+// back, turning ordinary content into an unrestorable snapshot. parseObject,
+// parseText and parseTreeNode run unescapeKey over the decoded keys, so the
+// round trip is transparent.
+//
+// Only keys are escaped: a plain string value spelling tagKey is ordinary data
+// and cannot be confused with a tag. A literal counts as a key when the next
+// non-space byte is ':', matching how encoding/json reads the same bytes.
+func escapeReservedKeys(data string) string {
+	var b strings.Builder
+	i, copied := 0, 0
 	for i < len(data) {
 		if data[i] != '"' {
 			i++
 			continue
 		}
 
+		start := i
 		end := scanStringLiteral(data, i)
-		literal := data[i:end]
+		literal := data[start:end]
 		i = end
 
-		// A literal is a key when the next non-space byte is ':'.
 		j := end
 		for j < len(data) && isJSONSpace(data[j]) {
 			j++
 		}
-		if j < len(data) && data[j] == ':' && isTagKeyLiteral(literal) {
-			return fmt.Errorf("%q is a reserved object key: %w", tagKey, ErrInvalidYSON)
+		if j >= len(data) || data[j] != ':' || !isReservedKeyLiteral(literal) {
+			continue
 		}
+
+		// The marker needs no escaping of its own, and the remainder of the
+		// literal is already a well-formed body, so splicing the two keeps the
+		// literal valid whatever escapes the caller used.
+		b.WriteString(data[copied:start])
+		b.WriteString(`"` + tagKeyEscape)
+		b.WriteString(literal[1:])
+		copied = end
 	}
-	return nil
+	if copied == 0 {
+		return data
+	}
+
+	b.WriteString(data[copied:])
+	return b.String()
 }
 
-// isTagKeyLiteral reports whether the given JSON string literal spells tagKey.
-// JSON can spell the same key in more than one way, so a literal carrying any
-// escape is decoded before it is compared.
-func isTagKeyLiteral(literal string) bool {
+// isReservedKeyLiteral reports whether the given JSON string literal decodes to
+// a key in the reserved tagKeyPrefix namespace. JSON can spell the same key in
+// more than one way, so a literal that does not carry the prefix in plain bytes
+// is decoded before it is compared.
+func isReservedKeyLiteral(literal string) bool {
+	if strings.HasPrefix(literal, `"`+tagKeyPrefix) {
+		return true
+	}
 	if !strings.Contains(literal, `\`) {
-		return literal == `"`+tagKey+`"`
+		return false
 	}
 
 	var decoded string
 	if err := gojson.Unmarshal([]byte(literal), &decoded); err != nil {
 		return false
 	}
-	return decoded == tagKey
+	return strings.HasPrefix(decoded, tagKeyPrefix)
+}
+
+// unescapeKey undoes escapeReservedKeys for a single decoded object key.
+func unescapeKey(key string) string {
+	if rest, ok := strings.CutPrefix(key, tagKeyEscape); ok {
+		return rest
+	}
+	return key
 }
 
 // isJSONSpace reports whether c is JSON insignificant whitespace.

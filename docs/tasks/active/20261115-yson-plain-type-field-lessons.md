@@ -14,12 +14,25 @@
   (`{"type":"p","children":[…]}`), and they are parsed by `parseTreeNode`,
   not `parseTypedValue`. Only the marker lookups move to the reserved key.
 - A reserved key is only unambiguous if input cannot also carry it. JSON lets
-  the same key be spelled many ways (`$$type`…), so the guard unescapes a
+  the same key be spelled many ways (`$$type`…), so the pass unescapes a
   literal before comparing, and only for literals that are object keys (the
   next non-space byte is `:`) — a plain *string value* equal to the reserved
   key is harmless.
-- The guard has to run before `rewriteDedupCounters`, otherwise it would trip
-  over the reserved key that pass emits itself.
+- Reserving a key on the *reading* side only is not enough. `Marshal` writes
+  member and attribute keys verbatim, and `json.Object` puts no restriction on
+  member names, so a key that `Unmarshal` refuses is still a key a client can
+  write — the snapshot produced from it would be permanently unrestorable.
+  Escaping on the way in and stripping on the way out keeps the namespace
+  private without denying it to callers. The escape marker lives inside the
+  reserved namespace itself (`$$yson$$~`), which makes escaping injective: a
+  key already spelling the marker escapes to a longer one and comes back
+  intact.
+- The escape pass has to run before `rewriteDedupCounters`, otherwise it would
+  escape the reserved key that pass emits itself.
+- A bare constructor (`Int(1)`) unmarshalled into an `Object` would otherwise
+  store the tag key as an ordinary member, so `parseObject` rejects a map
+  carrying the tag. By then a caller's key of that spelling has already been
+  escaped, so the tag can only have come from the rewrite.
 
 ## Review rounds
 
