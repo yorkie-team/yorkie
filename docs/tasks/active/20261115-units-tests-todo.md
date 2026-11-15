@@ -18,13 +18,13 @@ an error.
 
 ## Plan
 
-- [ ] `pkg/units/size_test.go`: `FromHumanSize`, `RAMInBytes`, `HumanSize`,
+- [x] `pkg/units/size_test.go`: `FromHumanSize`, `RAMInBytes`, `HumanSize`,
       `HumanSizeWithPrecision`, `BytesSize`, `CustomSize`
-- [ ] `pkg/units/duration_test.go`: `HumanDuration` across every branch and its
+- [x] `pkg/units/duration_test.go`: `HumanDuration` across every branch and its
       boundaries
-- [ ] Only test files change; any behaviour that looks wrong is recorded in the
+- [x] Only test files change; any behaviour that looks wrong is recorded in the
       lessons file and the PR body, not fixed here
-- [ ] `make lint` and `go test ./pkg/units/...` green
+- [x] `make lint` and `go test ./pkg/units/...` green (100% of statements)
 
 ## Out of scope
 
