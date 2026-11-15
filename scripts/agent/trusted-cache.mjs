@@ -245,6 +245,22 @@ export function stepRestoresCache(step, { sccacheGha = false } = {}) {
       ? null
       : "anthropics/claude-code-action installs Bun from the Actions cache unless `path_to_bun_executable` is set";
   }
+  // Actions whose own cache is on unless switched off.
+  if (name === "gradle/actions/setup-gradle" || name === "gradle/gradle-build-action") {
+    return isTrue(w["cache-disabled"]) ? null : `${name} restores the Gradle cache unless \`cache-disabled: true\``;
+  }
+  if (name === "astral-sh/setup-uv") {
+    return isFalse(w["enable-cache"]) ? null : "astral-sh/setup-uv restores the uv cache unless `enable-cache: false`";
+  }
+  if (name === "actions-rust-lang/setup-rust-toolchain") {
+    return isFalse(w.cache) ? null : "actions-rust-lang/setup-rust-toolchain restores rust-cache unless `cache: false`";
+  }
+  if (name === "golangci/golangci-lint-action") {
+    return isTrue(w["skip-cache"]) ? null : "golangci/golangci-lint-action restores its lint and build cache unless `skip-cache: true`";
+  }
+  if (name === "jdx/mise-action") {
+    return isFalse(w.cache) ? null : "jdx/mise-action restores its tool cache unless `cache: false`";
+  }
   if (name === "docker/setup-buildx-action") {
     return isFalse(w["cache-binary"]) ? null : "docker/setup-buildx-action restores the buildx binary unless `cache-binary: false`";
   }

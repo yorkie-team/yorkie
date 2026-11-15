@@ -816,6 +816,11 @@ What it refuses in such a job, and what turns each off:
 | `Swatinem/rust-cache` | `lookup-only: true` |
 | `cache-from` naming `type=gha`, or taking a variable or an expression, in any input or in a `run:` line (backslash continuations joined) | it is removed or spelled out |
 | `mozilla-actions/sccache-action` with `SCCACHE_GHA_ENABLED` set anywhere | the variable is removed |
+| `gradle/actions/setup-gradle`, `gradle/gradle-build-action` | `cache-disabled: true` |
+| `astral-sh/setup-uv` | `enable-cache: false` |
+| `actions-rust-lang/setup-rust-toolchain` | `cache: false` |
+| `golangci/golangci-lint-action` | `skip-cache: true` |
+| `jdx/mise-action` | `cache: false` |
 | `docker/setup-buildx-action` | `cache-binary: false` |
 | `docker/setup-qemu-action` | `cache-image: false` |
 | `oven-sh/setup-bun` | `no-cache: true` |

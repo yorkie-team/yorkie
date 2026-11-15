@@ -71,6 +71,13 @@ test("every way of restoring a cache is refused in a trusted job with a write to
     [{ uses: "docker/setup-qemu-action@v3" }, /cache-image: false/],
     [{ uses: "oven-sh/setup-bun@v2", with: { "bun-version": "1.3.14" } }, /no-cache: true/],
     [{ uses: "anthropics/claude-code-action@v1", with: { prompt: "p" } }, /path_to_bun_executable/],
+    [{ uses: "gradle/actions/setup-gradle@v4" }, /cache-disabled: true/],
+    [{ uses: "gradle/gradle-build-action@v3", with: { "cache-read-only": true } }, /cache-disabled: true/],
+    [{ uses: "astral-sh/setup-uv@v6" }, /enable-cache: false/],
+    [{ uses: "astral-sh/setup-uv@v6", with: { "enable-cache": "auto" } }, /enable-cache: false/],
+    [{ uses: "actions-rust-lang/setup-rust-toolchain@v1" }, /setup-rust-toolchain .*cache: false/],
+    [{ uses: "golangci/golangci-lint-action@v8", with: { version: "v2.11.4" } }, /skip-cache: true/],
+    [{ uses: "jdx/mise-action@v2" }, /mise-action .*cache: false/],
     // An expression may evaluate to on, so it counts as on.
     [{ uses: "actions/setup-go@v6", with: { cache: "${{ inputs.cache }}" } }, /setup-go/],
   ];
@@ -111,6 +118,11 @@ test("a restore switched off, or a step that only saves, is accepted", () => {
     { uses: "docker/setup-qemu-action@v3", with: { "cache-image": false } },
     { uses: "oven-sh/setup-bun@v2", with: { "no-cache": true } },
     { uses: "anthropics/claude-code-action@v1", with: { path_to_bun_executable: "${{ steps.bun.outputs.bun-path }}" } },
+    { uses: "gradle/actions/setup-gradle@v4", with: { "cache-disabled": true } },
+    { uses: "astral-sh/setup-uv@v6", with: { "enable-cache": false } },
+    { uses: "actions-rust-lang/setup-rust-toolchain@v1", with: { cache: false } },
+    { uses: "golangci/golangci-lint-action@v8", with: { "skip-cache": true } },
+    { uses: "jdx/mise-action@v2", with: { cache: false } },
     // Pull-request-only values evaluate to off on every trusted event.
     { uses: "actions/setup-node@v4", with: { cache: "${{ github.event_name == 'pull_request' && 'pnpm' || '' }}" } },
     {
