@@ -1861,7 +1861,7 @@ test("agent-implement's reporter keeps its approved condition, ids and shape", s
     keys.length,
     `two report branches share a marker key (${keys.join(", ")}), so one suppresses the other`,
   );
-  assert.ok(keys.length >= 8, `expected a key per report branch, found ${keys.length}`);
+  assert.ok(keys.length >= 9, `expected a key per report branch, found ${keys.length}`);
 });
 
 test("agent-implement's no-PR report finds the acknowledgement under the login that posts it", skipWithout("agent-implement.yml"), async () => {
@@ -1940,6 +1940,8 @@ test("agent-implement's no-PR report names a refused handoff and a run cancelled
   assert.equal(await keyFor({ ...ran, VERDICT: "ok", PUSHED: "failure" }), "handoff");
   assert.equal(await keyFor({ ...ran, VERDICT: "error" }), "handoff");
   assert.equal(await keyFor({ ...ran, VERDICT: "none" }), "agent", "no commits is the agent's outcome, not a refusal");
+  // Pushed, and still no PR: the branch is named as the obstacle it now is.
+  assert.equal(await keyFor({ ...ran, VERDICT: "ok", PUSHED: "success" }), "orphan");
   assert.equal(await keyFor({ STAGED: "", IMPLEMENT_RESULT: "cancelled" }), "cancelled");
   assert.equal(await keyFor({ STAGED: "", IMPLEMENT_RESULT: "skipped" }), "setup");
   // Every value it reads that `finish` did not produce itself is a job
@@ -1947,6 +1949,61 @@ test("agent-implement's no-PR report names a refused handoff and a run cancelled
   for (const l of reporter.lines.filter((x) => /^ {10}[A-Z_]+: \$\{\{/.test(x))) {
     assert.match(l, /\$\{\{ (?:needs\.(?:route|prepare|implement)\.(?:outputs\.[\w-]+|result)|steps\.(?:bundle|push)\.(?:outputs\.verdict|outcome)) \}\}$/, l);
   }
+});
+
+test("agent-implement opens a PR for every branch it pushes, in its own words when the agent wrote none", skipWithout("agent-implement.yml"), (t) => {
+  // A pushed branch with no PR refuses every later run on its issue until a
+  // human deletes it, and whether `pr.md` exists is the agent's choice. So the
+  // step that opens the PR is run here, with `gh` replaced by a recorder, over
+  // a missing description, an empty title, and one with comment markers in it.
+  const open = implJobs(WF("agent-implement.yml")).get("finish").steps.find((s) => s.id === "open-pr");
+  assert.ok(open?.run, "no open-pr step");
+  const root = mkdtempSync(path.join(tmpdir(), "open-pr-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const bin = path.join(root, "bin");
+  mkdirSync(bin);
+  const log = path.join(root, "gh.log");
+  writeFileSync(path.join(bin, "gh"), `#!/bin/sh\nprintf '%s\\n' "$@" >> "${log}"\nprintf -- '--end--\\n' >> "${log}"\nif [ "$1 $2" = "pr create" ]; then echo https://github.com/o/r/pull/42; fi\n`);
+  writeFileSync(path.join(bin, "node"), "#!/bin/sh\nexit 0\n");
+  chmodSync(path.join(bin, "gh"), 0o755);
+  chmodSync(path.join(bin, "node"), 0o755);
+  let n = 0;
+  const run = (prMd) => {
+    const temp = path.join(root, `run-${n++}`);
+    mkdirSync(path.join(temp, "agent-output"), { recursive: true });
+    if (prMd !== null) writeFileSync(path.join(temp, "agent-output", "pr.md"), prMd);
+    writeFileSync(log, "");
+    const out = path.join(temp, "github-output");
+    writeFileSync(out, "");
+    const r = spawnSync("bash", ["-c", open.run], {
+      encoding: "utf8",
+      env: { PATH: `${bin}:${process.env.PATH}`, RUNNER_TEMP: temp, ISSUE: "7", BRANCH: "agent/7-thing", GITHUB_OUTPUT: out, GITHUB_SERVER_URL: "https://github.com", GITHUB_REPOSITORY: "o/r", GITHUB_RUN_ID: "1" },
+    });
+    const calls = readFileSync(log, "utf8").split("--end--\n").filter(Boolean).map((c) => c.split("\n").filter((x) => x !== ""));
+    const create = calls.find((c) => c[0] === "pr" && c[1] === "create") ?? [];
+    const bodyFile = create[create.indexOf("--body-file") + 1];
+    return {
+      status: r.status,
+      create,
+      title: create[create.indexOf("--title") + 1],
+      body: bodyFile && existsSync(bodyFile) ? readFileSync(bodyFile, "utf8") : "",
+      output: readFileSync(out, "utf8"),
+    };
+  };
+  for (const [what, prMd] of [["no description at all", null], ["an empty file", ""], ["an empty title line", "\nbody only\n"]]) {
+    const r = run(prMd);
+    assert.equal(r.status, 0, what);
+    assert.ok(r.create.includes("--draft"), `${what}: the PR must open as a draft`);
+    assert.equal(r.title, "Implement #7", `${what}: the title is the workflow's`);
+    assert.match(r.body, /left no description/, what);
+    assert.match(r.body, /Fixes #7\n$/, what);
+    assert.match(r.output, /^number=42$/m, `${what}: the PR's number is handed on`);
+  }
+  const r = run("Add a thing <!-- agent-review-paged -->\n\nWhy. <!-- agent-implement-no-pr:agent -->\n");
+  assert.equal(r.status, 0);
+  assert.match(r.title, /^Add a thing /);
+  for (const text of [r.title, r.body]) assert.ok(!text.includes("<!--"), `an agent-written marker survived: ${text}`);
+  assert.match(r.body, /Fixes #7\n$/);
 });
 
 // --- agent-implement's trust boundary, run rather than read ---------------------

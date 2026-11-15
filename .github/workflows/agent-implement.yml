@@ -1057,7 +1057,6 @@ jobs:
           # Plain names only, checked again where the name is used.
           [[ "$BRANCH" =~ ^agent/[0-9]+-[A-Za-z0-9._-]+$ ]] || { echo "::warning::refusing an unexpected branch name"; exit 0; }
           PR_FILE="$RUNNER_TEMP/agent-output/pr.md"
-          [ -f "$PR_FILE" ] && [ -s "$PR_FILE" ] || { echo "the agent wrote no PR description; not opening a PR"; exit 0; }
           # NEUTRALISE HTML COMMENTS in the title and the body alike. Both are
           # written by the agent and posted under the App identity, and the
           # pipeline's latches and dedupe markers are trusted BY AUTHOR — so
@@ -1067,13 +1066,29 @@ jobs:
           # an oversized file is cut rather than rejected by the API.
           # Cut by CHARACTER, not byte: `cut -c` counts bytes, and half a
           # multibyte character makes `gh pr create` fail after the push landed.
-          TITLE="$(head -n 1 "$PR_FILE" | sed 's/<!--/<!\xe2\x80\x8c--/g')"
-          TITLE="$(LC_ALL=C.UTF-8 bash -c 'printf "%s" "${1:0:200}"' _ "$TITLE")"
-          [ -n "$TITLE" ] || { echo "the PR description has no title on its first line"; exit 0; }
-          {
-            tail -n +2 "$PR_FILE" | head -c 60000 | sed 's/<!--/<!\xe2\x80\x8c--/g'
-            printf '\n\nFixes #%s\n' "$ISSUE"
-          } > "$RUNNER_TEMP/pr-body.md"
+          TITLE=""
+          if [ -f "$PR_FILE" ] && [ -s "$PR_FILE" ]; then
+            TITLE="$(head -n 1 "$PR_FILE" | sed 's/<!--/<!\xe2\x80\x8c--/g')"
+            TITLE="$(LC_ALL=C.UTF-8 bash -c 'printf "%s" "${1:0:200}"' _ "$TITLE")"
+          fi
+          if [ -n "$TITLE" ]; then
+            {
+              tail -n +2 "$PR_FILE" | head -c 60000 | sed 's/<!--/<!\xe2\x80\x8c--/g'
+              printf '\n\nFixes #%s\n' "$ISSUE"
+            } > "$RUNNER_TEMP/pr-body.md"
+          else
+            # THE BRANCH IS PUSHED WHETHER OR NOT THE AGENT DESCRIBED IT, so the
+            # PR is opened either way: a pushed branch with no PR would refuse
+            # every later run on this issue until someone deleted it. With no
+            # usable description the words are the workflow's own.
+            TITLE="Implement #$ISSUE"
+            {
+              printf '%s\n\n' "The agent left no description for this change, so the workflow wrote this one."
+              printf "Read the change against the issue. The [run](%s) has the agent's transcript in its \`claude-execution-output\` artifact.\n\n" \
+                "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+              printf 'Fixes #%s\n' "$ISSUE"
+            } > "$RUNNER_TEMP/pr-body.md"
+          fi
           # The number from `gh pr create`'s own output — the URL it prints —
           # not a second query that could race or come back empty.
           URL="$(gh pr create --draft --base main --head "$BRANCH" \
@@ -1303,6 +1318,11 @@ jobs:
                 + 'checking out the base, collecting the issue, or finding that another run had already pushed '
                 + `a branch for this issue. See the [run](${runUrl}); there is no agent transcript because `
                 + 'nothing ran. `@claude fix` is worth trying again.';
+            } else if (process.env.PUSHED === 'success') {
+              key = 'orphan';
+              why = `🛑 The agent's commits passed the checks and were pushed to an \`agent/${issue}-…\` branch, but `
+                + `the pull request could not be opened. See the [run](${runUrl}); open a PR from that branch, or `
+                + 'delete it, before commenting `@claude fix` again.';
             } else if (['refused', 'error'].includes(process.env.VERDICT) || process.env.PUSHED === 'failure') {
               key = 'handoff';
               why = '🛑 The agent committed work, but this run did not push it: its commits failed the checks '
