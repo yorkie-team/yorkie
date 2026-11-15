@@ -2666,6 +2666,22 @@ async function implementBoundaryProblems(text) {
     if (!/^ubuntu-[a-z0-9.-]+$/.test(label ?? "")) problems.add(`${j.name} runs on ${label ?? "an unnamed runner"}, not a GitHub-hosted ubuntu-* runner`);
     if (j === implement && head.some((l) => /^ {4}(?:container|services):/.test(l))) problems.add("the agent's job declares a container or services, whose credentials no rule here reads");
   }
+  // No job here restores an Actions cache. The agent can write cache entries
+  // scoped to the default branch (the design doc's residuals), and `prepare`
+  // and `finish` hold the App's key, so a restore in any of these jobs is
+  // input the agent may have written. An action whose name says cache, and a
+  // `cache` input to a setup action, are both refused; `cache: false` is not
+  // a restore. The toolchain action the agent's job uses is a per-repository
+  // file this guard cannot read, and `repo.test.mjs` pins its `cache: false`.
+  for (const j of [prepare, implement, finish, report]) {
+    for (const s of j.steps) {
+      if (/cache/i.test(s.uses ?? "")) problems.add(`${j.name} uses ${s.uses}, which restores a cache`);
+      for (const l of s.lines) {
+        const m = /^ {10}(cache(?:-[\w-]+)?):\s*(.*?)\s*(?:#.*)?$/.exec(l);
+        if (m && !(m[1] === "cache" && /^["']?false["']?$/.test(m[2]))) problems.add(`${j.name} "${s.name ?? s.uses}" sets ${m[1]}: ${m[2]}, which restores a cache`);
+      }
+    }
+  }
   // Every artifact action in the three jobs is pinned to a commit: the agent
   // can write its archive directly, so `finish` relies on the download's own
   // handling of it.
@@ -2847,6 +2863,12 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     prepare_self_hosted: (t) => t.replace(/( {2}prepare:\n(?: {4}.*\n)*? {4}runs-on: )ubuntu-latest/, "$1self-hosted"),
     every_job_self_hosted: (t) => t.replaceAll("runs-on: ubuntu-latest", "runs-on: self-hosted"),
     finish_downloads_everything: ["          name: claude-execution-output\n          path: ${{ runner.temp }}/agent-output\n", "          merge-multiple: true\n          path: ${{ runner.temp }}/agent-output\n"],
+    // a cache restored where the agent may have written it
+    finish_restores_a_cache: [SUMMARY, `          true\n      - uses: actions/cache@v4\n        with:\n          path: scripts/agent/node_modules\n          key: deps\n      - name: x\n        if: always()\n        run: |\n${SUMMARY}`],
+    finish_node_cache: [FINISH_CO, FINISH_CO.replace("        if: always() && needs.prepare.outputs.ready == 'true'\n", "        if: always() && needs.prepare.outputs.ready == 'true'\n        with:\n          cache: npm\n")],
+    prepare_restores_a_cache: ["      - name: Check out the gate (trusted, from the default branch)\n", "      - uses: actions/cache/restore@v4\n        with:\n          path: x\n          key: y\n      - name: Check out the gate (trusted, from the default branch)\n"],
+    implement_rust_cache: ["      - name: Set up the toolchain (the workspace is still main)\n", "      - uses: Swatinem/rust-cache@v2\n      - name: Set up the toolchain (the workspace is still main)\n"],
+    implement_node_cache_path: (t) => t.replace(/( {2}implement:\n(?:.*\n)*? {6}- uses: actions\/setup-node@v4\n {8}with:\n {10}node-version: 22\.x\n)/, "$1          cache-dependency-path: scripts/agent/package-lock.json\n"),
     finish_download_unpinned: ["        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0\n        with:\n          name: claude-execution-output\n", "        uses: actions/download-artifact@v4\n        with:\n          name: claude-execution-output\n"],
     implement_download_unpinned: ["        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0\n        with:\n          name: implement-issue\n", "        uses: actions/download-artifact@v4\n        with:\n          name: implement-issue\n"],
     implement_downloads_everything: ["          name: implement-issue\n          path: ${{ runner.temp }}\n", "          path: ${{ runner.temp }}\n"],
@@ -2892,6 +2914,7 @@ test("agent-implement's trust boundary accepts ordinary edits", skipWithout("age
     agent_wall_shortened: ["        timeout-minutes: 50\n", "        timeout-minutes: 40\n"],
     pack_gets_an_id: ["      - name: Pack the agent's commits (untrusted output)\n", "      - name: Pack the agent's commits (untrusted output)\n        id: pack\n"],
     ready_gets_a_timeout: ["        id: ready\n", "        id: ready\n        timeout-minutes: 1\n"],
+    a_cache_turned_off: (t) => t.replace("      - uses: actions/setup-node@v4\n        if: always() && needs.prepare.outputs.ready == 'true'\n        with:\n          node-version: 22.x\n", "      - uses: actions/setup-node@v4\n        if: always() && needs.prepare.outputs.ready == 'true'\n        with:\n          node-version: 22.x\n          cache: false\n"),
     a_pool_secret_beside_the_agent: ["          github_token: ${{ github.token }}\n", "          github_token: ${{ github.token }}\n          extra: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_3 }}\n"],
   };
   for (const [name, edit] of Object.entries(edits)) {
