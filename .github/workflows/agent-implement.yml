@@ -490,9 +490,13 @@ jobs:
     # The agent's own wall is the `timeout-minutes` on its step below, so that
     # a run that reaches it still hands over what it committed: the steps after
     # the agent run when the STEP times out, and this ceiling leaves them room.
-    # No App token lives in this job any more, so the hour an installation
-    # token lasts no longer bounds it; `finish` mints its own.
-    timeout-minutes: 60
+    # It must also cover the setup BEFORE the agent — a full-history checkout,
+    # `npm ci` and the toolchain, which in some repositories is most of ten
+    # minutes — or the job's own timeout lands during the agent instead. So
+    # twenty minutes over the agent's fifty. No App token lives in this job
+    # any more, so the hour an installation token lasts no longer bounds it;
+    # `finish` mints its own.
+    timeout-minutes: 70
     concurrency:
       group: agent-implement-${{ github.event.issue.number || github.event.inputs.issue_number }}
       # FALSE, matching every other comment-triggered verb here and unlike
@@ -802,7 +806,7 @@ jobs:
       - name: Run Claude Code
         id: agent
         # THE AGENT'S WALL. A step that times out fails, and the steps after it
-        # still run, so what the agent committed is handed over. Ten minutes
+        # still run, so what the agent committed is handed over. Twenty minutes
         # under the job's ceiling, for the setup before it and the handoff
         # after it.
         timeout-minutes: 50

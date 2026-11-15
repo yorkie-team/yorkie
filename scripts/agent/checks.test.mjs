@@ -2311,12 +2311,12 @@ async function implementBoundaryProblems(text) {
 
   // 3. The agent: no status function in its condition (the implicit
   // `success()` is what stops it after any step before it failed), its own
-  // wall inside the job's with room for the handoff, and the handoff runs
-  // after the agent failed or hit that wall.
+  // wall inside the job's with room for the setup before it and the handoff
+  // after it, and the handoff runs after the agent failed or hit that wall.
   if (/\b(?:always|success|failure|cancelled)\s*\(\s*\)/i.test(st[agentAt].if ?? "")) problems.add(`the agent step's condition names a status function: ${st[agentAt].if}`);
   const agentWall = Number(st[agentAt].timeout);
-  if (!Number.isInteger(agentWall) || !(Number(implement.timeout) - agentWall >= 5)) {
-    problems.add(`the agent step's timeout-minutes (${st[agentAt].timeout ?? "unset"}) does not leave the job's (${implement.timeout ?? "unset"}) five minutes for the handoff`);
+  if (!Number.isInteger(agentWall) || !(Number(implement.timeout) - agentWall >= 15)) {
+    problems.add(`the agent step's timeout-minutes (${st[agentAt].timeout ?? "unset"}) does not leave the job's (${implement.timeout ?? "unset"}) fifteen minutes for the setup and the handoff`);
   }
   const handoff = st.slice(agentAt + 1);
   if (!handoff.some((s) => /\bgit bundle create\b/.test(s.run ?? ""))) problems.add("nothing after the agent packs its commits");
@@ -2700,7 +2700,8 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     agent_not_cancelled: [AGENT, `${AGENT}        if: \${{ !cancelled() }}\n`],
     // (d) the agent's wall and the handoff
     agent_no_wall: ["        timeout-minutes: 50\n", ""],
-    agent_wall_at_the_job_wall: ["        timeout-minutes: 50\n", "        timeout-minutes: 58\n"],
+    agent_wall_at_the_job_wall: ["        timeout-minutes: 50\n", "        timeout-minutes: 68\n"],
+    implement_wall_back_to_sixty: (t) => t.replace(/( {2}implement:\n(?: {4}.*\n)*? {4}timeout-minutes: )70/, "$160"),
     pack_only_on_success: [PACK, "      - name: Pack the agent's commits (untrusted output)\n        if: steps.stage.outcome == 'success'\n"],
     upload_only_on_success: [UPLOAD, "      - name: Hand the agent's output to the finish job\n        if: steps.agent.outcome == 'success'\n"],
     // (e) the base

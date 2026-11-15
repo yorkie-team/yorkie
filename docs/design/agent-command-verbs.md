@@ -507,8 +507,8 @@ each one by a mechanism rather than a promise:
   a step after the agent, which the trust model forbids; `checks.test.mjs` fails
   either fixer whose wall reaches the token's hour. `agent-implement.yml`'s agent
   no longer holds that token at all — `finish` mints its own after the agent
-  stops — so its job runs to 60 minutes and the agent's own step stops at 50,
-  leaving room for the handoff after it.
+  stops — so its job runs to 70 minutes and the agent's own step stops at 50,
+  leaving room for the setup before it and the handoff after it.
 - **Trusted authors only:** `OWNER`, `MEMBER`, `COLLABORATOR`, and a
   write-access check on top. An issue body is data, never instructions.
 - **Not ported:** upstream's issue classifier. It labels issues into a category
