@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { slotSuffix, chooseCredential, readPoolState, capacityNote, candidateNames, probeCredentials, classifyProbeFailure, probeEnv } from "./pick-fix-credential.mjs";
+import { slotSuffix, chooseCredential, readPoolState, capacityNote, candidateNames, probeCredentials, classifyProbeFailure, probeEnv, sdkCheck, TRANSIENT, AUTH } from "./pick-fix-credential.mjs";
 import { MAX_SLOTS, TOKEN_ENV } from "./token-pool.mjs";
 
 // --- slotSuffix: the name→suffix map, and the security boundary ---------------
@@ -417,4 +417,113 @@ test("classifyProbeFailure: a transient overload is NOT a refusal — it must no
     assert.equal(classifyProbeFailure(msg), "unknown", msg);
   }
   assert.equal(classifyProbeFailure("429 · You've hit your session limit · resets 3am"), "quota");
+});
+
+// One message per pattern, each matched by THAT pattern alone, so removing or
+// narrowing any one pattern fails a named case rather than passing on a
+// neighbour's match.
+const AUTH_SAMPLES = [
+  "401", "403 Forbidden", "unauthorized", "authentication_error", "invalid api key",
+  "expired token", "not authenticated", "permission denied", "not logged in",
+  "PLEASE RUN /LOGIN", "see /login",
+];
+const TRANSIENT_SAMPLES = ["rate limit exceeded", "429", "Overloaded", "quota exceeded", "at capacity", "too many requests"];
+
+function soleMatches(samples, list, name) {
+  for (const re of list) {
+    const only = samples.filter((s) => list.filter((r) => r.test(s)).length === 1 && re.test(s));
+    assert.ok(only.length > 0, `${name} pattern ${re} has no sample that only it matches`);
+  }
+}
+
+test("classifyProbeFailure: every auth pattern, alone, is a refusal", () => {
+  soleMatches(AUTH_SAMPLES, AUTH, "AUTH");
+  for (const msg of AUTH_SAMPLES) assert.equal(classifyProbeFailure(msg), "auth", msg);
+  // The three the pre-arm check knew and this probe did not: an SDK that says
+  // "not authenticated" or "permission denied", or points at `/login` without
+  // the "please run" the older pattern needed.
+  for (const msg of ["Error: not authenticated", "Permission denied for this credential", "Run /login to sign in"]) {
+    assert.equal(classifyProbeFailure(msg), "auth", msg);
+  }
+});
+
+test("classifyProbeFailure: a transient signal wins over auth words — a rate-limit blip must not latch a PR", () => {
+  soleMatches(TRANSIENT_SAMPLES, TRANSIENT, "TRANSIENT");
+  // The case that latched: a 429 whose text also says "unauthorized".
+  assert.equal(classifyProbeFailure("429 rate limited: unauthorized burst"), "unknown");
+  for (const t of TRANSIENT_SAMPLES) {
+    assert.equal(classifyProbeFailure(t), "unknown", t);
+    for (const a of AUTH_SAMPLES) {
+      assert.equal(classifyProbeFailure(`${t}: ${a}`), "unknown", `${t}: ${a}`);
+      assert.equal(classifyProbeFailure(`${a}: ${t}`), "unknown", `${a}: ${t}`);
+    }
+  }
+  // A closed usage window still outranks both: it stays closed until it resets.
+  assert.equal(classifyProbeFailure("429 unauthorized · You've hit your session limit"), "quota");
+});
+
+test("classifyProbeFailure: the runner's own faults in the stderr tail are not a refusal", () => {
+  // The SDK's exit error carries the CLI's stderr tail, so a filesystem error
+  // or a URL on the runner reaches the classifier. Read as auth, one passing
+  // fault would refuse every slot and page the PR.
+  const exit = (tail) => `Claude Code process exited with code 1. stderr: ${tail}`;
+  for (const msg of [
+    exit("Error: EACCES: permission denied, mkdir '/tmp/probe-abc/.claude'"),
+    exit("Error: EPERM: permission denied, open '/tmp/probe-abc/.claude.json'"),
+    exit("sh: /usr/local/bin/claude: Permission denied"),
+    exit("mkdir: cannot create directory '/tmp/x': Permission denied"),
+    exit("fetch failed: GET https://console.example.com/oauth/login (ECONNRESET)"),
+    exit("500 Internal server error; see https://status.example.com/login"),
+    exit("    at Object.<anonymous> (/app/login.js:12:5)"),
+    exit("    at run (/login.mjs:3:1)"),
+    exit("GET /login/callback failed"),
+  ]) {
+    assert.equal(classifyProbeFailure(msg), "unknown", msg);
+  }
+  // The same words still refuse when they are about the credential.
+  for (const msg of [
+    exit("Not logged in · Please run /login"),
+    exit("You must sign in first. Run /login."),
+    exit("Error: permission denied for this token"),
+    "error 0 Permission denied: the credential lacks access",
+  ]) {
+    assert.equal(classifyProbeFailure(msg), "auth", msg);
+  }
+});
+
+test("classifyProbeFailure: no message is not a refusal", () => {
+  for (const msg of [null, undefined, {}, "", "socket hang up", "timeout"]) {
+    assert.equal(classifyProbeFailure(msg), "unknown", String(msg));
+  }
+});
+
+test("TRANSIENT and AUTH are exported, pattern for pattern", () => {
+  // Pinned exactly: an adopter that keeps its own copy (wafflebase's pre-arm
+  // check) compares against these lists, so any change here is a behaviour
+  // change for it and should be made on purpose.
+  const key = (list) => list.map((re) => `${re.source}/${re.flags}`);
+  assert.deepEqual(key(TRANSIENT), [
+    "rate[ _-]?limit/i", "\\b429\\b/", "overloaded/i", "quota/i", "capacity/i", "too many requests/i",
+  ]);
+  assert.deepEqual(key(AUTH), [
+    "\\b401\\b/", "\\b403\\b/", "unauthorized/i", "authentication[ _-]?(error|failed)/i",
+    "invalid[ _-]?(api[ _-]?key|token|credential)/i", "expired[ _-]?(token|credential)/i",
+    "not[ _-]?authenticated/i", "(?<!(?:E(?:ACCES|PERM)|\\/[^\\s:]*): )permission[ _-]?denied/i",
+    "not[ _-]?logged[ _-]?in/i", "please run \\/login/i", "(?<![\\w./-])\\/login(?![\\w/-]|\\.\\w)/",
+  ]);
+});
+
+test("sdkCheck: an exit after a result message keeps the result's words", async () => {
+  // The CLI can send an error result and then exit non-zero; the SDK then
+  // throws an exit error that carries only the stderr tail. Classifying that
+  // alone loses the 401 the session reported.
+  const exitErr = () => new Error("Claude Code process exited with code 1. stderr: EACCES: permission denied, mkdir '/tmp/x'");
+  const thenExit = (result) => async function* () {
+    if (result) yield result;
+    throw exitErr();
+  };
+  const refused = { type: "result", subtype: "error_during_execution", is_error: true, api_error_status: 401, result: "authentication_error" };
+  assert.deepEqual(await sdkCheck(thenExit(refused), "m", "t", 5_000), { ok: false, kind: "auth" });
+  // No result message: the exit error alone, and a filesystem fault is no refusal.
+  assert.deepEqual(await sdkCheck(thenExit(null), "m", "t", 5_000), { ok: false, kind: "unknown" });
 });
