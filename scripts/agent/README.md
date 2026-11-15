@@ -801,14 +801,14 @@ What it refuses in such a job, and what turns each off:
 | Step | Restores unless |
 |---|---|
 | `actions/cache`, `actions/cache/restore` | `lookup-only: true` |
-| `actions/setup-go` v4 and later, or a commit pin | `cache: false` |
+| `actions/setup-go`, at any version | `cache: false` |
 | `actions/setup-node` with `cache:` | the input is dropped |
-| `actions/setup-node` v5 and later, or a commit pin | `package-manager-cache: false` |
+| `actions/setup-node` at any ref but a tag below v5 | `package-manager-cache: false` |
 | any other `actions/setup-*` with `cache:` | the input is dropped |
 | `ruby/setup-ruby` | no `bundler-cache:` |
 | `pnpm/action-setup` | no `cache:` |
 | `Swatinem/rust-cache` | `lookup-only: true` |
-| `cache-from` naming `type=gha`, in any input or in a `run:` line | it is removed |
+| `cache-from` naming `type=gha`, or taking a variable or an expression, in any input or in a `run:` line (backslash continuations joined) | it is removed or spelled out |
 | `mozilla-actions/sccache-action` with `SCCACHE_GHA_ENABLED` set anywhere | the variable is removed |
 | `docker/setup-buildx-action` | `cache-binary: false` |
 | `docker/setup-qemu-action` | `cache-image: false` |
@@ -818,9 +818,10 @@ What it refuses in such a job, and what turns each off:
 An input set to an expression counts as on, except one that is off on every
 trusted event: a pull-request-only condition, or such a condition choosing a
 value with an `''` or `false` fallback
-(`${{ github.event_name == 'pull_request' && 'pnpm' || '' }}`). A commit-pinned
-action is read at the major version its trailing `# vN` comment names, and
-at the newest behaviour when it has none.
+(`${{ github.event_name == 'pull_request' && 'pnpm' || '' }}`). A version is
+read only from a tag (`@v4`, `@v4.4.0`). A commit pin's `# vN` comment is not
+checked against the commit, so a commit-pinned action is read at its newest
+behaviour.
 
 Saving is not refused: `actions/cache/save` and `cache-to` write entries,
 they do not run them.

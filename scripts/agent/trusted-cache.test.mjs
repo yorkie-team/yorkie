@@ -51,6 +51,8 @@ test("every way of restoring a cache is refused in a trusted job with a write to
     [SETUP_GO, /setup-go .*cache: false/],
     [{ uses: `actions/setup-go@${SHA}`, with: { "go-version": "1.26" } }, /setup-go/],
     [{ uses: "actions/setup-go@v3", with: { cache: true } }, /setup-go/],
+    // Off by default before v4, but the switch is required at every version.
+    [{ uses: "actions/setup-go@v3", with: { "go-version": "1.20" } }, /setup-go/],
     [{ uses: "actions/setup-node@v4", with: { cache: "pnpm" } }, /setup-node restores/],
     [{ uses: "actions/setup-node@v5", with: { "node-version": "22" } }, /package-manager-cache: false/],
     [{ uses: "actions/setup-python@v5", with: { cache: "pip" } }, /setup-python restores/],
@@ -61,7 +63,10 @@ test("every way of restoring a cache is refused in a trusted job with a write to
     [{ uses: "docker/build-push-action@v6", with: { "cache-from": "type=gha" } }, /type=gha/],
     [{ uses: "docker/build-push-action@v6", with: { "cache-from": "type=registry,ref=r\ntype=gha,scope=a\n" } }, /type=gha/],
     [{ uses: "docker/bake-action@v5", with: { set: "*.cache-from=type=gha\n*.cache-to=type=gha" } }, /type=gha/],
-    [{ run: "docker buildx build --cache-from type=gha --push ." }, /--cache-from type=gha/],
+    [{ run: "docker buildx build --cache-from type=gha --push ." }, /--cache-from/],
+    [{ run: "docker buildx build \\\n  --cache-from \\\n  type=gha \\\n  ." }, /--cache-from/],
+    [{ run: 'docker buildx build --cache-from "$CACHE_FROM" .' }, /--cache-from/],
+    [{ uses: "docker/build-push-action@v6", with: { "cache-from": "${{ env.CACHE_FROM }}" } }, /may read/],
     [{ uses: "docker/setup-buildx-action@v3" }, /cache-binary: false/],
     [{ uses: "docker/setup-qemu-action@v3" }, /cache-image: false/],
     [{ uses: "oven-sh/setup-bun@v2", with: { "bun-version": "1.3.14" } }, /no-cache: true/],
@@ -94,7 +99,6 @@ test("a restore switched off, or a step that only saves, is accepted", () => {
   const off = [
     { ...SETUP_GO, with: { ...SETUP_GO.with, cache: false } },
     { ...SETUP_GO, with: { ...SETUP_GO.with, cache: "false" } },
-    { uses: "actions/setup-go@v3", with: { "go-version": "1.20" } }, // off by default before v4
     { uses: "actions/setup-node@v4", with: { "node-version": "22" } },
     { uses: "actions/setup-node@v5", with: { "package-manager-cache": false } },
     { uses: "actions/setup-python@v5", with: { "python-version": "3.12" } },
@@ -102,6 +106,7 @@ test("a restore switched off, or a step that only saves, is accepted", () => {
     { uses: "actions/cache@v4", with: { path: "x", key: "k", "lookup-only": true } },
     { uses: "actions/cache/save@v4", with: { path: "x", key: "k" } },
     { uses: "docker/build-push-action@v6", with: { "cache-to": "type=gha,mode=max" } },
+    { run: "docker buildx build --cache-from type=registry,ref=$IMAGE ." },
     { uses: "docker/setup-buildx-action@v3", with: { "cache-binary": false } },
     { uses: "docker/setup-qemu-action@v3", with: { "cache-image": false } },
     { uses: "oven-sh/setup-bun@v2", with: { "no-cache": true } },
@@ -116,7 +121,8 @@ test("a restore switched off, or a step that only saves, is accepted", () => {
   ];
   for (const step of off) assert.deepEqual(oneStep(step), [], JSON.stringify(step));
 
-  // A commit pin is read at the version its trailing comment names.
+  // A commit pin's `# vN` comment is not checked against the commit, so it
+  // proves nothing: only a tag below v5 exempts setup-node from the switch.
   const pinned = (comment) =>
     check({
       ".github/workflows/w.yml": [
@@ -128,8 +134,7 @@ test("a restore switched off, or a step that only saves, is accepted", () => {
         `      - uses: actions/setup-node@${SHA}${comment}`,
       ].join("\n"),
     });
-  assert.deepEqual(pinned(" # v4.4.0"), []);
-  assert.equal(pinned(" # v5.0.0").length, 1);
+  assert.equal(pinned(" # v4.4.0").length, 1);
   assert.equal(pinned("").length, 1, "an unknown version is read as one that caches");
 });
 

@@ -172,53 +172,49 @@ function splitUses(uses) {
 }
 
 /**
- * The major version a commit-pinned `uses:` names in its trailing comment
- * (`uses: actions/setup-node@<sha> # v4.4.0`), per `uses:` string in a file's
- * text. The parsed YAML drops comments, so they are read from the text.
+ * Whether text names a `cache-from` that is, or may be, the Actions cache:
+ * `type=gha` on the same logical line (backslash continuations joined), or a
+ * value taken from a variable or an expression, which may hold it.
  */
-export function commentedMajors(text) {
-  const out = new Map();
-  for (const m of String(text).matchAll(/\buses:\s*["']?([^\s"'#]+@[0-9a-f]{40})["']?\s+#\s*v(\d+)\b/gi)) {
-    out.set(m[1], Number(m[2]));
-  }
-  return out;
-}
-
 const GHA_CACHE_FROM = (text) =>
-  typeof text === "string" && text.split("\n").some((line) => /cache-from/.test(line) && /type=gha\b/.test(line));
+  typeof text === "string" &&
+  text
+    .replace(/\\\r?\n/g, " ")
+    .split("\n")
+    .some((line) => /cache-from/.test(line) && (/type=gha\b/.test(line) || /cache-from[=:\s"']+\$/.test(line)));
 
 /**
  * Why a single step restores an Actions cache, or null. `sccacheGha` is true
  * when sccache's Actions-cache backend is switched on for the job.
  */
-export function stepRestoresCache(step, { sccacheGha = false, majors = new Map() } = {}) {
+export function stepRestoresCache(step, { sccacheGha = false } = {}) {
   const w = step.with ?? {};
   if (typeof step.run === "string" && GHA_CACHE_FROM(step.run)) {
-    return "runs a build with `--cache-from type=gha`";
+    return "runs a build with `--cache-from` reading, or able to read, `type=gha`";
   }
   if (typeof step.uses !== "string") return null;
-  const { name, major: tagged } = splitUses(step.uses);
-  const major = tagged ?? majors.get(step.uses);
+  // Only a version tag counts. A commit pin's `# vN` comment is not checked
+  // against the commit, so it proves nothing.
+  const { name, major } = splitUses(step.uses);
   if (name.startsWith("./") || name.startsWith("docker://")) return null;
   for (const [k, v] of Object.entries(w)) {
-    if ((k === "cache-from" && typeof v === "string" && /type=gha\b/.test(v)) || (k !== "cache-from" && GHA_CACHE_FROM(v))) {
-      return `\`${k}\` reads the Actions cache (\`type=gha\`)`;
+    if ((k === "cache-from" && typeof v === "string" && /type=gha\b|\$\{\{/.test(v)) || (k !== "cache-from" && GHA_CACHE_FROM(v))) {
+      return `\`${k}\` reads, or may read, the Actions cache (\`type=gha\`)`;
     }
   }
   if (name === "actions/cache" || name === "actions/cache/restore") {
     return isTrue(w["lookup-only"]) ? null : `${name} restores an entry`;
   }
   if (name === "actions/setup-go") {
-    // Default on since v4. An unparsed ref (a commit SHA) is treated as on.
-    const defaultOn = major === undefined || major >= 4;
-    if (isFalse(w.cache)) return null;
-    if (w.cache === undefined && !defaultOn) return null;
-    return "actions/setup-go restores the module and build cache unless `cache: false`";
+    // Default on since v4. The switch is required at every version: it is
+    // harmless before v4, and a ref can be bumped without anyone looking here.
+    return isFalse(w.cache) ? null : "actions/setup-go restores the module and build cache unless `cache: false`";
   }
   if (name === "actions/setup-node") {
     if (isSet(w.cache)) return "actions/setup-node restores the package manager cache (`cache:`)";
     // v5 and later cache on their own when package.json names a packageManager.
-    const auto = major === undefined || major >= 5;
+    // Only a tag below v5 shows the step predates that.
+    const auto = !(major !== undefined && major < 5);
     if (auto && !isFalse(w["package-manager-cache"])) {
       return "actions/setup-node v5+ caches automatically unless `package-manager-cache: false`";
     }
@@ -274,12 +270,10 @@ function sccacheGhaEnabled(...scopes) {
 export function checkWorkflows({ workflowPaths, readText, parse }) {
   const findings = [];
   const docs = new Map();
-  const majorsOf = new Map();
   const load = (rel) => {
     if (!docs.has(rel)) {
       const text = readText(rel);
       docs.set(rel, text === null ? null : parse(text) ?? {});
-      majorsOf.set(rel, commentedMajors(text ?? ""));
     }
     return docs.get(rel);
   };
@@ -329,13 +323,13 @@ export function checkWorkflows({ workflowPaths, readText, parse }) {
     }
   }
 
-  const scanSteps = (steps, file, where, scc, seen) => {
+  const scanSteps = (steps, where, scc, seen) => {
     for (const [i, step] of (steps ?? []).entries()) {
       if (!step || typeof step !== "object") continue;
       if (onlyOnPullRequest(step.if)) continue;
       const label = `${where} › step ${JSON.stringify(step.name ?? step.uses ?? step.id ?? `#${i + 1}`)}`;
       const sccache = scc || sccacheGhaEnabled(step.env);
-      const why = stepRestoresCache(step, { sccacheGha: sccache, majors: majorsOf.get(file) });
+      const why = stepRestoresCache(step, { sccacheGha: sccache });
       if (why) findings.push(`${label}: ${why}`);
       if (typeof step.uses === "string" && step.uses.startsWith("./") && !step.uses.endsWith(".yml") && !step.uses.endsWith(".yaml")) {
         const actionFile = resolveAction(step.uses);
@@ -346,7 +340,7 @@ export function checkWorkflows({ workflowPaths, readText, parse }) {
         if (seen.has(actionFile)) continue;
         const action = load(actionFile);
         if (action?.runs?.using === "composite") {
-          scanSteps(action.runs.steps, actionFile, `${label} → ${actionFile}`, sccache, new Set([...seen, actionFile]));
+          scanSteps(action.runs.steps, `${label} → ${actionFile}`, sccache, new Set([...seen, actionFile]));
         }
       }
     }
@@ -390,7 +384,7 @@ export function checkWorkflows({ workflowPaths, readText, parse }) {
       if (!writes && secrets.length === 0) continue;
       const scc = sccacheGhaEnabled(wf.env, job.env) ||
         (job.steps ?? []).some((s) => typeof s?.run === "string" && /SCCACHE_GHA_ENABLED=(?!false\b)/.test(s.run));
-      scanSteps(job.steps, rel, where, scc, new Set());
+      scanSteps(job.steps, where, scc, new Set());
     }
   };
 
