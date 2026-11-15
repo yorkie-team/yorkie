@@ -45,7 +45,11 @@ const ENV = { ...repoScopedEnv(tmpdir()), ...FIXED };
  */
 function world(t) {
   const root = mkdtempSync(path.join(tmpdir(), "bundle-handoff-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  // Retried: when git refuses a fetch it can exit before the `index-pack` it
+  // started has finished writing, and a removal that races that writer fails
+  // with ENOTEMPTY (seen on hosted runners). The verdict is already taken by
+  // then; only the cleanup has to wait.
+  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }));
   const up = path.join(root, "up");
   run(root, "init", "-q", "-b", "main", up);
   run(up, "commit", "-q", "--allow-empty", "-m", "c0");
