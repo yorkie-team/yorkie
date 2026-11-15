@@ -2603,6 +2603,14 @@ async function implementBoundaryProblems(text) {
     if (!/^ubuntu-[a-z0-9.-]+$/.test(label ?? "")) problems.add(`${j.name} runs on ${label ?? "an unnamed runner"}, not a GitHub-hosted ubuntu-* runner`);
     if (j === implement && head.some((l) => /^ {4}(?:container|services):/.test(l))) problems.add("the agent's job declares a container or services, whose credentials no rule here reads");
   }
+  // Every artifact action in the three jobs is pinned to a commit: the agent
+  // can write its archive directly, so `finish` relies on the download's own
+  // handling of it.
+  for (const j of [prepare, implement, finish]) {
+    for (const s of j.steps.filter((x) => /^actions\/(?:upload|download)-artifact@/.test(x.uses ?? ""))) {
+      if (!/@[0-9a-f]{40}$/.test(s.uses)) problems.add(`${j.name} uses ${s.uses}, not pinned to a commit`);
+    }
+  }
   // Artifacts by name, each exactly the one the job before uploaded.
   const uploads = (j) => j.steps.filter((s) => /^actions\/upload-artifact@/.test(s.uses ?? "")).map((s) => ({ s, name: implKey(s.lines, 10, "name"), path: implKey(s.lines, 10, "path") }));
   const downloads = (j) => j.steps.filter((s) => /^actions\/download-artifact@/.test(s.uses ?? "")).map((s) => ({ s, name: implKey(s.lines, 10, "name") }));
@@ -2761,6 +2769,8 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     prepare_self_hosted: (t) => t.replace(/( {2}prepare:\n(?: {4}.*\n)*? {4}runs-on: )ubuntu-latest/, "$1self-hosted"),
     every_job_self_hosted: (t) => t.replaceAll("runs-on: ubuntu-latest", "runs-on: self-hosted"),
     finish_downloads_everything: ["          name: claude-execution-output\n          path: ${{ runner.temp }}/agent-output\n", "          merge-multiple: true\n          path: ${{ runner.temp }}/agent-output\n"],
+    finish_download_unpinned: ["        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0\n        with:\n          name: claude-execution-output\n", "        uses: actions/download-artifact@v4\n        with:\n          name: claude-execution-output\n"],
+    implement_download_unpinned: ["        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0\n        with:\n          name: implement-issue\n", "        uses: actions/download-artifact@v4\n        with:\n          name: implement-issue\n"],
     implement_downloads_everything: ["          name: implement-issue\n          path: ${{ runner.temp }}\n", "          path: ${{ runner.temp }}\n"],
     implement_container_credentials: ["    environment: agent\n", "    environment: agent\n    container:\n      image: node:22\n      credentials:\n        username: x\n        password: ${{ github.token }}\n"],
     implement_services: ["    environment: agent\n", "    environment: agent\n    services:\n      db:\n        image: mongo:8\n"],
@@ -3300,7 +3310,7 @@ test("each trusted job downloads exactly the artifact its agent job uploaded", (
     return wf.slice(at, next ? at + 1 + next.index : wf.length);
   };
   const names = (text, action) => [...text.matchAll(
-    new RegExp(`uses: actions/${action}@v\\d+\\n(?: {8}.*\\n)*? {10}name: (\\S+)`, "g"),
+    new RegExp(`uses: actions/${action}@(?:v\\d+|[0-9a-f]{40} # v[\\d.]+)\\n(?: {8}.*\\n)*? {10}name: (\\S+)`, "g"),
   )].map((m) => m[1]);
   for (const [file, [agentJob, trustedJob]] of Object.entries(JOBS)) {
     const wf = readFileSync(path.join(dir, file), "utf8");

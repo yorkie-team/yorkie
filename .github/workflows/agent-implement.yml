@@ -461,7 +461,7 @@ jobs:
 
       - name: Hand the issue text to the implement job
         if: steps.app.outputs.configured == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: implement-issue
           path: ${{ runner.temp }}/issue.md
@@ -607,7 +607,7 @@ jobs:
 
       # The issue as `prepare` fetched it: data, in a file the prompt names.
       - name: Collect the issue text
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: implement-issue
           path: ${{ runner.temp }}
@@ -861,7 +861,7 @@ jobs:
       # Only DATA crosses: the transcript, the PR description and the bundle.
       - name: Hand the agent's output to the finish job
         if: always() && steps.stage.outcome == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: claude-execution-output
           path: |
@@ -947,11 +947,14 @@ jobs:
           node-version: 22.x
 
       # INTO THE RUNNER'S TEMP DIRECTORY, never the workspace: a file in the
-      # artifact must not be able to land where `main`'s scripts are.
+      # artifact must not be able to land where `main`'s scripts are. And
+      # PINNED TO A COMMIT, like every artifact action in this file: the agent
+      # can write this archive itself, so keeping its entries inside that
+      # directory is this action's job, and its code must not move under us.
       - name: Collect the agent's output (untrusted data)
         if: always() && needs.prepare.outputs.ready == 'true'
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: claude-execution-output
           path: ${{ runner.temp }}/agent-output
