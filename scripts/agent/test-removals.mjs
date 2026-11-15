@@ -233,7 +233,11 @@ function goTestInReach(file) {
 }
 
 /**
- * A file the runners pick up by NAME (`*_test.go` in reach of `go test` on CI; `*.test.*`, `*.spec.*`, `*_test.*` in JS), wherever it lives.
+ * A file the runners pick up by NAME (`*_test.go` in reach of `go test` on CI;
+ * `*.test.*`, `*.spec.*`, `*_test.*` in JS, and the two a runner config adds
+ * in an adopter: Nest's `*.e2e-spec.*` and `*.integration.*`), wherever it
+ * lives. Kept to named suffixes, not any `-test`/`-spec`: through `isTestFile`
+ * this also decides what a scoped fix may touch.
  * With the cargo rules, a Rust file is one only as an integration-test
  * target. A unit-test file has no such name: it is compiled because a `mod`
  * line reaches it, and renaming it without that line does not build.
@@ -242,7 +246,7 @@ export function isRunnableTest(file) {
   const f = str(file);
   if (GO_RULES && /_test\.go$/.test(f)) return goTestInReach(f);
   if (isRust(f)) return !CARGO_BUILD_SCRIPT.test(f) && CARGO_TARGETS.some((re) => re.test(f));
-  return JS_RULES && /[._](test|spec)\.[cm]?[jt]sx?$/.test(f);
+  return JS_RULES && /(?:[._](?:test|spec)|\.e2e-spec|\.integration)\.[cm]?[jt]sx?$/.test(f);
 }
 
 const isGo = (file) => GO_RULES && /\.go$/.test(str(file));

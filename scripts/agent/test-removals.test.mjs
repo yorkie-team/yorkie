@@ -125,6 +125,27 @@ test("testRemovals: a rename out of the test tree is a deletion of the old file"
   ]);
 });
 
+test("testRemovals: renaming a runner-config suffix suite out of its name is a deletion", () => {
+  // Nest's e2e suites and `*.integration.*` suites are run by name through a
+  // runner config. Renamed to something no runner picks up, they stop running.
+  const got = testRemovals([
+    { filename: "packages/backend/test/auth.e2e-spec.ts.off", previous_filename: "packages/backend/test/auth.e2e-spec.ts", status: "renamed", patch: "" },
+    { filename: "packages/app/tests/store.integration.ts.off", previous_filename: "packages/app/tests/store.integration.ts", status: "renamed", patch: "" },
+  ]);
+  assert.deepEqual(got.map((r) => [r.file, r.deleted]), [
+    ["packages/backend/test/auth.e2e-spec.ts", true],
+    ["packages/app/tests/store.integration.ts", true],
+  ]);
+  // Not a test by name: an ordinary module whose name merely contains the word,
+  // or a hyphenated suffix no runner config here names.
+  assert.deepEqual(testRemovals([
+    { filename: "packages/app/src/x-test.ts.off", previous_filename: "packages/app/src/x-test.ts", status: "renamed", patch: "" },
+    { filename: "packages/app/src/view-spec.ts.off", previous_filename: "packages/app/src/view-spec.ts", status: "renamed", patch: "" },
+    { filename: "packages/app/src/attest.ts.off", previous_filename: "packages/app/src/attest.ts", status: "renamed", patch: "" },
+    { filename: "packages/app/src/integration.ts.off", previous_filename: "packages/app/src/integration.ts", status: "renamed", patch: "" },
+  ]), []);
+});
+
 test("testRemovals: a test file whose diff GitHub would not show is unreadable, not clean", () => {
   const got = testRemovals([{ filename: "packages/sdk/test/unit/big_test.ts", status: "modified" }]);
   assert.deepEqual(got, [{ file: "packages/sdk/test/unit/big_test.ts", deleted: false, removed: 0, added: 0, suitesOff: 0, unreadable: true }]);
