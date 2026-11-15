@@ -95,16 +95,23 @@ export function gitEnv({ remote, token } = {}) {
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_TERMINAL_PROMPT: "0",
-    GIT_CONFIG_COUNT: "1",
+    // No background maintenance: from git 2.47 a fetch starts `maintenance
+    // run --auto` DETACHED, which keeps writing into the object store after
+    // the call returns and races whatever reads or removes it next.
+    GIT_CONFIG_COUNT: "3",
     GIT_CONFIG_KEY_0: "core.hooksPath",
     GIT_CONFIG_VALUE_0: "/dev/null",
+    GIT_CONFIG_KEY_1: "maintenance.auto",
+    GIT_CONFIG_VALUE_1: "false",
+    GIT_CONFIG_KEY_2: "gc.auto",
+    GIT_CONFIG_VALUE_2: "0",
   };
   if (token && remote && /^https:\/\//.test(remote)) {
     const origin = `${new URL(remote).origin}/`;
     const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
-    env.GIT_CONFIG_COUNT = "2";
-    env.GIT_CONFIG_KEY_1 = `http.${origin}.extraheader`;
-    env.GIT_CONFIG_VALUE_1 = `AUTHORIZATION: basic ${basic}`;
+    env.GIT_CONFIG_COUNT = "4";
+    env.GIT_CONFIG_KEY_3 = `http.${origin}.extraheader`;
+    env.GIT_CONFIG_VALUE_3 = `AUTHORIZATION: basic ${basic}`;
   }
   return env;
 }
