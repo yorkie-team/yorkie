@@ -285,7 +285,7 @@ brackets is then left out whole.
 | `todoTrackingLine` | sentences, optional | issue-to-PR: "The todo starts with a `**Created**: YYYY-MM-DD` line.[ `<todoTrackingLine>`]" | empty |
 | `implementVerifyStep` | sentences | issue-to-PR, the whole of step 5: "5. `<implementVerifyStep>`". Say what to run, what not to run, and that CI runs the rest | LET CI VERIFY — do NOT run `make test`, `make test-complex`, `make bench` or `make coverage`: … |
 | `replyVerifyInstruction` | fragment, optional | review-reply: "Act on it if it is right: edit the branch,[ `<replyVerifyInstruction>`,] commit with the trailer…" | empty |
-| `toolchainSteps` | fragment | the issue-to-PR job's report: "This run stopped after setup and before the agent started — `<toolchainSteps>`, fetching the issue, or revoking the pre-agent token." | the Go toolchain, the linter install |
+| `toolchainSteps` | fragment | the issue-to-PR job's report: "This run stopped after setup and before the agent started — `<toolchainSteps>`, checking out the base, collecting the issue, installing Bun for the agent, or finding that another run had already pushed a branch for this issue." | the Go toolchain, the linter install |
 | `lastResortDiagnosis` | sentences | CI-fix, when nothing could be read: "No failed-step log could be read for run N. `<lastResortDiagnosis>`" | Re-run the failing lane locally: `make verify` (…), then `make build`. |
 
 The three issue-to-PR values may use that prompt's own placeholders, which
@@ -401,14 +401,32 @@ repository that adopts the harness follows them:
 
 - The default branch is `main`. Workflows check trusted code out with
   `ref: main`, and the scripts' base-branch arguments default to it.
-- The issue-to-PR job's own token holds `contents: read` and nothing else,
-  which reads `main` in a private repository as well as a public one. It is
-  read-only because the agent runs in that job and the token reaches it.
-  Every write there goes through an App token; the two comments that must
-  not depend on the App (the "App is not configured" reply and the no-PR
-  report) are posted by its `finish` job, which runs only for a commenter
-  the write-access check admitted. The pre-agent App token is revoked before
-  the agent starts, and if the revocation fails the agent does not start.
+- The issue-to-PR verb runs in three jobs, and its agent's job holds no
+  credential that writes to the repository. (Every job is still given a
+  runtime token for the Actions cache and its run's artifacts, which
+  `permissions:` does not govern; the design doc's residuals say what that
+  leaves open.) `prepare` makes every App call before the agent (the
+  write-access check, the protection gate, the duplicate-branch pre-flight,
+  the "On it" reply, the issue text) and records the base commit. `implement`
+  runs the agent with the Claude credentials, each named, and a token that
+  holds `contents: read` and nothing else, which reads `main` in a private
+  repository as well as a public one; no App secret is referenced there,
+  because a runner is sent every secret its job references and the agent has
+  that runner. The agent commits and does not push. `finish` checks those
+  commits (`bundle-handoff.mjs`, below), pushes them with an App token it
+  mints only after they pass, and opens the draft PR. It is `!cancelled()`,
+  so a maintainer's Cancel stops the push: a step's own `cancelled()` sees
+  only its job's cancellation, never the run's. `report` posts the two
+  comments that must not depend on the App (the "App is not configured" reply
+  and the no-PR report), and is `always()`, so they survive a cancelled run.
+  Both run only for a commenter the write-access check admitted.
+- The issue-to-PR agent hands over ONE branch, `agent/<issue>-<slug>`, built
+  on the commit it was given. `bundle-handoff.mjs` refuses the whole branch,
+  and nothing is pushed, if there is more than one, if any commit does not
+  descend from that base, if the bundle is over 32 MiB or the branch over 100
+  commits, or if any commit changes `.github/workflows` — a deletion
+  included. Its own step stops at 50 minutes, and what it committed by then
+  is still handed over.
 - `agent-scripts.yml` triggers on the harness's own paths and weekly. It
   cannot trigger on a repository's lane files (a `paths:` filter is not
   configurable), so drift between the toolchain action — and anything it
@@ -729,6 +747,35 @@ issues on a clock, with nobody watching:
 Adding a step to that workflow therefore means editing the list in the
 guard, in the same pull request, where a reviewer sees both.
 
+### The issue-to-PR boundary
+
+`checks.test.mjs` holds `agent-implement.yml` to its layout by reading what
+each job is sent and by running the jobs' step conditions, not by matching
+their text:
+
+- every secret a job references is read out of its `${{ }}` expressions, the
+  workflow's own `env:` included: the agent's job may name the Claude pool
+  credentials and nothing else, no job may look a secret up by a computed
+  name or read the whole context, and the App's private key appears only in
+  the steps that mint with it;
+- the agent's job token is exactly `contents: read`, the agent is handed that
+  token, and nothing in that job mints or uses an App token;
+- with every step of `prepare` failing in turn, on both entry points, with
+  and without the App — and, where the agent's job starts, every step of it,
+  and inside `finish` every step of that — the agent never starts past a
+  failed gate, `finish` and `report` run exactly for an admitted commenter,
+  the push happens only after verification passed, with its token minted
+  after that, and never on a run cancelled at any point or with the pipeline
+  switched off, while the report still runs;
+- the base `finish` verifies against comes from `prepare`, and `finish`
+  downloads the agent's output outside the workspace, runs no git itself and
+  no command from that output.
+
+`bundle-handoff.test.mjs` builds real bundles, most of them hostile, and runs
+the checks against them. Each named loosening of the workflow is a mutation
+the guard must refuse, and a handful of ordinary edits are mutations it must
+accept.
+
 ### What this guard does not see
 
 It reads workflow text for the shapes the workflows use today. It exists to
@@ -747,6 +794,10 @@ around it, and these pass it:
   `"uses":`), flow-style mappings, anchors.
 - What the toolchain action does once it runs. Where its file came from is
   checked; the actions it nests and the commands it runs are not.
+- What a step writes to a file another job reads. The guard sees the values
+  a step is given, not what it puts in an artifact; for the issue-to-PR
+  verb it holds the step that writes the agent's issue file to holding
+  nothing worth leaking instead.
 - What happens to `.trusted-toolchain` after the agent starts. The agent can
   rewrite the action's file before the job's post phase. The post steps that
   run were recorded when the action first ran, and an agent with a shell can

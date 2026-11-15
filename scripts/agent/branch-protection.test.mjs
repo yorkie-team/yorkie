@@ -146,9 +146,9 @@ test("the workflow calls the module rather than carrying its own copy", () => {
     path.join(HERE, "..", "..", ".github", "workflows", "agent-implement.yml"),
     "utf8",
   );
-  // From its own trusted side directory: checked out into the workspace root,
-  // the sparse checkout survived into the full one that follows it.
-  assert.match(wf, /node \.\/\.trusted-protection\/scripts\/agent\/check-protection\.mjs main/);
+  // From the `prepare` job's checkout of `main`, the only checkout in that job:
+  // the gate runs in a job the agent never has, before the agent's job starts.
+  assert.match(wf, /run: node scripts\/agent\/check-protection\.mjs main\n/);
   assert.ok(
     !/getBranchProtection/.test(wf),
     "the workflow must not carry its own copy of the protection logic",

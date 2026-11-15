@@ -50,25 +50,54 @@ work here is porting plus the three repo-specific pieces named in §4.
   reach by other means is listed under the residuals below. Until 2026-09-24 four workflows (`agent-fix.yml`, `agent-iterate-ci.yml`,
   the panel's `fix` job and `agent-review-reply.yml`) passed `claude-code-action`
   one token carrying `contents` + `pull-requests` + `issues`. Now every job that
-  runs a pushing agent is built the same way, and `agent-implement.yml` too:
+  runs a pushing agent — those four — is built the same way:
 
   | Where | Holds | Runs |
   | --- | --- | --- |
-  | The agent job, before the agent | a pre-agent App token where a pre-agent step needs one (never `contents: write`), revoked by a step just before the agent; a GITHUB_TOKEN without `contents: write` (in `agent-implement.yml`, read-only, and a failed revocation keeps the agent from starting) | gates, the brief, the placeholder — all from `main` |
+  | The agent job, before the agent | a pre-agent App token where a pre-agent step needs one (never `contents: write`), revoked by a step just before the agent; a GITHUB_TOKEN without `contents: write` | gates, the brief, the placeholder — all from `main` |
   | The agent step | a **narrow** App token, `contents: write` only, persisted into `.git/config` | the agent, with `Bash` |
   | The agent job, after the agent | no workflow step but the artifact upload — though the runner still runs the earlier actions' **post steps** here (see residuals) | the handoff of the agent's files, as data |
-  | A separate job (`report`, `fix-report`, `finish`) on a fresh runner | a wide App token minted there | posting, disclosure, paging, metrics — `main`'s scripts |
+  | A separate job (`report`, `fix-report`) on a fresh runner | a wide App token minted there | posting, disclosure, paging, metrics — `main`'s scripts |
+
+  **`agent-implement.yml` goes further: its agent does not push.** Its agent's
+  job holds no credential that writes to the repository, so the App's private
+  key is never sent to the runner the agent has. It can still write Actions
+  cache entries and its run's artifacts (see the residuals below):
+
+  | Job | Holds | Runs |
+  | --- | --- | --- |
+  | `prepare`, before the agent | an App token (`administration`, `contents` and `pull-requests` read, `issues` write); a GITHUB_TOKEN with `contents: read` | the write-access check, the protection gate, the duplicate-branch pre-flight, the "On it" reply, the issue text, the base commit — all from `main` |
+  | `implement` | the Claude credentials, each named; a GITHUB_TOKEN with `contents: read`; the runtime token every job gets, for the Actions cache and artifacts; no App secret | the agent, which commits on a local branch; after it, packing those commits into a `git bundle` and uploading it, as the agent's own output |
+  | `finish`, on a fresh runner | an App token for the PR and its comments (no `contents: write`), and — only after the bundle passes — a push token with `contents: write` alone | checking the bundle, pushing it, the draft PR, disclosure, metrics — `main`'s scripts |
+  | `report`, on a fresh runner | a GITHUB_TOKEN with `issues: write` | the "App is not configured" reply and the no-PR report |
+
+  **A Cancel stops the push.** A maintainer who cancels the run while
+  watching the agent misbehave must stop what follows it too. A step's
+  `cancelled()` sees only its own job's cancellation, not the run's, and a
+  job whose condition still holds when the run is cancelled is neither
+  skipped nor cancelled — so a `finish` keyed on `always()` pushed after a
+  Cancel exactly as before one. `finish` is keyed on `!cancelled()`: a Cancel
+  before it starts skips it, and one while it runs cancels it, after which
+  its push steps, themselves `!cancelled()`, are skipped. The two comments
+  that must survive a cancelled run are the `report` job's, which is
+  `always()`. The pipeline switch is read by the push steps, and takes effect
+  for a `finish` that starts after it is turned off. An agent that reaches its
+  wall stops its own step, or at worst its own job; neither cancels the run,
+  so what it committed is still handed over and pushed.
 
   **Why a separate job and not a re-staged copy.** The previous correction
   re-checked-out `scripts/agent` after the agent stopped, and called the steps
   that ran it trusted. It protected the files and not the process: the agent's
   shell inherits `$GITHUB_ENV` and `$GITHUB_PATH`, which the runner applies to
   every later step of the same job, and it can rewrite `~/.gitconfig`,
-  `~/.npmrc` and the workspace's `.git/config`, where a `remote.origin.url` of
-  `ext::sh -c …` is command execution for the next `git ls-remote origin`. A
-  step later in that job ran on the agent's terms whatever file it executed.
-  `checks.test.mjs` ("nothing after the agent but the handoff") now fails any
-  pushing agent job with another step after the agent.
+  `~/.npmrc` and the workspace's `.git/config`, where a remote URL can name a
+  command for the next `git` that reads it. A step later in that job ran on
+  the agent's terms whatever file it executed. `checks.test.mjs` ("nothing
+  after the agent but the handoff") now fails any pushing agent job with
+  another step after the agent. In `agent-implement.yml` the steps after the
+  agent do run commands — they pack its commits — and that is acceptable only
+  because that job holds nothing the agent does not: what they produce is
+  checked by `finish` as the agent's own output.
 
   **What crosses is data, and it is read as data.** The agent writes its fix
   report, disputes, reply, PR description and execution log; the trusted job
@@ -77,7 +106,15 @@ work here is porting plus the three repo-specific pieces named in §4.
   afresh — so a file reading `<!-- agent-review-paged -->` posts nothing — and
   `metrics.mjs` coerces the log's counts and identifiers before any of it reaches
   a comment. Free prose (the reply, the PR description) has every `<!--`
-  neutralised. Heads are read from the API, never from a checkout.
+  neutralised. Heads are read from the API, never from a checkout. The
+  issue-to-PR agent's commits cross as a bundle, and `bundle-handoff.mjs` reads
+  it into a fresh repository holding only the base `prepare` recorded. Nothing
+  from it is checked out or run, git checks every object on the way in, and it
+  is refused unless it is exactly one `agent/<issue>-<slug>` branch whose
+  commits all descend from that base, within a size and a commit-count limit,
+  with `.github/workflows` unchanged in every commit — deletions included,
+  which GitHub would let an App without `workflows` push. Only then is the push
+  token minted, and the push is never forced.
 
   **What this does not close, stated so it is not mistaken for closed.**
 
@@ -85,54 +122,91 @@ work here is porting plus the three repo-specific pieces named in §4.
     cannot approve or comment, but it can merge a PR that already satisfies
     `main`'s protection — a human-approved PR can be merged early by an injected
     agent. `require_last_push_approval` (Phase I criterion 2) limits which
-    approvals count; it does not stop the merge of one that does. The agent needs
-    `contents: write` to push its own commits, so closing this means the agent
-    stops pushing: it commits, hands a bundle across, and the trusted job pushes.
-    That is the next change here. The two workflows that turn a push or release
+    approvals count; it does not stop the merge of one that does. **Closed for
+    `agent-implement.yml`**, whose agent holds no App token and whose job token
+    reads. **Open in the four fix-family workflows**, whose agents push their
+    own commits with that token. The two workflows that turn a push or release
     by the App into Docker Hub credentials refuse the App as the actor.
-  - **The agent job still holds the App's private key, and still runs code
-    after the agent.** The key is there to mint the narrow token, and the runner
-    runs every earlier action's **post step** after the agent, in the same job:
-    `create-github-app-token`'s (whose environment carries the private key as
-    an input and each minted token as state) and `actions/checkout`'s (carrying
-    the job's `GITHUB_TOKEN`). The agent can reach those without `sudo` — the
-    actions' code under `_actions/` is owned by the runner user and can be
-    rewritten, a process left running outlives the agent step and can read the
-    post step's `/proc/<pid>/environ` as the same user, and `$GITHUB_ENV` can
-    set `LD_PRELOAD` — and with the passwordless `sudo` a GitHub-hosted runner
-    grants, it can read the runner's memory directly. With the key it can mint
-    any token the installation allows, the approve+merge pair included; with
-    the `GITHUB_TOKEN` it can post as `github-actions[bot]`, an author several
-    markers are trusted by. What IS done: no agent job's `GITHUB_TOKEN` carries
-    `contents: write`, and `agent-implement.yml`'s carries no write scope at
-    all, so there it cannot post (and since the outputs of the agent's job are
-    reported by the agent's runner, its `finish` job uses them only as gates
-    and to choose between fixed messages, and takes the repository's words
-    from `route`: a forged value can withhold `finish`'s work or pick the
-    wrong fixed message, never put text on the issue); the pre-agent App
-    tokens carry no `contents: write` and are revoked by a step before the
-    agent starts, and in `agent-implement.yml` a revocation that fails keeps
-    the agent from starting; `setup-go` runs without its cache, whose post
-    step would otherwise save the agent's module and build caches under a key
-    `main` restores. **Where the key appears inside the job
-    does not close this.** The runner receives every secret a job references
-    when the job starts, and holds them until the job ends, whichever step names
-    them. A mint moved into a plain `run:` step loses its post step and its
-    environment, and the key is still in the runner. Dropping `sudo` does not
-    close it either: on a hosted runner the job's user has routes to the host's
-    memory that do not go through `sudo`. And the credential pick resolves its
-    secret by a computed name, so the set of secrets the job is sent may be
-    wider than the ones it names, which has not been checked. Replacing that
-    lookup with a fixed chain over the named slots would settle the question
-    without checking it; that is a follow-up. An earlier version of this
-    paragraph proposed those three changes together as the closure; none of
-    them, alone or together, keeps the key from the agent. The closure is to
-    keep the private key out of the job that runs the agent: the pre-agent App
-    calls (the protection check, the branch pre-flight, the acknowledgement)
-    move to a job before it, and the agent commits and hands a bundle across as
-    an artifact, which the trusted job validates and pushes. That is the same
-    change as the merge-endpoint residual above, and it closes both. Until it
-    lands, this residual stands.
+  - **The agent's job holds the App's private key.** A runner is sent every
+    secret its job references when the job starts, and holds them until the
+    job ends, whichever step names them; and the agent has that runner — its
+    files, its processes and, through the passwordless `sudo` a hosted runner
+    grants, its memory. So a key referenced anywhere in the agent's job is
+    within the agent's reach, and with it the agent can mint any token the
+    installation allows, the approve+merge pair included. Moving the mint
+    into a plain `run:` step, revoking tokens early or dropping `sudo` does
+    not change that: the key is still in the runner.
+
+    **Closed for `agent-implement.yml`.** The pre-agent App calls run in
+    `prepare`, a job the agent never has, and the agent's job names no App
+    secret. Its credential pick no longer looks a secret up by a computed name
+    (`secrets[format(...)]`), which may have widened what the runner was sent
+    beyond the names in the file and could not be checked; it is a chain over
+    the nine named pool slots, which picks the same secret for every slot the
+    picker can choose. `checks.test.mjs` reads every `${{ }}` expression each
+    job is sent and fails if the agent's job names any secret but the Claude
+    credentials, if any job looks one up by a computed name, or if the
+    private key is named outside the steps that mint with it.
+
+    **Open in the four fix-family workflows**, and the next changes here, one
+    workflow at a time: `agent-fix.yml` (`fix`), `agent-iterate-ci.yml`
+    (`iterate`), the panel's `fix` job and `agent-review-reply.yml` (`reply`)
+    still mint App tokens in the agent's job, and each looks its Claude
+    credential up by a computed name. Each needs what `agent-implement.yml`
+    now has: the pre-agent App calls in a job before the agent, the agent
+    committing instead of pushing, the commits checked as a bundle and pushed
+    by the trusted job that follows — there, against the PR's head rather than
+    `main`, and with the fix-scope check (§7.3) applied before the push rather
+    than after it — and the credential named slot by slot. Until each lands,
+    this residual stands for it.
+  - **The agent's job can still write the Actions cache and its run's
+    artifacts.** Every job is given a runtime token for those services along
+    with its runner, `permissions:` does not govern it, and the agent can read
+    it like anything else on that runner. A run started by `issue_comment`
+    executes in the default branch's context, and a `workflow_dispatch` in
+    that of the ref it was started on, usually `main`. So a cache entry the
+    agent writes is scoped to `main`, where later runs on `main` — jobs that
+    hold secrets or publish among them — and pull requests can restore it
+    under a key they compute. Closing this needs every job on the
+    default branch that holds a secret or can write to restore no cache
+    (tracked separately, across the repositories that run this harness), or
+    the agent to run under a ref other than the default branch's, so that
+    what it writes is not `main`'s. Until one of those lands, a cache
+    restored on `main` is input the issue-to-PR agent may have written.
+  - **The agent's artifact is the agent's to write, all of it.** It can upload
+    to its run's artifact store without the workflow's upload step, so the
+    trusted job treats every file it downloads as untrusted, downloads into a
+    directory of its own outside the workspace, and runs nothing from it. It
+    relies on `actions/download-artifact` to keep the archive's entries inside
+    that directory. That is as true of the fix family's report jobs. And what
+    passes between jobs through a file is outside what a guard reading the
+    workflow can pin: it sees which values a step is given, not what the step
+    writes to a file another job reads. So the step that writes the issue
+    text the agent's job downloads is held to holding nothing worth leaking —
+    the event payload and its own job's token — rather than to what it
+    writes.
+  - **The issue-to-PR agent still holds the Claude credentials and a read-only
+    token, and is not egress-controlled.** All nine pool slots are named in its
+    job, so all nine are sent to its runner. It can read what those reach and
+    send it anywhere; a runner egress policy is what would bound that. And the
+    handoff checks bound the SHAPE of what is pushed, not its content: what the
+    commits do is for CI and the required human review.
+
+    The next change narrows that to one credential: the agent's job moves into
+    a reusable workflow that is passed exactly one Claude credential, picked
+    in `prepare` (the picker needs only which slots are set and the run id).
+    A job that calls a reusable workflow has no runner of its own, and the
+    secret it passes is resolved when the call is made, so the called job's
+    runner should be sent that one secret alone. That is to be confirmed on a
+    live run — a marker value in a slot that was not picked must not reach
+    the called job's runner — before anything relies on it. Two constraints
+    come with it: secrets of an environment cannot be passed into a reusable
+    workflow, so a pool kept in the `agent` environment moves to repository
+    or organization secrets (or the called job names every slot again under
+    its own `environment:`, which gives the narrowing back); and the called
+    workflow is one more file to keep identical across the repositories, which
+    the boundary guard has to follow into. The one credential that does reach
+    the agent is still the agent's to read, so it needs a rotation plan.
   - **Branch protection on `main` is a setting, not a checked property.** It
     appears nowhere in the tree — no ruleset fixture, no `CODEOWNERS`, no test.
     Phase I's gate is the only thing that reads it at run time, and only for that
@@ -478,12 +552,15 @@ each one by a mechanism rather than a promise:
   60-minute installation token, so a run past the hour loses the ability to push
   and 401s at the end of the expensive part — was not unverified at all, only
   unfixed, and `agent-fix.yml` and the panel's `fix` job carried the same
-  ceiling. All three are now 55. The minutes between 60 and 90 held a credential
-  that had already expired: they could spend model budget and a round from
-  `MAX_REVIEW_ROUNDS` and could not push, which is the outcome raising the fixer
-  wall from 45 to 90 was meant to prevent. Refreshing mid-round would need a step
-  after the agent, which the trust model forbids; `checks.test.mjs` now fails any
-  of the three whose wall reaches the token's hour.
+  ceiling. All three were set to 55. The minutes between 60 and 90 held a
+  credential that had already expired: they could spend model budget and a round
+  from `MAX_REVIEW_ROUNDS` and could not push, which is the outcome raising the
+  fixer wall from 45 to 90 was meant to prevent. Refreshing mid-round would need
+  a step after the agent, which the trust model forbids; `checks.test.mjs` fails
+  either fixer whose wall reaches the token's hour. `agent-implement.yml`'s agent
+  no longer holds that token at all — `finish` mints its own after the agent
+  stops — so its job runs to 70 minutes and the agent's own step stops at 50,
+  leaving room for the setup before it and the handoff after it.
 - **Trusted authors only:** `OWNER`, `MEMBER`, `COLLABORATOR`, and a
   write-access check on top. An issue body is data, never instructions.
 - **Not ported:** upstream's issue classifier. It labels issues into a category
@@ -508,13 +585,13 @@ withdrawn again) and have to pass.
    carrying `pull-requests: write` (which opening a PR needs) beside
    `contents: write` is exactly the pair that submits an **approving review** and
    then **merges**; GitHub only blocks approving a PR the same identity authored,
-   so an injected run could approve and merge somebody else's. Mint **two**
-   tokens: the agent gets `contents` alone, the workspace checkout persists
-   *that* narrower one (`persist-credentials` writes it into `.git/config`,
-   which the agent reads with one `Bash` call), and every step needing more runs
-   in a separate job the agent never ran in (see Non-Goals). `contents: write`
-   on its own still reaches the merge endpoint for a PR that is already
-   approved — an accepted, written residual until the agent stops pushing.
+   so an injected run could approve and merge somebody else's. This was first
+   held by minting **two** tokens, the agent getting `contents` alone — which
+   still reached the merge endpoint for a PR that was already approved. The
+   agent now gets no App token at all (criterion 16): it commits, and `finish`
+   pushes with a token minted after the commits passed, used by that one step
+   and holding `contents: write` alone, beside a token for the PR that never
+   holds `contents: write`.
 2. **The protection check must require `require_last_push_approval`** on both the
    classic-protection and the ruleset path. Without it an approval given on an
    agent PR stays valid across every later commit the bot pushes to the same
@@ -522,7 +599,9 @@ withdrawn again) and have to pass.
 3. **`contents: write` is not bounded by a check on `main` alone.** It also
    creates tags and publishes releases, and `docker-publish.yml` fires on
    `release: published` with Docker Hub credentials. Either the agent's token
-   must not reach releases, or that escape is an accepted, written risk.
+   must not reach releases, or that escape is an accepted, written risk. The
+   agent now holds no such token; `finish`'s push token could, and runs only
+   `main`'s scripts.
 4. **Refusals must print their reason.** The draft's `setFailed` referenced an
    identifier declared nowhere, so three of four refusal paths raised a
    `ReferenceError` instead of the diagnosis. The gate failed closed and told
@@ -537,7 +616,7 @@ withdrawn again) and have to pass.
    path with no concurrency group and no thread to complain on.
 7. **The pre-flight must also catch the orphan branch.** Looking only at open
    pull requests misses the documented failure — a run that died between
-   `git push -u origin` and `gh pr create` leaves the branch with no PR, and the
+   pushing the branch and opening the PR leaves the branch with no PR, and the
    report tells the maintainer to retry straight into it.
 8. **The authorising text must be the snapshot the maintainer read.** Take the
    issue title and body from the immutable event payload, not from a
@@ -590,49 +669,86 @@ withdrawn again) and have to pass.
     those files afterwards with the App token. Re-checking them out after the
     agent did not help either: the agent owns the job's environment
     (`$GITHUB_ENV`, `$GITHUB_PATH`, `~/.gitconfig`, `.git/config`), not just its
-    files. Every post-agent step runs in the `finish` job instead.
+    files. Every post-agent step that holds anything runs in the `finish` job
+    instead. The two left after the agent in its own job pack its commits and
+    upload them, hold nothing the agent does not, and produce what `finish`
+    checks as the agent's own output.
 13. **The per-cause dedupe on the no-PR reporter must be acknowledgement-aware.**
     Suppressing on the mere presence of a prior report of the same kind
     re-creates the silence it exists to close: the "On it" acknowledgement is
     posted on every run and never deduplicated, so a second failure of the same
     kind leaves a fresh claim that a run is in progress with nothing to withdraw
     it — reached through the report's own advice to retry.
-14. **The pre-agent token's revocation fails closed.** It was
+14. **The agent starts only after every step before it succeeded.** This
+    began as the pre-agent token's revocation failing closed: it was
     `continue-on-error`, so a revocation that failed left the agent starting
-    beside a token that might still be live. It now fails the job, and the
-    agent step, whose condition names no status function, is skipped by the
-    runner's implicit `success()`. It still runs after an earlier failure, so
-    a minted token is revoked on every path.
-15. **`finish` runs only for a commenter the write-access check admitted.**
-    It was keyed on the App check, which implied admission only because that
-    step happens to carry no condition of its own. An `admitted` output,
-    written by the step directly after the check, keys it now, and the App
-    check keys the steps inside: the "App is not configured" reply on one
-    side, the no-PR report on the other.
+    beside a token that might still be live. There is no pre-agent token in
+    the agent's job any more — `prepare`'s never meets the agent — and what
+    the rule left is the agent step's condition: it names no status function,
+    so the runner's implicit `success()` skips it after any earlier failure.
+15. **`finish` and `report` run only for a commenter the write-access check
+    admitted.** `finish` was keyed on the App check, which implied admission
+    only because that step happens to carry no condition of its own. An
+    `admitted` output, written in `prepare` by the step directly after the
+    check, keys both now, and the App check keys the two steps of `report`:
+    the "App is not configured" reply on one side, the no-PR report on the
+    other.
+16. **The agent's job holds no credential that writes to the repository, and
+    names each secret it is sent.** A runner is sent every secret its job
+    references when the job starts, and the agent has that runner. So no App
+    secret is referenced in the agent's job: the pre-agent App calls run in
+    `prepare`, a job of their own that runs only `main`'s code. The job's
+    token is `contents: read` and is the one the agent is handed. The credential pick names each pool slot
+    rather than computing a name, so what the runner is sent can be read off
+    the file — the nine Claude credentials and nothing else. It can still
+    write Actions cache entries and artifacts; that is a residual, not a
+    criterion this meets.
+17. **The agent does not push; `finish` pushes what passes.** The agent
+    commits on a local branch, and a bundle of those commits crosses as an
+    artifact. `finish` reads it as attacker-controlled data with
+    `bundle-handoff.mjs` — one `agent/<issue>-<slug>` branch, every commit
+    descending from the base, within a size and a commit-count limit,
+    `.github/workflows` unchanged in every commit — and mints its push token
+    only then. The push is not forced, and not made over an
+    `agent/<issue>-*` branch another run pushed. The agent's own step stops at
+    50 minutes, and packing and uploading run after it however it ended, so a
+    run that hit its wall still hands over what it committed. A run a
+    maintainer cancelled pushes nothing (above: "A Cancel stops the push").
+18. **The base is one the agent could not choose.** `prepare` records `main`'s
+    commit; the agent's job checks it out and packs against it, and `finish`
+    verifies against it — read from `prepare`'s outputs, never from the agent's
+    job, whose outputs its runner reports.
 
-Criteria 11, 14 and 15 are pinned by running the job's conditions rather than
-reading them: `checks.test.mjs` walks every step of the implement job failing
-in turn, on both entry points, with and without the App, and checks who the
-agent starts beside and who `finish` runs for.
+Criteria 11 and 14–18 are pinned by reading what each job is sent and by
+running the jobs' conditions rather than reading them: `checks.test.mjs` walks
+every step of `prepare` failing in turn, on both entry points, with and
+without the App; where the agent's job starts, every one of its steps; and
+inside `finish`, every one of its steps. It checks when the agent starts, who
+`finish` runs for, and that nothing is pushed that did not pass.
+`bundle-handoff.test.mjs` builds real bundles, most of them hostile, and runs
+the checks against them.
 
-**What none of that covers.** Even with all fifteen satisfied, the agent runs
-with an unrestricted `Bash` beside a live installation token and a model
-credential, on text an arbitrary GitHub user wrote. The gate constrains merging;
-it does not constrain network egress. A successful prompt injection does not need
-to get code into `main` — it already has the token. Of the two narrowings, one is
+**What none of that covers.** Even with all of them satisfied, the agent runs
+with an unrestricted `Bash` beside the Claude credentials and a read-only token,
+on text an arbitrary GitHub user wrote. The gate constrains merging; it does not
+constrain network egress. A successful prompt injection can no longer write to
+the repository from the agent's job, but it can read whatever that job can and
+send it anywhere, and it can hand over commits whose shape passes the checks —
+what they do is for CI and the required human review. Of the two narrowings, one is
 mechanical and one is only a convention, and an earlier draft of this section
 wrote both as though they were the first kind. **Mechanical:** the issue title and
 body come from the event-payload snapshot (criterion 8), which is the text as it
 stood when the maintainer's comment was created, written to a file the prompt
 names as untrusted input. **A convention, enforced by nothing:** a prompt line
 telling the agent not to run `gh issue view` and not to read the issue's comments
-is unenforceable — `--allowedTools` includes `Bash` and the agent holds a token
-`gh` authenticates with, so a comment posted mid-run is reachable by any agent
-that decides to look. It narrows the honest agent's behaviour and bounds nothing.
-Neither is a control on egress, and the residual risk is accepted knowingly: the
-token is installation-scoped to this repository, expires in an hour, and carries
-no `workflows` permission. The control that would actually close the channel is a
-runner egress policy, and it is the next thing to add here.
+is unenforceable — `--allowedTools` includes `Bash`, and an issue's comments are
+public, so a comment posted mid-run is reachable by any agent that decides to
+look. It narrows the honest agent's behaviour and bounds nothing. Neither is a
+control on egress, and the residual risk is accepted knowingly: what the agent's
+job holds can read this repository and spend model budget, and nothing it holds
+writes to the repository — though it can write Actions cache entries and its
+run's artifacts, a residual stated above. The control that would actually close
+the channel is a runner egress policy, and it is the next thing to add here.
 
 
 ### 3. The kill switch
@@ -987,6 +1103,10 @@ The same check lints the round's commits:
 | An out-of-diff finding needs both git and a judge to leave the gate | Git alone demotes on age, which #583 rejected; a judge alone decides scope on author-controlled text |
 | A fix round's scope violation pages rather than being stripped | Stripping needs a second push path and can leave a branch that does not build |
 | A Go reproducer is kept behind `t.Skip`, not left failing | A red test hands the PR to the CI-fix arm, whose job is to make CI pass, which deleting the test also does; a recorded skip keeps the reproducer committed and visible |
+| The issue-to-PR agent commits and a trusted job pushes | Every secret a job references reaches the runner the agent has, so the only way to keep the App's key from the agent is to keep it out of the agent's job, and a job without it cannot push |
+| The handoff is a `git bundle`, checked before the push token exists | It carries commits and nothing else; read into a fresh repository holding only the base, it can be checked without checking anything out or running anything from it |
+| The credential pick names every pool slot rather than computing a name | What a job is sent should be readable off its file; a computed name could not be, and the named chain picks the same secret for every slot |
+| The handoff refuses a change under `.github/workflows`, deletions included | The App could not push a create or an edit there anyway; a deletion it could, and an agent should not be able to remove a lane that grades it |
 
 ## Alternatives Considered
 
@@ -1001,6 +1121,8 @@ The same check lints the round's commits:
 | Refund fix rounds lost to infra failures | The infra page latches the PR and only a rerun lifts it, which restarts the budget anyway; the refund could never change a decision |
 | Keep earlier demotions across rounds (by finding identity) | On yorkie-js-sdk#1426 the finding that flipped blocking was raised against different files from the one demoted; identity matching would not have held it, and wider matching drops real findings off the gate. Carry removes the re-review that caused the flip |
 | Retry the fixer on another credential after it fails | Nothing may run after the agent in its own job |
+| Keep the issue-to-PR agent pushing, and mint its narrow token in a plain `run:` step, revoke it early, or drop `sudo` | The private key would still be referenced in the agent's job and so sent to its runner; none of these changes where the key is |
+| Re-check branch protection in `finish`, just before the push | Parity with what was there: the check ran before the agent, and the push came after it. A protection change in between is a maintainer's act, and the required review still applies to the PR |
 
 ## Tasks
 
