@@ -994,9 +994,15 @@ jobs:
       # THE ONLY WRITE TO THE REPOSITORY'S CODE IN THIS FILE, and its token is
       # minted only after the commits passed, holds `contents: write` alone,
       # and is used by one step.
+      #
+      # NOT `always()`, unlike every other step of this job. A maintainer who
+      # cancels the run, or turns the pipeline off, while watching the agent
+      # misbehave must stop the push as well as the agent; the report below
+      # still runs. A run that hit the agent's wall is not cancelled, so it
+      # still hands over and pushes.
       - name: Generate the push token
         id: push-token
-        if: always() && steps.bundle.outcome == 'success'
+        if: ${{ !cancelled() && vars.AGENT_PIPELINE_ENABLED == 'true' && steps.bundle.outcome == 'success' }}
         uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ secrets.AGENT_APP_ID }}
@@ -1008,7 +1014,7 @@ jobs:
       # and not over any `agent/<issue>-*` branch another run pushed meanwhile.
       - name: Push the agent's branch
         id: push
-        if: always() && steps.push-token.outcome == 'success'
+        if: ${{ !cancelled() && vars.AGENT_PIPELINE_ENABLED == 'true' && steps.push-token.outcome == 'success' }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.push-token.outputs.token }}
@@ -1032,7 +1038,7 @@ jobs:
       # would give the branch three writers.
       - name: Open the draft PR
         id: open-pr
-        if: always() && steps.push.outcome == 'success'
+        if: ${{ !cancelled() && vars.AGENT_PIPELINE_ENABLED == 'true' && steps.push.outcome == 'success' }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}

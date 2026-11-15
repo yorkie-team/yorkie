@@ -2057,34 +2057,43 @@ function implAdmits(cond, ctx) {
   if (!/\b(?:always|success|failure|cancelled)\(\)/.test(c)) c = `success() && (${c})`;
   const js = c
     .replace(/\balways\(\)/g, "true")
-    .replace(/\bsuccess\(\)/g, "!FAILED")
+    .replace(/\bsuccess\(\)/g, "(!FAILED && !CANCELLED)")
     .replace(/\bfailure\(\)/g, "FAILED")
-    .replace(/\bcancelled\(\)/g, "false")
-    .replace(/\bvars\.AGENT_PIPELINE_ENABLED\b/g, "'true'")
+    .replace(/\bcancelled\(\)/g, "CANCELLED")
+    .replace(/\bvars\.AGENT_PIPELINE_ENABLED\b/g, "ENABLED")
     .replace(/\bsteps\.([\w-]+)\.outcome\b/g, (_, id) => `OUT(${JSON.stringify(id)})`)
     .replace(/\bsteps\.([\w-]+)\.outputs\.([\w-]+)/g, (_, id, k) => `STEP(${JSON.stringify(id)}, ${JSON.stringify(k)})`)
     .replace(/\bneeds\.([\w-]+)\.outputs\.([\w-]+)/g, (_, j, k) => `NEED(${JSON.stringify(j)}, ${JSON.stringify(k)})`)
     .replace(/\bgithub\.event_name\b/g, "EVENT")
     .replace(/([^!=])==(?!=)/g, "$1===");
-  return Boolean(new Function("FAILED", "OUT", "STEP", "NEED", "EVENT", `return (${js});`)(
-    ctx.failed, ctx.out, ctx.step, ctx.need, ctx.event,
+  return Boolean(new Function("FAILED", "CANCELLED", "ENABLED", "OUT", "STEP", "NEED", "EVENT", `return (${js});`)(
+    ctx.failed, ctx.cancelled ?? false, ctx.enabled ?? "true", ctx.out, ctx.step, ctx.need, ctx.event,
   ));
 }
 
-/** One job run: which steps ran, how each ended, and the job's outputs. */
-function implRun(job, { event, configured = true, fails = -1, need = () => "", failed = false }) {
+/**
+ * One job run: which steps ran, how each ended, and the job's outputs.
+ * `cancelled` is a run cancelled before this job started; `cancelledAt` is a
+ * step the job was cancelled (or timed out) in, and `cancelledAfter` one it
+ * was cancelled just after; past either, `cancelled()` is true. `enabled` is
+ * the kill switch.
+ */
+function implRun(job, { event, configured = true, fails = -1, need = () => "", failed = false, cancelled = false, cancelledAt = -1, cancelledAfter = -2, enabled = "true" }) {
   const outcome = [];
   const byId = {};
   const outputs = {};
   for (const [i, s] of job.steps.entries()) {
+    const gone = cancelled || (cancelledAt >= 0 && i > cancelledAt) || (cancelledAfter >= -1 && i > cancelledAfter);
     const runs = implAdmits(s.if, {
       failed,
+      cancelled: gone,
+      enabled,
       event,
       need,
       out: (id) => byId[id] ?? "",
       step: (id, k) => outputs[id]?.[k] ?? "",
     });
-    const o = !runs ? "skipped" : i === fails ? "failure" : "success";
+    const o = !runs ? "skipped" : i === cancelledAt ? "cancelled" : i === fails ? "failure" : "success";
     outcome.push(o);
     if (s.id) byId[s.id] = o;
     if (o === "failure" && !s.failOpen) failed = true;
@@ -2304,14 +2313,19 @@ async function implementBoundaryProblems(text) {
         }
         if (!starts && configured && fails < 0) problems.add(`the agent's job does not start ${when}`);
 
-        for (const ifail of starts ? [...Array(st.length + 1).keys()].map((k) => k - 1) : [null]) {
-          const imp = ifail === null ? { jobOut: {}, outcome: st.map(() => "skipped"), failed: false } : implRun(implement, { event, fails: ifail, need: needP });
-          const whenI = ifail === null ? when : `${when}, and ${ifail < 0 ? "nothing" : name(st[ifail])} fails in implement`;
+        // Every step of the agent's job failing in turn, and one more case: the
+        // job cancelled at the agent step — its own timeout, or a cancel.
+        for (const ifail of starts ? [...[...Array(st.length + 1).keys()].map((k) => k - 1), "wall"] : [null]) {
+          const imp = ifail === null ? { jobOut: {}, outcome: st.map(() => "skipped"), failed: false }
+            : ifail === "wall" ? implRun(implement, { event, cancelledAt: agentAt, need: needP })
+            : implRun(implement, { event, fails: ifail, need: needP });
+          const whenI = ifail === null ? when : ifail === "wall" ? `${when}, and the agent's job is stopped at the agent`
+            : `${when}, and ${ifail < 0 ? "nothing" : name(st[ifail])} fails in implement`;
           if (ifail !== null && ifail >= 0 && ifail < agentAt && !st[ifail].failOpen && imp.outcome[agentAt] !== "skipped") {
             problems.add(`the agent starts after ${name(st[ifail])} failed`);
           }
           // A run that hit its wall still hands over what it committed.
-          if ((ifail === -1 || ifail === agentAt) && imp.outcome[stageAt] === "success") {
+          if ((ifail === -1 || ifail === agentAt || ifail === "wall") && imp.outcome[stageAt] === "success") {
             for (const s of handoff) if (imp.outcome[st.indexOf(s)] === "skipped") problems.add(`${name(s)} does not run ${whenI}`);
           }
           const need = (j, k) => (j === "prepare" ? pre.jobOut[k] ?? "" : j === "implement" ? imp.jobOut[k] ?? "" : "");
@@ -2334,14 +2348,28 @@ async function implementBoundaryProblems(text) {
             }
             if (o[openAt] !== "skipped" && o[pushAt] !== "success") problems.add(`finish opens a PR without having pushed ${whenF}`);
             if (ffail >= 0) continue;
+            // A maintainer who cancels the run, or turns the pipeline off,
+            // stops the push and the PR too; the report still runs.
+            const cancels = [-1, ...fst.keys()].map((i) => [`the run was cancelled ${i < 0 ? "before finish" : `after ${name(fst[i])}`}`, { cancelledAfter: i }]);
+            for (const [how, opts] of [...cancels, ["the pipeline was switched off", { enabled: "false" }]]) {
+              const stopped = implRun(finish, { event, need, ...opts }).outcome;
+              const after = opts.cancelledAfter ?? -1;
+              for (const [what, i] of [["mints the push token", pushTokenAt], ["pushes", pushAt], ["opens a PR", openAt]]) {
+                if (i > after && stopped[i] !== "skipped") problems.add(`finish ${what} after ${how} ${whenI}`);
+              }
+              if (reporter && fst.indexOf(reporter) > after && event === "issue_comment" && configured && fails < 0 && ifail === -1 && stopped[fst.indexOf(reporter)] !== "success") {
+                problems.add(`the no-PR reporter does not run after ${how} ${whenI}`);
+              }
+            }
             // Inside it: the App-missing reply, and the reporter, each on its own side of the App check.
             const ran = (s) => s && o[fst.indexOf(s)] === "success";
             const say = event === "issue_comment" && pre.jobOut.configured === "false";
             if (noApp && noApp.job === finish && ran(noApp.s) !== say) problems.add(`the App-missing reply ${say ? "is not posted" : "is posted"} ${whenI}`);
             if (reporter && ran(reporter) && pre.jobOut.configured !== "true") problems.add(`the no-PR reporter runs without the App and names a cause it did not see ${whenI}`);
             if (reporter && event === "issue_comment" && configured && fails < 0 && ifail === -1 && !ran(reporter)) problems.add(`the no-PR reporter does not run ${whenI}`);
-            // And when everything passed, it does push.
-            if (configured && fails < 0 && ifail === -1 && o[pushAt] !== "success") problems.add(`finish does not push ${whenI}`);
+            // And when everything passed, it does push — after an agent that hit
+            // its wall too, since that cancels its job and not the run.
+            if (configured && fails < 0 && [-1, agentAt, "wall"].includes(ifail) && o[pushAt] !== "success") problems.add(`finish does not push ${whenI}`);
           }
         }
       }
@@ -2495,9 +2523,10 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
   const SUMMARY = "          node scripts/agent/session-job-summary.mjs \\\n";
   const PACK = "      - name: Pack the agent's commits (untrusted output)\n        if: always() && steps.stage.outcome == 'success'\n";
   const UPLOAD = "      - name: Hand the agent's output to the finish job\n        if: always() && steps.stage.outcome == 'success'\n";
-  const PUSH_TOKEN_IF = "        id: push-token\n        if: always() && steps.bundle.outcome == 'success'\n";
-  const PUSH_IF = "        id: push\n        if: always() && steps.push-token.outcome == 'success'\n";
-  const OPEN_IF = "        id: open-pr\n        if: always() && steps.push.outcome == 'success'\n";
+  const STOP = "!cancelled() && vars.AGENT_PIPELINE_ENABLED == 'true' && ";
+  const PUSH_TOKEN_IF = `        id: push-token\n        if: \${{ ${STOP}steps.bundle.outcome == 'success' }}\n`;
+  const PUSH_IF = `        id: push\n        if: \${{ ${STOP}steps.push-token.outcome == 'success' }}\n`;
+  const OPEN_IF = `        id: open-pr\n        if: \${{ ${STOP}steps.push.outcome == 'success' }}\n`;
   const VERIFY_BASE = "          BASE: ${{ needs.prepare.outputs.base }}\n        run: |\n          node scripts/agent/bundle-handoff.mjs verify";
   const DOWNLOAD = "          name: claude-execution-output\n          path: ${{ runner.temp }}/agent-output\n";
   const CHAIN = /( {10}claude_code_oauth_token: )>-\n(?: {12}.*\n)+/;
@@ -2551,12 +2580,21 @@ test("agent-implement's trust boundary refuses each named loosening", skipWithou
     base_from_implement_output: [VERIFY_BASE, VERIFY_BASE.replace("needs.prepare.outputs.base", "needs.implement.outputs.base")],
     implement_outputs_base: ["      agent: ${{ steps.agent.outcome }}\n", "      agent: ${{ steps.agent.outcome }}\n      base: ${{ steps.prep.outputs.base }}\n"],
     // (f) what finish pushes, and with what
-    push_token_before_verify: [PUSH_TOKEN_IF, "        id: push-token\n        if: always() && steps.app-token.outcome == 'success'\n"],
+    push_token_before_verify: [PUSH_TOKEN_IF, `        id: push-token\n        if: \${{ ${STOP}steps.app-token.outcome == 'success' }}\n`],
     push_ungated: [PUSH_IF, "        id: push\n        if: always()\n"],
+    // (f2) a cancel or the kill switch stops the push and the PR
+    push_token_on_cancel: [PUSH_TOKEN_IF, "        id: push-token\n        if: always() && steps.bundle.outcome == 'success'\n"],
+    push_on_cancel: [PUSH_IF, "        id: push\n        if: always() && steps.push-token.outcome == 'success'\n"],
+    pr_on_cancel: [OPEN_IF, "        id: open-pr\n        if: always() && steps.push.outcome == 'success'\n"],
+    // The switch is read when a job starts, so it is the token's mint that has
+    // to check it; that every one of the three carries it is pinned by the
+    // cancelled-run guard above.
+    push_token_ignores_kill_switch: [PUSH_TOKEN_IF, "        id: push-token\n        if: ${{ !cancelled() && steps.bundle.outcome == 'success' }}\n"],
+    pack_not_after_a_wall: [PACK, "      - name: Pack the agent's commits (untrusted output)\n        if: ${{ !cancelled() && steps.stage.outcome == 'success' }}\n"],
     push_token_widened: ["          permission-contents: write # push the verified branch, and nothing else\n", "          permission-contents: write # push the verified branch, and nothing else\n          permission-pull-requests: write\n"],
     finish_token_holds_the_pair: ["          permission-contents: read\n          permission-pull-requests: write", "          permission-contents: write\n          permission-pull-requests: write"],
     push_takes_another_branch: ["          BRANCH: ${{ steps.bundle.outputs.branch }}\n          HEAD_SHA", "          BRANCH: ${{ needs.prepare.outputs.base }}\n          HEAD_SHA"],
-    pr_without_push: [OPEN_IF, "        id: open-pr\n        if: always() && steps.app-token.outcome == 'success'\n"],
+    pr_without_push: [OPEN_IF, `        id: open-pr\n        if: \${{ ${STOP}steps.app-token.outcome == 'success' }}\n`],
     verify_without_ready: (t) => t.replace(/( {8}id: bundle\n {8}if: ).*\n/, "$1always()\n").replace(/( {8}id: app-token\n {8}if: always\(\) && )needs\.prepare\.outputs\.ready == 'true' && /, "$1"),
     // (g) admission
     finish_on_the_app_check: [FINISH_IF, "    if: always() && needs.prepare.outputs.configured == 'true'\n"],
@@ -3003,6 +3041,12 @@ test("every step of a trusted post-agent job survives a cancelled run", () => {
   // `success()` is SKIPPED in a cancelled run (see close-stuck-checks), so a
   // setup step without `always()` silently turned the whole report into a
   // no-op on exactly the runs it exists for.
+  //
+  // WITH ONE EXCEPTION, and it is the point of it. agent-implement's `finish`
+  // pushes the agent's commits and opens the PR. A maintainer who cancels the
+  // run, or turns the pipeline off, must stop that as well as the agent, so
+  // those three steps are `!cancelled()` and check the switch; everything else
+  // there, the report included, still runs.
   const HERE = path.dirname(fileURLToPath(import.meta.url));
   const dir = path.join(HERE, "..", "..", ".github", "workflows");
   const JOBS = {
@@ -3012,6 +3056,7 @@ test("every step of a trusted post-agent job survives a cancelled run", () => {
     "agent-review-panel.yml": "fix-report",
     "agent-implement.yml": "finish",
   };
+  const STOPS = { "agent-implement.yml": new Set(["push-token", "push", "open-pr"]) };
   for (const [file, job] of Object.entries(JOBS)) {
     const wf = readFileSync(path.join(dir, file), "utf8");
     const at = wf.indexOf(`\n  ${job}:\n`);
@@ -3021,10 +3066,18 @@ test("every step of a trusted post-agent job survives a cancelled run", () => {
     assert.match(lines.slice(0, 8).join("\n"), /if: (>-\n\s+)?always\(\)/, `${file} ${job}: the job itself must be always()`);
     const stepAt = lines.map((l, i) => (/^ {6}- /.test(l) ? i : -1)).filter((i) => i >= 0);
     assert.ok(stepAt.length > 3, `${file} ${job}: expected steps`);
+    const stops = new Set();
     stepAt.forEach((s, k) => {
       const step = lines.slice(s, stepAt[k + 1] ?? lines.length).filter((l) => !/^\s*#/.test(l)).join("\n");
-      assert.match(step, /^ {8}if: (>-\n {10})?always\(\)/m, `${file} ${job}: "${lines[s].trim()}" is skipped in a cancelled run`);
+      const id = /^ {8}id: (\S+)$/m.exec(step)?.[1];
+      if (STOPS[file]?.has(id)) {
+        stops.add(id);
+        assert.match(step, /^ {8}if: \$\{\{ !cancelled\(\) && vars\.AGENT_PIPELINE_ENABLED == 'true' && /m, `${file} ${job}: "${id}" must stop when the run is cancelled or the pipeline is off`);
+      } else {
+        assert.match(step, /^ {8}if: (>-\n {10})?always\(\)/m, `${file} ${job}: "${lines[s].trim()}" is skipped in a cancelled run`);
+      }
     });
+    assert.deepEqual([...stops].sort(), [...(STOPS[file] ?? [])].sort(), `${file} ${job}: the steps that stop on a cancel are not where they were`);
   }
 });
 
