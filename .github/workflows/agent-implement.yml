@@ -747,9 +747,11 @@ jobs:
       # under a key derived from the download URL alone. Any job on main's ref,
       # an agent's included, can write that entry, and the restored binary would
       # run the action with this job's credentials. Installed here with
-      # `no-cache` and handed over by path, the action skips its own install; if
-      # this step produced no binary, the fallback path fails the action rather
-      # than letting it install one from the cache.
+      # `no-cache` and handed over by path, the action skips its own install.
+      # If this step produced no binary, the action is handed a path that does
+      # not exist; it only adds that directory to PATH, so it then runs
+      # whatever `bun` is already there (none on a hosted runner, so it fails),
+      # and it never installs one from the cache.
       # scripts/agent/trusted-cache.test.mjs holds every caller to it.
       - name: Install Bun for the agent, without the Actions cache
         id: bun
@@ -1188,10 +1190,12 @@ jobs:
               key = 'presetup';
               // Between staging and the agent: the toolchain setup
               // (`fixer.toolchainSteps` names its parts), the issue fetch, the
-              // prompt build, and the revocation that fails closed. The branch below cites the execution transcript,
-              // and none of these produce one.
+              // prompt build, the revocation that fails closed, and the
+              // uncached Bun install. The branch below cites the execution
+              // transcript, and none of these produce one.
               why = `🛑 This run stopped after setup and before the agent started — ${toolchainSteps}, `
-                + `fetching the issue, or revoking the pre-agent token. See the [run](${runUrl}); there is no agent `
+                + 'fetching the issue, revoking the pre-agent token, or installing Bun for the agent. '
+                + `See the [run](${runUrl}); there is no agent `
                 + 'transcript because nothing ran. `@claude fix` is worth trying again.';
             } else {
               key = 'agent';

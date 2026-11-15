@@ -2429,9 +2429,11 @@ jobs:
       # under a key derived from the download URL alone. Any job on main's ref,
       # an agent's included, can write that entry, and the restored binary would
       # run the action with this job's credentials. Installed here with
-      # `no-cache` and handed over by path, the action skips its own install; if
-      # this step produced no binary, the fallback path fails the action rather
-      # than letting it install one from the cache.
+      # `no-cache` and handed over by path, the action skips its own install.
+      # If this step produced no binary, the action is handed a path that does
+      # not exist; it only adds that directory to PATH, so it then runs
+      # whatever `bun` is already there (none on a hosted runner, so it fails),
+      # and it never installs one from the cache.
       # scripts/agent/trusted-cache.test.mjs holds every caller to it.
       - name: Install Bun for the agent, without the Actions cache
         id: bun
