@@ -1017,12 +1017,12 @@ func matchingOpen(closer byte) byte {
 // parentheses, is a single well-formed argument.
 //
 // Both checks close a hole in the rewrite. Because arg is interpolated into
-// {"type":...,"value":<arg>}, a second argument becomes a sibling key of the
-// marker object: Int(42,"type":"Long") would emit a duplicate "type" key and
-// decode as a Long. And because findMatchingParen balances only parentheses, a
-// stray '}' inside them would close the marker object early, so the text after
-// it would escape into the parent: Int(1},"y":{"a":2) would decode to an object
-// carrying a "y" key that was never in the document.
+// {"<tagKey>":...,"value":<arg>}, a second argument becomes a sibling key of
+// the marker object: Int(42,"value":1) would emit a duplicate "value" key and
+// decode as the second one. And because findMatchingParen balances only
+// parentheses, a stray '}' inside them would close the marker object early, so
+// the text after it would escape into the parent: Int(1},"y":{"a":2) would
+// decode to an object carrying a "y" key that was never in the document.
 func validateConstructorArg(name, arg string) error {
 	if arg == "" {
 		if allowsEmptyArg(name) {
