@@ -795,6 +795,9 @@ secrets. A workflow that reaches itself through its calls is a failure. It follo
 the local composite action and its nested ones; `./<dir>/.github/actions/x`,
 a checkout of this repository under a subdirectory, is read from this tree's
 `.github/actions/x`. A local action or workflow it cannot read is a failure.
+So is a YAML merge key (`<<`) anywhere in a workflow or a local action it
+reads: it would hide inputs and steps from every rule, and the guard does not
+resolve it.
 
 What it refuses in such a job, and what turns each off:
 

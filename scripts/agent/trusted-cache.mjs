@@ -254,6 +254,14 @@ export function stepRestoresCache(step, { sccacheGha = false } = {}) {
   return null;
 }
 
+/** Whether a parsed document has a `<<` key anywhere. Aliases are visited once. */
+function hasMergeKey(value, seen = new Set()) {
+  if (!value || typeof value !== "object" || seen.has(value)) return false;
+  seen.add(value);
+  if (!Array.isArray(value) && Object.hasOwn(value, "<<")) return true;
+  return Object.values(value).some((v) => hasMergeKey(v, seen));
+}
+
 /** sccache's Actions-cache backend, switched on anywhere the job's steps can see. */
 function sccacheGhaEnabled(...scopes) {
   for (const s of scopes) {
@@ -273,7 +281,13 @@ export function checkWorkflows({ workflowPaths, readText, parse }) {
   const load = (rel) => {
     if (!docs.has(rel)) {
       const text = readText(rel);
-      docs.set(rel, text === null ? null : parse(text) ?? {});
+      const doc = text === null ? null : parse(text) ?? {};
+      // A merge key would hide inputs and steps from every check below, and
+      // refusing it is simpler and safer than resolving it.
+      if (hasMergeKey(doc)) {
+        findings.push(`${rel}: uses a YAML merge key (\`<<\`), which this guard does not resolve; write the mapping out in full`);
+      }
+      docs.set(rel, doc);
     }
     return docs.get(rel);
   };

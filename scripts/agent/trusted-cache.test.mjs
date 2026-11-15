@@ -312,6 +312,36 @@ test("a local composite action's steps are checked as the job's own", () => {
   );
 });
 
+test("a YAML merge key is refused wherever it appears", () => {
+  // Merged inputs or steps would be invisible to every rule, so the key is
+  // refused outright, in any workflow and any local action it reaches.
+  const withMerge = [
+    "on: pull_request",
+    "x-inputs: &w",
+    "  cache: npm",
+    "jobs:",
+    "  build:",
+    "    runs-on: ubuntu-latest",
+    "    steps:",
+    "      - uses: actions/setup-node@v4",
+    "        with:",
+    "          <<: *w",
+  ].join("\n");
+  const found = check({ ".github/workflows/w.yml": withMerge });
+  assert.equal(found.length, 1, JSON.stringify(found));
+  assert.match(found[0], /^\.github\/workflows\/w\.yml: uses a YAML merge key/);
+  // Aliases without a merge key are ordinary values.
+  assert.deepEqual(check({ ".github/workflows/w.yml": withMerge.replace("<<: *w", "node-version: *w") }), []);
+  // In a local action, too.
+  const action = ["runs:", "  using: composite", "  steps:", "    - &s", "      run: echo", "    - <<: *s"].join("\n");
+  const inAction = check({
+    ".github/actions/a/action.yml": action,
+    ".github/workflows/w.yml": workflow({ job: { steps: [{ uses: "./.github/actions/a" }] } }),
+  });
+  assert.equal(inAction.length, 1, JSON.stringify(inAction));
+  assert.match(inAction[0], /^\.github\/actions\/a\/action\.yml: uses a YAML merge key/);
+});
+
 test("this repository's trusted, privileged jobs restore no Actions cache", async () => {
   const root = defaultRoot(HERE);
   assert.ok(workflowFiles(root).length > 0, "expected to find the workflows");
