@@ -637,6 +637,24 @@ jobs:
           }
           node "$RUNNER_TEMP/agent-tools/pick-credential.mjs"
 
+      # BUN WITHOUT THE ACTIONS CACHE. claude-code-action installs Bun with
+      # oven-sh/setup-bun, which restores the executable from the Actions cache
+      # under a key derived from the download URL alone. Any job on main's ref,
+      # an agent's included, can write that entry, and the restored binary would
+      # run the action with this job's credentials. Installed here with
+      # `no-cache` and handed over by path, the action skips its own install; if
+      # this step produced no binary, the fallback path fails the action rather
+      # than letting it install one from the cache.
+      # scripts/agent/trusted-cache.test.mjs holds every caller to it.
+      - name: Install Bun for the agent, without the Actions cache
+        id: bun
+        if: steps.guard.outputs.proceed == 'true'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          # The version the pinned claude-code-action installs itself.
+          bun-version: 1.3.14
+          no-cache: true
+
       - name: Run Claude Code
         id: agent
         if: steps.guard.outputs.proceed == 'true'
@@ -646,6 +664,8 @@ jobs:
         with:
           claude_code_oauth_token: ${{ steps.cred.outputs.slot != '' && secrets[format('CLAUDE_CODE_OAUTH_TOKEN_{0}', steps.cred.outputs.slot)] || secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ steps.agent-token.outputs.token }}
+          # The Bun installed above, so the action skips its own cached install.
+          path_to_bun_executable: ${{ steps.bun.outputs.bun-path || '/nonexistent/bun' }}
           # This loop is triggered by workflow_run from the agent's own (bot)
           # push, so the initiating actor is the App bot. claude-code-action
           # blocks bot-initiated runs unless the bot is allow-listed. Allow ONLY

@@ -964,7 +964,12 @@ test("no token-bearing job sets itself up by running the branch's build files", 
   // is meant to be every repository's. Scoped to SETUP: the agent itself runs
   // branch code by design, and holds the token by design, because it has to
   // push.
-  const SETUP_ACTION = /uses:\s*(?:actions\/setup-(?!node@)[\w-]+|pnpm\/action-setup|oven-sh\/setup-bun|ruby\/setup-ruby|dtolnay\/rust-toolchain)@/;
+  //
+  // Bun is not on the list: it is claude-code-action's own runtime, not this
+  // repository's toolchain, and every caller installs it in the workflow with
+  // `no-cache` so the action does not restore it from the Actions cache
+  // (trusted-cache.test.mjs). It runs no branch file.
+  const SETUP_ACTION = /uses:\s*(?:actions\/setup-(?!node@)[\w-]+|pnpm\/action-setup|ruby\/setup-ruby|dtolnay\/rust-toolchain)@/;
   const INSTALL = /^\s*(?:run:\s*)?(?:make\s+tools|go\s+install|pnpm\s+install|yarn(?:\s+install)?|npm\s+install|pip\s+install|cargo\s+install)\b/m;
   for (const name of ["agent-fix.yml", "agent-implement.yml", "agent-iterate-ci.yml", "agent-review-panel.yml", "agent-review-reply.yml"]) {
     const code = WF(name).split("\n").filter((l) => !/^\s*#/.test(l)).join("\n");
