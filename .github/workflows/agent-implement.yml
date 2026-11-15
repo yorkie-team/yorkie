@@ -610,9 +610,11 @@ jobs:
 
       # ANOTHER RUN FOR THIS ISSUE MAY HAVE PUSHED while this one waited for the
       # concurrency group. `prepare` looked before that wait, and nothing is
-      # pushed until `finish`, so look again — before the agent spends a session
-      # on work `finish` would refuse to push. `finish` looks a last time just
-      # before it pushes.
+      # pushed until `finish`, so look again before the agent spends a session.
+      # This narrows the waste and does not close it: the group covers only
+      # this job, so the previous run's `finish` may still be verifying when
+      # this looks. `finish` looks again before it pushes, and its push is
+      # refused by the server if the branch exists by then.
       - name: Stop if another run already pushed a branch for this issue
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1022,8 +1024,11 @@ jobs:
           permission-contents: write # push the verified branch, and nothing else
 
       # The App pushes, so the push re-triggers CI — a `GITHUB_TOKEN`-authored
-      # push would not, which would leave the PR with no CI at all. No force,
-      # and not over any `agent/<issue>-*` branch another run pushed meanwhile.
+      # push would not, which would leave the PR with no CI at all. No force:
+      # not over any `agent/<issue>-*` branch already there, and a creation the
+      # server refuses if this branch appears in between. Two runs' branches
+      # under DIFFERENT names can both land if their `finish` jobs overlap;
+      # the concurrency group on the agent's job keeps that window narrow.
       - name: Push the agent's branch
         id: push
         if: ${{ !cancelled() && vars.AGENT_PIPELINE_ENABLED == 'true' && steps.push-token.outcome == 'success' }}

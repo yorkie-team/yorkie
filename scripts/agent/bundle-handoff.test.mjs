@@ -470,22 +470,23 @@ test("push: refuses when the issue already has an agent branch, and never forces
   assert.deepEqual(pushBranch({ gitDir: w.gitDir, remote: url, branch: r.branch, head: r.head, issue: 42 }), { pushed: true });
 });
 
-test("push: a branch that appears after the check is not overwritten", (t) => {
+test("push: a branch that appears after the check is not overwritten, even by a fast-forward", (t) => {
   // The check and the push are two round trips, and another run can land
   // between them. Hiding a branch from the listing, but not from the push,
-  // puts the remote in exactly that state: the push must be refused, not forced.
+  // puts the remote in exactly that state. The branch sits at the base, which
+  // the handoff repository has, so a plain push would fast-forward it.
   const w = world(t);
   run(w.up, "checkout", "-q", "-b", "agent/42-x");
   commit(w.up, "a.txt", "a\n");
   const r = verify(w, bundle(w, "ok", "agent/42-x", `^${w.base}`));
   const url = remote(w);
   const dir = url.slice("file://".length);
-  run(dir, "update-ref", "refs/heads/agent/42-x", w.c0);
+  run(dir, "update-ref", "refs/heads/agent/42-x", w.base);
   run(dir, "config", "uploadpack.hideRefs", "refs/heads/agent/");
   const got = pushBranch({ gitDir: w.gitDir, remote: url, branch: r.branch, head: r.head, issue: 42 });
   assert.equal(got.pushed, false);
-  assert.match(got.reason, /the push was refused/);
-  assert.equal(run(dir, "rev-parse", "refs/heads/agent/42-x"), w.c0, "the other run's branch is untouched");
+  assert.match(got.reason, /appeared on the remote after the check/);
+  assert.equal(run(dir, "rev-parse", "refs/heads/agent/42-x"), w.base, "the other run's branch is untouched");
 });
 
 test("push: refuses a branch name or head that is not the shape verify hands on", (t) => {
