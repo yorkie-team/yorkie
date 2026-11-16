@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { HANDOFF_REF, branchPattern, prepareRepository, pushBranch, verifyBundle } from "./bundle-handoff.mjs";
+import { HANDOFF_REF, branchPattern, gitEnv, prepareRepository, pushBranch, verifyBundle } from "./bundle-handoff.mjs";
 import { fixtureGitEnv, repoScopedEnv } from "./git-env.mjs";
 
 // Every bundle here is a real `git bundle`, built from a real repository, and
@@ -45,7 +45,10 @@ const ENV = { ...repoScopedEnv(tmpdir()), ...FIXED };
  */
 function world(t) {
   const root = mkdtempSync(path.join(tmpdir(), "bundle-handoff-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  // Retried as a backstop. The cause of the ENOTEMPTY this once hit on hosted
+  // runners was git's detached background maintenance after a fetch, which
+  // gitEnv now turns off; see "gitEnv: no background maintenance" below.
+  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }));
   const up = path.join(root, "up");
   run(root, "init", "-q", "-b", "main", up);
   run(up, "commit", "-q", "--allow-empty", "-m", "c0");
@@ -555,9 +558,23 @@ test("CLI: a refusal and an absent bundle both exit non-zero, and say which", (t
   assert.deepEqual(again.outputs, { verdict: "error" }, "a check that could not run is not a verdict on the commits");
 });
 
+test("gitEnv: no background maintenance outlives a git call", () => {
+  // From git 2.47 a fetch starts `maintenance run --auto` detached; it keeps
+  // writing into the object store after the call returns (reproduced with git
+  // 2.54: the refusal tests' cleanup failed with ENOTEMPTY in 5 of 12 runs).
+  for (const env of [gitEnv(), gitEnv({ remote: "https://github.com/o/r.git", token: "tkn" })]) {
+    const n = Number(env.GIT_CONFIG_COUNT);
+    const config = Object.fromEntries(Array.from({ length: n }, (_, i) => [env[`GIT_CONFIG_KEY_${i}`], env[`GIT_CONFIG_VALUE_${i}`]]));
+    assert.equal(config["core.hooksPath"], "/dev/null");
+    assert.equal(config["maintenance.auto"], "false");
+    assert.equal(config["gc.auto"], "0");
+    assert.equal(env[`GIT_CONFIG_KEY_${n}`], undefined, "GIT_CONFIG_COUNT names every key");
+  }
+});
+
 test("CLI: a token reaches git through the environment, never the command line", () => {
   // Not run against a server: what is checked is where the header is put.
   const src = readFileSync(CLI, "utf8");
-  assert.match(src, /GIT_CONFIG_KEY_1 = `http\.\$\{origin\}\.extraheader`/);
+  assert.match(src, /GIT_CONFIG_KEY_3 = `http\.\$\{origin\}\.extraheader`/);
   assert.doesNotMatch(src, /"-c",\s*`http\./, "the auth header must not be passed with -c, where it shows in the process list");
 });
