@@ -65,6 +65,20 @@ test("run through a linked directory, a script is the entry point", (t) => {
   assert.equal(fileLink.stdout.trim(), "run", fileLink.stderr);
 });
 
+test("a module loaded through a link is the entry point the real path names", (t) => {
+  // What `--preserve-symlinks` gives a module: its own URL as written, through
+  // the link, while `argv[1]` names the real file. Only a realpath of BOTH
+  // sides matches them.
+  const base = area(t);
+  mkdirSync(path.join(base, "real"));
+  writeFileSync(path.join(base, "real", "tool.mjs"), "");
+  writeFileSync(path.join(base, "real", "other.mjs"), "");
+  symlinkSync(path.join(base, "real"), path.join(base, "link"));
+  withEntry(t, path.join(base, "real", "tool.mjs"));
+  assert.equal(isDirectRun(pathToFileURL(path.join(base, "link", "tool.mjs")).href), true);
+  assert.equal(isDirectRun(pathToFileURL(path.join(base, "link", "other.mjs")).href), false);
+});
+
 test("no entry, or an entry that is not there, is not this module", (t) => {
   const base = area(t);
   writeFileSync(path.join(base, "file"), "");

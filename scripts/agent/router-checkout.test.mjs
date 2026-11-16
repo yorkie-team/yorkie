@@ -139,10 +139,18 @@ test("the router's copy of isDirectRun gives the shared one's answer in every en
     // An argument after `node -e`, not a path: a comment body, say.
     "a name too long to exist": [`@claude review ${"x".repeat(300)}`, "imported"],
     "a link loop": [path.join(base, "loop-a"), "throw"],
+    // The one state where the module's own path is the linked one: under
+    // `--preserve-symlinks` the loader keeps an import's URL as written, so
+    // only a realpath of BOTH sides matches it to the real path that was run.
+    "the router run, but loaded through a link with --preserve-symlinks": [
+      solo,
+      "run",
+      { via: path.join(base, "linked", "agent", "command.mjs"), flags: ["--preserve-symlinks"] },
+    ],
   };
-  const routerUrl = pathToFileURL(solo).href;
   const sharedUrl = pathToFileURL(path.join(HERE, "direct-run.mjs")).href;
-  for (const [name, [entry, expected]] of Object.entries(STATES)) {
+  for (const [name, [entry, expected, { via = solo, flags = [] } = {}]] of Object.entries(STATES)) {
+    const routerUrl = pathToFileURL(via).href;
     const script = `
       process.argv[1] = ${entry === undefined ? "undefined" : JSON.stringify(entry)};
       process.argv[2] = "@claude review";
@@ -157,7 +165,7 @@ test("the router's copy of isDirectRun gives the shared one's answer in every en
       process.stdout.write = write;
       console.log(JSON.stringify({ shared, router }));
     `;
-    const r = spawnSync(process.execPath, ["--input-type=module", "-e", script], { cwd: base, encoding: "utf8", env: { ...process.env, GITHUB_OUTPUT: "" } });
+    const r = spawnSync(process.execPath, [...flags, "--input-type=module", "-e", script], { cwd: base, encoding: "utf8", env: { ...process.env, GITHUB_OUTPUT: "" } });
     assert.equal(r.status, 0, `${name}: ${r.stderr}`);
     assert.deepEqual(JSON.parse(r.stdout), { shared: expected, router: expected }, name);
   }
