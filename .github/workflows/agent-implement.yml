@@ -1109,14 +1109,18 @@ jobs:
           # THEN CAPPED, BY CHARACTER: the substitution adds a character per
           # marker, so a cap applied before it can be pushed past GitHub's
           # limit by the text it caps; and a byte count can cut a character in
-          # half. A byte cap comes first only to bound what is read, and it is
-          # the first reader of the file, so nothing upstream of it is cut off
-          # mid-write (which `pipefail` would turn into a failed step). Each cut
-          # is made in a subshell whose locale is UTF-8, on a variable rather
-          # than an argument, so no length limit on arguments applies.
+          # half. A byte cap comes first only to bound what is read. No reader
+          # in these pipelines stops before its input ends: the title's first
+          # line is cut from a variable, not by `head -n 1`, because a reader
+          # that exits early leaves the writer before it to die of SIGPIPE,
+          # and `pipefail` turns that into a failed step (seen in CI, where it
+          # depends on timing). Each cut is made in a subshell whose locale is
+          # UTF-8, on a variable rather than an argument, so no length limit
+          # on arguments applies.
           TITLE=""
           if [ -f "$PR_FILE" ] && [ -s "$PR_FILE" ]; then
-            TITLE="$(head -c 4000 "$PR_FILE" | head -n 1 | sed 's/<!--/<!\xe2\x80\x8c--/g')"
+            TITLE="$(head -c 4000 "$PR_FILE")"
+            TITLE="$(printf '%s' "${TITLE%%$'\n'*}" | sed 's/<!--/<!\xe2\x80\x8c--/g')"
             TITLE="$(LC_ALL=C.UTF-8; printf '%s' "${TITLE:0:200}")"
           fi
           URL=""
