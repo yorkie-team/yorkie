@@ -757,6 +757,14 @@ function inspect(workflows) {
           if (/\b(?:cp|mv|ln|rsync|rm)\b[^|;&]*\$RUNNER_TEMP\/agent-tools(?!\/)/.test(line)) {
             flag(`rewrites the staged scripts outside the staging step: ${trimmed.slice(0, 120)}`);
           }
+          // The package is copied WHOLE or not at all. Its tools import each
+          // other — every gated one imports `./direct-run.mjs` — so a single
+          // file copied out on its own is ERR_MODULE_NOT_FOUND where it lands.
+          // (The router is the one file delivered alone, and by a sparse
+          // checkout, never by a copy: router-checkout.test.mjs.)
+          if (/\b(?:cp|mv|ln|rsync|install|tar)\b[^|;&]*?(?:^|[\s"'=/])scripts\/agent\/[^\s"'|;&]/.test(trimmed)) {
+            flag(`copies part of ${SCRIPTS} rather than the whole package: ${trimmed.slice(0, 120)}`);
+          }
 
           // ---- running a harness script -------------------------------------------
           if (/^\[ -f /.test(trimmed)) continue; // an existence test runs nothing
@@ -960,6 +968,17 @@ const MUTATIONS = [
       - run: node scripts/agent/set-state.mjs "$PR" blocked
 `),
     expect: /agent-sweep\.yml › extra: runs set-state\.mjs, which reads the configuration, from the workspace, whose checkout does not include \.github\/agent-harness/,
+  },
+  {
+    name: "one tool is copied out of the package on its own",
+    files: () =>
+      edit("agent-fix.yml", (t) =>
+        replaceOnce(
+          t,
+          '          cp -R ./scripts/agent "${{ runner.temp }}/agent-tools"\n',
+          '          cp -R ./scripts/agent "${{ runner.temp }}/agent-tools"\n          cp ./scripts/agent/set-state.mjs "${{ runner.temp }}/set-state.mjs"\n',
+        )),
+    expect: /agent-fix\.yml › fix: copies part of scripts\/agent rather than the whole package: cp \.\/scripts\/agent\/set-state\.mjs/,
   },
   {
     name: "an invocation moves from the trusted side directory to the pull request's workspace",

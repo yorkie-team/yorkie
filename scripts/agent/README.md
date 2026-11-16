@@ -727,7 +727,9 @@ it inspects, so a change in workflow shape that hides them fails too.
 It refuses rather than follows: a script run by a relative path in a step with
 `working-directory:` or after a `cd`, a script reached through `npm run`, and
 `AGENT_HARNESS_CONFIG_DIR` or `NODE_OPTIONS` set at workflow, job or step
-level.
+level. It also refuses a `cp`, `mv` or similar of part of the package: tools
+import each other (each imports `direct-run.mjs`), so the package is staged
+whole.
 
 It treats a local action the same way as a script: `uses: ./…` is allowed for
 `.github/actions/agent-toolchain` alone, from a tree that is trusted at that
