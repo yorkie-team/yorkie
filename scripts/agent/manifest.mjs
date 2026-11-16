@@ -46,11 +46,12 @@
 //   node manifest.mjs upstream   compare with the repository upstream.json names
 
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { HARNESS_DIR, isRepoSlug } from "./config.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -435,16 +436,6 @@ export async function githubFetchText(url) {
 
 // --- CLI ---------------------------------------------------------------------------
 
-function isDirectRun() {
-  if (!process.argv[1]) return false;
-  const entry = fileURLToPath(import.meta.url);
-  try {
-    return realpathSync(process.argv[1]) === realpathSync(entry);
-  } catch {
-    return path.resolve(process.argv[1]) === path.resolve(entry);
-  }
-}
-
 async function main(argv) {
   const [verb, ...extra] = argv;
   const root = defaultRoot();
@@ -486,7 +477,7 @@ async function main(argv) {
   return result.ok ? 0 : 1;
 }
 
-if (isDirectRun()) {
+if (isDirectRun(import.meta.url)) {
   main(process.argv.slice(2)).then(
     (code) => process.exit(code),
     (err) => {

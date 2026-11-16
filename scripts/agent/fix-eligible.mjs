@@ -31,10 +31,9 @@
 // eligible" into a red workflow run, which reads as a bug rather than an answer.
 
 import { appendFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { gh, commitCheckRuns, parseArgs } from "./gh-checks.mjs";
 import { resolveCheckNames as resolveNames } from "./prior-findings.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 const str = (v) => (typeof v === "string" ? v : "");
 
@@ -214,4 +213,4 @@ function emit(args, decision) {
   console.error(`fix-eligible: ${decision.eligible ? "ELIGIBLE" : "not eligible"} — ${decision.reason}`);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (isDirectRun(import.meta.url)) main();

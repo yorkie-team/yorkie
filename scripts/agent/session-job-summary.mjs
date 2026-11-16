@@ -15,8 +15,6 @@
 //     --kind implement|ci-fix|review-fix [--title "Implement agent session"]
 
 import { readFileSync, appendFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { redactSecrets } from "./redact.mjs";
 import {
   parseExecution,
@@ -25,6 +23,7 @@ import {
   formatUsd,
   formatMinutes,
 } from "./metrics.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 /** Render the session table. Pure. `rec`/`outcome` may be null. */
 export function renderSessionSummary({ rec = null, outcome = null, title = "Agent session" } = {}) {
@@ -99,6 +98,6 @@ function main() {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isDirectRun(import.meta.url)) {
   main();
 }

@@ -40,9 +40,9 @@
 
 import { readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { get } from "./config.mjs";
 import { parseArgs } from "./gh-checks.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 // Bumped only on a BREAKING change to the field set. A consumer that does not
 // recognise the major must skip the capture loudly rather than guess at it —
@@ -294,6 +294,6 @@ function main(argv, now = new Date()) {
 
 // Only when executed directly — same guard as review-panel.mjs, so importing
 // this module for tests never writes a file.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isDirectRun(import.meta.url)) {
   process.exit(main(process.argv));
 }

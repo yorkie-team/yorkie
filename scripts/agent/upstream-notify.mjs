@@ -69,12 +69,9 @@
 //   node upstream-notify.mjs --dry-run   decide, print the decision and the
 //                                        issue body, and send nothing but GETs
 
-import { realpathSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { HARNESS_DIR, isRepoSlug } from "./config.mjs";
 import { MANIFEST_PATH, PACKAGE_DIR, UPSTREAM_PATH, WORKFLOW_DIR, checkUpstream, defaultRoot, getWithRetry, githubFetchText, manifestDigest, readManifest, readUpstream } from "./manifest.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 /** The label the issue carries, when this job is allowed to have it exist. */
 export const LABEL = "agent:harness-sync";
@@ -416,16 +413,6 @@ async function githubApi(method, apiPath, body) {
 
 // --- CLI ---------------------------------------------------------------------------
 
-function isDirectRun() {
-  if (!process.argv[1]) return false;
-  const entry = fileURLToPath(import.meta.url);
-  try {
-    return realpathSync(process.argv[1]) === realpathSync(entry);
-  } catch {
-    return path.resolve(process.argv[1]) === path.resolve(entry);
-  }
-}
-
 async function main(argv) {
   if (argv.length > 1 || (argv.length === 1 && argv[0] !== "--dry-run")) {
     console.error("usage: node upstream-notify.mjs [--dry-run]");
@@ -452,7 +439,7 @@ async function main(argv) {
   return 0;
 }
 
-if (isDirectRun()) {
+if (isDirectRun(import.meta.url)) {
   main(process.argv.slice(2)).then(
     (code) => process.exit(code),
     (err) => {

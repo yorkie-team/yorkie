@@ -31,7 +31,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 // Node builtins only, transitively too: ask.mjs has no top-level imports at all,
 // which is what makes it importable here. The `agent:tests` lane runs with
 // scripts/agent/node_modules ABSENT, so a module that statically pulled in the
@@ -40,6 +39,7 @@ import { classifyResult } from "./ask.mjs";
 import { get } from "./config.mjs";
 import { redactSecrets } from "./redact.mjs";
 import { emitBestEffortWarning } from "./guard-verdict.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 // `maxBuffer`: node's default is 1 MiB, and `gh api --paginate` over a busy PR
 // blows through it. When it does, `execFileSync` throws `ENOBUFS` — not an API
@@ -1313,7 +1313,7 @@ function cmdSummarize(args) {
 }
 
 // Only run the CLI when executed directly (not when imported for tests).
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isDirectRun(import.meta.url)) {
   const cmd = process.argv[2];
   const args = parseArgs(process.argv);
   if (cmd === "record") cmdRecord(args);

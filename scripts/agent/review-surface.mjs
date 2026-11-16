@@ -47,12 +47,11 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { appendFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { repoScopedEnv } from "./git-env.mjs";
 import { gh } from "./gh-checks.mjs";
 import { findingLocation } from "./novelty.mjs";
 import { collectFixDispatches } from "./rounds.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 const execFileAsync = promisify(execFile);
 const SHA = /^[0-9a-fA-F]{40}$/;
@@ -332,12 +331,9 @@ async function dryRun(argv) {
   console.log(`demotes: ${DEMOTING_SCOPES.has(r.scope)}`);
 }
 
-// The package's own entry-point guard — `scripts/agent/` is staged detached
-// from its parent, so `isDirectRun` from `scripts/direct-run.mjs` is out of
-// reach. The `file://` template this replaces compared a percent-encoded URL
-// against a raw path, so any clone path needing encoding silently skipped the
-// CLI.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// Through `direct-run.mjs`, like every tool here: workflows run this from a
+// staged copy whose path may pass through a symbolic link.
+if (isDirectRun(import.meta.url)) {
   const argv = process.argv.slice(2);
   if (argv[0] === "resolve") {
     cmdResolve(argv.slice(1));

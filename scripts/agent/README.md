@@ -490,6 +490,12 @@ repository that adopts the harness follows them:
 - This package lives at `scripts/agent`, and nothing in it imports from
   outside it: workflows check it out or copy it without its parent directory.
   `command.mjs` imports nothing at all, because route jobs check it out alone.
+- A tool decides whether it was run or imported with `isDirectRun` from
+  `direct-run.mjs`, which compares realpaths: the staged directory a job runs
+  a tool from may pass through a symbolic link, and a comparison as typed
+  answers "imported" there, so the step does nothing and exits 0. A path it
+  cannot resolve throws. `command.mjs` carries its own copy, for the reason
+  above; `router-checkout.test.mjs` holds it to the shared one.
 - No trusted job that holds a secret or a write-capable token restores an
   Actions cache, in any workflow of the repository, not only the harness's.
   `trusted-cache.test.mjs` checks it in `npm test`; "The Actions cache guard"

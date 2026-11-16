@@ -56,10 +56,9 @@
 
 import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, lstatSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { repoScopedEnv } from "./git-env.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 /** Generous for a change an agent writes in under an hour; a bundle past it is refused unread. */
 export const MAX_BUNDLE_BYTES = 32 * 1024 * 1024;
@@ -344,9 +343,9 @@ function main(argv) {
   throw new Error(`unknown command: ${command ?? "(none)"}; expected verify or push`);
 }
 
-// The package's own entry-point guard, as in pick-credential.mjs: workflows run
-// this from a sparse checkout with no parent `scripts/` directory.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// Through `direct-run.mjs`, like every tool here: workflows run this from a
+// sparse checkout beside the workspace, whose path may pass through a link.
+if (isDirectRun(import.meta.url)) {
   try {
     process.exitCode = main(process.argv.slice(2));
   } catch (e) {

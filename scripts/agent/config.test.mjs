@@ -457,7 +457,7 @@ test("a staged copy without the variable fails even when a config sits two direc
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const tools = path.join(root, "x", "agent-tools");
   mkdirSync(tools, { recursive: true });
-  cpSync(path.join(HERE, "config.mjs"), path.join(tools, "config.mjs"));
+  for (const f of ["config.mjs", "direct-run.mjs"]) cpSync(path.join(HERE, f), path.join(tools, f));
   cpSync(FIXTURE_CONFIG_DIR, path.join(root, ".github", "agent-harness"), { recursive: true });
   const env = { ...process.env };
   delete env[CONFIG_DIR_ENV];

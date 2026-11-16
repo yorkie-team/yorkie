@@ -84,6 +84,7 @@ import {
   upheldCount,
 } from "./rebuttal.mjs";
 import { authorClaims, claimFor, MAX_FIX_ADJUDICATIONS, withRoundEvidence } from "./fix-report.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -3719,6 +3720,6 @@ function writeVerdict(lensOut, lens, findings, summary, { valid, conclusion, adv
 }
 
 // Only run main() when executed directly (not when imported for tests).
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isDirectRun(import.meta.url)) {
   main().catch((err) => { console.error("panel orchestrator crashed:", err); process.exit(1); });
 }

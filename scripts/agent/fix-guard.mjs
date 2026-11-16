@@ -99,12 +99,12 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { compileGlob, get, TEST_RULE_SETS } from "./config.mjs";
 import { isCargoGoverned, isCargoUnitTestByName, isTestFile, roundCommits, fixerHead, safePath, ROUND_COMMIT_CAP } from "./test-removals.mjs";
 import { declaresTestModule, patchLines, testOnlyChange, testRegionLines } from "./cargo-rules.mjs";
 import { frozenShaFrom } from "./review-surface.mjs";
 import { PAGED_LATCH } from "./rounds.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 export const FIX_GUARD_MARKER = "<!-- agent-fix-guard ";
 export const FIX_GUARD_VERSION = 1;
@@ -1011,7 +1011,7 @@ function cmdCheck(argv) {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isDirectRun(import.meta.url)) {
   const [verb, ...rest] = process.argv.slice(2);
   if (verb === "allowed") cmdAllowed(rest);
   else if (verb === "prepush") cmdPrepush(rest);
