@@ -158,10 +158,15 @@ test("every tool decides run-or-imported through this module, bar the router", (
   // copies of the right one, which drift.
   const HAND_ROLLED = [
     /path\.resolve\(process\.argv\[1\]\)/,
-    /fileURLToPath\(import\.meta\.url\)\s*===\s*process\.argv\[1\]/,
-    /import\.meta\.url\s*===\s*`file:/,
     /realpathSync\(process\.argv\[1\]\)/,
     /process\.argv\[1\]\.endsWith\(/,
+    // `argv[1]` compared as typed, on either side, with anything.
+    /process\.argv\[1\]\s*[!=]==?/,
+    /[!=]==?\s*process\.argv\[1\]/,
+    /import\.meta\.url\s*[!=]==?\s*`file:/,
+    /import\.meta\.filename\s*[!=]==?|[!=]==?\s*import\.meta\.filename/,
+    // Node's own answer compares paths the same way, and older Node has none.
+    /import\.meta\.main\b/,
     /function isDirectRun\(/,
   ];
   // `command.mjs` is the ONE exception, because of how it is delivered: route
