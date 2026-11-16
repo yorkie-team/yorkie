@@ -585,7 +585,9 @@ func (d *DB) CreateUserInfo(
 	return info, nil
 }
 
-// GetOrCreateUserInfoByGitHubID returns a user by the given GitHub ID.
+// GetOrCreateUserInfoByGitHubID returns a user by the given GitHub ID. It
+// only matches users created by GitHub login: a username held by another
+// auth provider is never returned.
 func (d *DB) GetOrCreateUserInfoByGitHubID(
 	_ context.Context,
 	githubID string,
@@ -605,7 +607,7 @@ func (d *DB) GetOrCreateUserInfoByGitHubID(
 		info = &database.UserInfo{
 			ID:           newID(),
 			Username:     githubID,
-			AuthProvider: "github",
+			AuthProvider: database.AuthProviderGitHub,
 			CreatedAt:    now,
 			AccessedAt:   now,
 		}
@@ -613,7 +615,12 @@ func (d *DB) GetOrCreateUserInfoByGitHubID(
 			return nil, fmt.Errorf("create user %s: %w", githubID, err)
 		}
 	} else {
-		info = raw.(*database.UserInfo).DeepCopy()
+		existing := raw.(*database.UserInfo)
+		if existing.AuthProvider != database.AuthProviderGitHub {
+			return nil, fmt.Errorf("%s: %w", githubID, database.ErrUserAuthProviderMismatch)
+		}
+
+		info = existing.DeepCopy()
 		info.AccessedAt = now
 		if err := txn.Insert(tblUsers, info); err != nil {
 			return nil, fmt.Errorf("update user %s: %w", githubID, err)

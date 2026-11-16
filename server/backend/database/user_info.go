@@ -29,6 +29,9 @@ import (
 // ServerActorID is the ID of the server actor.
 var ServerActorID = types.ID("000000000000000000000000")
 
+// AuthProviderGitHub is the AuthProvider of users signed in with GitHub.
+const AuthProviderGitHub = "github"
+
 var (
 	// ErrMismatchedPassword is returned when the password is mismatched.
 	ErrMismatchedPassword = errors.Unauthenticated("mismatched password").WithCode("ErrMismatchedPassword")

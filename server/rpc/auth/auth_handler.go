@@ -19,6 +19,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -234,6 +235,10 @@ func (h *AuthManager) handleGitHubCallback(ctx context.Context, w http.ResponseW
 	}
 
 	user, err := users.GetOrCreateUserByGitHubID(ctx, h.be, body.Login)
+	if errors.Is(err, database.ErrUserAuthProviderMismatch) {
+		http.Error(w, "Username is already used by a non-GitHub account", http.StatusConflict)
+		return
+	}
 	if err != nil {
 		http.Error(w, "Failed to get or create user by GitHub ID", http.StatusInternalServerError)
 		return

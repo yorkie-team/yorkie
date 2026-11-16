@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"sync"
 	"testing"
 	gotime "time"
 
@@ -1079,6 +1080,85 @@ func RunListUserInfosTest(t *testing.T, db database.Database) {
 		assert.Equal(t, info.ID, infos[0].ID)
 		assert.Equal(t, info.Username, infos[0].Username)
 		assert.True(t, info.CreatedAt.Equal(infos[0].CreatedAt))
+	})
+}
+
+// RunGetOrCreateUserInfoByGitHubIDTest runs the GetOrCreateUserInfoByGitHubID
+// test for the given db.
+func RunGetOrCreateUserInfoByGitHubIDTest(t *testing.T, db database.Database) {
+	t.Run("create a GitHub user and find it again", func(t *testing.T) {
+		ctx := context.Background()
+		githubID := "github-login-test-user"
+
+		created, err := db.GetOrCreateUserInfoByGitHubID(ctx, githubID)
+		assert.NoError(t, err)
+		assert.Equal(t, githubID, created.Username)
+		assert.Equal(t, database.AuthProviderGitHub, created.AuthProvider)
+
+		found, err := db.GetOrCreateUserInfoByGitHubID(ctx, githubID)
+		assert.NoError(t, err)
+		assert.Equal(t, created.ID, found.ID)
+	})
+
+	t.Run("concurrent first logins share one GitHub user", func(t *testing.T) {
+		ctx := context.Background()
+		const logins = 8
+
+		for round := range 10 {
+			githubID := fmt.Sprintf("github-login-concurrent-%d", round)
+
+			var wg sync.WaitGroup
+			ids := make([]types.ID, logins)
+			errs := make([]error, logins)
+			for i := range logins {
+				wg.Go(func() {
+					info, err := db.GetOrCreateUserInfoByGitHubID(ctx, githubID)
+					errs[i] = err
+					if err == nil {
+						ids[i] = info.ID
+					}
+				})
+			}
+			wg.Wait()
+
+			for i := range logins {
+				require.NoError(t, errs[i], "round %d, login %d", round, i)
+				assert.Equal(t, ids[0], ids[i])
+			}
+		}
+	})
+
+	t.Run("keep a local user of the same name apart", func(t *testing.T) {
+		ctx := context.Background()
+		username := "github-login-local-user"
+
+		local, err := db.CreateUserInfo(ctx, username, "hashed-password")
+		assert.NoError(t, err)
+
+		_, err = db.GetOrCreateUserInfoByGitHubID(ctx, username)
+		assert.ErrorIs(t, err, database.ErrUserAuthProviderMismatch)
+
+		after, err := db.FindUserInfoByName(ctx, username)
+		assert.NoError(t, err)
+		assert.Equal(t, local.ID, after.ID)
+		assert.Empty(t, after.AuthProvider)
+		assert.Equal(t, local.HashedPassword, after.HashedPassword)
+	})
+
+	t.Run("keep the default user apart", func(t *testing.T) {
+		ctx := context.Background()
+		username := "github-login-default-user"
+
+		defaultUser, _, err := db.EnsureDefaultUserAndProject(ctx, username, "temporary-password")
+		assert.NoError(t, err)
+
+		_, err = db.GetOrCreateUserInfoByGitHubID(ctx, username)
+		assert.ErrorIs(t, err, database.ErrUserAuthProviderMismatch)
+
+		after, err := db.FindUserInfoByName(ctx, username)
+		assert.NoError(t, err)
+		assert.Equal(t, defaultUser.ID, after.ID)
+		assert.Empty(t, after.AuthProvider)
 	})
 }
 

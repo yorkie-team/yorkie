@@ -42,6 +42,12 @@ var (
 	// ErrUserAlreadyExists is returned when the user already exists.
 	ErrUserAlreadyExists = errors.AlreadyExists("user already exists").WithCode("ErrUserAlreadyExists")
 
+	// ErrUserAuthProviderMismatch is returned when the username is already
+	// taken by a user of another auth provider.
+	ErrUserAuthProviderMismatch = errors.AlreadyExists(
+		"username taken by another auth provider",
+	).WithCode("ErrUserAuthProviderMismatch")
+
 	// ErrClientNotFound is returned when the client could not be found.
 	ErrClientNotFound = errors.NotFound("client not found").WithCode("ErrClientNotFound")
 
@@ -165,7 +171,10 @@ type Database interface {
 	// CreateUserInfo creates a new user.
 	CreateUserInfo(ctx context.Context, username string, hashedPassword string) (*UserInfo, error)
 
-	// GetOrCreateUserInfoByGitHubID returns a user by the given GitHub ID.
+	// GetOrCreateUserInfoByGitHubID returns the GitHub user of the given
+	// GitHub ID, creating it when missing. It returns
+	// ErrUserAuthProviderMismatch when the username belongs to a user of
+	// another auth provider.
 	GetOrCreateUserInfoByGitHubID(ctx context.Context, githubID string) (*UserInfo, error)
 
 	// DeleteUserInfoByName deletes a user by name.

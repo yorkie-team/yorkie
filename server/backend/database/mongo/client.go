@@ -828,38 +828,59 @@ func (c *Client) CreateUserInfo(
 	return info, nil
 }
 
-// GetOrCreateUserInfoByGitHubID returns a user by the given GitHub ID.
+// GetOrCreateUserInfoByGitHubID returns a user by the given GitHub ID. It
+// only matches users created by GitHub login: a username held by another
+// auth provider is never returned.
 func (c *Client) GetOrCreateUserInfoByGitHubID(
 	ctx context.Context,
 	githubID string,
+) (*database.UserInfo, error) {
+	info, err := c.touchGitHubUser(ctx, githubID, true)
+	if !mongo.IsDuplicateKeyError(err) {
+		return info, err
+	}
+
+	// The insert lost on the unique username. MongoDB does not retry it
+	// because the filter has fields beyond the index key, so look again: a
+	// concurrent login created the GitHub user, or the name belongs to a
+	// user of another provider.
+	info, err = c.touchGitHubUser(ctx, githubID, false)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, fmt.Errorf("%s: %w", githubID, database.ErrUserAuthProviderMismatch)
+	}
+	return info, err
+}
+
+// touchGitHubUser updates the access time of the GitHub user of the given
+// GitHub ID and returns it. With upsert, it creates the user when missing.
+func (c *Client) touchGitHubUser(
+	ctx context.Context,
+	githubID string,
+	upsert bool,
 ) (*database.UserInfo, error) {
 	now := gotime.Now()
 	result := c.collection(ColUsers).FindOneAndUpdate(
 		ctx,
 		bson.M{
-			"username": githubID,
+			"username":      githubID,
+			"auth_provider": database.AuthProviderGitHub,
 		},
 		bson.M{
 			"$set": bson.M{
 				"accessed_at": now,
 			},
 			"$setOnInsert": bson.M{
-				"auth_provider": "github",
-				"created_at":    now,
+				"created_at": now,
 			},
 		},
 		options.FindOneAndUpdate().
-			SetUpsert(true).
+			SetUpsert(upsert).
 			SetReturnDocument(options.After),
 	)
 
 	info := &database.UserInfo{}
 	if err := result.Decode(info); err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, fmt.Errorf("%s: %w", githubID, database.ErrUserNotFound)
-		}
-
-		return nil, fmt.Errorf("create user %s: %w", githubID, err)
+		return nil, fmt.Errorf("touch github user %s: %w", githubID, err)
 	}
 
 	return info, nil
