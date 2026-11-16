@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-14
+updated: 2026-11-16
 ---
 
 # Tasks Archive
@@ -8,12 +8,16 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 115
+Total archived tasks: 119
 
-## 2026/11 (3 tasks)
+## 2026/11 (7 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Match GitHub Login Users by Auth Provider (2026-11-16) | [20261116-github-login-provider-scope-todo.md](./2026/11/20261116-github-login-provider-scope-todo.md) | [20261116-github-login-provider-scope-lessons.md](./2026/11/20261116-github-login-provider-scope-lessons.md) |
+| Restore a revision whose root holds a plain object with a `type` field (2026-11-15) | [20261115-yson-plain-type-field-todo.md](./2026/11/20261115-yson-plain-type-field-todo.md) | [20261115-yson-plain-type-field-lessons.md](./2026/11/20261115-yson-plain-type-field-lessons.md) |
+| Add unit tests for pkg/units (2026-11-15) | [20261115-units-tests-todo.md](./2026/11/20261115-units-tests-todo.md) | [20261115-units-tests-lessons.md](./2026/11/20261115-units-tests-lessons.md) |
+| Deactivate a client whose attached document is gone (2026-11-10) | [20261110-deactivate-missing-document-todo.md](./2026/11/20261110-deactivate-missing-document-todo.md) | [20261110-deactivate-missing-document-lessons.md](./2026/11/20261110-deactivate-missing-document-lessons.md) |
 | Channel Batch Window (2026-11-10) | [20261110-channel-batch-window-todo.md](./2026/11/20261110-channel-batch-window-todo.md) | [20261110-channel-batch-window-lessons.md](./2026/11/20261110-channel-batch-window-lessons.md) |
 | Presence base keyed behind the stored checkpoint after a push-only reply (2026-11-06) | [20261106-presence-base-pushonly-checkpoint-todo.md](./2026/11/20261106-presence-base-pushonly-checkpoint-todo.md) | [20261106-presence-base-pushonly-checkpoint-lessons.md](./2026/11/20261106-presence-base-pushonly-checkpoint-lessons.md) |
 | Skip the presence clears of a server-side detach on presenceless documents (2026-11-05) | [20261105-presenceless-detach-skips-clears-todo.md](./2026/11/20261105-presenceless-detach-skips-clears-todo.md) | [20261105-presenceless-detach-skips-clears-lessons.md](./2026/11/20261105-presenceless-detach-skips-clears-lessons.md) |

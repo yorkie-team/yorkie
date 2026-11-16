@@ -7,6 +7,29 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [v0.7.28] - 2026-11-16
+
+### Fixed
+
+- Match GitHub login users by auth provider by @hackerwins in
+  https://github.com/yorkie-team/yorkie/pull/2375. GitHub login used to look
+  a user up by username alone, so it could return a user that another auth
+  provider created under the same name. It now matches the username and
+  `auth_provider: "github"`, and the GitHub callback answers `409 Conflict`
+  when the username belongs to a user of another provider. No migration is
+  needed; a local user who also used GitHub login under the same name keeps
+  the password login only.
+- Tag YSON typed values with a reserved key instead of `type`, so
+  `RestoreRevision` no longer fails with "unsupported element" on a document
+  that holds ordinary data such as `{type: "sheet"}`, by
+  @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2365.
+  Keys that start with the reserved `$$yson$$` prefix are escaped and still
+  round-trip. The marshalled YSON is unchanged.
+- Detach a document the client row lists as attached or attaching but that
+  no longer exists, instead of failing deactivation, so housekeeping can
+  deactivate such a client, by @hackerwins in
+  https://github.com/yorkie-team/yorkie/pull/2344
+
 ## [v0.7.27] - 2026-11-10
 
 ### Added
