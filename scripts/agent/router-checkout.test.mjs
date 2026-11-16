@@ -136,6 +136,8 @@ test("the router's copy of isDirectRun gives the shared one's answer in every en
     "another file": [path.join(base, "other.mjs"), "imported"],
     "a missing file": [path.join(base, "missing.mjs"), "imported"],
     "a path through a file": [path.join(base, "file", "command.mjs"), "imported"],
+    // An argument after `node -e`, not a path: a comment body, say.
+    "a name too long to exist": [`@claude review ${"x".repeat(300)}`, "imported"],
     "a link loop": [path.join(base, "loop-a"), "throw"],
   };
   const routerUrl = pathToFileURL(solo).href;

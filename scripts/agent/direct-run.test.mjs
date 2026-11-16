@@ -75,6 +75,9 @@ test("no entry, or an entry that is not there, is not this module", (t) => {
   // A file standing where a directory would be: ENOTDIR, also "not there".
   process.argv[1] = path.join(base, "file", "script.mjs");
   assert.equal(isDirectRun(import.meta.url), false);
+  // A name too long to exist — an argument after `node -e`, not a path.
+  process.argv[1] = "x".repeat(300);
+  assert.equal(isDirectRun(import.meta.url), false);
 });
 
 test("an entry that exists but cannot be resolved throws instead of answering 'imported'", (t) => {

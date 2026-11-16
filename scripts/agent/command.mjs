@@ -103,7 +103,7 @@ function isDirectRun(moduleUrl) {
   try {
     entry = realpathSync(typed);
   } catch (error) {
-    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return false;
+    if (error?.code === "ENOENT" || error?.code === "ENOTDIR" || error?.code === "ENAMETOOLONG") return false;
     throw unresolvable(typed, error);
   }
   try {

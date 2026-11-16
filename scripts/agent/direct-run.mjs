@@ -49,8 +49,10 @@ export function isDirectRun(moduleUrl) {
   try {
     entry = realpathSync(typed);
   } catch (error) {
-    // A path that is not there cannot be this module, which is.
-    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return false;
+    // A path that is not there cannot be this module, which is — nor can a
+    // name too long to exist, which is what an `argv[1]` that is not a path
+    // at all (an argument after `node -e`) can be.
+    if (NOT_THERE.has(error?.code)) return false;
     throw unresolvable(typed, error);
   }
   try {
@@ -59,6 +61,8 @@ export function isDirectRun(moduleUrl) {
     throw unresolvable(self, error);
   }
 }
+
+const NOT_THERE = new Set(["ENOENT", "ENOTDIR", "ENAMETOOLONG"]);
 
 function unresolvable(target, cause) {
   return new Error(
