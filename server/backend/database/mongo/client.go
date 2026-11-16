@@ -828,42 +828,49 @@ func (c *Client) CreateUserInfo(
 	return info, nil
 }
 
-// GetOrCreateUserInfoByGitHubID returns a user by the given GitHub ID. It
-// only matches users created by GitHub login: a username held by another
-// auth provider is never returned.
-func (c *Client) GetOrCreateUserInfoByGitHubID(
+// GetOrCreateUserInfoByProvider returns the user of the given username
+// under the given auth provider. It only matches users created by that
+// provider: a username held by another auth provider is never returned.
+func (c *Client) GetOrCreateUserInfoByProvider(
 	ctx context.Context,
-	githubID string,
+	provider string,
+	username string,
 ) (*database.UserInfo, error) {
-	info, err := c.touchGitHubUser(ctx, githubID, true)
+	if provider == "" {
+		return nil, fmt.Errorf("%s: %w", username, database.ErrEmptyAuthProvider)
+	}
+
+	info, err := c.touchProviderUser(ctx, provider, username, true)
 	if !mongo.IsDuplicateKeyError(err) {
 		return info, err
 	}
 
 	// The insert lost on the unique username. MongoDB does not retry it
 	// because the filter has fields beyond the index key, so look again: a
-	// concurrent login created the GitHub user, or the name belongs to a
-	// user of another provider.
-	info, err = c.touchGitHubUser(ctx, githubID, false)
+	// concurrent login created the user, or the name belongs to a user of
+	// another provider.
+	info, err = c.touchProviderUser(ctx, provider, username, false)
 	if errors.Is(err, mongo.ErrNoDocuments) {
-		return nil, fmt.Errorf("%s: %w", githubID, database.ErrUserAuthProviderMismatch)
+		return nil, fmt.Errorf("%s: %w", username, database.ErrUserAuthProviderMismatch)
 	}
 	return info, err
 }
 
-// touchGitHubUser updates the access time of the GitHub user of the given
-// GitHub ID and returns it. With upsert, it creates the user when missing.
-func (c *Client) touchGitHubUser(
+// touchProviderUser updates the access time of the user of the given
+// username under the given provider and returns it. With upsert, it creates
+// the user when missing.
+func (c *Client) touchProviderUser(
 	ctx context.Context,
-	githubID string,
+	provider string,
+	username string,
 	upsert bool,
 ) (*database.UserInfo, error) {
 	now := gotime.Now()
 	result := c.collection(ColUsers).FindOneAndUpdate(
 		ctx,
 		bson.M{
-			"username":      githubID,
-			"auth_provider": database.AuthProviderGitHub,
+			"username":      username,
+			"auth_provider": provider,
 		},
 		bson.M{
 			"$set": bson.M{
@@ -880,7 +887,7 @@ func (c *Client) touchGitHubUser(
 
 	info := &database.UserInfo{}
 	if err := result.Decode(info); err != nil {
-		return nil, fmt.Errorf("touch github user %s: %w", githubID, err)
+		return nil, fmt.Errorf("touch %s user %s: %w", provider, username, err)
 	}
 
 	return info, nil

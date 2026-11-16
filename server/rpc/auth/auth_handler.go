@@ -21,10 +21,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/lithammer/shortuuid/v4"
-	"golang.org/x/oauth2"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/cmap"
@@ -49,55 +49,81 @@ type Config struct {
 
 // NewAuthHandler creates handlers for cookie-based session.
 func NewAuthHandler(be *backend.Backend, tokenManager *TokenManager, conf Config) (string, http.Handler) {
-	oauthConf := &oauth2.Config{
-		ClientID:     conf.GitHubClientID,
-		ClientSecret: conf.GitHubClientSecret,
-		RedirectURL:  conf.GitHubRedirectURL,
-		Scopes:       []string{"user:email"},
-		Endpoint: oauth2.Endpoint{
-			AuthURL:       conf.GitHubAuthURL,
-			TokenURL:      conf.GitHubTokenURL,
-			DeviceAuthURL: conf.GitHubDeviceAuthURL,
-		},
-	}
-
 	manager := &AuthManager{
-		githubUserAPIURL:          conf.GitHubUserURL,
-		githubCallbackRedirectURL: conf.GitHubCallbackRedirectURL,
-		oauth2Conf:                oauthConf,
-		be:                        be,
-		tokenManager:              tokenManager,
-		stateStore:                cmap.New[string, time.Time](),
+		providers: map[string]Provider{
+			"github": newGitHubProvider(conf),
+		},
+		loginRedirectURL: conf.GitHubCallbackRedirectURL,
+		be:               be,
+		tokenManager:     tokenManager,
+		stateStore:       cmap.New[string, loginState](),
 	}
 
 	// TODO(hackerwins): Consider to use prefix `yorkie.v1.AuthService` for consistency with other handlers.
-	return "/auth/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/auth/me":
-			manager.handleMe(r.Context(), w, r)
-		case "/auth/logout":
-			manager.handleLogout(r.Context(), w, r)
-		case "/auth/login":
-			manager.handleLogin(r.Context(), w, r)
-		case "/auth/github/login":
-			manager.handleGitHubLogin(r.Context(), w, r)
-		case "/auth/github/callback":
-			manager.handleGitHubCallback(r.Context(), w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
+	return "/auth/", manager
 }
 
 // AuthManager provides handlers for login, logout, and me in cookie-based session.
 type AuthManager struct {
-	oauth2Conf                *oauth2.Config
-	githubUserAPIURL          string
-	githubCallbackRedirectURL string
+	// providers maps a route, as in /auth/{route}/login, to its provider.
+	providers map[string]Provider
+
+	// loginRedirectURL is where the browser goes after a provider login.
+	loginRedirectURL string
 
 	be           *backend.Backend
 	tokenManager *TokenManager
-	stateStore   *cmap.Map[string, time.Time]
+	stateStore   *cmap.Map[string, loginState]
+}
+
+// stateTTL is how long a login state stays usable after it is issued.
+const stateTTL = 10 * time.Minute
+
+// loginState is a state issued for a login through one provider route.
+type loginState struct {
+	route    string
+	issuedAt time.Time
+}
+
+// ServeHTTP routes the requests under /auth/.
+func (h *AuthManager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Path {
+	case "/auth/me":
+		h.handleMe(r.Context(), w, r)
+		return
+	case "/auth/logout":
+		h.handleLogout(r.Context(), w, r)
+		return
+	case "/auth/login":
+		h.handleLogin(r.Context(), w, r)
+		return
+	}
+
+	if route, provider, ok := h.providerOf(r.URL.Path, "/login"); ok {
+		h.handleProviderLogin(w, r, route, provider)
+		return
+	}
+	if route, provider, ok := h.providerOf(r.URL.Path, "/callback"); ok {
+		h.handleProviderCallback(r.Context(), w, r, route, provider)
+		return
+	}
+	http.NotFound(w, r)
+}
+
+// providerOf returns the route in the given path, which is
+// /auth/{route}{suffix}, and the provider registered for it.
+func (h *AuthManager) providerOf(path, suffix string) (string, Provider, bool) {
+	route, ok := strings.CutPrefix(path, "/auth/")
+	if !ok {
+		return "", nil, false
+	}
+	route, ok = strings.CutSuffix(route, suffix)
+	if !ok {
+		return "", nil, false
+	}
+
+	provider, ok := h.providers[route]
+	return route, provider, ok
 }
 
 func (h *AuthManager) handleMe(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -186,61 +212,62 @@ func (h *AuthManager) handleLogin(ctx context.Context, w http.ResponseWriter, r 
 	h.setCookie(w, token)
 }
 
-func (h *AuthManager) handleGitHubLogin(_ context.Context, w http.ResponseWriter, r *http.Request) {
+func (h *AuthManager) handleProviderLogin(
+	w http.ResponseWriter,
+	r *http.Request,
+	route string,
+	provider Provider,
+) {
 	state := shortuuid.New()
-	h.stateStore.Set(state, time.Now())
+	h.stateStore.Set(state, loginState{route: route, issuedAt: time.Now()})
 	h.cleanupOldStates()
 
-	url := h.oauth2Conf.AuthCodeURL(state)
-	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+	http.Redirect(w, r, provider.LoginURL(state), http.StatusTemporaryRedirect)
 }
 
-func (h *AuthManager) handleGitHubCallback(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	state := r.URL.Query().Get("state")
-	if ok := h.stateStore.Delete(state); !ok {
-		http.Error(w, "Invalid state", http.StatusBadRequest)
+func (h *AuthManager) handleProviderCallback(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	route string,
+	provider Provider,
+) {
+	stateConsumed := false
+	identity, err := provider.Callback(ctx, r, func(state string) bool {
+		stateConsumed = h.consumeState(state, route)
+		return stateConsumed
+	})
+	if errors.Is(err, errInvalidState) {
+		logging.DefaultLogger().Warnf("%s login: %v", provider.Name(), err)
+		http.Error(w, errInvalidState.Error(), http.StatusBadRequest)
 		return
 	}
-
-	code := r.URL.Query().Get("code")
-	oauthToken, err := h.oauth2Conf.Exchange(ctx, code)
 	if err != nil {
-		http.Error(w, "Token exchange failed", http.StatusInternalServerError)
+		// Provider errors may carry details of the identity source, so they
+		// go to the log instead of the browser.
+		logging.DefaultLogger().Warnf("%s login: %v", provider.Name(), err)
+		http.Error(w, "Failed to sign in", http.StatusInternalServerError)
+		return
+	}
+	if !stateConsumed {
+		// A provider that returns an identity without consuming a state
+		// would accept a callback this server never started.
+		http.Error(w, errInvalidState.Error(), http.StatusBadRequest)
+		return
+	}
+	if identity == nil || identity.Username == "" {
+		logging.DefaultLogger().Warnf("%s login: no username in the identity", provider.Name())
+		http.Error(w, "Failed to sign in", http.StatusInternalServerError)
 		return
 	}
 
-	cli := h.oauth2Conf.Client(ctx, oauthToken)
-	resp, err := cli.Get(h.githubUserAPIURL)
-	if err != nil {
-		http.Error(w, "Failed to get user info", http.StatusInternalServerError)
-		return
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logging.DefaultLogger().Error(err)
-		}
-	}()
-
-	var body struct {
-		Login string `json:"login"`
-		Email string `json:"email"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		http.Error(w, "Failed to parse user info", http.StatusInternalServerError)
-		return
-	}
-	if body.Login == "" {
-		http.Error(w, "Invalid user info from GitHub", http.StatusInternalServerError)
-		return
-	}
-
-	user, err := users.GetOrCreateUserByGitHubID(ctx, h.be, body.Login)
+	user, err := users.GetOrCreateUserByProvider(ctx, h.be, provider.Name(), identity.Username)
 	if errors.Is(err, database.ErrUserAuthProviderMismatch) {
-		http.Error(w, "Username is already used by a non-GitHub account", http.StatusConflict)
+		http.Error(w, "Username is already used by an account of another provider", http.StatusConflict)
 		return
 	}
 	if err != nil {
-		http.Error(w, "Failed to get or create user by GitHub ID", http.StatusInternalServerError)
+		http.Error(w, "Failed to get or create user", http.StatusInternalServerError)
 		return
 	}
 
@@ -251,7 +278,7 @@ func (h *AuthManager) handleGitHubCallback(ctx context.Context, w http.ResponseW
 	}
 
 	h.setCookie(w, token)
-	http.Redirect(w, r, h.githubCallbackRedirectURL, http.StatusTemporaryRedirect)
+	http.Redirect(w, r, h.loginRedirectURL, http.StatusTemporaryRedirect)
 }
 
 func (h *AuthManager) setCookie(w http.ResponseWriter, token string) {
@@ -266,12 +293,23 @@ func (h *AuthManager) setCookie(w http.ResponseWriter, token string) {
 	})
 }
 
+// consumeState deletes the given state and reports whether it was issued for
+// the given route and has not expired.
+func (h *AuthManager) consumeState(state, route string) bool {
+	valid := false
+	h.stateStore.Delete(state, func(value loginState, exists bool) bool {
+		valid = exists && value.route == route && time.Since(value.issuedAt) < stateTTL
+		return exists
+	})
+	return valid
+}
+
 func (h *AuthManager) cleanupOldStates() {
-	threshold := time.Now().Add(-10 * time.Minute)
+	threshold := time.Now().Add(-stateTTL)
 
 	for _, state := range h.stateStore.Keys() {
-		h.stateStore.Delete(state, func(value time.Time, exists bool) bool {
-			return exists && value.Before(threshold)
+		h.stateStore.Delete(state, func(value loginState, exists bool) bool {
+			return exists && value.issuedAt.Before(threshold)
 		})
 	}
 }

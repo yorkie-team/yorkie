@@ -48,6 +48,11 @@ var (
 		"username taken by another auth provider",
 	).WithCode("ErrUserAuthProviderMismatch")
 
+	// ErrEmptyAuthProvider is returned when a provider login names no auth
+	// provider. Local users have an empty auth provider, so such a login
+	// must never match them.
+	ErrEmptyAuthProvider = errors.InvalidArgument("empty auth provider").WithCode("ErrEmptyAuthProvider")
+
 	// ErrClientNotFound is returned when the client could not be found.
 	ErrClientNotFound = errors.NotFound("client not found").WithCode("ErrClientNotFound")
 
@@ -171,11 +176,12 @@ type Database interface {
 	// CreateUserInfo creates a new user.
 	CreateUserInfo(ctx context.Context, username string, hashedPassword string) (*UserInfo, error)
 
-	// GetOrCreateUserInfoByGitHubID returns the GitHub user of the given
-	// GitHub ID, creating it when missing. It returns
+	// GetOrCreateUserInfoByProvider returns the user of the given username
+	// under the given auth provider, creating it when missing. It returns
 	// ErrUserAuthProviderMismatch when the username belongs to a user of
-	// another auth provider.
-	GetOrCreateUserInfoByGitHubID(ctx context.Context, githubID string) (*UserInfo, error)
+	// another auth provider, and ErrEmptyAuthProvider when the provider is
+	// empty, which would match local users.
+	GetOrCreateUserInfoByProvider(ctx context.Context, provider, username string) (*UserInfo, error)
 
 	// DeleteUserInfoByName deletes a user by name.
 	DeleteUserInfoByName(ctx context.Context, username string) error

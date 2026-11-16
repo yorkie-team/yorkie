@@ -1083,19 +1083,19 @@ func RunListUserInfosTest(t *testing.T, db database.Database) {
 	})
 }
 
-// RunGetOrCreateUserInfoByGitHubIDTest runs the GetOrCreateUserInfoByGitHubID
+// RunGetOrCreateUserInfoByProviderTest runs the GetOrCreateUserInfoByProvider
 // test for the given db.
-func RunGetOrCreateUserInfoByGitHubIDTest(t *testing.T, db database.Database) {
+func RunGetOrCreateUserInfoByProviderTest(t *testing.T, db database.Database) {
 	t.Run("create a GitHub user and find it again", func(t *testing.T) {
 		ctx := context.Background()
 		githubID := "github-login-test-user"
 
-		created, err := db.GetOrCreateUserInfoByGitHubID(ctx, githubID)
+		created, err := db.GetOrCreateUserInfoByProvider(ctx, database.AuthProviderGitHub, githubID)
 		assert.NoError(t, err)
 		assert.Equal(t, githubID, created.Username)
 		assert.Equal(t, database.AuthProviderGitHub, created.AuthProvider)
 
-		found, err := db.GetOrCreateUserInfoByGitHubID(ctx, githubID)
+		found, err := db.GetOrCreateUserInfoByProvider(ctx, database.AuthProviderGitHub, githubID)
 		assert.NoError(t, err)
 		assert.Equal(t, created.ID, found.ID)
 	})
@@ -1112,7 +1112,7 @@ func RunGetOrCreateUserInfoByGitHubIDTest(t *testing.T, db database.Database) {
 			errs := make([]error, logins)
 			for i := range logins {
 				wg.Go(func() {
-					info, err := db.GetOrCreateUserInfoByGitHubID(ctx, githubID)
+					info, err := db.GetOrCreateUserInfoByProvider(ctx, database.AuthProviderGitHub, githubID)
 					errs[i] = err
 					if err == nil {
 						ids[i] = info.ID
@@ -1135,7 +1135,7 @@ func RunGetOrCreateUserInfoByGitHubIDTest(t *testing.T, db database.Database) {
 		local, err := db.CreateUserInfo(ctx, username, "hashed-password")
 		assert.NoError(t, err)
 
-		_, err = db.GetOrCreateUserInfoByGitHubID(ctx, username)
+		_, err = db.GetOrCreateUserInfoByProvider(ctx, database.AuthProviderGitHub, username)
 		assert.ErrorIs(t, err, database.ErrUserAuthProviderMismatch)
 
 		after, err := db.FindUserInfoByName(ctx, username)
@@ -1152,13 +1152,36 @@ func RunGetOrCreateUserInfoByGitHubIDTest(t *testing.T, db database.Database) {
 		defaultUser, _, err := db.EnsureDefaultUserAndProject(ctx, username, "temporary-password")
 		assert.NoError(t, err)
 
-		_, err = db.GetOrCreateUserInfoByGitHubID(ctx, username)
+		_, err = db.GetOrCreateUserInfoByProvider(ctx, database.AuthProviderGitHub, username)
 		assert.ErrorIs(t, err, database.ErrUserAuthProviderMismatch)
 
 		after, err := db.FindUserInfoByName(ctx, username)
 		assert.NoError(t, err)
 		assert.Equal(t, defaultUser.ID, after.ID)
 		assert.Empty(t, after.AuthProvider)
+	})
+
+	t.Run("keep users of two providers apart", func(t *testing.T) {
+		ctx := context.Background()
+		username := "provider-login-shared-name"
+
+		first, err := db.GetOrCreateUserInfoByProvider(ctx, "provider-a", username)
+		assert.NoError(t, err)
+		assert.Equal(t, "provider-a", first.AuthProvider)
+
+		_, err = db.GetOrCreateUserInfoByProvider(ctx, "provider-b", username)
+		assert.ErrorIs(t, err, database.ErrUserAuthProviderMismatch)
+	})
+
+	t.Run("refuse an empty provider", func(t *testing.T) {
+		ctx := context.Background()
+		username := "provider-login-empty-provider"
+
+		_, err := db.CreateUserInfo(ctx, username, "hashed-password")
+		assert.NoError(t, err)
+
+		_, err = db.GetOrCreateUserInfoByProvider(ctx, "", username)
+		assert.ErrorIs(t, err, database.ErrEmptyAuthProvider)
 	})
 }
 

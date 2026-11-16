@@ -585,19 +585,24 @@ func (d *DB) CreateUserInfo(
 	return info, nil
 }
 
-// GetOrCreateUserInfoByGitHubID returns a user by the given GitHub ID. It
-// only matches users created by GitHub login: a username held by another
-// auth provider is never returned.
-func (d *DB) GetOrCreateUserInfoByGitHubID(
+// GetOrCreateUserInfoByProvider returns the user of the given username
+// under the given auth provider. It only matches users created by that
+// provider: a username held by another auth provider is never returned.
+func (d *DB) GetOrCreateUserInfoByProvider(
 	_ context.Context,
-	githubID string,
+	provider string,
+	username string,
 ) (*database.UserInfo, error) {
+	if provider == "" {
+		return nil, fmt.Errorf("%s: %w", username, database.ErrEmptyAuthProvider)
+	}
+
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblUsers, "username", githubID)
+	raw, err := txn.First(tblUsers, "username", username)
 	if err != nil {
-		return nil, fmt.Errorf("find user %s: %w", githubID, err)
+		return nil, fmt.Errorf("find user %s: %w", username, err)
 	}
 
 	now := gotime.Now()
@@ -606,24 +611,24 @@ func (d *DB) GetOrCreateUserInfoByGitHubID(
 	if raw == nil {
 		info = &database.UserInfo{
 			ID:           newID(),
-			Username:     githubID,
-			AuthProvider: database.AuthProviderGitHub,
+			Username:     username,
+			AuthProvider: provider,
 			CreatedAt:    now,
 			AccessedAt:   now,
 		}
 		if err := txn.Insert(tblUsers, info); err != nil {
-			return nil, fmt.Errorf("create user %s: %w", githubID, err)
+			return nil, fmt.Errorf("create user %s: %w", username, err)
 		}
 	} else {
 		existing := raw.(*database.UserInfo)
-		if existing.AuthProvider != database.AuthProviderGitHub {
-			return nil, fmt.Errorf("%s: %w", githubID, database.ErrUserAuthProviderMismatch)
+		if existing.AuthProvider != provider {
+			return nil, fmt.Errorf("%s: %w", username, database.ErrUserAuthProviderMismatch)
 		}
 
 		info = existing.DeepCopy()
 		info.AccessedAt = now
 		if err := txn.Insert(tblUsers, info); err != nil {
-			return nil, fmt.Errorf("update user %s: %w", githubID, err)
+			return nil, fmt.Errorf("update user %s: %w", username, err)
 		}
 	}
 
