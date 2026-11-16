@@ -19,7 +19,6 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const WORKFLOWS = path.join(HERE, "..", "..", ".github", "workflows");
 const ROUTER = "scripts/agent/command.mjs";
 const TMP = realpathSync(os.tmpdir());
 
@@ -37,35 +36,97 @@ function deliverAlone(base) {
   return solo;
 }
 
+// A YAML parser rather than a line scan, so every spelling of the list — `|`,
+// `|-`, `>`, a quoted scalar, blank lines inside it — reads the same as it
+// does to the runner. Loaded with `await import` like everywhere in this
+// package; it is a devDependency, and only tests need it here.
+const { parse } = await import("yaml");
+const ROOT = path.join(HERE, "..", "..");
+const PACKAGE = "scripts/agent";
+
+/** A sparse-checkout pattern as a repository path: no `./` or `/` in front, no `/` behind. */
+const normalize = (pattern) => pattern.replace(/^\.?\/+/, "").replace(/\/+$/, "");
+
+/** Does this pattern bring the whole package, not just files in it? */
+const coversPackage = (pattern) => {
+  const p = normalize(pattern).replace(/\/\*\*?$/, "");
+  return p === "" || p === "*" || p === "**" || p === "scripts" || p === PACKAGE;
+};
+
+/** Every `.yml`/`.yaml` under `dir`, as `[path relative to ROOT, text]`. */
+function* yamlFiles(dir) {
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch (e) {
+    if (e.code === "ENOENT") return;
+    throw e;
+  }
+  for (const e of entries) {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) yield* yamlFiles(full);
+    else if (/\.ya?ml$/.test(e.name)) yield [path.relative(ROOT, full), readFileSync(full, "utf8")];
+  }
+}
+
+/** Every `sparse-checkout` value anywhere in a parsed document. */
+function* sparseCheckouts(node) {
+  if (Array.isArray(node)) {
+    for (const v of node) yield* sparseCheckouts(v);
+  } else if (node && typeof node === "object") {
+    for (const [k, v] of Object.entries(node)) {
+      if (k === "sparse-checkout" && v != null) yield String(v);
+      else yield* sparseCheckouts(v);
+    }
+  }
+}
+
 /**
- * Every package file a workflow checks out WITHOUT the package around it: an
- * entry under `scripts/agent/` in a `sparse-checkout:` list that does not also
- * name `scripts/agent` itself.
+ * Every package file a workflow or action checks out WITHOUT the package
+ * around it: an entry under `scripts/agent/` in a `sparse-checkout` list that
+ * does not also bring the package itself.
  */
-function deliveredAlone() {
+function deliveredAlone(files = [...yamlFiles(path.join(ROOT, ".github", "workflows")), ...yamlFiles(path.join(ROOT, ".github", "actions"))]) {
   const alone = new Map();
-  for (const file of readdirSync(WORKFLOWS).filter((f) => f.endsWith(".yml"))) {
-    const lines = readFileSync(path.join(WORKFLOWS, file), "utf8").split("\n");
-    lines.forEach((line, i) => {
-      const m = /^(\s*)sparse-checkout:\s*(.*)$/.exec(line);
-      if (!m) return;
-      const entries = [];
-      if (m[2] && m[2] !== "|") {
-        entries.push(m[2].trim());
-      } else {
-        for (const next of lines.slice(i + 1)) {
-          if (!next.trim() || next.search(/\S/) <= m[1].length) break;
-          entries.push(next.trim());
-        }
-      }
-      if (entries.some((e) => e.replace(/\/$/, "") === "scripts/agent")) return;
-      for (const e of entries.filter((e) => e.startsWith("scripts/agent/"))) {
+  for (const [file, text] of files) {
+    for (const value of sparseCheckouts(parse(text))) {
+      const entries = value.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#") && !l.startsWith("!"));
+      if (entries.some(coversPackage)) continue;
+      for (const e of entries.map(normalize).filter((e) => e.startsWith(`${PACKAGE}/`))) {
         alone.set(e, [...(alone.get(e) ?? []), file]);
       }
-    });
+    }
   }
   return alone;
 }
+
+test("every spelling of a sparse-checkout list is read, in workflows and actions", () => {
+  // The shapes a line scan misses. Each names one package file alone, or the
+  // package beside it.
+  const step = (value) => `jobs:\n  route:\n    steps:\n      - uses: actions/checkout@v4\n        with:\n          sparse-checkout: ${value}\n`;
+  const files = [
+    ["a.yml", step("|-\n            scripts/agent/a.mjs\n\n            .github/agent-harness")],
+    ["b.yml", step("|+\n            scripts/agent/b.mjs")],
+    ["c.yml", step(">-\n            scripts/agent/c.mjs")],
+    ["d.yml", step('"/scripts/agent/d.mjs"')],
+    ["e.yml", step("'./scripts/agent/e.mjs'")],
+    ["actions/f/action.yml", "runs:\n  using: composite\n  steps:\n    - uses: actions/checkout@v4\n      with:\n        sparse-checkout: scripts/agent/f.mjs\n"],
+    // The package itself is in the list, after a blank line: not alone.
+    ["g.yml", step("|\n            scripts/agent/g.mjs\n\n            ./scripts/agent/")],
+    ["h.yml", step("|\n            scripts/agent/h.mjs\n            scripts/agent/**")],
+  ];
+  assert.deepEqual(
+    Object.fromEntries(deliveredAlone(files)),
+    {
+      "scripts/agent/a.mjs": ["a.yml"],
+      "scripts/agent/b.mjs": ["b.yml"],
+      "scripts/agent/c.mjs": ["c.yml"],
+      "scripts/agent/d.mjs": ["d.yml"],
+      "scripts/agent/e.mjs": ["e.yml"],
+      "scripts/agent/f.mjs": ["actions/f/action.yml"],
+    },
+  );
+});
 
 test("the router is the one package file a workflow checks out alone", () => {
   // Read from the workflows, so a new single-file checkout of another tool
@@ -78,7 +139,7 @@ test("the router is the one package file a workflow checks out alone", () => {
 
 test("every file checked out alone imports node builtins only", () => {
   for (const [rel, workflows] of deliveredAlone()) {
-    const src = readFileSync(path.join(HERE, "..", "..", rel), "utf8");
+    const src = readFileSync(path.join(ROOT, rel), "utf8");
     const specs = [
       ...src.matchAll(/^\s*(?:import|export)\b[^;]*?\sfrom\s+["']([^"']+)["']/gm),
       ...src.matchAll(/^\s*import\s+["']([^"']+)["']/gm),
