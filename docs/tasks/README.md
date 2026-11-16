@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-14
+updated: 2026-11-16
 ---
 
 # Tasks Index
@@ -25,7 +25,6 @@ Track task-specific plan/review and lessons files using the active/archive layou
 | Detect drift in copies of the shared agent harness (2026-11-14) | [20261114-agent-harness-manifest-todo.md](./active/20261114-agent-harness-manifest-todo.md) | [20261114-agent-harness-manifest-lessons.md](./active/20261114-agent-harness-manifest-lessons.md) |
 | Let a Rust repository adopt the shared agent harness (2026-11-14) | [20261114-agent-harness-cargo-todo.md](./active/20261114-agent-harness-cargo-todo.md) | [20261114-agent-harness-cargo-lessons.md](./active/20261114-agent-harness-cargo-lessons.md) |
 | Move the harness's repository-specific values into configuration (2026-11-13) | [20261113-agent-harness-config-todo.md](./active/20261113-agent-harness-config-todo.md) | [20261113-agent-harness-config-lessons.md](./active/20261113-agent-harness-config-lessons.md) |
-| Deactivate a client whose attached document is gone (2026-11-10) | [20261110-deactivate-missing-document-todo.md](./active/20261110-deactivate-missing-document-todo.md) | [20261110-deactivate-missing-document-lessons.md](./active/20261110-deactivate-missing-document-lessons.md) |
 | Read the sessions summary through rl_session_daily by name (2026-10-24) | [20261024-session-summary-rollup-hint-todo.md](./active/20261024-session-summary-rollup-hint-todo.md) | [20261024-session-summary-rollup-hint-lessons.md](./active/20261024-session-summary-rollup-hint-lessons.md) |
 | Merge-moved children sit in arrival order (2026-09-24) | [20260924-merge-moved-child-order-todo.md](./active/20260924-merge-moved-child-order-todo.md) | - |
 | Install the `@claude` command surface, in four phases (2026-09-22) | [20260922-agent-command-verbs-todo.md](./active/20260922-agent-command-verbs-todo.md) | [20260922-agent-command-verbs-lessons.md](./active/20260922-agent-command-verbs-lessons.md) |
@@ -40,5 +39,5 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 ## Archive
 
-- Archived task count: 115
+- Archived task count: 119
 - Archive index: [archive/README.md](./archive/README.md)
