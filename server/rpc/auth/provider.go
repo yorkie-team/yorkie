@@ -27,6 +27,14 @@ import (
 // used, or expired.
 var errInvalidState = errors.New("invalid state")
 
+// errLoginRejected is wrapped by a provider error when the identity source
+// sent back a login that does not verify.
+var errLoginRejected = errors.New("login rejected")
+
+// errInvalidUsername is wrapped by a provider error when the username of a
+// new user is not a valid Yorkie username.
+var errInvalidUsername = errors.New("invalid username")
+
 // Identity is a user identity that a provider verified.
 type Identity struct {
 	// Subject is the ID of the user in the provider. It must not change for

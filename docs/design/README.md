@@ -49,6 +49,7 @@ New design documents should be based on [TEMPLATE.md](TEMPLATE.md).
 - [Offline-Resumable Attach](offline-resumable-attach.md): Stable actor decoupled from the per-session client row plus a resumable checkpoint, so a client's locally-persisted un-pushed changes replay after a reload
 - [Fine-grained Document Locking](fine-grained-document-locking.md): Fine-grained document locking for high concurrency
 - [OLAP Stack for MAU Tracking](olap-stack.md): Kafka and StarRocks pipeline behind the warehouse-backed project stats, starting from Monthly Active Users (MAU) tracking
+- [External Identity Login](external-identity-login.md): Dashboard login through an operator-run broker that posts an ES256 assertion; users identified by `(auth_provider, subject)`
 - [Cluster Service Authentication](cluster-service-auth.md): Shared secret authentication for inter-node cluster RPCs
 - [Admin API Credentials](admin-credentials.md): The two credentials of the project-scoped `AdminService` procedures — the project secret key and a session token plus `x-yorkie-project` — and the role each carries
 - [Watch Access Revalidation](watch-access-revalidation.md): Customer-triggered re-check of open Watch streams so a webhook revocation reaches them

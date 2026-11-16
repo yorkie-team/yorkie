@@ -60,6 +60,23 @@ yorkie:
     # credentials above and passes it as YORKIE_AUTH_GITHUB_CLIENT_SECRET,
     # never as an argument.
     githubClientSecret: ""
+    # External login brokers for the dashboard (Auth.ExternalProviders in
+    # server/config.sample.yml). The chart puts the list in a ConfigMap and
+    # passes it with --auth-external-providers-file; it holds public keys
+    # only. Pods restart when it changes. After a login the browser goes to
+    # githubCallbackRedirectURL, so set it to the dashboard URL.
+    # externalProviders:
+    #   - Name: corp
+    #     DisplayName: "Company SSO"
+    #     LoginURL: "https://login-broker.example.com/login"
+    #     Issuer: "login-broker"
+    #     Audience: "yorkie-admin"
+    #     PublicKeys:
+    #       - |
+    #         -----BEGIN PUBLIC KEY-----
+    #         ...
+    #         -----END PUBLIC KEY-----
+    externalProviders: []
     # Serve project-stats history from the decoupled daily HLL summary tables
     # (--starrocks-summary-enabled). Enable only after the summary tables are
     # backfilled and validated, and once SELECT 1 FROM rl_session_daily

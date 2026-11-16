@@ -110,7 +110,12 @@ func NewServer(conf *Config, be *backend.Backend) (*Server, error) {
 	mux.Handle(v1connect.NewYorkieServiceHandler(newYorkieServer(yorkieServiceCtx, be, watches), opts...))
 	mux.Handle(v1connect.NewAdminServiceHandler(newAdminServer(be, tokenManager, yorkieInterceptor), opts...))
 	mux.Handle(v1connect.NewClusterServiceHandler(newClusterServer(be, watches), opts...))
-	mux.Handle(auth.NewAuthHandler(be, tokenManager, conf.Auth))
+	authPath, authHandler, err := auth.NewAuthHandler(be, tokenManager, conf.Auth)
+	if err != nil {
+		yorkieServiceCancel()
+		return nil, err
+	}
+	mux.Handle(authPath, authHandler)
 	mux.Handle(grpchealth.NewHandler(healthChecker))
 	mux.Handle(httphealth.NewHandler(healthChecker))
 

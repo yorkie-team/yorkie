@@ -74,12 +74,19 @@ func signInWithGitHub(t *testing.T, handler http.Handler) *http.Response {
 	require.NotEmpty(t, state)
 
 	callback := httptest.NewRecorder()
-	handler.ServeHTTP(callback, httptest.NewRequest(
+	handler.ServeHTTP(callback, withStateCookie(httptest.NewRequest(
 		http.MethodGet,
 		"/auth/github/callback?code=code&state="+url.QueryEscape(state),
 		nil,
-	))
+	), state))
 	return callback.Result()
+}
+
+// withStateCookie adds the state cookie the browser got at login to the
+// request.
+func withStateCookie(r *http.Request, state string) *http.Request {
+	r.AddCookie(&http.Cookie{Name: stateCookieName, Value: state})
+	return r
 }
 
 // newGitHubAuthHandler returns an auth handler on a memory backend whose
@@ -98,7 +105,7 @@ func newCountingGitHubAuthHandler(t *testing.T, login string) (http.Handler, *ba
 
 	tokenRequests := &atomic.Int32{}
 	github := newGitHubStub(t, login, tokenRequests)
-	_, handler := NewAuthHandler(be, NewTokenManager("test-secret-key", time.Hour), Config{
+	_, handler, err := NewAuthHandler(be, NewTokenManager("test-secret-key", time.Hour), Config{
 		GitHubClientID:            "client-id",
 		GitHubClientSecret:        "client-secret",
 		GitHubRedirectURL:         "http://localhost/auth/github/callback",
@@ -107,6 +114,7 @@ func newCountingGitHubAuthHandler(t *testing.T, login string) (http.Handler, *ba
 		GitHubTokenURL:            github.URL + "/token",
 		GitHubUserURL:             github.URL + "/user",
 	})
+	require.NoError(t, err)
 	return handler, be, tokenRequests
 }
 
@@ -115,7 +123,7 @@ func TestGitHubCallback(t *testing.T) {
 		handler, _ := newGitHubAuthHandler(t, "octocat")
 
 		resp := signInWithGitHub(t, handler)
-		assert.Equal(t, http.StatusTemporaryRedirect, resp.StatusCode)
+		assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
 
 		var session *http.Cookie
 		for _, c := range resp.Cookies() {
@@ -127,7 +135,7 @@ func TestGitHubCallback(t *testing.T) {
 		assert.NotEmpty(t, session.Value)
 
 		again := signInWithGitHub(t, handler)
-		assert.Equal(t, http.StatusTemporaryRedirect, again.StatusCode, "a returning GitHub user was refused")
+		assert.Equal(t, http.StatusSeeOther, again.StatusCode, "a returning GitHub user was refused")
 	})
 
 	t.Run("rejects a login whose name a local user holds", func(t *testing.T) {
@@ -175,14 +183,15 @@ func TestProviderRoutes(t *testing.T) {
 		handler.ServeHTTP(login, httptest.NewRequest(http.MethodGet, "/auth/github/login", nil))
 		location, err := url.Parse(login.Header().Get("Location"))
 		require.NoError(t, err)
-		callbackURL := "/auth/github/callback?code=code&state=" + url.QueryEscape(location.Query().Get("state"))
+		state := location.Query().Get("state")
+		callbackURL := "/auth/github/callback?code=code&state=" + url.QueryEscape(state)
 
 		first := httptest.NewRecorder()
-		handler.ServeHTTP(first, httptest.NewRequest(http.MethodGet, callbackURL, nil))
-		require.Equal(t, http.StatusTemporaryRedirect, first.Code)
+		handler.ServeHTTP(first, withStateCookie(httptest.NewRequest(http.MethodGet, callbackURL, nil), state))
+		require.Equal(t, http.StatusSeeOther, first.Code)
 
 		second := httptest.NewRecorder()
-		handler.ServeHTTP(second, httptest.NewRequest(http.MethodGet, callbackURL, nil))
+		handler.ServeHTTP(second, withStateCookie(httptest.NewRequest(http.MethodGet, callbackURL, nil), state))
 		assert.Equal(t, http.StatusBadRequest, second.Code)
 	})
 
@@ -225,9 +234,71 @@ func TestProviderRoutes(t *testing.T) {
 		manager := newFakeProviderManager(t, &fakeProvider{identity: fakeUser()})
 		manager.stateStore.Set("stale", loginState{route: "fake", issuedAt: time.Now().Add(-stateTTL)})
 
-		callback := httptest.NewRecorder()
-		manager.ServeHTTP(callback, httptest.NewRequest(http.MethodGet, "/auth/fake/callback?state=stale", nil))
-		assert.Equal(t, http.StatusBadRequest, callback.Code)
+		resp := fakeCallback(manager, "stale", "stale")
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("rejects a callback from a browser that did not start the login", func(t *testing.T) {
+		manager := newFakeProviderManager(t, &fakeProvider{identity: fakeUser()})
+
+		login := httptest.NewRecorder()
+		manager.ServeHTTP(login, httptest.NewRequest(http.MethodGet, "/auth/fake/login", nil))
+		location, err := url.Parse(login.Header().Get("Location"))
+		require.NoError(t, err)
+		state := location.Query().Get("state")
+
+		for _, browserState := range []string{"", "another-login"} {
+			resp := fakeCallback(manager, state, browserState)
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "browser state %q", browserState)
+			assert.False(t, hasSessionCookie(resp))
+		}
+	})
+
+	t.Run("sets a state cookie a broker's cross-site post carries", func(t *testing.T) {
+		manager := newFakeProviderManager(t, &fakeProvider{identity: fakeUser()})
+
+		login := httptest.NewRecorder()
+		manager.ServeHTTP(login, httptest.NewRequest(http.MethodGet, "/auth/fake/login", nil))
+		var cookie *http.Cookie
+		for _, c := range login.Result().Cookies() {
+			if c.Name == stateCookieName {
+				cookie = c
+			}
+		}
+		require.NotNil(t, cookie)
+		assert.True(t, cookie.HttpOnly)
+		assert.True(t, cookie.Secure)
+		assert.Equal(t, http.SameSiteNoneMode, cookie.SameSite)
+		assert.Equal(t, "/", cookie.Path, "the __Host- prefix requires Path=/")
+		assert.Empty(t, cookie.Domain, "the __Host- prefix requires a host-only cookie")
+	})
+
+	t.Run("clears the state cookie at the callback", func(t *testing.T) {
+		manager := newFakeProviderManager(t, &fakeProvider{identity: fakeUser()})
+
+		resp := signInWithFake(t, manager, "")
+		require.Equal(t, http.StatusSeeOther, resp.StatusCode)
+		var cleared *http.Cookie
+		for _, c := range resp.Cookies() {
+			if c.Name == stateCookieName {
+				cleared = c
+			}
+		}
+		require.NotNil(t, cleared)
+		assert.Negative(t, cleared.MaxAge)
+		assert.True(t, cleared.Secure)
+		assert.Equal(t, "/", cleared.Path)
+	})
+
+	t.Run("refuses a login while too many are pending", func(t *testing.T) {
+		manager := newFakeProviderManager(t, &fakeProvider{identity: fakeUser()})
+		for i := range maxPendingLogins {
+			manager.stateStore.Set(fmt.Sprintf("pending-%d", i), loginState{route: "fake", issuedAt: time.Now()})
+		}
+
+		login := httptest.NewRecorder()
+		manager.ServeHTTP(login, httptest.NewRequest(http.MethodGet, "/auth/fake/login", nil))
+		assert.Equal(t, http.StatusServiceUnavailable, login.Code)
 	})
 
 	t.Run("keeps details of a state error out of the response", func(t *testing.T) {
@@ -269,7 +340,7 @@ func TestProviderRoutes(t *testing.T) {
 		manager := newFakeProviderManager(t, &fakeProvider{identity: fakeUser()})
 
 		resp := signInWithFake(t, manager, "")
-		assert.Equal(t, http.StatusTemporaryRedirect, resp.StatusCode)
+		assert.Equal(t, http.StatusSeeOther, resp.StatusCode)
 		assert.True(t, hasSessionCookie(resp))
 
 		user, err := manager.be.DB.FindUserInfoByName(t.Context(), "fake-user")
@@ -335,11 +406,18 @@ func signInWithFake(t *testing.T, manager *AuthManager, state string) *http.Resp
 		state = location.Query().Get("state")
 	}
 
+	return fakeCallback(manager, state, state)
+}
+
+// fakeCallback sends the callback of the fake route with the given state,
+// from a browser whose state cookie holds browserState.
+func fakeCallback(manager *AuthManager, state, browserState string) *http.Response {
+	r := httptest.NewRequest(http.MethodGet, "/auth/fake/callback?state="+url.QueryEscape(state), nil)
+	if browserState != "" {
+		r = withStateCookie(r, browserState)
+	}
+
 	callback := httptest.NewRecorder()
-	manager.ServeHTTP(callback, httptest.NewRequest(
-		http.MethodGet,
-		"/auth/fake/callback?state="+url.QueryEscape(state),
-		nil,
-	))
+	manager.ServeHTTP(callback, r)
 	return callback.Result()
 }

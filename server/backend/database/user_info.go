@@ -42,8 +42,9 @@ type UserInfo struct {
 	// ID is the unique ID of the user.
 	ID types.ID `bson:"_id"`
 
-	// AuthProvider is the provider of the authentication. Valid values are
-	// "github" and empty string for local authentication.
+	// AuthProvider is the provider of the authentication: "github",
+	// "external:<name>" for an external login provider, or empty for local
+	// authentication.
 	AuthProvider string `bson:"auth_provider"`
 
 	// Subject is the ID of the user in its auth provider, unique together
