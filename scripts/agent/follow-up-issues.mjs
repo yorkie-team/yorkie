@@ -36,8 +36,6 @@
 // the deferred record, which is where it was before this existed.
 
 import { execFileSync } from "node:child_process";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 import { parseArgs } from "./gh-checks.mjs";
 import { readLensFindings } from "./deferred-findings.mjs";
@@ -45,6 +43,7 @@ import { findingLocation } from "./novelty.mjs";
 import { BLOCKING, normalizeSeverity } from "./severity.mjs";
 import { findingSimilarity, DEFAULT_SIMILARITY } from "./rounds.mjs";
 import { ANCHOR_MARGIN, outOfDiffDemotes } from "./out-of-diff.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 export const FOLLOW_UP_LABEL = "agent:follow-up";
 export const FOLLOW_UP_MARKER = "<!-- agent-follow-up ";
@@ -288,6 +287,6 @@ function main() {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isDirectRun(import.meta.url)) {
   main();
 }

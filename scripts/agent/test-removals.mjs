@@ -80,9 +80,9 @@
 
 import { execFileSync } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { compileGlob, get } from "./config.mjs";
 import { cargoManifestTally, cargoTally } from "./cargo-rules.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 export const TEST_REMOVALS_MARKER = "<!-- agent-fix-tests ";
 export const TEST_REMOVALS_VERSION = 1;
@@ -812,6 +812,6 @@ function main() {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isDirectRun(import.meta.url)) {
   main();
 }

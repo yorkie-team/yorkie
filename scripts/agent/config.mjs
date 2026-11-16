@@ -45,9 +45,10 @@
 //   node config.mjs get <dotted.key>     a string is printed raw, anything
 //                                        else as JSON; exit 1 on any failure
 
-import { readFileSync, realpathSync, statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDirectRun } from "./direct-run.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -788,26 +789,10 @@ export function getOptionalList(key, config = loadConfig()) {
 
 // --- CLI ---------------------------------------------------------------------
 
-/**
- * Is this module the process's entry point? REALPATH BOTH SIDES: the loader
- * resolves `import.meta.url` through symlinks and `process.argv[1]` is whatever
- * the caller typed, so compared as plain strings a run through a symlinked
- * path looks like an import — and the CLI would print nothing and exit 0,
- * which a caller reads as an empty value. (The same predicate as the
- * repository-level `scripts/direct-run.mjs`, copied because this package is
- * checked out without its parent directory.)
- */
-function isDirectRun() {
-  if (!process.argv[1]) return false;
-  const entry = fileURLToPath(import.meta.url);
-  try {
-    return realpathSync(process.argv[1]) === realpathSync(entry);
-  } catch {
-    return path.resolve(process.argv[1]) === path.resolve(entry);
-  }
-}
-
-if (isDirectRun()) {
+// Through `direct-run.mjs`, which compares realpaths: as plain strings, a run
+// through a symlinked path looks like an import, and the CLI would print
+// nothing and exit 0 — which a caller reads as an empty value.
+if (isDirectRun(import.meta.url)) {
   const [verb, key, ...extra] = process.argv.slice(2);
   if (verb !== "get" || !key || extra.length > 0) {
     console.error("usage: node config.mjs get <dotted.key>");

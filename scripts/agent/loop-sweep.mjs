@@ -50,6 +50,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "./gh-checks.mjs";
 import { isPagedLatchComment, PAGED_LATCH, PAGE_AUTHOR_LOGINS } from "./rounds.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 export const SWEEP_MARKER = "<!-- agent-sweep ";
 export const USAGE_MARKER = "<!-- agent-usage-limit ";
@@ -311,6 +312,6 @@ function sweepOne(pr, { gh, ghJson, dry }) {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isDirectRun(import.meta.url)) {
   main();
 }

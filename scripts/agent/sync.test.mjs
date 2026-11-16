@@ -47,6 +47,7 @@ function repo(t, prefix) {
 function source(t) {
   const r = repo(t, "sync-src-");
   r.write("scripts/agent/config.mjs", real("config.mjs")); // the real loader, so the schema report is real
+  r.write("scripts/agent/direct-run.mjs", real("direct-run.mjs")); // which the loader's CLI imports
   r.write("scripts/agent/keep.mjs", "export const v = 2;\n");
   r.write("scripts/agent/added.mjs", "export const added = true;\n");
   r.write("scripts/agent/lenses/x.md", "# new rubric\n");
@@ -119,7 +120,7 @@ test("sync: the core becomes the source's, and nothing else is touched", (t) => 
     assert.equal(dst.has(rel), false, `${rel} is not in the source and must be deleted`);
   }
   assert.deepEqual(result.deleted.sort(), [".github/workflows/agent-retired.yml", "scripts/agent/gone.mjs", "scripts/agent/lenses/old.md"]);
-  assert.equal(result.copied.length, 5);
+  assert.equal(result.copied.length, 6);
 
   // The destination now verifies against the source's manifest.
   assert.equal(dst.read(MANIFEST_PATH), src.read(MANIFEST_PATH));
@@ -167,7 +168,7 @@ test("sync: a repository adopting the harness for the first time", (t) => {
   dst.write("README.md", "# a repository with no harness yet\n");
   dst.commit("start");
   const result = sync({ from: src.dir, to: dst.dir, repository: "another-org/renamed-upstream" });
-  assert.equal(result.copied.length, 5);
+  assert.equal(result.copied.length, 6);
   assert.deepEqual(result.deleted, []);
   assert.equal(JSON.parse(dst.read(UPSTREAM_PATH)).repository, "another-org/renamed-upstream");
   // No configuration yet: the report says so rather than passing.
@@ -419,7 +420,7 @@ test("CLI: syncs into the repository named by --to and says what is left to do",
   }
   const ok = run("--from", src.dir, "--to", dst.dir);
   assert.equal(ok.status, 0, ok.stderr);
-  assert.match(ok.stdout, /Copied 5 files, deleted 3\./);
+  assert.match(ok.stdout, /Copied 6 files, deleted 3\./);
   assert.match(ok.stdout, /deleted: scripts\/agent\/gone\.mjs/);
   assert.match(ok.stdout, new RegExp(`upstream\\.json: fixture-org/fixture-upstream at ${src.head}`));
   assert.match(ok.stdout, /does not load under the new schema[\s\S]*- repo\.appSlug is missing/);

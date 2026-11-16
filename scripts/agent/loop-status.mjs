@@ -76,6 +76,7 @@ import {
   formatUsd,
   formatMinutes,
 } from "./metrics.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 export const LOOP_STATUS_MARKER = "<!-- agent-loop-status -->";
 
@@ -621,6 +622,6 @@ function main() {
 
 // Import-safe: only run the CLI when executed directly (so tests can import
 // the pure functions without touching gh).
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isDirectRun(import.meta.url)) {
   main();
 }

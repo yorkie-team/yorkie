@@ -14,8 +14,8 @@
 
 import { readFileSync, appendFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { formatUsd, formatMinutes } from "./metrics.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 /** severity counts → "1 crit, 2 maj" (blocking first, zeroes dropped). */
 export function severityCell(counts) {
@@ -158,6 +158,6 @@ function main() {
   }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isDirectRun(import.meta.url)) {
   main();
 }

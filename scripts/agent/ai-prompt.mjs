@@ -17,8 +17,8 @@
 
 import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { BLOCKING, normalizeSeverity } from "./severity.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 /** A finding gates iff it is blocking (critical/major) and NOT demoted. */
 function isFixable(f) {
@@ -123,7 +123,7 @@ export function collectFindings(reviewDir) {
 // node ai-prompt.mjs --review-dir .agent-review --out /tmp/ai-prompt.md
 // Writes the rendered section (or "" when nothing blocks) to --out, and echoes
 // it to stdout. Always exits 0: this is an advisory add-on, never a gate.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isDirectRun(import.meta.url)) {
   const args = process.argv.slice(2);
   const opt = (name, def) => {
     const i = args.indexOf(name);

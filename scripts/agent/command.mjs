@@ -21,7 +21,7 @@
 
 // Node builtins only, and that is a constraint rather than a coincidence —
 // see the CLI guard at the bottom of this file.
-import { appendFileSync } from "node:fs";
+import { appendFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -81,16 +81,46 @@ export function parseCommand(body, { surface = "pr" } = {}) {
 // --- CLI -------------------------------------------------------------------
 // Only run when invoked directly (not when imported by the test file).
 //
-// NOT `isDirectRun` from `scripts/direct-run.mjs`, which is the shared version
-// of this predicate everywhere else in the repository. Six workflows check
-// this file out ALONE — `sparse-checkout: scripts/agent/command.mjs` with
-// `sparse-checkout-cone-mode: false`, which writes exactly that path and
-// nothing else — so a single relative import outside this file turns every
-// `@claude` comment into ERR_MODULE_NOT_FOUND, and the router fails silently
-// at the workflow level: an empty `command=` output reads as "no verb here".
-// `scripts/README.md`'s `agent/` row states the rule; `checks.test.mjs` pins
-// it.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// THE ONE TOOL IN THIS PACKAGE THAT DOES NOT IMPORT `./direct-run.mjs`. Route
+// jobs check this file out ALONE — `sparse-checkout: scripts/agent/command.mjs`
+// with `sparse-checkout-cone-mode: false`, which writes exactly that path and
+// nothing else — so any relative import turns every `@claude` comment into
+// ERR_MODULE_NOT_FOUND, and the router fails silently at the workflow level:
+// an empty `command=` output reads as "no verb here".
+//
+// So this is a copy of `isDirectRun` from `direct-run.mjs`, in builtins only,
+// and it must stay the same function: realpath both sides (a staged path may
+// pass through a symbolic link, and comparing it as typed answers "imported"
+// there, which routes nothing), and throw on a path that exists but cannot be
+// resolved. `router-checkout.test.mjs` runs this file alone and holds the copy
+// to the shared function's answers, state by state.
+function isDirectRun(moduleUrl) {
+  const typed = process.argv[1];
+  if (!typed) return false;
+  const self = fileURLToPath(moduleUrl);
+  if (path.resolve(typed) === self) return true;
+  let entry;
+  try {
+    entry = realpathSync(typed);
+  } catch (error) {
+    if (error?.code === "ENOENT" || error?.code === "ENOTDIR" || error?.code === "ENAMETOOLONG") return false;
+    throw unresolvable(typed, error);
+  }
+  try {
+    return entry === realpathSync(self);
+  } catch (error) {
+    throw unresolvable(self, error);
+  }
+}
+
+function unresolvable(target, cause) {
+  return new Error(
+    `cannot tell whether this script was run or imported: ${target} does not resolve through symbolic links (${cause?.message ?? cause})`,
+    { cause },
+  );
+}
+
+if (isDirectRun(import.meta.url)) {
   const surfaceArg = (process.argv[3] ?? "pr").toLowerCase();
   const surface = surfaceArg === "issue" ? "issue" : "pr";
   const { command } = parseCommand(process.argv[2] ?? "", { surface });

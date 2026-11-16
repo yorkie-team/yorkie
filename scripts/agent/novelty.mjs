@@ -42,9 +42,8 @@
 import { execFile } from "node:child_process";
 import { repoScopedEnv } from "./git-env.mjs";
 import { promisify } from "node:util";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { parseCitations } from "./citation.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -411,6 +410,6 @@ async function dryRun(argv) {
 
 // Only when executed directly — same guard as review-panel.mjs, so importing
 // this module for tests (or from the panel) never starts a dry run.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isDirectRun(import.meta.url)) {
   dryRun(process.argv).catch((e) => { console.error(e.message); process.exit(1); });
 }

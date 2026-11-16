@@ -23,6 +23,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BLOCKING, adjudicationNote, normalizeSeverity } from "./severity.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 // Leave ~5k of the 65 536-char comment cap for the parts the workflow adds
 // around this region (marker, verifier tally, AI-prompt fold, advisory note).
@@ -333,7 +334,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 // Writes the rendered region (or "" when there's nothing to say) to --out and
 // echoes it. Always exits 0 — advisory; the workflow falls back to the old
 // per-lens concatenation when the file is empty/missing.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isDirectRun(import.meta.url)) {
   const args = process.argv.slice(2);
   const opt = (name, def) => {
     const i = args.indexOf(name);

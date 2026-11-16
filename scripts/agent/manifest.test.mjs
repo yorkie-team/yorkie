@@ -469,7 +469,7 @@ test("CLI: verify and digest answer about the tree the script sits in", () => {
 test("CLI: verify fails and names the path when a core file is changed", (t) => {
   // A copy of the modules the CLI needs, in a tree of its own.
   const { root, write } = tree(t);
-  for (const f of ["manifest.mjs", "config.mjs"]) write(`scripts/agent/${f}`, readFileSync(path.join(HERE, f), "utf8"));
+  for (const f of ["manifest.mjs", "config.mjs", "direct-run.mjs"]) write(`scripts/agent/${f}`, readFileSync(path.join(HERE, f), "utf8"));
   write(MANIFEST_PATH, buildManifest(root));
   const run = (...args) => spawnSync(process.execPath, [path.join(root, "scripts/agent/manifest.mjs"), ...args], { encoding: "utf8" });
   assert.equal(run("verify").status, 0);
@@ -480,6 +480,6 @@ test("CLI: verify fails and names the path when a core file is changed", (t) => 
   // `build` makes it match again, and says what it wrote.
   const built = run("build");
   assert.equal(built.status, 0, built.stderr);
-  assert.match(built.stdout, /MANIFEST\.sha256: 5 files, digest [0-9a-f]{64}/);
+  assert.match(built.stdout, /MANIFEST\.sha256: 6 files, digest [0-9a-f]{64}/);
   assert.equal(run("verify").status, 0);
 });

@@ -28,10 +28,9 @@
 
 import { randomUUID } from "node:crypto";
 import { appendFileSync, writeFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { gh, commitCheckRuns, withFullOutput, parseArgs } from "./gh-checks.mjs";
 import { resolveCheckNames as resolveNames } from "./prior-findings.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 /**
  * BOUND THE CHECKLIST. Each lens persists up to 60k chars of findings JSON, so an
@@ -313,4 +312,4 @@ function main() {
   );
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (isDirectRun(import.meta.url)) main();

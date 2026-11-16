@@ -59,7 +59,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { CONFIG_DIR_ENV, HARNESS_DIR, isRepoSlug } from "./config.mjs";
 import { repoScopedEnv } from "./git-env.mjs";
@@ -80,6 +79,7 @@ import {
   readUpstream,
   validateUpstream,
 } from "./manifest.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 /** git in `root`, unable to reach any other repository. Throws with git's own words. */
 function git(root, ...args) {
@@ -367,17 +367,7 @@ function parseArgs(argv) {
   return out.from ? out : null;
 }
 
-function isDirectRun() {
-  if (!process.argv[1]) return false;
-  const entry = fileURLToPath(import.meta.url);
-  try {
-    return realpathSync(process.argv[1]) === realpathSync(entry);
-  } catch {
-    return path.resolve(process.argv[1]) === path.resolve(entry);
-  }
-}
-
-if (isDirectRun()) {
+if (isDirectRun(import.meta.url)) {
   const args = parseArgs(process.argv.slice(2));
   if (!args) {
     console.error("usage: node sync.mjs --from <upstream checkout> [--to <repository>] [--repository owner/name] [--allow-unmerged]");

@@ -47,11 +47,11 @@ import { describeRemoval } from "./test-removals.mjs";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { findingSimilarity, DEFAULT_SIMILARITY } from "./rounds.mjs";
 import { CITATION } from "./citation.mjs";
 import { get } from "./config.mjs";
 import { emitBestEffortWarning } from "./guard-verdict.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 // `maxBuffer`: node's default is 1 MiB, and `gh api --paginate` over a busy PR
 // blows through it. When it does, `execFileSync` throws `ENOBUFS` — not an API
@@ -843,4 +843,4 @@ function main() {
   console.error(`rebuttal: ${rebuttals.length} rebuttal(s) on #${pr}`);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (isDirectRun(import.meta.url)) main();

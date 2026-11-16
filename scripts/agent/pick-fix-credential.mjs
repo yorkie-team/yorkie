@@ -55,10 +55,10 @@
 import { readFileSync, existsSync, statSync, appendFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { MAX_SLOTS, TOKEN_ENV, slotSuffix, readPoolSlots } from "./token-pool.mjs";
 import { SESSION_LIMIT_RE } from "./redact.mjs";
 import { classifyFixResult } from "./metrics.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 // Re-exported, not redefined: `token-pool.mjs` owns the slot naming, and a second
 // copy of this mapping is exactly the drift its docblock warns about.
@@ -352,11 +352,9 @@ async function main(argv) {
   }
 }
 
-// Same guard, same two reasons, as `pick-credential.mjs`: this runs from the
-// parentless `$RUNNER_TEMP/agent-tools` copy, so the shared `isDirectRun` is
-// out of reach; and the `file://` template this replaces compared a
-// percent-encoded URL against a raw path.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// Same guard, same reasons, as `pick-credential.mjs`: this runs from the
+// staged `$RUNNER_TEMP/agent-tools` copy.
+if (isDirectRun(import.meta.url)) {
   // Fail OPEN on a crash, like every other doubt here: no `available=` written
   // reads as "proceed" in the workflow.
   main(process.argv.slice(2)).catch((err) => console.log(`pick-fix-credential: crashed (${err.message}); proceeding as before`));

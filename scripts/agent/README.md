@@ -490,6 +490,12 @@ repository that adopts the harness follows them:
 - This package lives at `scripts/agent`, and nothing in it imports from
   outside it: workflows check it out or copy it without its parent directory.
   `command.mjs` imports nothing at all, because route jobs check it out alone.
+- A tool decides whether it was run or imported with `isDirectRun` from
+  `direct-run.mjs`, which compares realpaths: the staged directory a job runs
+  a tool from may pass through a symbolic link, and a comparison as typed
+  answers "imported" there, so the step does nothing and exits 0. A path it
+  cannot resolve throws. `command.mjs` carries its own copy, for the reason
+  above; `router-checkout.test.mjs` holds it to the shared one.
 - No trusted job that holds a secret or a write-capable token restores an
   Actions cache, in any workflow of the repository, not only the harness's.
   `trusted-cache.test.mjs` checks it in `npm test`; "The Actions cache guard"
@@ -721,7 +727,9 @@ it inspects, so a change in workflow shape that hides them fails too.
 It refuses rather than follows: a script run by a relative path in a step with
 `working-directory:` or after a `cd`, a script reached through `npm run`, and
 `AGENT_HARNESS_CONFIG_DIR` or `NODE_OPTIONS` set at workflow, job or step
-level.
+level. It also refuses a `cp`, `mv` or similar of part of the package: tools
+import each other (each imports `direct-run.mjs`), so the package is staged
+whole.
 
 It treats a local action the same way as a script: `uses: ./…` is allowed for
 `.github/actions/agent-toolchain` alone, from a tree that is trusted at that

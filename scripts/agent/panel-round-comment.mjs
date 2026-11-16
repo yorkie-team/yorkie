@@ -52,6 +52,7 @@ import { buildRounds, neutralizeHiddenMarkers } from "./loop-status.mjs";
 import { emitBestEffortWarning } from "./guard-verdict.mjs";
 import { gh, ghJson, listAllComments } from "./metrics.mjs";
 import { PAGE_AUTHOR_LOGINS } from "./rounds.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 /** Marker prefix; the full marker carries the round's head SHA. */
 export const PANEL_ROUND_PREFIX = "<!-- agent-panel-round:";
@@ -300,6 +301,6 @@ function main() {
 
 // Import-safe: only run the CLI when executed directly, so tests can import the
 // pure renderers without touching gh.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isDirectRun(import.meta.url)) {
   main();
 }

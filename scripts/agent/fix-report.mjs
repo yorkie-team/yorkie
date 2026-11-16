@@ -30,12 +30,11 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { findingSimilarity, DEFAULT_SIMILARITY } from "./rounds.mjs";
 import { fromRebuttalAuthor, readRebuttals } from "./rebuttal.mjs";
 import { emitBestEffortWarning } from "./guard-verdict.mjs";
 import { collectTestRemovals } from "./test-removals.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 // `maxBuffer`: node's default is 1 MiB, and `gh api --paginate` over a busy PR
 // blows through it. When it does, `execFileSync` throws `ENOBUFS` — not an API
@@ -821,4 +820,4 @@ function main() {
   console.error(`fix-report: ${reports.length} report(s) on #${pr}`);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+if (isDirectRun(import.meta.url)) main();

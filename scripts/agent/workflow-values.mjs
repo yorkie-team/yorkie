@@ -36,11 +36,10 @@
 //                                        format on stdout; exit 1 on any failure
 
 import { randomUUID } from "node:crypto";
-import { realpathSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { loadConfig } from "./config.mjs";
+import { isDirectRun } from "./direct-run.mjs";
 
 /** `prefix + text + suffix` when the repository said something, else nothing. */
 const joined = (text, prefix, suffix = "") => (text.trim() === "" ? "" : `${prefix}${text.trim()}${suffix}`);
@@ -169,20 +168,10 @@ export function githubOutput(pairs, delimiter = `harness_${randomUUID()}`) {
   return out;
 }
 
-// Realpath both sides, as `config.mjs` does and for the same reason: compared
-// as typed, a run through a symlinked path looks like an import, prints
-// nothing and exits 0 — which the workflow would read as every value empty.
-function isDirectRun() {
-  if (!process.argv[1]) return false;
-  const entry = fileURLToPath(import.meta.url);
-  try {
-    return realpathSync(process.argv[1]) === realpathSync(entry);
-  } catch {
-    return path.resolve(process.argv[1]) === path.resolve(entry);
-  }
-}
-
-if (isDirectRun()) {
+// Through `direct-run.mjs`, as every tool here: compared as typed, a run
+// through a symlinked path looks like an import, prints nothing and exits 0 —
+// which the workflow would read as every value empty.
+if (isDirectRun(import.meta.url)) {
   try {
     process.stdout.write(githubOutput(values(process.argv.slice(2))));
   } catch (err) {
