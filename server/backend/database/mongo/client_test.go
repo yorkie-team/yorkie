@@ -26,6 +26,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
@@ -52,13 +55,9 @@ const (
 	testDialTimeout = "30s"
 )
 
-// setupTestWithDummyData dials a mongo.Client for the test and closes it when
-// the test ends. A failed dial stops the test there, rather than handing the
-// test a nil client to panic on, which would take down every test after it in
-// the package. A rerun of the test under -count gets a database of its own,
-// since the shared testcases name their documents and users after the test.
-func setupTestWithDummyData(t *testing.T) *mongo.Client {
-	config := &mongo.Config{
+// newTestConfig returns the config setupTestWithDummyData dials with.
+func newTestConfig(t *testing.T) *mongo.Config {
+	return &mongo.Config{
 		ConnectionTimeout:  testDialTimeout,
 		ConnectionURI:      "mongodb://localhost:27017",
 		YorkieDatabase:     helper.TestDBName() + helper.TestRunSuffix(t),
@@ -71,6 +70,15 @@ func setupTestWithDummyData(t *testing.T) *mongo.Client {
 		ChangeCacheSize:    helper.MongoChangeCacheSize,
 		VectorCacheSize:    helper.MongoVectorCacheSize,
 	}
+}
+
+// setupTestWithDummyData dials a mongo.Client for the test and closes it when
+// the test ends. A failed dial stops the test there, rather than handing the
+// test a nil client to panic on, which would take down every test after it in
+// the package. A rerun of the test under -count gets a database of its own,
+// since the shared testcases name their documents and users after the test.
+func setupTestWithDummyData(t *testing.T) *mongo.Client {
+	config := newTestConfig(t)
 	require.NoError(t, config.Validate())
 
 	cli, err := mongo.Dial(config)
@@ -393,4 +401,71 @@ func TestClient_RotateProjectKeys(t *testing.T) {
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, database.ErrProjectNotFound)
 	})
+}
+
+// TestClient_BackfillUserSubjects checks that users written before the
+// subject existed get their username as subject when the server starts, so
+// GitHub users keep their accounts and the unique index can be built.
+func TestClient_BackfillUserSubjects(t *testing.T) {
+	ctx := context.Background()
+	config := newTestConfig(t)
+	require.NoError(t, config.Validate())
+
+	raw, err := mongodriver.Connect(options.Client().ApplyURI(config.ConnectionURI))
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, raw.Disconnect(ctx)) })
+
+	users := raw.Database(config.YorkieDatabase).Collection(mongo.ColUsers)
+	result, err := users.InsertOne(ctx, bson.M{
+		"username":      "legacy-github-user",
+		"auth_provider": database.AuthProviderGitHub,
+	})
+	require.NoError(t, err)
+	legacyID := types.ID(result.InsertedID.(bson.ObjectID).Hex())
+	_, err = users.InsertOne(ctx, bson.M{
+		"username":        "legacy-local-user",
+		"hashed_password": "hashed-password",
+	})
+	require.NoError(t, err)
+
+	cli, err := mongo.Dial(config)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, cli.Close()) })
+
+	github, err := cli.GetOrCreateUserInfoByProvider(
+		ctx, database.AuthProviderGitHub, "legacy-github-user", "legacy-github-user",
+	)
+	require.NoError(t, err)
+	assert.Equal(t, legacyID, github.ID)
+	assert.Equal(t, "legacy-github-user", github.Subject)
+
+	local, err := cli.FindUserInfoByName(ctx, "legacy-local-user")
+	require.NoError(t, err)
+	assert.Equal(t, "legacy-local-user", local.Subject)
+
+	// An older server writes a GitHub user without a subject after this
+	// server started, during a rolling update.
+	result, err = users.InsertOne(ctx, bson.M{
+		"username":      "late-github-user",
+		"auth_provider": database.AuthProviderGitHub,
+	})
+	require.NoError(t, err)
+	lateID := types.ID(result.InsertedID.(bson.ObjectID).Hex())
+
+	late, err := cli.GetOrCreateUserInfoByProvider(
+		ctx, database.AuthProviderGitHub, "late-github-user", "late-github-user",
+	)
+	require.NoError(t, err)
+	assert.Equal(t, lateID, late.ID)
+
+	// The same backfill never hands a user of one provider to another.
+	_, err = users.InsertOne(ctx, bson.M{
+		"username":      "late-other-user",
+		"auth_provider": "external:other",
+	})
+	require.NoError(t, err)
+	_, err = cli.GetOrCreateUserInfoByProvider(
+		ctx, database.AuthProviderGitHub, "late-other-user", "late-other-user",
+	)
+	assert.ErrorIs(t, err, database.ErrUserAuthProviderMismatch)
 }

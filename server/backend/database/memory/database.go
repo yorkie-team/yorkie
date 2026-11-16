@@ -585,12 +585,13 @@ func (d *DB) CreateUserInfo(
 	return info, nil
 }
 
-// GetOrCreateUserInfoByProvider returns the user of the given username
-// under the given auth provider. It only matches users created by that
-// provider: a username held by another auth provider is never returned.
+// GetOrCreateUserInfoByProvider returns the user of the given subject under
+// the given auth provider. It only matches users created by that provider: a
+// username held by another user is never returned.
 func (d *DB) GetOrCreateUserInfoByProvider(
 	_ context.Context,
 	provider string,
+	subject string,
 	username string,
 ) (*database.UserInfo, error) {
 	if provider == "" {
@@ -600,35 +601,39 @@ func (d *DB) GetOrCreateUserInfoByProvider(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
-	raw, err := txn.First(tblUsers, "username", username)
+	raw, err := txn.First(tblUsers, "auth_provider_subject", provider, subject)
 	if err != nil {
-		return nil, fmt.Errorf("find user %s: %w", username, err)
+		return nil, fmt.Errorf("find %s user %s: %w", provider, subject, err)
 	}
 
 	now := gotime.Now()
 	var info *database.UserInfo
 
-	if raw == nil {
+	if raw != nil {
+		info = raw.(*database.UserInfo).DeepCopy()
+		info.AccessedAt = now
+		if err := txn.Insert(tblUsers, info); err != nil {
+			return nil, fmt.Errorf("update %s user %s: %w", provider, subject, err)
+		}
+	} else {
+		holder, err := txn.First(tblUsers, "username", username)
+		if err != nil {
+			return nil, fmt.Errorf("find user %s: %w", username, err)
+		}
+		if holder != nil {
+			return nil, fmt.Errorf("%s: %w", username, database.ErrUserAuthProviderMismatch)
+		}
+
 		info = &database.UserInfo{
 			ID:           newID(),
-			Username:     username,
 			AuthProvider: provider,
+			Subject:      subject,
+			Username:     username,
 			CreatedAt:    now,
 			AccessedAt:   now,
 		}
 		if err := txn.Insert(tblUsers, info); err != nil {
-			return nil, fmt.Errorf("create user %s: %w", username, err)
-		}
-	} else {
-		existing := raw.(*database.UserInfo)
-		if existing.AuthProvider != provider {
-			return nil, fmt.Errorf("%s: %w", username, database.ErrUserAuthProviderMismatch)
-		}
-
-		info = existing.DeepCopy()
-		info.AccessedAt = now
-		if err := txn.Insert(tblUsers, info); err != nil {
-			return nil, fmt.Errorf("update user %s: %w", username, err)
+			return nil, fmt.Errorf("create %s user %s: %w", provider, subject, err)
 		}
 	}
 

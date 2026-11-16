@@ -42,8 +42,8 @@ var (
 	// ErrUserAlreadyExists is returned when the user already exists.
 	ErrUserAlreadyExists = errors.AlreadyExists("user already exists").WithCode("ErrUserAlreadyExists")
 
-	// ErrUserAuthProviderMismatch is returned when the username is already
-	// taken by a user of another auth provider.
+	// ErrUserAuthProviderMismatch is returned when a provider login would
+	// create a user whose username another user already holds.
 	ErrUserAuthProviderMismatch = errors.AlreadyExists(
 		"username taken by another auth provider",
 	).WithCode("ErrUserAuthProviderMismatch")
@@ -176,12 +176,12 @@ type Database interface {
 	// CreateUserInfo creates a new user.
 	CreateUserInfo(ctx context.Context, username string, hashedPassword string) (*UserInfo, error)
 
-	// GetOrCreateUserInfoByProvider returns the user of the given username
-	// under the given auth provider, creating it when missing. It returns
-	// ErrUserAuthProviderMismatch when the username belongs to a user of
-	// another auth provider, and ErrEmptyAuthProvider when the provider is
-	// empty, which would match local users.
-	GetOrCreateUserInfoByProvider(ctx context.Context, provider, username string) (*UserInfo, error)
+	// GetOrCreateUserInfoByProvider returns the user of the given subject
+	// under the given auth provider. When it is missing, it creates the user
+	// with the given username, or returns ErrUserAuthProviderMismatch when
+	// another user holds that username. It returns ErrEmptyAuthProvider when
+	// the provider is empty, which would match local users.
+	GetOrCreateUserInfoByProvider(ctx context.Context, provider, subject, username string) (*UserInfo, error)
 
 	// DeleteUserInfoByName deletes a user by name.
 	DeleteUserInfoByName(ctx context.Context, username string) error

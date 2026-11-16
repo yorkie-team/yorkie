@@ -106,5 +106,5 @@ func (p *githubProvider) Callback(
 		return nil, errGitHubUserInvalid
 	}
 
-	return &Identity{Username: body.Login}, nil
+	return &Identity{Subject: body.Login, Username: body.Login}, nil
 }

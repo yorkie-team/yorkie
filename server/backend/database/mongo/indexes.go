@@ -105,6 +105,17 @@ var collectionInfos = []collectionInfo{
 		indexes: []mongo.IndexModel{{
 			Keys:    bson.D{{Key: "username", Value: int32(1)}},
 			Options: options.Index().SetUnique(true),
+		}, {
+			Keys: bson.D{
+				{Key: "auth_provider", Value: int32(1)},
+				{Key: "subject", Value: int32(1)},
+			},
+			// Partial so that users written without a subject, by a server of
+			// an older version during a rolling update, do not collide.
+			Options: options.Index().
+				SetUnique(true).
+				SetPartialFilterExpression(bson.M{"subject": bson.M{"$exists": true}}).
+				SetName("auth_provider_subject_unique"),
 		}},
 	},
 	{
@@ -259,6 +270,22 @@ var collectionInfos = []collectionInfo{
 			Options: options.Index().SetUnique(true),
 		}},
 	},
+}
+
+// backfillUserSubjects sets the subject of users written before the subject
+// existed to their username, which is the subject of local and GitHub users.
+// It runs at every start and only touches users without a subject, so it is
+// safe to run from several servers at once.
+func backfillUserSubjects(ctx context.Context, db *mongo.Database) error {
+	_, err := db.Collection(ColUsers).UpdateMany(
+		ctx,
+		bson.M{"subject": bson.M{"$exists": false}},
+		mongo.Pipeline{{{Key: "$set", Value: bson.M{"subject": "$username"}}}},
+	)
+	if err != nil {
+		return fmt.Errorf("backfill user subjects: %w", err)
+	}
+	return nil
 }
 
 func ensureIndexes(ctx context.Context, db *mongo.Database) error {

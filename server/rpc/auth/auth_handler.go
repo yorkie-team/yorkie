@@ -255,13 +255,13 @@ func (h *AuthManager) handleProviderCallback(
 		http.Error(w, errInvalidState.Error(), http.StatusBadRequest)
 		return
 	}
-	if identity == nil || identity.Username == "" {
-		logging.DefaultLogger().Warnf("%s login: no username in the identity", provider.Name())
+	if identity == nil || identity.Subject == "" || identity.Username == "" {
+		logging.DefaultLogger().Warnf("%s login: no subject or username in the identity", provider.Name())
 		http.Error(w, "Failed to sign in", http.StatusInternalServerError)
 		return
 	}
 
-	user, err := users.GetOrCreateUserByProvider(ctx, h.be, provider.Name(), identity.Username)
+	user, err := users.GetOrCreateUserByProvider(ctx, h.be, provider.Name(), identity.Subject, identity.Username)
 	if errors.Is(err, database.ErrUserAuthProviderMismatch) {
 		http.Error(w, "Username is already used by an account of another provider", http.StatusConflict)
 		return

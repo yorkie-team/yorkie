@@ -199,7 +199,7 @@ func TestProviderRoutes(t *testing.T) {
 	t.Run("refuses an identity from a provider that skipped the state", func(t *testing.T) {
 		manager := newFakeProviderManager(t, &fakeProvider{
 			skipState: true,
-			identity:  &Identity{Username: "careless-user"},
+			identity:  &Identity{Subject: "careless-user-id", Username: "careless-user"},
 		})
 
 		resp := signInWithFake(t, manager, "")
@@ -208,8 +208,8 @@ func TestProviderRoutes(t *testing.T) {
 	})
 
 	t.Run("rejects a state issued for another provider", func(t *testing.T) {
-		manager := newFakeProviderManager(t, &fakeProvider{identity: &Identity{Username: "fake-user"}})
-		manager.providers["other"] = &fakeProvider{identity: &Identity{Username: "other-user"}}
+		manager := newFakeProviderManager(t, &fakeProvider{identity: fakeUser()})
+		manager.providers["other"] = &fakeProvider{identity: &Identity{Subject: "other-user-id", Username: "other-user"}}
 
 		login := httptest.NewRecorder()
 		manager.ServeHTTP(login, httptest.NewRequest(http.MethodGet, "/auth/other/login", nil))
@@ -222,7 +222,7 @@ func TestProviderRoutes(t *testing.T) {
 	})
 
 	t.Run("rejects an expired state", func(t *testing.T) {
-		manager := newFakeProviderManager(t, &fakeProvider{identity: &Identity{Username: "fake-user"}})
+		manager := newFakeProviderManager(t, &fakeProvider{identity: fakeUser()})
 		manager.stateStore.Set("stale", loginState{route: "fake", issuedAt: time.Now().Add(-stateTTL)})
 
 		callback := httptest.NewRecorder()
@@ -255,16 +255,18 @@ func TestProviderRoutes(t *testing.T) {
 		assert.False(t, hasSessionCookie(resp))
 	})
 
-	t.Run("refuses an identity without a username", func(t *testing.T) {
-		manager := newFakeProviderManager(t, &fakeProvider{identity: &Identity{}})
+	t.Run("refuses an identity without a subject or username", func(t *testing.T) {
+		for _, identity := range []*Identity{{}, {Username: "fake-user"}, {Subject: "fake-user-id"}} {
+			manager := newFakeProviderManager(t, &fakeProvider{identity: identity})
 
-		resp := signInWithFake(t, manager, "")
-		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
-		assert.False(t, hasSessionCookie(resp))
+			resp := signInWithFake(t, manager, "")
+			assert.Equal(t, http.StatusInternalServerError, resp.StatusCode, "%+v", identity)
+			assert.False(t, hasSessionCookie(resp))
+		}
 	})
 
 	t.Run("signs a user of a registered provider in", func(t *testing.T) {
-		manager := newFakeProviderManager(t, &fakeProvider{identity: &Identity{Username: "fake-user"}})
+		manager := newFakeProviderManager(t, &fakeProvider{identity: fakeUser()})
 
 		resp := signInWithFake(t, manager, "")
 		assert.Equal(t, http.StatusTemporaryRedirect, resp.StatusCode)
@@ -274,6 +276,11 @@ func TestProviderRoutes(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "fake", user.AuthProvider)
 	})
+}
+
+// fakeUser returns the identity of the user the fake provider signs in.
+func fakeUser() *Identity {
+	return &Identity{Subject: "fake-user-id", Username: "fake-user"}
 }
 
 // fakeProvider is a provider whose callback answers with the given identity

@@ -68,15 +68,16 @@ func IsCorrectPassword(
 	return info.ToUser(), nil
 }
 
-// GetOrCreateUserByProvider returns the user of the given username under the
-// given auth provider, creating it when missing.
+// GetOrCreateUserByProvider returns the user of the given subject under the
+// given auth provider, creating it with the given username when missing.
 func GetOrCreateUserByProvider(
 	ctx context.Context,
 	be *backend.Backend,
 	provider string,
+	subject string,
 	username string,
 ) (*types.User, error) {
-	info, err := be.DB.GetOrCreateUserInfoByProvider(ctx, provider, username)
+	info, err := be.DB.GetOrCreateUserInfoByProvider(ctx, provider, subject, username)
 	if err != nil {
 		return nil, err
 	}

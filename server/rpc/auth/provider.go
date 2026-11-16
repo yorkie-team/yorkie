@@ -29,7 +29,12 @@ var errInvalidState = errors.New("invalid state")
 
 // Identity is a user identity that a provider verified.
 type Identity struct {
-	// Username is the name of the user in the provider.
+	// Subject is the ID of the user in the provider. It must not change for
+	// the same person and must never be given to another person.
+	Subject string
+
+	// Username is the username of the user when the login creates the user.
+	// A returning user keeps the username it was created with.
 	Username string
 }
 

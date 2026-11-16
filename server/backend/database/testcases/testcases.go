@@ -1090,12 +1090,12 @@ func RunGetOrCreateUserInfoByProviderTest(t *testing.T, db database.Database) {
 		ctx := context.Background()
 		githubID := "github-login-test-user"
 
-		created, err := db.GetOrCreateUserInfoByProvider(ctx, database.AuthProviderGitHub, githubID)
+		created, err := db.GetOrCreateUserInfoByProvider(ctx, database.AuthProviderGitHub, githubID, githubID)
 		assert.NoError(t, err)
 		assert.Equal(t, githubID, created.Username)
 		assert.Equal(t, database.AuthProviderGitHub, created.AuthProvider)
 
-		found, err := db.GetOrCreateUserInfoByProvider(ctx, database.AuthProviderGitHub, githubID)
+		found, err := db.GetOrCreateUserInfoByProvider(ctx, database.AuthProviderGitHub, githubID, githubID)
 		assert.NoError(t, err)
 		assert.Equal(t, created.ID, found.ID)
 	})
@@ -1112,7 +1112,7 @@ func RunGetOrCreateUserInfoByProviderTest(t *testing.T, db database.Database) {
 			errs := make([]error, logins)
 			for i := range logins {
 				wg.Go(func() {
-					info, err := db.GetOrCreateUserInfoByProvider(ctx, database.AuthProviderGitHub, githubID)
+					info, err := db.GetOrCreateUserInfoByProvider(ctx, database.AuthProviderGitHub, githubID, githubID)
 					errs[i] = err
 					if err == nil {
 						ids[i] = info.ID
@@ -1135,7 +1135,7 @@ func RunGetOrCreateUserInfoByProviderTest(t *testing.T, db database.Database) {
 		local, err := db.CreateUserInfo(ctx, username, "hashed-password")
 		assert.NoError(t, err)
 
-		_, err = db.GetOrCreateUserInfoByProvider(ctx, database.AuthProviderGitHub, username)
+		_, err = db.GetOrCreateUserInfoByProvider(ctx, database.AuthProviderGitHub, username, username)
 		assert.ErrorIs(t, err, database.ErrUserAuthProviderMismatch)
 
 		after, err := db.FindUserInfoByName(ctx, username)
@@ -1152,7 +1152,7 @@ func RunGetOrCreateUserInfoByProviderTest(t *testing.T, db database.Database) {
 		defaultUser, _, err := db.EnsureDefaultUserAndProject(ctx, username, "temporary-password")
 		assert.NoError(t, err)
 
-		_, err = db.GetOrCreateUserInfoByProvider(ctx, database.AuthProviderGitHub, username)
+		_, err = db.GetOrCreateUserInfoByProvider(ctx, database.AuthProviderGitHub, username, username)
 		assert.ErrorIs(t, err, database.ErrUserAuthProviderMismatch)
 
 		after, err := db.FindUserInfoByName(ctx, username)
@@ -1165,12 +1165,82 @@ func RunGetOrCreateUserInfoByProviderTest(t *testing.T, db database.Database) {
 		ctx := context.Background()
 		username := "provider-login-shared-name"
 
-		first, err := db.GetOrCreateUserInfoByProvider(ctx, "provider-a", username)
+		first, err := db.GetOrCreateUserInfoByProvider(ctx, "provider-a", "subject-a", username)
 		assert.NoError(t, err)
 		assert.Equal(t, "provider-a", first.AuthProvider)
 
-		_, err = db.GetOrCreateUserInfoByProvider(ctx, "provider-b", username)
+		_, err = db.GetOrCreateUserInfoByProvider(ctx, "provider-b", "subject-b", username)
 		assert.ErrorIs(t, err, database.ErrUserAuthProviderMismatch)
+	})
+
+	t.Run("find a user by subject, not by username", func(t *testing.T) {
+		ctx := context.Background()
+		provider := "provider-subject"
+
+		created, err := db.GetOrCreateUserInfoByProvider(ctx, provider, "employee-1001", "subject-login-alice")
+		assert.NoError(t, err)
+		assert.Equal(t, "employee-1001", created.Subject)
+		assert.Equal(t, "subject-login-alice", created.Username)
+
+		// A returning user keeps the username it was created with, even when
+		// the provider now suggests another one.
+		again, err := db.GetOrCreateUserInfoByProvider(ctx, provider, "employee-1001", "subject-login-alice2")
+		assert.NoError(t, err)
+		assert.Equal(t, created.ID, again.ID)
+		assert.Equal(t, "subject-login-alice", again.Username)
+
+		// Another person whose suggested username is taken is refused rather
+		// than given the existing user.
+		_, err = db.GetOrCreateUserInfoByProvider(ctx, provider, "employee-2002", "subject-login-alice")
+		assert.ErrorIs(t, err, database.ErrUserAuthProviderMismatch)
+	})
+
+	t.Run("let one of several people racing for a username have it", func(t *testing.T) {
+		ctx := context.Background()
+		const logins = 8
+		username := "subject-race-username"
+
+		var wg sync.WaitGroup
+		errs := make([]error, logins)
+		for i := range logins {
+			wg.Go(func() {
+				_, errs[i] = db.GetOrCreateUserInfoByProvider(
+					ctx, "provider-race", fmt.Sprintf("subject-race-%d", i), username,
+				)
+			})
+		}
+		wg.Wait()
+
+		succeeded := 0
+		for i := range logins {
+			if errs[i] == nil {
+				succeeded++
+				continue
+			}
+			assert.ErrorIs(t, errs[i], database.ErrUserAuthProviderMismatch)
+		}
+		assert.Equal(t, 1, succeeded)
+	})
+
+	t.Run("give the default user its username as subject", func(t *testing.T) {
+		ctx := context.Background()
+		username := "provider-login-default-subject"
+
+		defaultUser, _, err := db.EnsureDefaultUserAndProject(ctx, username, "temporary-password")
+		assert.NoError(t, err)
+		assert.Equal(t, username, defaultUser.Subject)
+	})
+
+	t.Run("give local users their username as subject", func(t *testing.T) {
+		ctx := context.Background()
+		username := "provider-login-local-subject"
+
+		_, err := db.CreateUserInfo(ctx, username, "hashed-password")
+		assert.NoError(t, err)
+
+		found, err := db.FindUserInfoByName(ctx, username)
+		assert.NoError(t, err)
+		assert.Equal(t, username, found.Subject)
 	})
 
 	t.Run("refuse an empty provider", func(t *testing.T) {
@@ -1180,7 +1250,7 @@ func RunGetOrCreateUserInfoByProviderTest(t *testing.T, db database.Database) {
 		_, err := db.CreateUserInfo(ctx, username, "hashed-password")
 		assert.NoError(t, err)
 
-		_, err = db.GetOrCreateUserInfoByProvider(ctx, "", username)
+		_, err = db.GetOrCreateUserInfoByProvider(ctx, "", username, username)
 		assert.ErrorIs(t, err, database.ErrEmptyAuthProvider)
 	})
 }
