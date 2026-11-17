@@ -30,7 +30,8 @@ RPC:
     # GitHubRedirectURL is GitHub OAuth callback URL.
     GitHubRedirectURL: "http://localhost:8080/auth/github/callback"
 
-    # GitHubCallbackRedirectURL is GitHub OAuth callback redirect URL.
+    # GitHubCallbackRedirectURL is where the browser goes after a dashboard
+    # login, through GitHub or an external provider.
     GitHubCallbackRedirectURL: "http://localhost:5173/dashboard"
 
     # GitHubAuthURL is GitHub OAuth2 authorization URL.
@@ -44,6 +45,22 @@ RPC:
 
     # GitHubUserURL is GitHub User API URL.
     GitHubUserURL: "https://api.github.com/user"
+
+    # ExternalProviders are login brokers run outside Yorkie. A broker signs
+    # users in however its organization does and posts an ES256 JWT
+    # assertion to /auth/external/{Name}/callback. Outside a config file,
+    # give the same list in a file with --auth-external-providers-file.
+    ExternalProviders: []
+    # - Name: corp                    # lowercase letters, digits, hyphens
+    #   DisplayName: "Company SSO"    # the dashboard login button
+    #   LoginURL: "https://login-broker.example.com/login"  # gets ?state=
+    #   Issuer: "login-broker"        # must equal `iss`
+    #   Audience: "yorkie-admin"      # must be in `aud`
+    #   PublicKeys:                   # P-256; list two while rotating
+    #     - |
+    #       -----BEGIN PUBLIC KEY-----
+    #       ...
+    #       -----END PUBLIC KEY-----
 
 # Profiling is the configuration for the profiling server.
 Profiling:

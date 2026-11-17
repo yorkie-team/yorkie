@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-16
+updated: 2026-11-17
 ---
 
 # Tasks Archive
@@ -8,13 +8,15 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 119
+Total archived tasks: 121
 
-## 2026/11 (7 tasks)
+## 2026/11 (9 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
 | Match GitHub Login Users by Auth Provider (2026-11-16) | [20261116-github-login-provider-scope-todo.md](./2026/11/20261116-github-login-provider-scope-todo.md) | [20261116-github-login-provider-scope-lessons.md](./2026/11/20261116-github-login-provider-scope-lessons.md) |
+| Add an external login provider verifying signed assertions (2026-11-16) | [20261116-external-login-provider-todo.md](./2026/11/20261116-external-login-provider-todo.md) | [20261116-external-login-provider-lessons.md](./2026/11/20261116-external-login-provider-lessons.md) |
+| Move GitHub login behind a provider interface (2026-11-16) | [20261116-auth-provider-interface-todo.md](./2026/11/20261116-auth-provider-interface-todo.md) | [20261116-auth-provider-interface-lessons.md](./2026/11/20261116-auth-provider-interface-lessons.md) |
 | Restore a revision whose root holds a plain object with a `type` field (2026-11-15) | [20261115-yson-plain-type-field-todo.md](./2026/11/20261115-yson-plain-type-field-todo.md) | [20261115-yson-plain-type-field-lessons.md](./2026/11/20261115-yson-plain-type-field-lessons.md) |
 | Add unit tests for pkg/units (2026-11-15) | [20261115-units-tests-todo.md](./2026/11/20261115-units-tests-todo.md) | [20261115-units-tests-lessons.md](./2026/11/20261115-units-tests-lessons.md) |
 | Deactivate a client whose attached document is gone (2026-11-10) | [20261110-deactivate-missing-document-todo.md](./2026/11/20261110-deactivate-missing-document-todo.md) | [20261110-deactivate-missing-document-lessons.md](./2026/11/20261110-deactivate-missing-document-lessons.md) |

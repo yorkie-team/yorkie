@@ -1,0 +1,13 @@
+{{- if .Values.yorkie.args.externalProviders }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.yorkie.name }}-external-providers
+  namespace: {{ .Values.yorkie.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.yorkie.name }}
+    app.kubernetes.io/component: server
+data:
+  external-providers.yaml: |
+    {{- toYaml .Values.yorkie.args.externalProviders | nindent 4 }}
+{{- end }}

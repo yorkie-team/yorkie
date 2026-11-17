@@ -42,9 +42,14 @@ type UserInfo struct {
 	// ID is the unique ID of the user.
 	ID types.ID `bson:"_id"`
 
-	// AuthProvider is the provider of the authentication. Valid values are
-	// "github" and empty string for local authentication.
+	// AuthProvider is the provider of the authentication: "github",
+	// "external:<name>" for an external login provider, or empty for local
+	// authentication.
 	AuthProvider string `bson:"auth_provider"`
+
+	// Subject is the ID of the user in its auth provider, unique together
+	// with AuthProvider. It is the username for local and GitHub users.
+	Subject string `bson:"subject"`
 
 	// Username is the username of the user.
 	Username string `bson:"username"`
@@ -63,6 +68,7 @@ type UserInfo struct {
 // NewUserInfo creates a new UserInfo of the given username.
 func NewUserInfo(username, hashedPassword string) *UserInfo {
 	return &UserInfo{
+		Subject:        username,
 		Username:       username,
 		HashedPassword: hashedPassword,
 		CreatedAt:      time.Now().UTC().Truncate(time.Millisecond),
@@ -78,6 +84,7 @@ func (i *UserInfo) DeepCopy() *UserInfo {
 	return &UserInfo{
 		ID:             i.ID,
 		AuthProvider:   i.AuthProvider,
+		Subject:        i.Subject,
 		Username:       i.Username,
 		HashedPassword: i.HashedPassword,
 		CreatedAt:      i.CreatedAt,

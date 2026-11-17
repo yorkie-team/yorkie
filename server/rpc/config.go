@@ -85,6 +85,10 @@ func (c *Config) Validate() error {
 		return err
 	}
 
+	if err := c.Auth.Validate(); err != nil {
+		return err
+	}
+
 	return nil
 }
 

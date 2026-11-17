@@ -94,6 +94,19 @@ var schema = &memdb.DBSchema{
 					Unique:  true,
 					Indexer: &memdb.StringFieldIndex{Field: "Username"},
 				},
+				// Local users have no auth provider and are left out, as the
+				// partial index leaves users without a subject out in MongoDB.
+				"auth_provider_subject": {
+					Name:         "auth_provider_subject",
+					Unique:       true,
+					AllowMissing: true,
+					Indexer: &memdb.CompoundIndex{
+						Indexes: []memdb.Indexer{
+							&memdb.StringFieldIndex{Field: "AuthProvider"},
+							&memdb.StringFieldIndex{Field: "Subject"},
+						},
+					},
+				},
 			},
 		},
 		tblMembers: {

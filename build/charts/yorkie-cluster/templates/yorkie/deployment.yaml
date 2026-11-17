@@ -31,6 +31,9 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.yorkie.ports.profilingPort }}"
         prometheus.io/path: "/metrics"
+        {{- with .Values.yorkie.args.externalProviders }}
+        checksum/external-providers: {{ toYaml . | sha256sum }}
+        {{- end }}
         {{- /*
         No checksum of the signing key here, by design: a pod annotation is
         readable with `get pods`, which is a far weaker permission than
@@ -188,6 +191,10 @@ spec:
           "--auth-github-user-url",
           "{{ .Values.yorkie.args.githubUserURL }}",
           {{- end }}
+          {{- if .Values.yorkie.args.externalProviders }}
+          "--auth-external-providers-file",
+          "/etc/yorkie/auth/external-providers.yaml",
+          {{- end }}
           {{- if .Values.yorkie.args.starrocksDSN }}
           "--starrocks-dsn",
           "{{ .Values.yorkie.args.starrocksDSN }}",
@@ -227,3 +234,15 @@ spec:
           initialDelaySeconds: 10
         resources:
           {{ toYaml .Values.yorkie.resources | nindent 12 }}
+        {{- if .Values.yorkie.args.externalProviders }}
+        volumeMounts:
+          - name: external-providers
+            mountPath: /etc/yorkie/auth
+            readOnly: true
+        {{- end }}
+      {{- if .Values.yorkie.args.externalProviders }}
+      volumes:
+        - name: external-providers
+          configMap:
+            name: {{ .Values.yorkie.name }}-external-providers
+      {{- end }}

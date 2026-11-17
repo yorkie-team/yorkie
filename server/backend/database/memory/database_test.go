@@ -86,8 +86,8 @@ func TestDB(t *testing.T) {
 		testcases.RunFindUserInfoByNameTest(t, db)
 	})
 
-	t.Run("GetOrCreateUserInfoByGitHubID test", func(t *testing.T) {
-		testcases.RunGetOrCreateUserInfoByGitHubIDTest(t, db)
+	t.Run("GetOrCreateUserInfoByProvider test", func(t *testing.T) {
+		testcases.RunGetOrCreateUserInfoByProviderTest(t, db)
 	})
 
 	t.Run("FindProjectInfoBySecretKey test", func(t *testing.T) {

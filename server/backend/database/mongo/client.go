@@ -125,6 +125,10 @@ func Dial(conf *Config) (*Client, error) {
 		return nil, fmt.Errorf("ping MongoDB: %w", err)
 	}
 
+	if err := backfillUserSubjects(ctx, client.Database(conf.YorkieDatabase)); err != nil {
+		return nil, err
+	}
+
 	if err := ensureIndexes(ctx, client.Database(conf.YorkieDatabase)); err != nil {
 		return nil, err
 	}
@@ -495,6 +499,7 @@ func (c *Client) ensureDefaultUserInfo(
 		"username": candidate.Username,
 	}, bson.M{
 		"$setOnInsert": bson.M{
+			"subject":         candidate.Subject,
 			"username":        candidate.Username,
 			"hashed_password": candidate.HashedPassword,
 			"created_at":      candidate.CreatedAt,
@@ -812,6 +817,7 @@ func (c *Client) CreateUserInfo(
 ) (*database.UserInfo, error) {
 	info := database.NewUserInfo(username, hashedPassword)
 	result, err := c.collection(ColUsers).InsertOne(ctx, bson.M{
+		"subject":         info.Subject,
 		"username":        info.Username,
 		"hashed_password": info.HashedPassword,
 		"created_at":      info.CreatedAt,
@@ -828,48 +834,86 @@ func (c *Client) CreateUserInfo(
 	return info, nil
 }
 
-// GetOrCreateUserInfoByGitHubID returns a user by the given GitHub ID. It
-// only matches users created by GitHub login: a username held by another
-// auth provider is never returned.
-func (c *Client) GetOrCreateUserInfoByGitHubID(
+// GetOrCreateUserInfoByProvider returns the user of the given subject under
+// the given auth provider. It only matches users created by that provider: a
+// username held by another user is never returned.
+func (c *Client) GetOrCreateUserInfoByProvider(
 	ctx context.Context,
-	githubID string,
+	provider string,
+	subject string,
+	username string,
 ) (*database.UserInfo, error) {
-	info, err := c.touchGitHubUser(ctx, githubID, true)
+	if provider == "" {
+		return nil, fmt.Errorf("%s: %w", username, database.ErrEmptyAuthProvider)
+	}
+
+	info, err := c.touchProviderUser(ctx, provider, subject, username, true)
 	if !mongo.IsDuplicateKeyError(err) {
 		return info, err
 	}
 
-	// The insert lost on the unique username. MongoDB does not retry it
-	// because the filter has fields beyond the index key, so look again: a
-	// concurrent login created the GitHub user, or the name belongs to a
-	// user of another provider.
-	info, err = c.touchGitHubUser(ctx, githubID, false)
+	// The insert lost on a unique index. Look again: a concurrent login
+	// created the user, or another user holds the username.
+	info, err = c.touchProviderUser(ctx, provider, subject, username, false)
+	if !errors.Is(err, mongo.ErrNoDocuments) {
+		return info, err
+	}
+
+	// An older server may have written this provider's user without a
+	// subject after this server backfilled at start, during a rolling
+	// update. Backfill that one user and look once more. The filter keeps
+	// the provider, so a user of another provider is never taken over.
+	if err := c.backfillProviderUserSubject(ctx, provider, username); err != nil {
+		return nil, err
+	}
+	info, err = c.touchProviderUser(ctx, provider, subject, username, false)
 	if errors.Is(err, mongo.ErrNoDocuments) {
-		return nil, fmt.Errorf("%s: %w", githubID, database.ErrUserAuthProviderMismatch)
+		return nil, fmt.Errorf("%s: %w", username, database.ErrUserAuthProviderMismatch)
 	}
 	return info, err
 }
 
-// touchGitHubUser updates the access time of the GitHub user of the given
-// GitHub ID and returns it. With upsert, it creates the user when missing.
-func (c *Client) touchGitHubUser(
+// backfillProviderUserSubject sets the subject of the given provider's user
+// of the given username to the username, when it has none.
+func (c *Client) backfillProviderUserSubject(ctx context.Context, provider, username string) error {
+	_, err := c.collection(ColUsers).UpdateOne(
+		ctx,
+		bson.M{
+			"auth_provider": provider,
+			"username":      username,
+			"subject":       bson.M{"$exists": false},
+		},
+		mongo.Pipeline{{{Key: "$set", Value: bson.M{"subject": "$username"}}}},
+	)
+	if err != nil {
+		return fmt.Errorf("backfill subject of %s user %s: %w", provider, username, err)
+	}
+	return nil
+}
+
+// touchProviderUser updates the access time of the user of the given subject
+// under the given provider and returns it. With upsert, it creates the user
+// with the given username when missing.
+func (c *Client) touchProviderUser(
 	ctx context.Context,
-	githubID string,
+	provider string,
+	subject string,
+	username string,
 	upsert bool,
 ) (*database.UserInfo, error) {
 	now := gotime.Now()
 	result := c.collection(ColUsers).FindOneAndUpdate(
 		ctx,
 		bson.M{
-			"username":      githubID,
-			"auth_provider": database.AuthProviderGitHub,
+			"auth_provider": provider,
+			"subject":       subject,
 		},
 		bson.M{
 			"$set": bson.M{
 				"accessed_at": now,
 			},
 			"$setOnInsert": bson.M{
+				"username":   username,
 				"created_at": now,
 			},
 		},
@@ -880,7 +924,7 @@ func (c *Client) touchGitHubUser(
 
 	info := &database.UserInfo{}
 	if err := result.Decode(info); err != nil {
-		return nil, fmt.Errorf("touch github user %s: %w", githubID, err)
+		return nil, fmt.Errorf("touch %s user %s: %w", provider, subject, err)
 	}
 
 	return info, nil

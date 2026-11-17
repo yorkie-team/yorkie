@@ -32,6 +32,7 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/messaging"
 	"github.com/yorkie-team/yorkie/server/backend/warehouse"
 	"github.com/yorkie-team/yorkie/server/logging"
+	"github.com/yorkie-team/yorkie/server/rpc/auth"
 )
 
 var (
@@ -71,6 +72,7 @@ var (
 	authGitHubAuthURL             string
 	authGitHubTokenURL            string
 	authGitHubDeviceAuthURL       string
+	authExternalProvidersFile     string
 
 	channelSessionTTL             time.Duration
 	channelBatchWindow            time.Duration
@@ -164,6 +166,13 @@ func newServerCmd() *cobra.Command {
 			conf.RPC.Auth.GitHubAuthURL = authGitHubAuthURL
 			conf.RPC.Auth.GitHubTokenURL = authGitHubTokenURL
 			conf.RPC.Auth.GitHubDeviceAuthURL = authGitHubDeviceAuthURL
+			if authExternalProvidersFile != "" {
+				providers, err := auth.LoadExternalProviders(authExternalProvidersFile)
+				if err != nil {
+					return err
+				}
+				conf.RPC.Auth.ExternalProviders = providers
+			}
 
 			conf.Profiling.PprofEnabled = pprofEnabled
 
@@ -407,6 +416,13 @@ func init() {
 		"auth-github-device-auth-url",
 		server.DefaultGitHubDeviceAuthURL,
 		"GitHub OAuth2 device authorization URL",
+	)
+	cmd.Flags().StringVar(
+		&authExternalProvidersFile,
+		"auth-external-providers-file",
+		"",
+		"YAML file listing the external login providers of the dashboard. "+
+			"See Auth.ExternalProviders in server/config.sample.yml",
 	)
 
 	cmd.Flags().DurationVar(
