@@ -43,7 +43,7 @@ func TestTextOriginFuzz(t *testing.T) {
 	found, errs := 0, 0
 	errTrace := ""
 	for seed := 0; seed < trials; seed++ {
-		rnd := rand.New(rand.NewSource(int64(seed)))
+		rnd := rand.New(rand.NewSource(int64(seed))) //nolint:gosec // seeded so a failing seed reproduces
 		n := 2 + rnd.Intn(2)
 		docs := intentReplicas(t, n, "XY")
 		var trace []string
@@ -123,7 +123,8 @@ func originSyncAll(docs []*document.Document) error {
 			if i == j {
 				continue
 			}
-			if err := d.ApplyChangePack(change.NewPack(p.DocumentKey, change.NewCheckpoint(0, 0), p.Changes, time.InitialVersionVector, nil)); err != nil {
+			pack := change.NewPack(p.DocumentKey, change.NewCheckpoint(0, 0), p.Changes, time.InitialVersionVector, nil)
+			if err := d.ApplyChangePack(pack); err != nil {
 				return err
 			}
 		}
@@ -133,7 +134,8 @@ func originSyncAll(docs []*document.Document) error {
 		if len(p.Changes) > 0 {
 			lastSeq = p.Changes[len(p.Changes)-1].ClientSeq()
 		}
-		if err := docs[i].ApplyChangePack(change.NewPack(p.DocumentKey, change.NewCheckpoint(0, lastSeq), nil, time.InitialVersionVector, nil)); err != nil {
+		ack := change.NewPack(p.DocumentKey, change.NewCheckpoint(0, lastSeq), nil, time.InitialVersionVector, nil)
+		if err := docs[i].ApplyChangePack(ack); err != nil {
 			return err
 		}
 	}

@@ -31,6 +31,9 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
+// strategyForward types each character after the previous one.
+const strategyForward = "forward"
+
 // intentSyncAll delivers every replica's pending changes to every other
 // replica, then acknowledges each replica's own changes.
 func intentSyncAll(t *testing.T, docs []*document.Document) {
@@ -95,7 +98,7 @@ func TestIntentPropertyInterleaving(t *testing.T) {
 	base := "0123456789"
 
 	for _, n := range []int{2, 3} {
-		for _, strategy := range []string{"forward", "backward", "random", "mixed"} {
+		for _, strategy := range []string{strategyForward, "backward", "random", "mixed"} {
 			for _, neighbouring := range []bool{false, true} {
 				placement := "same"
 				if neighbouring {
@@ -116,14 +119,14 @@ func TestIntentPropertyInterleaving(t *testing.T) {
 							}
 							s := strategy
 							if s == "mixed" {
-								s = []string{"forward", "backward", "random"}[rnd.Intn(3)]
+								s = []string{strategyForward, "backward", "random"}[rnd.Intn(3)]
 							}
 							chars := []rune(alphabets[i])[:2+rnd.Intn(4)]
 							var run []rune
 							for _, c := range chars {
 								off := 0
 								switch s {
-								case "forward":
+								case strategyForward:
 									off = len(run)
 								case "random":
 									off = rnd.Intn(len(run) + 1)
@@ -152,7 +155,7 @@ func TestIntentPropertyInterleaving(t *testing.T) {
 					}
 					t.Logf("STAT %s interleaved=%d/%d (%.1f%%)", name, interleaved, trials,
 						100*float64(interleaved)/trials)
-					if strategy == "forward" {
+					if strategy == strategyForward {
 						require.Zero(t, interleaved, "forward typing must not interleave")
 					}
 				})

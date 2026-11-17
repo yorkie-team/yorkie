@@ -72,7 +72,7 @@ func BenchmarkRightOriginLocal(b *testing.B) {
 		})
 		b.Run(fmt.Sprintf("random/%d", n), func(b *testing.B) {
 			doc := roTypedDoc(b, n)
-			rnd := rand.New(rand.NewSource(1))
+			rnd := rand.New(rand.NewSource(1)) //nolint:gosec // a fixed seed keeps runs comparable
 			size := n
 			for b.Loop() {
 				roInsert(b, doc, rnd.Intn(size+1))

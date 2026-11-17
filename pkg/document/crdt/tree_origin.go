@@ -277,18 +277,9 @@ func (t *Tree) integrateTree(
 ) (*TreeNode, resource.DataSize, error) {
 	var diff resource.DataSize
 	children := parent.Children(true)
-	start := 0
-	if left != parent {
-		start = -1
-		for i, c := range children {
-			if c == left {
-				start = i + 1
-				break
-			}
-		}
-		if start < 0 {
-			return left, diff, nil
-		}
+	start := indexAfter(children, parent, left)
+	if start < 0 {
+		return left, diff, nil
 	}
 
 	rightIdx, children, d, err := t.originRightIn(children, start, origin.Right)
@@ -296,14 +287,9 @@ func (t *Tree) integrateTree(
 	if err != nil {
 		return nil, diff, err
 	}
-	if left != parent {
+	if s := indexAfter(children, parent, left); s >= 0 {
 		// A split of the right origin may have reshaped the slice.
-		for i, c := range children {
-			if c == left {
-				start = i + 1
-				break
-			}
-		}
+		start = s
 	}
 	if rightIdx == start {
 		return left, diff, nil
@@ -321,27 +307,8 @@ func (t *Tree) integrateTree(
 		order[children[i]] = i
 	}
 	right := children[rightIdx]
-
 	compareRight := func(id *TreeNodeID) int {
-		if id == nil {
-			return 1
-		}
-		if id.Equal(right.id) {
-			return 0
-		}
-		n := t.findFloorNode(id)
-		idx, ok := order[n]
-		if !ok || n == left {
-			return 1
-		}
-		if n == right {
-			// Inside the right piece but past its start: after it.
-			return 1
-		}
-		if idx < rightIdx {
-			return -1
-		}
-		return 1
+		return t.compareTreeRight(id, left, right, order, rightIdx)
 	}
 
 	dest, prev := left, left
@@ -384,6 +351,48 @@ func (t *Tree) integrateTree(
 		}
 	}
 	return dest, diff, nil
+}
+
+// indexAfter returns the index in children right after left, 0 when left is
+// parent (the start of the parent), or -1 when left is not among children.
+func indexAfter(children []*TreeNode, parent, left *TreeNode) int {
+	if left == parent {
+		return 0
+	}
+	for i, c := range children {
+		if c == left {
+			return i + 1
+		}
+	}
+	return -1
+}
+
+// compareTreeRight compares a sibling's right origin id with right, the
+// inserting node's right origin at children index rightIdx: -1 when it lies
+// inside the window before right, 0 when it is right, 1 when it lies past
+// it (outside the window, at left, or inside the right piece past its
+// start).
+func (t *Tree) compareTreeRight(
+	id *TreeNodeID,
+	left, right *TreeNode,
+	order map[*TreeNode]int,
+	rightIdx int,
+) int {
+	if id == nil {
+		return 1
+	}
+	if id.Equal(right.id) {
+		return 0
+	}
+	n := t.findFloorNode(id)
+	idx, ok := order[n]
+	if !ok || n == left || n == right {
+		return 1
+	}
+	if idx < rightIdx {
+		return -1
+	}
+	return 1
 }
 
 // integrateTreeOpen places an insertion that has no right origin in this

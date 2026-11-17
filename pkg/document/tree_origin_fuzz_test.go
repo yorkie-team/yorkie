@@ -125,6 +125,21 @@ func treeFuzzOp(t *testing.T, rnd *rand.Rand, d *document.Document, mix string, 
 // TestTreeOriginFuzz runs random concurrent Tree edits with GC on some replicas
 // and checks convergence. ORIGIN_TREE_MIX=struct adds element split, merge and
 // paragraph insertion to plain text insert/delete. ORIGIN_TREE_FUZZ sets trials.
+// fuzzSeedRange returns the seeds [first, end) to run: ORIGIN_SEED0 shifts
+// the first n seeds to start there, and ORIGIN_SEED runs that one seed only.
+func fuzzSeedRange(n int) (first, end int) {
+	end = n
+	if v := os.Getenv("ORIGIN_SEED0"); v != "" {
+		first, _ = strconv.Atoi(v)
+		end += first
+	}
+	if v := os.Getenv("ORIGIN_SEED"); v != "" {
+		first, _ = strconv.Atoi(v)
+		end = first + 1
+	}
+	return first, end
+}
+
 func TestTreeOriginFuzz(t *testing.T) {
 	trials := 2000
 	if v := os.Getenv("ORIGIN_TREE_FUZZ"); v != "" {
@@ -137,19 +152,11 @@ func TestTreeOriginFuzz(t *testing.T) {
 		t.Run(mix, func(t *testing.T) {
 			diverged, errs := 0, 0
 			var first string
-			first0 := 0
-			if v := os.Getenv("ORIGIN_SEED0"); v != "" {
-				first0, _ = strconv.Atoi(v)
-				trials += first0
-			}
-			if v := os.Getenv("ORIGIN_SEED"); v != "" {
-				first0, _ = strconv.Atoi(v)
-				trials = first0 + 1
-			}
+			first0, trials := fuzzSeedRange(trials)
 			config := fmt.Sprintf("origins=%v gc=%v seeds=[%d,%d)",
 				crdt.TreeOrigins, os.Getenv("ORIGIN_NOGC") == "", first0, trials)
 			for seed := first0; seed < trials; seed++ {
-				rnd := rand.New(rand.NewSource(int64(seed)))
+				rnd := rand.New(rand.NewSource(int64(seed))) //nolint:gosec // seeded so a failing seed reproduces
 				n := 2 + rnd.Intn(2)
 				docs := treeReplicas(t, n, "XY")
 				if mix == "struct" {

@@ -74,19 +74,20 @@ var tagRe = regexp.MustCompile(`<[^>]*>`)
 // parent, each paragraph a one-character marker, typed forward or backward.
 func TestTreeIntentInterleaving(t *testing.T) {
 	trials := 300
-	if os.Getenv("ORIGIN_TREE_TRIALS") != "" {
-		fmt.Sscan(os.Getenv("ORIGIN_TREE_TRIALS"), &trials)
+	if v := os.Getenv("ORIGIN_TREE_TRIALS"); v != "" {
+		_, err := fmt.Sscan(v, &trials)
+		require.NoError(t, err)
 	}
 	alphabets := []string{"가나다라마바", "abcdef", "ABCDEF"}
 
 	for _, n := range []int{2, 3} {
-		for _, strategy := range []string{"forward", "backward", "random"} {
+		for _, strategy := range []string{strategyForward, "backward", "random"} {
 			for _, neighbouring := range []bool{false, true} {
 				name := fmt.Sprintf("text replicas=%d strategy=%s neighbouring=%v", n, strategy, neighbouring)
 				t.Run(name, func(t *testing.T) {
 					interleaved, diverged := 0, 0
 					for seed := range trials {
-						rnd := rand.New(rand.NewSource(int64(seed + 1)))
+						rnd := rand.New(rand.NewSource(int64(seed + 1))) //nolint:gosec // seeded so a failing seed reproduces
 						docs := treeReplicas(t, n, "0123456789")
 						runs := make([]string, n)
 						for i, d := range docs {
@@ -99,7 +100,7 @@ func TestTreeIntentInterleaving(t *testing.T) {
 							for _, c := range chars {
 								off := 0
 								switch strategy {
-								case "forward":
+								case strategyForward:
 									off = len(run)
 								case "random":
 									off = rnd.Intn(len(run) + 1)
@@ -139,12 +140,12 @@ func TestTreeIntentInterleaving(t *testing.T) {
 			}
 		}
 
-		for _, strategy := range []string{"forward", "backward"} {
+		for _, strategy := range []string{strategyForward, "backward"} {
 			name := fmt.Sprintf("elements replicas=%d strategy=%s", n, strategy)
 			t.Run(name, func(t *testing.T) {
 				interleaved, diverged := 0, 0
 				for seed := range trials {
-					rnd := rand.New(rand.NewSource(int64(seed + 1)))
+					rnd := rand.New(rand.NewSource(int64(seed + 1))) //nolint:gosec // seeded so a failing seed reproduces
 					docs := treeReplicas(t, n, "X")
 					runs := make([]string, n)
 					for i, d := range docs {
@@ -154,11 +155,11 @@ func TestTreeIntentInterleaving(t *testing.T) {
 							// After the first paragraph (<p>X</p> spans 0..3).
 							// Each new paragraph is 3 positions wide.
 							at := 3
-							if strategy == "forward" {
+							if strategy == strategyForward {
 								at = 3 + 3*k
 							}
 							treeEdit(t, d, at, at, &json.TreeNode{Type: "p", Children: []json.TreeNode{{Type: "text", Value: string(c)}}})
-							if strategy == "forward" {
+							if strategy == strategyForward {
 								run = append(run, c)
 							} else {
 								run = append([]rune{c}, run...)

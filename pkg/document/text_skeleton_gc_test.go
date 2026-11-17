@@ -86,7 +86,7 @@ func TestSkeletonGCFuzz(t *testing.T) {
 	diverged, errs, skeletonsSeen := 0, 0, 0
 	var first string
 	for seed := 0; seed < trials; seed++ {
-		rnd := rand.New(rand.NewSource(int64(seed)))
+		rnd := rand.New(rand.NewSource(int64(seed))) //nolint:gosec // seeded so a failing seed reproduces
 		n := 2 + rnd.Intn(2)
 		docs := intentReplicas(t, n, "XY")
 		var trace []string
@@ -162,7 +162,8 @@ func TestSkeletonGCFuzz(t *testing.T) {
 			}
 		}
 	}
-	t.Logf("SKELFUZZ diverged=%d errors=%d of %d (skeletons on d0 across trials: %d)", diverged, errs, trials, skeletonsSeen)
+	t.Logf("SKELFUZZ diverged=%d errors=%d of %d (skeletons on d0 across trials: %d)",
+		diverged, errs, trials, skeletonsSeen)
 	require.Zero(t, diverged, first)
 	require.Zero(t, errs, first)
 	require.Positive(t, skeletonsSeen)

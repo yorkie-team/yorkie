@@ -122,7 +122,7 @@ func TestMixedOps(t *testing.T) {
 				}
 				diverged, broken, errs := 0, 0, 0
 				for seed := range trials {
-					rnd := rand.New(rand.NewSource(int64(seed + 1)))
+					rnd := rand.New(rand.NewSource(int64(seed + 1))) //nolint:gosec // seeded so a failing seed reproduces
 					json.RecordInsertOrigins = !c.legacyBase
 					docs := intentReplicas(t, n, "0123456789")
 					var runs []string
@@ -161,25 +161,9 @@ func TestMixedOps(t *testing.T) {
 								}
 								runs = append(runs, string(run))
 								if c.extra {
-									l := len([]rune(intentText(d)))
-									switch rnd.Intn(5) {
-									case 0: // delete a base char right before the run
-										if at > 0 {
-											logf("r%d d%d delete [%d,%d)", round, i, at-1, at)
-											originEdit(t, d, func(tx *json.Text) { tx.Edit(at-1, at, "") })
-										}
-									case 1: // replace the char right after the run
-										if e := at + len(run); e < l {
-											logf("r%d d%d replace [%d,%d) with *", round, i, e, e+1)
-											originEdit(t, d, func(tx *json.Text) { tx.Edit(e, e+1, "*") })
-										}
-									case 2:
-										logf("r%d d%d style [%d,%d)", round, i, max(0, at-1), min(l, at+len(run)+1))
-										originEdit(t, d, func(tx *json.Text) { tx.Style(max(0, at-1), min(l, at+len(run)+1), map[string]string{"b": "1"}) })
-									case 3:
-										logf("r%d d%d undo", round, i)
-										require.NoError(t, d.Undo())
-									}
+									mixedExtraOp(t, rnd, d, at, len(run), func(f string, a ...any) {
+										logf("r%d d%d "+f, append([]any{round, i}, a...)...)
+									})
 								}
 							}
 							if c.gc && rnd.Intn(2) == 0 {
@@ -238,6 +222,39 @@ func TestMixedOps(t *testing.T) {
 				t.Logf("MIXED %s errors=%d diverged=%d interleaved=%d (of %d)", name, errs, diverged, broken, trials)
 			})
 		}
+	}
+}
+
+// mixedExtraOp applies one random edit around a run of runLen characters
+// just typed at at: a deletion before it, a replacement after it, a style
+// over it, an undo, or nothing.
+func mixedExtraOp(
+	t *testing.T,
+	rnd *rand.Rand,
+	d *document.Document,
+	at, runLen int,
+	logf func(string, ...any),
+) {
+	l := len([]rune(intentText(d)))
+	switch rnd.Intn(5) {
+	case 0: // delete a base char right before the run
+		if at > 0 {
+			logf("delete [%d,%d)", at-1, at)
+			originEdit(t, d, func(tx *json.Text) { tx.Edit(at-1, at, "") })
+		}
+	case 1: // replace the char right after the run
+		if e := at + runLen; e < l {
+			logf("replace [%d,%d) with *", e, e+1)
+			originEdit(t, d, func(tx *json.Text) { tx.Edit(e, e+1, "*") })
+		}
+	case 2:
+		logf("style [%d,%d)", max(0, at-1), min(l, at+runLen+1))
+		originEdit(t, d, func(tx *json.Text) {
+			tx.Style(max(0, at-1), min(l, at+runLen+1), map[string]string{"b": "1"})
+		})
+	case 3:
+		logf("undo")
+		require.NoError(t, d.Undo())
 	}
 }
 

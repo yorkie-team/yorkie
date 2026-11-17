@@ -1034,20 +1034,9 @@ func (s *RGATreeSplit[V]) integrate(
 	if err != nil {
 		return nil, err
 	}
-	right, err := s.originRightNode(origin.Right)
-	rightResolved := err == nil
+	right, rightResolved, err := s.integrateRight(left, origin.Right, vv)
 	if err != nil {
-		if vv == nil {
-			return nil, err
-		}
-		// The right origin was purged. It was the first node after left
-		// that the author knew; every node between them is concurrent. So
-		// the first node after left that the change's version vector
-		// covers is the same boundary.
-		right = left.next
-		for right != nil && !vv.EqualToOrAfter(right.createdAt()) {
-			right = right.next
-		}
+		return nil, err
 	}
 	if left.next == right && right != nil {
 		return left, nil
@@ -1056,42 +1045,7 @@ func (s *RGATreeSplit[V]) integrate(
 		return s.integrateOpen(left, origin, editedAt)
 	}
 
-	// Order of the nodes in the window (left, right]. A right origin that is
-	// not in it lies past right. The map is reused across inserts.
-	if s.scanOrder == nil {
-		s.scanOrder = make(map[*RGATreeSplitNode[V]]int)
-	}
-	order := s.scanOrder
-	clear(order)
-	if s.scanByID == nil {
-		s.scanByID = make(map[pieceKey]int)
-	}
-	byID := s.scanByID
-	clear(byID)
-	order[left] = 0
-	i := 1
-	for n := left.next; n != nil && n != right; n = n.next {
-		order[n] = i
-		byID[pieceKeyOf(n.id)] = i
-		i++
-	}
-	rightIdx := i
-	if right != nil {
-		order[right] = rightIdx
-	}
-	compareRight := func(n *RGATreeSplitNode[V]) int {
-		if n == right {
-			return 0
-		}
-		if idx, ok := order[n]; ok && n != nil {
-			if idx < rightIdx {
-				return -1
-			}
-			return 0
-		}
-		return 1
-	}
-
+	w := s.indexWindow(left, right)
 	dest := left
 	prev := left
 	scanning := false
@@ -1111,22 +1065,9 @@ func (s *RGATreeSplit[V]) integrate(
 			return nil, err
 		}
 		if oleft == left {
-			// Siblings typed against the same right neighbour share the
-			// right origin, and a right origin that starts a piece inside
-			// the window is in byID; answer both without an index lookup.
-			var cmp int
-			if rightResolved && o.origin.Right != nil && origin.Right != nil && o.origin.Right.Equal(origin.Right) {
-				cmp = 0
-			} else if idx, ok := byID[pieceKeyOf0(o.origin.Right)]; ok && o.origin.Right != nil {
-				if idx < rightIdx {
-					cmp = -1
-				}
-			} else {
-				oright, err := s.originRightNode(o.origin.Right)
-				if err != nil {
-					return nil, err
-				}
-				cmp = compareRight(oright)
+			cmp, err := s.compareSiblingRight(w, o.origin.Right, origin.Right, rightResolved)
+			if err != nil {
+				return nil, err
 			}
 			switch {
 			case cmp < 0:
@@ -1141,13 +1082,110 @@ func (s *RGATreeSplit[V]) integrate(
 			}
 			continue
 		}
-		if _, inWindow := order[oleft]; !inWindow {
+		if _, inWindow := w.order[oleft]; !inWindow {
 			// oleft < left: o belongs to an earlier insertion point.
 			break
 		}
 		// oleft > left: o hangs off something inside the window; skip it.
 	}
 	return dest, nil
+}
+
+// integrateRight resolves an insertion's right origin. A right origin that
+// was purged was the first node after left that the author knew, and every
+// node between them is concurrent, so the first node after left that the
+// change's version vector covers is the same boundary. resolved reports
+// whether the right origin itself was found.
+func (s *RGATreeSplit[V]) integrateRight(
+	left *RGATreeSplitNode[V],
+	id *RGATreeSplitNodeID,
+	vv time.VersionVector,
+) (right *RGATreeSplitNode[V], resolved bool, err error) {
+	right, err = s.originRightNode(id)
+	if err == nil {
+		return right, true, nil
+	}
+	if vv == nil {
+		return nil, false, err
+	}
+	right = left.next
+	for right != nil && !vv.EqualToOrAfter(right.createdAt()) {
+		right = right.next
+	}
+	return right, false, nil
+}
+
+// integrateWindow indexes the nodes of an integrate window (left, right].
+type integrateWindow[V RGATreeSplitValue] struct {
+	right *RGATreeSplitNode[V]
+	// order maps each node in [left, right] to its position.
+	order map[*RGATreeSplitNode[V]]int
+	// byID maps the start ID of each piece strictly inside the window to its
+	// position.
+	byID     map[pieceKey]int
+	rightIdx int
+}
+
+// indexWindow indexes the window (left, right]. A right origin that is not
+// in it lies past right. The maps are reused across inserts.
+func (s *RGATreeSplit[V]) indexWindow(left, right *RGATreeSplitNode[V]) integrateWindow[V] {
+	if s.scanOrder == nil {
+		s.scanOrder = make(map[*RGATreeSplitNode[V]]int)
+	}
+	order := s.scanOrder
+	clear(order)
+	if s.scanByID == nil {
+		s.scanByID = make(map[pieceKey]int)
+	}
+	byID := s.scanByID
+	clear(byID)
+	order[left] = 0
+	i := 1
+	for n := left.next; n != nil && n != right; n = n.next {
+		order[n] = i
+		byID[pieceKeyOf(n.id)] = i
+		i++
+	}
+	if right != nil {
+		order[right] = i
+	}
+	return integrateWindow[V]{right: right, order: order, byID: byID, rightIdx: i}
+}
+
+// compareSiblingRight compares a sibling's right origin with the inserting
+// node's: -1 when it lies inside the window, before the inserting node's
+// right origin; 0 when it is the same boundary; 1 when it lies past it.
+// Siblings typed against the same right neighbour share the right origin,
+// and a right origin that starts a piece inside the window is in byID, so
+// both are answered without an index lookup.
+func (s *RGATreeSplit[V]) compareSiblingRight(
+	w integrateWindow[V],
+	sibling, mine *RGATreeSplitNodeID,
+	mineResolved bool,
+) (int, error) {
+	if mineResolved && sibling != nil && mine != nil && sibling.Equal(mine) {
+		return 0, nil
+	}
+	if idx, ok := w.byID[pieceKeyOf0(sibling)]; ok && sibling != nil {
+		if idx < w.rightIdx {
+			return -1, nil
+		}
+		return 0, nil
+	}
+	n, err := s.originRightNode(sibling)
+	if err != nil {
+		return 0, err
+	}
+	if n == w.right {
+		return 0, nil
+	}
+	if idx, ok := w.order[n]; ok && n != nil {
+		if idx < w.rightIdx {
+			return -1, nil
+		}
+		return 0, nil
+	}
+	return 1, nil
 }
 
 // integrateOpen places an insertion that has no right origin. It scans

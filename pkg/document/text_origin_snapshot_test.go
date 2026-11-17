@@ -45,7 +45,7 @@ func originString(o *crdt.InsertOrigin) string {
 // result as a snapshot, decodes it, and checks every node's origin survives.
 func TestOriginSnapshotRoundTrip(t *testing.T) {
 	for seed := int64(1); seed <= 50; seed++ {
-		rnd := rand.New(rand.NewSource(seed))
+		rnd := rand.New(rand.NewSource(seed)) //nolint:gosec // seeded so a failing seed reproduces
 		d1, d2 := intentShared(t, "0123456789")
 		for range 5 {
 			for _, d := range []*document.Document{d1, d2} {

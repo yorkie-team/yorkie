@@ -2224,6 +2224,33 @@ func (t *Tree) Edit(
 	)
 }
 
+// editOrigin returns the insertion origin an edit is placed by, or nil when
+// it carries none: an edit that inserts nothing and splits nothing, or one
+// from a client that records no right origin. The left origin is recomputed
+// from from, which every replica resolves the same way.
+func (t *Tree) editOrigin(
+	from *TreePos,
+	contents []*TreeNode,
+	splitLevel int,
+	rightOrigin *TreeInsertOrigin,
+	versionVector time.VersionVector,
+) *TreeInsertOrigin {
+	if rightOrigin == nil || (len(contents) == 0 && splitLevel == 0) {
+		return nil
+	}
+	left, ok := t.canonicalLeft(from)
+	if !ok {
+		return nil
+	}
+	return &TreeInsertOrigin{
+		Left:   left,
+		Right:  rightOrigin.Right,
+		parent: from.ParentID,
+		cut:    len(contents) == 0,
+		vv:     versionVector,
+	}
+}
+
 // EditWithOrigin is Edit with the right insertion origin of the contents
 // (see TreeInsertOrigin). Only rightOrigin.Right is read; the left origin is
 // the from position. A nil rightOrigin keeps the createdAt-only rule.
@@ -2241,18 +2268,7 @@ func (t *Tree) EditWithOrigin(
 	var pairs []GCPair
 	var info TreeEditReverseInfo
 
-	var origin *TreeInsertOrigin
-	if rightOrigin != nil && (len(contents) > 0 || splitLevel > 0) {
-		if left, ok := t.canonicalLeft(from); ok {
-			origin = &TreeInsertOrigin{
-				Left:   left,
-				Right:  rightOrigin.Right,
-				parent: from.ParentID,
-				cut:    len(contents) == 0,
-				vv:     versionVector,
-			}
-		}
-	}
+	origin := t.editOrigin(from, contents, splitLevel, rightOrigin, versionVector)
 
 	// Phase 1: Position Resolution — resolve CRDTTreePos to tree nodes.
 	fromParent, fromLeft, diffFrom, err := t.findTreeNodesWithSplitText(from, editedAt, BoundaryInsert, origin)
