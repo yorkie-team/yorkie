@@ -694,6 +694,16 @@ func parseDedupCounter(raw map[string]any) (Counter, error) {
 	if len(registers) == 0 {
 		registers = nil
 	}
+	// The apply path cannot report a bad payload: json.Object.setNewCounter
+	// and json.Array.AddNewCounter panic when RestoreHLL fails. This decodes
+	// untrusted input — admin CreateDocument/UpdateDocument bodies and
+	// RestoreRevision snapshots — so reject a malformed payload here, where
+	// it is still an error.
+	if registers != nil {
+		if err := crdt.ValidateHLLPayload(registers); err != nil {
+			return Counter{}, fmt.Errorf("parse dedup counter hll: %w: %w", err, ErrInvalidYSON)
+		}
+	}
 
 	switch counterType {
 	case counterTypeInt:
