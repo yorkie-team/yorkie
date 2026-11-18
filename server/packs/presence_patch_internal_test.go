@@ -17,6 +17,7 @@
 package packs
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -88,19 +89,32 @@ func presencePack(firstClientSeq uint32, pcs ...*presence.Change) *change.Pack {
 	return change.NewPack(key.Key("doc"), change.InitialCheckpoint, changes, nil, nil)
 }
 
+// cursorWidth is the width every value patches below carries, so each fold of
+// a run costs the same however far into the run it is.
+const cursorWidth = 2
+
+// cursor is the value the nth patch of a run carries. The values are distinct,
+// so a put the fold keeps names which patch produced it: a walk that stopped
+// folding into the base part way through a coalesced run would keep an earlier
+// one than the sender's own.
+func cursor(n int) string {
+	return fmt.Sprintf("%0*d", cursorWidth, n)
+}
+
 // maxFoldBase returns a presence that the patches below fold into a put of
 // exactly maxPresenceBaseSize, so the fold budget pays for exactly
 // maxPresenceFoldPerPack / maxPresenceBaseSize of them.
 func maxFoldBase() presence.Data {
-	size := maxPresenceBaseSize - len("blob") - len("cursor") - len("1") - 2*presenceEntryOverhead
+	size := maxPresenceBaseSize - len("blob") - len("cursor") - cursorWidth - 2*presenceEntryOverhead
 	return presence.Data{"blob": strings.Repeat("x", size)}
 }
 
-// patches returns n patches of the one key maxFoldBase leaves room for.
+// patches returns n patches of the one key maxFoldBase leaves room for, each
+// carrying a different value.
 func patches(n int) []*presence.Change {
 	var pcs []*presence.Change
-	for range n {
-		pcs = append(pcs, patch(presence.Data{"cursor": "1"}))
+	for i := range n {
+		pcs = append(pcs, patch(presence.Data{"cursor": cursor(i)}))
 	}
 	return pcs
 }
@@ -465,10 +479,14 @@ func TestFoldPresencePatches(t *testing.T) {
 		_, err := foldPresencePatches(be, clientAt(docKey, 7, 3), docKey, pack)
 		require.NoError(t, err)
 
-		folded, total := put(presence.Data{"blob": base["blob"], "cursor": "1"}), 0
+		// Each put the fold keeps carries the presence of the patch it sits
+		// on, the last one of the run included: the run drops the presences
+		// between them, not the one the sender ends up holding.
+		total := 0
 		for i, cn := range pack.Changes {
 			pc := cn.PresenceChange()
 			if i < within || i == len(pack.Changes)-1 {
+				folded := put(presence.Data{"blob": base["blob"], "cursor": cursor(i)})
 				assert.Equal(t, folded, pc, "change %d", i)
 				total += presenceSize(pc.Presence)
 				continue
@@ -499,7 +517,7 @@ func TestFoldPresencePatches(t *testing.T) {
 		assert.Nil(t, pack.Changes[within+1].PresenceChange())
 		assert.Equal(t, put(presence.Data{"name": "a"}), pack.Changes[within+2].PresenceChange())
 		assert.Nil(t, pack.Changes[within+3].PresenceChange())
-		assert.Equal(t, put(presence.Data{"name": "a", "cursor": "1"}),
+		assert.Equal(t, put(presence.Data{"name": "a", "cursor": cursor(1)}),
 			pack.Changes[len(pack.Changes)-1].PresenceChange())
 	})
 
@@ -511,9 +529,9 @@ func TestFoldPresencePatches(t *testing.T) {
 		pack := presencePack(4, patches(maxPresenceFoldPerPack/maxPresenceBaseSize)...)
 		_, err := foldPresencePatches(be, clientAt(docKey, 7, 3), docKey, pack)
 		require.NoError(t, err)
-		folded := presence.Data{"blob": base["blob"], "cursor": "1"}
-		for _, cn := range pack.Changes {
-			assert.Equal(t, put(folded), cn.PresenceChange())
+		for i, cn := range pack.Changes {
+			folded := presence.Data{"blob": base["blob"], "cursor": cursor(i)}
+			assert.Equal(t, put(folded), cn.PresenceChange(), "change %d", i)
 		}
 	})
 
@@ -528,13 +546,21 @@ func TestFoldPresencePatches(t *testing.T) {
 		for range maxPresenceFoldPerPack/maxPresenceBaseSize + 1 {
 			pcs = append(pcs, put(base))
 		}
-		pack := presencePack(4, append(pcs, patch(presence.Data{"cursor": "1"}))...)
+		// Two patches, not one: a budget that charged the puts would coalesce
+		// the run they form and write its single put on the last of them, which
+		// is the put a single trailing patch would be given either way.
+		pack := presencePack(4, append(pcs, patches(2)...)...)
 
 		_, err := foldPresencePatches(be, clientAt(docKey, 7, 3), docKey, pack)
 		require.NoError(t, err)
+		n := len(pack.Changes)
 		assert.Equal(t,
-			put(presence.Data{"blob": base["blob"], "cursor": "1"}),
-			pack.Changes[len(pack.Changes)-1].PresenceChange(),
+			put(presence.Data{"blob": base["blob"], "cursor": cursor(0)}),
+			pack.Changes[n-2].PresenceChange(),
+		)
+		assert.Equal(t,
+			put(presence.Data{"blob": base["blob"], "cursor": cursor(1)}),
+			pack.Changes[n-1].PresenceChange(),
 		)
 	})
 
