@@ -4,26 +4,43 @@
 
 ## Notes
 
-- `converter.FromPresenceChange` sits on two paths with opposite requirements,
-  exactly like `FromOperations`: the wire, where rejecting malformed input is
-  the point, and `database.PresenceChangeFromBytes`, where rejecting anything
-  makes the document holding that row unloadable. The repo already had the
-  shape for this — `api/converter/normalize.go` — so the presence fix is a twin
-  of `FromStoredOperations`, not a new idea.
-- The faithful repair for a stored non-JSON presence value is to JSON-encode
-  it. Go readers already saw the raw text (`DecodeValue` returns a non-JSON
-  value as it arrived), and after the repair they still do; JS readers go from
-  a thrown `JSON.parse` to the same text. No reader loses anything.
+- The first cut copied the `FromOperations`/`FromStoredOperations` split:
+  strict on the wire, lenient on the stored path. That split works for
+  operations because the two paths really are separate functions with separate
+  callers. Presence has three callers, not two, and the third breaks the
+  analogy: `FromPresenceChange` is also the Go *client's* pull decoder
+  (`client/client.go` Attach/Detach/PushPullChanges). A rejection there
+  protects nobody and wedges the client, and a rejection at ingress refuses the
+  entire change pack — every batched document operation with it — of any client
+  running a Go SDK older than `presence.EncodeValue` (0.6.36), permanently and
+  with no recourse but an upgrade.
+- So the enforcement became a repair on every path instead of a rejection on
+  one: `repairPresence` JSON-encodes, in place, any value peers cannot parse.
+  It keeps the invariant the task was filed for — nothing unparseable is ever
+  persisted or fanned out — while costing no version-skew story at all. Worth
+  remembering before reaching for a strict/lenient pair: count the callers
+  first, because the pair only pays off when the strict side has a caller that
+  can actually act on the rejection.
+- The faithful repair for a non-JSON presence value is to JSON-encode it. Go
+  readers already saw the raw text (`DecodeValue` returns an unencoded value as
+  it arrived), and after the repair they still do; JS readers go from a thrown
+  `JSON.parse` to the same text. No reader loses anything.
+- `json.Valid` is a weaker predicate than "a JS peer can `JSON.parse` it": Go's
+  scanner accepts nesting up to 10000 levels, while V8 throws `RangeError` from
+  a stack overflow well before that. A syntax check alone would have left the
+  wedge the task was filed to close half open, so the repair also covers
+  anything nested past `maxPresenceValueDepth`.
 - Because the fan-out path (`ServerPack.ToPBChangePack`) re-encodes
   `info.PresenceChange`, which came from `PresenceChangeFromBytes`, repairing
-  at the stored-decode step is enough to keep the strict client-side decode
-  from failing on legacy rows. No separate `Sanitize…` twin was needed.
+  at the decode step is enough to keep a pulling client from seeing a legacy
+  value. No separate `Sanitize…` twin was needed.
 
 - The integration lane caught what unit tests could not: several suites build
   change packs straight from `api.Presence` / `inner.Presence` literals rather
   than through a document's write path, so they carried bare strings
-  (`"name": "a"`) that the new boundary refuses. Those fixtures had to be
-  JSON-encoded. They are the only in-tree clients that bypass
+  (`"name": "a"`) that the new boundary rewrites. Those fixtures were
+  JSON-encoded so their assertions describe the fold rather than the repair.
+  They are the only in-tree clients that bypass
   `presence.Set`, which is the evidence that the SDK write paths already
   satisfy the contract — and the reminder that a wire-level check has to be
   validated against the raw-RPC tests, not only against the SDK ones.

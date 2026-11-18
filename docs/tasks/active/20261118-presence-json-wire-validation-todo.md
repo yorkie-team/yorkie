@@ -19,27 +19,29 @@ document, repeatedly, with nothing more than presence-write access.
 
 ## Plan
 
-1. **Strict at the wire boundary.** `FromPresenceChange` rejects a `PUT`/`PATCH`
-   carrying a value that is not valid JSON, with a new
-   `ErrInvalidPresenceValue` (`errors.InvalidArgument`, so the RPC layer maps it
-   to `InvalidArgument` rather than `Internal`).
+1. **Repair at the wire boundary, do not reject.** `FromPresenceChange`
+   JSON-encodes, in place, a `PUT`/`PATCH` value no peer can parse
+   (`repairPresence`), so what the server stores and fans out is always
+   parseable. Rejection is not available: the same function is the server's
+   ingress, the Go client's pull decoder, and the read path for rows and
+   snapshots persisted under the looser rules. Refusing at ingress would reject
+   the whole change pack of every client on a Go SDK older than
+   `presence.EncodeValue` (0.6.36); refusing on pull would wedge the client;
+   refusing on a stored read would make the document permanently unreadable —
+   the exact poison pill `converter.FromStoredOperations` exists to avoid. One
+   repair covers all three, and needs no rollout ordering.
 
-2. **Lenient on the stored path.** `FromPresenceChange` is also the read path
-   for rows persisted under the looser rules
-   (`database.PresenceChangeFromBytes`), and rejecting there would make the
-   document holding such a row permanently unreadable — the exact poison pill
-   `converter.FromStoredOperations` exists to avoid. Add the presence twin,
-   `FromStoredPresenceChange`, which repairs before it decodes: a stored value
-   that is not valid JSON is JSON-encoded, which is what it already meant
-   (a bare string), so Go readers see the same text and JS readers can finally
-   parse it.
+2. **Bound the nesting as well as the syntax.** "Valid JSON" is weaker than
+   "a peer can parse it": Go's scanner accepts 10000 levels of nesting, V8's
+   `JSON.parse` overflows its stack first. A value deeper than
+   `maxPresenceValueDepth` is repaired the same way as unparseable text.
 
-3. **Snapshot decode too.** `fromPresences` (snapshot read path) normalizes the
-   same way, so a document rebuilt from a legacy snapshot no longer re-emits the
-   poisoned value into the next snapshot.
+3. **Snapshot decode too.** `fromPresences` (snapshot read path) repairs the
+   same way, so a document rebuilt from a legacy snapshot no longer re-emits
+   the poisoned value into the next snapshot.
 
-4. Tests in `api/converter` for both sides, plus a `server/packs` or
-   `server/rpc` level test that the ingress path refuses the poisoned pack.
+4. Tests in `api/converter` for the wire path, the ingress pack, the nesting
+   bound and the snapshot path.
 
 5. Update `docs/design/presence.md` (Presence Value Encoding) and the `SetJSON`
    doc comment, which currently promises the value is stored as given.

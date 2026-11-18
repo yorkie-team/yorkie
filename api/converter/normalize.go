@@ -18,13 +18,11 @@ package converter
 
 import (
 	"encoding/binary"
-	"encoding/json"
 	goerrors "errors"
 	"math"
 
 	api "github.com/yorkie-team/yorkie/api/yorkie/v1"
 	"github.com/yorkie-team/yorkie/pkg/document/operations"
-	"github.com/yorkie-team/yorkie/pkg/document/presence"
 )
 
 // FromStoredOperations decodes operations read back from storage
@@ -100,52 +98,6 @@ func withoutUndatedOperations(pbOps []*api.Operation) []*api.Operation {
 	}
 
 	return kept
-}
-
-// FromStoredPresenceChange decodes a presence change read back from storage
-// (database.PresenceChangeFromBytes), where FromPresenceChange's job is the
-// opposite of what it is on the wire: rejecting one makes the document holding
-// that change permanently unreadable, so the JSON check added at the wire
-// boundary has to be undone here for the data already written under the looser
-// rules.
-//
-// It repairs instead of rejecting -- see NormalizeStoredPresence -- so the
-// decode that follows is the ordinary one, and anything else the wire path
-// refuses still surfaces.
-func FromStoredPresenceChange(pbPresenceChange *api.PresenceChange) (*presence.Change, error) {
-	if pbPresenceChange != nil {
-		NormalizeStoredPresence(pbPresenceChange.Presence)
-	}
-
-	return FromPresenceChange(pbPresenceChange)
-}
-
-// NormalizeStoredPresence JSON-encodes, in place, every value of the given
-// stored presence that is not valid JSON.
-//
-// Encoding is the faithful repair rather than a convenient one: such a value
-// is a bare string a Go client wrote before the encoding existed, and the
-// string it stands for is itself. A Go reader saw that text before the repair
-// (presence.DecodeValue returns a non-JSON value as it arrived) and sees the
-// same text after it; a JS reader goes from a thrown JSON.parse -- which fails
-// the entire pack carrying the value -- to that same text. No reader loses
-// anything, and what the server later hands to a pulling client is a value its
-// strict decoder accepts.
-//
-// Whether any such value exists cannot be answered by a query -- presence
-// changes are persisted as opaque protobuf blobs -- so the population is
-// unknown rather than known-empty, and the pass costs one json.Valid per value
-// if it is empty.
-func NormalizeStoredPresence(pbPresence *api.Presence) {
-	if pbPresence == nil {
-		return
-	}
-
-	for key, value := range pbPresence.Data {
-		if !json.Valid([]byte(value)) {
-			pbPresence.Data[key] = presence.EncodeValue(value)
-		}
-	}
 }
 
 // NormalizeStoredOperations repairs, in place, the shapes FromOperations

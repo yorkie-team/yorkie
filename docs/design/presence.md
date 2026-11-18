@@ -187,16 +187,31 @@ RPC API directly runs nobody's write path, and a presence value the server
 accepts is persisted in the change history and in the next snapshot and fanned
 out to every peer — so one unparseable value wedges every JS peer on that
 document, repeatedly, for as long as it is stored.
-`converter.FromPresenceChange` therefore rejects a `PUT`/`PATCH` carrying a
-value that is not valid JSON, with `ErrInvalidPresenceValue`.
 
-That function is also the read path for rows written before the check existed,
-where rejecting would make the document permanently unreadable — the same split
-`FromOperations`/`FromStoredOperations` already has. Stored decoding goes
-through `converter.FromStoredPresenceChange`, which JSON-encodes an unparseable
-value instead of refusing it (`NormalizeStoredPresence`, applied to stored
-snapshots too). That is what the value already meant: a Go reader saw the raw
-text before and after, and a JS reader can now read it at all.
+`converter.FromPresenceChange` therefore **repairs rather than rejects**: a
+`PUT`/`PATCH` value no peer can parse is JSON-encoded in place
+(`repairPresence`), so what the server stores and fans out is always a value
+every peer parses. "No peer can parse it" is wider than "not valid JSON":
+Go's scanner accepts nesting up to 10000 levels while a recursive-descent
+parser such as V8's `JSON.parse` overflows its stack first, so a value nested
+deeper than `maxPresenceValueDepth` (100 — far above any presence payload,
+far below where parsers give out) is repaired the same way.
+
+Repair rather than rejection is what the three callers of that decode need:
+
+| Caller | Why a rejection is not an option |
+| --- | --- |
+| Server ingress (`FromChangePack` at `yorkie_server.go`) | A client on a Go SDK older than `presence.EncodeValue` (added for 0.6.36) puts a bare string on the wire. Rejecting refuses its whole change pack — every document operation batched with it — on every retry, with nothing the client can do but upgrade. |
+| Go client pull (`client.Client`) | The same function decodes every server response. A value arriving from an older server would fail the pull permanently; the rejection would protect nobody and wedge the client. |
+| Stored rows and snapshots (`PresenceChangeFromBytes`, `fromPresences`) | A row written before the encoding existed would make its document permanently unreadable — the same hazard `FromStoredOperations` exists for. |
+
+Encoding is the faithful repair, not a convenient one: the value is a bare
+string, and the string it stands for is itself. A Go reader saw that text
+before the repair (`DecodeValue` returns an unencoded value as it arrived) and
+sees the same text after it; a JS reader goes from a thrown `JSON.parse` to
+that same text. So no rollout ordering is required — an upgraded server accepts
+every released client, and a document carrying legacy values heals as they are
+read.
 
 Three consequences are worth stating:
 

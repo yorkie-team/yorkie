@@ -36,9 +36,11 @@ import (
 // advertises the capability, folds the patch into a full put, and refuses a
 // patch it has no base for.
 //
-// The presence values here are JSON, which is the only form the wire boundary
-// accepts (converter.ErrInvalidPresenceValue): a string is quoted, a number
-// stands as it is.
+// The presence values here are JSON, which is the form a value takes once it
+// has been through any SDK's write path: a string is quoted, a number stands
+// as it is. Sending them already encoded keeps the assertions below about the
+// fold itself rather than about the repair the wire boundary would otherwise
+// apply (converter.FromPresenceChange).
 func TestPresencePatch(t *testing.T) {
 	ctx := context.Background()
 

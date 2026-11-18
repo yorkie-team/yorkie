@@ -76,10 +76,9 @@ func TestRegistry(t *testing.T) {
 	t.Run("presenceChange test", func(t *testing.T) {
 		p := presence.NewData()
 		// Encoded, because that is the form a presence value takes once it has
-		// been through any SDK's write path -- and the only form the wire
-		// boundary accepts. A raw value round-trips too, but the stored decode
-		// repairs it (converter.NormalizeStoredPresence), so it would not come
-		// back as it went in.
+		// been through any SDK's write path. A raw value round-trips too, but
+		// the decode repairs it (converter.FromPresenceChange), so it would not
+		// come back as it went in.
 		p.Set("color", presence.EncodeValue("orange"))
 		presenceChange := &presence.Change{
 			ChangeType: presence.Put,

@@ -379,14 +379,14 @@ func fromOperation(pbOp *api.Operation) (operations.Operation, error) {
 }
 
 // fromPresences decodes the presences carried by a stored snapshot. Like
-// FromStoredPresenceChange it repairs rather than rejects, so a snapshot
-// written before presence values had to be JSON stays loadable -- and the
-// document rebuilt from it no longer carries the unparseable value into the
-// next snapshot it writes.
+// FromPresenceChange it repairs rather than rejects, so a snapshot written
+// before presence values had to be JSON stays loadable -- and the document
+// rebuilt from it no longer carries the unparseable value into the next
+// snapshot it writes.
 func fromPresences(pbPresences map[string]*api.Presence) *presence.Map {
 	presences := presence.NewMap()
 	for id, pbPresence := range pbPresences {
-		NormalizeStoredPresence(pbPresence)
+		repairPresence(pbPresence)
 		presences.Store(id, fromPresence(pbPresence))
 	}
 	return presences
@@ -405,28 +405,112 @@ func fromPresence(pbPresence *api.Presence) presence.Data {
 	return data
 }
 
-// validatePresence reports whether every value of the given presence is valid
-// JSON, which is the form a presence value takes on the wire: the JS SDK
-// `JSON.parse`s each one, so a value that is not valid JSON fails the whole
-// pack carrying it for every peer that reads it, and -- once the server has
-// stored it -- for every pull of that document thereafter. The server is the
-// only boundary that can keep such a value from being persisted, since a
-// client speaking the RPC API directly does not run any SDK's write path.
-func validatePresence(data presence.Data) error {
-	for key, value := range data {
-		if !json.Valid([]byte(value)) {
-			return fmt.Errorf("%q: %w", key, ErrInvalidPresenceValue)
+// maxPresenceValueDepth bounds how deeply a presence value may nest. It exists
+// because "valid JSON" is a weaker predicate than "a peer can parse it": Go's
+// scanner accepts nesting up to 10000 levels, while a recursive-descent parser
+// such as V8's `JSON.parse` overflows its call stack well before that and
+// throws. A value that is valid JSON but nested beyond what peers can parse
+// wedges them exactly as unparseable text does, so it is repaired the same way.
+//
+// The bound is far above anything presence carries -- a cursor, a selection
+// range, a user label -- and far below where any parser gives out.
+const maxPresenceValueDepth = 100
+
+// parsablePresenceValue reports whether every peer can parse the given presence
+// value. That is the form a presence value takes on the wire: the JS SDK
+// `JSON.parse`s each one, so a value no parser accepts fails the whole pack
+// carrying it for every peer that reads it, and -- once the server has stored
+// it -- for every pull of that document thereafter.
+func parsablePresenceValue(value string) bool {
+	if !json.Valid([]byte(value)) {
+		return false
+	}
+
+	// Only a composite value can be nested, and most presence values are not
+	// one, so the scan below is skipped for the encoded strings and numbers
+	// that make up the ordinary case.
+	if !strings.ContainsAny(value, "{[") {
+		return true
+	}
+
+	return withinDepth(value, maxPresenceValueDepth)
+}
+
+// withinDepth reports whether the given JSON text nests no deeper than the
+// given limit. It is only ever called on text json.Valid has accepted, so it
+// tracks string literals -- where a brace is a character rather than a nesting
+// level -- and nothing else.
+func withinDepth(value string, limit int) bool {
+	var depth int
+	var inString, escaped bool
+	for i := range len(value) {
+		c := value[i]
+		if inString {
+			switch {
+			case escaped:
+				escaped = false
+			case c == '\\':
+				escaped = true
+			case c == '"':
+				inString = false
+			}
+			continue
+		}
+
+		switch c {
+		case '"':
+			inString = true
+		case '{', '[':
+			depth++
+			if depth > limit {
+				return false
+			}
+		case '}', ']':
+			depth--
 		}
 	}
 
-	return nil
+	return true
+}
+
+// repairPresence JSON-encodes, in place, every value of the given presence that
+// peers cannot parse.
+//
+// The server is the only boundary that can keep such a value out of a document,
+// since a client speaking the RPC API directly runs no SDK's write path. It
+// repairs rather than rejects, because this decode sits on three paths with
+// incompatible needs: a pack pushed by a client, which may be running a Go SDK
+// older than the presence encoding and would otherwise be refused forever with
+// nothing it can do about it; a pack pulled from the server, which the Go
+// client decodes with this same function and where a rejection wedges the
+// client rather than protecting anyone; and rows and snapshots written before
+// the encoding existed, where rejecting makes the document permanently
+// unreadable.
+//
+// Encoding is the faithful repair rather than a convenient one: such a value is
+// a bare string a client wrote before the encoding existed, and the string it
+// stands for is itself. A Go reader saw that text before the repair
+// (presence.DecodeValue returns an unencoded value as it arrived) and sees the
+// same text after it; a JS reader goes from a thrown JSON.parse -- which fails
+// the entire pack carrying the value -- to that same text. No reader loses
+// anything, and what the server stores and later hands to a pulling client is a
+// value every peer can parse.
+func repairPresence(pbPresence *api.Presence) {
+	if pbPresence == nil {
+		return
+	}
+
+	for key, value := range pbPresence.Data {
+		if !parsablePresenceValue(value) {
+			pbPresence.Data[key] = presence.EncodeValue(value)
+		}
+	}
 }
 
 // FromPresenceChange converts the given Protobuf formats to model format.
 //
-// This is the strict path: a presence value that is not valid JSON is
-// rejected. Rows persisted before that check existed are decoded by
-// FromStoredPresenceChange instead, which repairs rather than rejects.
+// A presence value peers cannot parse is repaired rather than rejected; see
+// repairPresence for why no caller of this can afford the rejection.
 func FromPresenceChange(pbPresenceChange *api.PresenceChange) (*presence.Change, error) {
 	if pbPresenceChange == nil {
 		return nil, nil
@@ -435,12 +519,10 @@ func FromPresenceChange(pbPresenceChange *api.PresenceChange) (*presence.Change,
 	var p presence.Change
 	switch pbPresenceChange.Type {
 	case api.PresenceChange_CHANGE_TYPE_PUT:
+		repairPresence(pbPresenceChange.Presence)
 		presenceData := fromPresence(pbPresenceChange.Presence)
 		if presenceData == nil {
 			return nil, goerrors.New("presence missing")
-		}
-		if err := validatePresence(presenceData); err != nil {
-			return nil, err
 		}
 		p = presence.Change{
 			ChangeType: presence.Put,
@@ -453,12 +535,10 @@ func FromPresenceChange(pbPresenceChange *api.PresenceChange) (*presence.Change,
 		}
 	case api.PresenceChange_CHANGE_TYPE_PATCH:
 		// A patch that only removes keys may leave presence unset.
+		repairPresence(pbPresenceChange.Presence)
 		presenceData := fromPresence(pbPresenceChange.Presence)
 		if presenceData == nil {
 			presenceData = presence.NewData()
-		}
-		if err := validatePresence(presenceData); err != nil {
-			return nil, err
 		}
 		p = presence.Change{
 			ChangeType:  presence.Patch,
