@@ -299,6 +299,15 @@ Counter{
 }
 ```
 
+A non-empty payload is checked against `crdt.ValidateHLLPayload` before
+it is returned, and a payload of the wrong length is rejected with
+`ErrInvalidYSON`. This is the boundary that keeps a malformed payload
+off the `SetYSON` path below: `setNewCounter`/`AddNewCounter` panic when
+`RestoreHLL` fails, as every setter in `pkg/document/json` panics on a
+constructor error, and `yson.Unmarshal` decodes untrusted input — admin
+`CreateDocument`/`UpdateDocument` bodies and `RestoreRevision`
+snapshots. An empty `"hll"` stays valid and decodes to nil registers.
+
 #### CRDT → YSON Conversion (`to_yson.go`)
 
 Extend `toCounter()` to extract HLL bytes:
