@@ -30,15 +30,17 @@ where an operator would look for it.
 
 Give the fold a per-pack byte budget, `maxPresenceFoldPerPack`, measured in
 the same `presenceSize` the per-put bound uses, and charge every folded put
-against it. A pack whose folds would pass the budget is handled exactly like
-one whose base is unavailable: the patch is dropped when a later `PUT` or
-`CLEAR` in the same pack replaces the presence anyway, and otherwise the push
-fails with `ErrPresenceBaseUnavailable`.
+against it. Past the budget the walk keeps folding but stops writing a put
+per patch: the patches of the run lose their presence and the last of them
+carries one `PUT` of what the run produced.
 
-That is the existing fallback, and it is what removes the amplification: the
-client resends the pack with its patches replaced by full puts, so the bytes
-stored and fanned out are bounded by the bytes the client sent — which is
-what every client did before patches existed.
+The push still lands. Refusing it with `ErrPresenceBaseUnavailable`, the way
+a missing base does, would not converge: that error names no patch, and
+passing the budget is a property of the pack's shape rather than of server
+state, so the resend is over the budget too and the whole push — operations
+included — is refused again. Coalescing removes the amplification outright:
+a pack's folded output is the budget plus one put however many patches it
+carries.
 
 Budget: 64 KiB (16 × `maxPresenceBaseSize`). It bounds a pack's folded output
 to a small constant regardless of how many patches it carries, while leaving
@@ -49,10 +51,11 @@ cursor presence of the motivating issue folds ~260 times within it).
 
 - [x] `maxPresenceFoldPerPack` in `presence_patch.go`, charged in the
       `presence.Patch` arm of `foldPresencePatches`.
-- [x] Internal tests: a pack of patches over the budget is refused; a pack
-      under it folds every patch; the budget counts folded puts only.
-- [x] `docs/design/presence-patch.md`: the fold table row, the "No base"
-      section and the risk row now say per-pack as well as per-put.
+- [x] Internal tests: patches over the budget share one put and keep the
+      push; a put past the budget starts a new run; a pack under the budget
+      folds every patch; the budget counts folded puts only.
+- [x] `docs/design/presence-patch.md`: the fold table row, a "Fold budget"
+      section and the risk row.
 
 ## Out of scope
 

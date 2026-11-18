@@ -81,7 +81,7 @@ tracking the sender's full presence:
 |--------|--------------------------------|
 | `PUT` | becomes the tracked presence |
 | `CLEAR` | tracked presence becomes unknown |
-| `PATCH` | applied to the tracked presence; the change is rewritten to a `PUT` of the result, unless the result would pass `maxPresenceBaseSize` or the pack's folds would pass `maxPresenceFoldPerPack`, which are handled as having no tracked presence |
+| `PATCH` | applied to the tracked presence; the change is rewritten to a `PUT` of the result, unless the result would pass `maxPresenceBaseSize`, which is handled as having no tracked presence, or the pack's folds have passed `maxPresenceFoldPerPack`, which keeps one `PUT` for the run (see [Fold budget](#fold-budget)) |
 | no presence | none |
 
 A patch applies its deletions first and then its sets, so a key in both ends
@@ -143,8 +143,7 @@ whose result is thrown away.
 ### No base
 
 A patch with no tracked presence (no entry, a stale entry, or a patch after a
-`CLEAR`), one whose result would pass `maxPresenceBaseSize`, or one past the
-pack's `maxPresenceFoldPerPack` budget, fails the push
+`CLEAR`), or one whose result would pass `maxPresenceBaseSize`, fails the push
 with `ErrPresenceBaseUnavailable`
 (`FailedPrecondition`). Nothing in the pack is stored. The client resends the
 pack with that patch replaced by a full `PUT`.
@@ -162,14 +161,33 @@ neither folded into nor cached; sending full `PUT`s is both the fallback and
 the steady state for such a client. It is an expected signal, so it is not
 counted in the push-pull error metric.
 
-The budget makes the same path reachable from a pack rather than from a
-single patch: a pack whose folded puts sum past `maxPresenceFoldPerPack`
-(64 KiB) is refused at the patch that passes it, and the resend carries full
-`PUT`s. A client that pushes each presence change as it happens never reaches
-it; one that batches hundreds of them into a single pack does, and pays for
-them in the bytes it sends. A patch past the budget that a later `PUT` or
-`CLEAR` in the same pack replaces loses its presence instead of failing the
-push, the same as a patch with no base.
+### Fold budget
+
+`maxPresenceBaseSize` bounds one folded put, and nothing bounds how many
+changes a pack carries, so that bound alone leaves a pack of minimal patches
+— each needing only clientSeq continuity — rewritten into one full presence
+per change, every one of them stored and fanned out.
+`maxPresenceFoldPerPack` (64 KiB, 16 × the per-put bound) bounds the sum of
+the puts a single pack's folds produce.
+
+Past the budget the fold keeps folding, but stops writing a put per patch:
+the patches of the run lose their presence and the last of them carries one
+`PUT` of what the run produced. So a pack costs the budget plus one put
+however many patches it carries, the sender's peers still end on the presence
+it holds, and the intermediate presences dropped are the transient ones the
+presence path is lossy about anyway. A `PUT` or `CLEAR` the client sent ends
+a run — it replaces the presence, so the run needs no put of its own — and
+the patches after it start a new one, whose put is bounded by the presence
+that `PUT` carried and so is paid for in the client's own bytes.
+
+The push is not refused. A missing base is a property of the server's state
+that the client clears by sending the presence it holds as a `PUT`; passing
+the budget is a property of the pack's shape, and the client is told no more
+than that the base was unavailable, so a resend that replaced only the patch
+the server stopped on would be refused again — operations included — for as
+many round trips as the pack has patches. A client that pushes each presence
+change as it happens never reaches the budget at all; one that batches
+hundreds of them into a single pack does.
 
 ### Risks and Mitigation
 
@@ -182,7 +200,7 @@ push, the same as a patch with no base.
 | Cache memory | LRU bounded by `--presence-base-cache-size` (default 10,000) entries, and each entry by `maxPresenceBaseSize` (4 KiB), since presence is in no document size gate. The product, about 40 MiB, is the ceiling |
 | A presence of many tiny keys costing far more memory than its bytes | `presenceSize` counts `presenceEntryOverhead` (64 B) per key as well as the key and value bytes, so the 4 KiB bound also caps a presence at 64 keys and the 40 MiB ceiling holds whatever shape the presence has |
 | A small patch expanding into a large stored and fanned-out put | The fold refuses a patch whose result would pass the same 4 KiB bound, so a folded put costs at most that however large a presence the sender parked earlier. The client then pushes the presence as a full `PUT`, paying for its own bytes, as every client did before patches existed |
-| One pack of many small patches expanding into as many large puts | The 4 KiB bound is per put, and nothing bounds how many changes a pack carries, so it alone would let a single request of minimal patches be rewritten into one full presence per change, each stored and fanned out. `maxPresenceFoldPerPack` (64 KiB, 16 × the per-put bound) bounds the sum of a pack's folded puts; a pack past it is refused like one with no base, so the client resends its patches as full `PUT`s and what is stored is bounded by what it sent |
+| One pack of many small patches expanding into as many large puts | The 4 KiB bound is per put, and nothing bounds how many changes a pack carries, so it alone would let a single request of minimal patches be rewritten into one full presence per change, each stored and fanned out. `maxPresenceFoldPerPack` (64 KiB, 16 × the per-put bound) bounds the sum of a pack's folded puts; past it the patches of a run share the single `PUT` their last change carries, so the pack's folded output is the budget plus one put however many patches it holds. See [Fold budget](#fold-budget) |
 
 ### Design Decisions
 
@@ -193,6 +211,7 @@ push, the same as a patch with no base.
 | A dedicated cache instead of reading the presence change store | The presence store is indexed by server seq per document; finding one client's latest presence would mean a scan, and the store can be evicted independently anyway |
 | Advertise on `ChangePack.capabilities` | It is the existing negotiation channel and is returned on push-pull as well as attach, so a client learns about an upgraded server without re-attaching |
 | Refuse the whole push when there is no base | See [No base](#no-base) |
+| Coalesce past the pack's fold budget instead of refusing | Passing the budget is a property of the pack's shape, so a refusal would recur on the resend. See [Fold budget](#fold-budget) |
 
 `api.ServerCapabilities` is emitted for the first time with this change, so it
 lists only `presence-patch`. It used to list `element-restore`, which the

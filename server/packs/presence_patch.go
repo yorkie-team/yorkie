@@ -62,15 +62,24 @@ const maxPresenceBaseSize = 4 * 1024
 // and fanned out to every client of the document. At the 16 MiB the RPC
 // server reads that is on the order of 10^5 puts of 4 KiB from one request.
 //
-// A pack over the budget is treated the same as one whose base is
-// unavailable, which is what removes the amplification rather than merely
-// capping it: the client resends the pack with its patches as full puts, so
-// what is stored and fanned out is bounded by what the client sent.
+// Past the budget the fold stops writing a put per patch and keeps only the
+// last one of the run, so the patches it covers cost one put between them
+// instead of one each. The push is not refused: unlike a missing base, which
+// the client clears by sending the presence it holds as a put, passing the
+// budget is a property of the pack's shape, so a refusal would be repeated on
+// a resend that replaced only the patch the server stopped on -- and the
+// client is told no more than that the base was unavailable. The intermediate
+// presences the run drops are the transient ones: the presence path is
+// latest-wins and lossy by design, and the put kept at the end of the run is
+// the presence the sender holds.
 //
 // At 16 times the per-put bound it leaves room for a batched pack of a few
 // hundred ordinary presences -- the ~250 B cursor presence patches were
 // introduced for folds about 260 times within it -- while bounding a pack's
-// folded output to a constant however many patches it carries.
+// folded output to a constant however many patches it carries. A put the
+// client sends itself starts a new run, whose kept put is bounded by the
+// presence that put carried, so those stay paid for in the bytes the client
+// sent.
 const maxPresenceFoldPerPack = 16 * maxPresenceBaseSize
 
 // presenceEntryOverhead is what one presence key costs beyond the bytes of its
@@ -111,8 +120,10 @@ type presenceFold struct {
 //
 // A patch it has no base for is dropped when a later put or clear in the same
 // pack replaces the presence anyway, which is how a detach pack ends;
-// otherwise the push fails with ErrPresenceBaseUnavailable. It returns nil
-// when there is nothing to commit: no cached base and nothing to push.
+// otherwise the push fails with ErrPresenceBaseUnavailable. Patches past
+// maxPresenceFoldPerPack keep the push but share one put between them. It
+// returns nil when there is nothing to commit: no cached base and nothing to
+// push.
 func foldPresencePatches(
 	be *backend.Backend,
 	clientInfo *database.ClientInfo,
@@ -152,6 +163,12 @@ func foldPresencePatches(
 	}
 
 	base, folded := fold.base, 0
+	// coalesced is the index in pushables of the last patch the pack's fold
+	// budget did not pay for a put of. Such a patch loses its presence while
+	// the walk keeps folding it into base, and the presence the run of them
+	// produces is attached to the last one after the walk, as a single put. A
+	// put or clear ends the run: it replaces the presence anyway.
+	coalesced := -1
 	for i, cn := range pushables {
 		pc := cn.PresenceChange()
 		if pc == nil {
@@ -160,23 +177,23 @@ func foldPresencePatches(
 
 		switch pc.ChangeType {
 		case presence.Put:
-			base = pc.Presence
+			base, coalesced = pc.Presence, -1
 		case presence.Clear:
-			base = nil
+			base, coalesced = nil, -1
 		case presence.Patch:
-			// A fold whose result would not fit either bound is treated as
-			// having no base. The put a patch is rewritten into is stored and
-			// fanned out, so folding one over the per-put bound, or more of
-			// them than the pack's budget pays for, would let a request cost
-			// arbitrarily more than its own bytes; the sender instead pushes
-			// the presence it holds as puts, paying for them itself.
+			// A fold whose result would not fit the per-put bound is treated
+			// as having no base. The put a patch is rewritten into is stored
+			// and fanned out, so folding one over the bound would let a
+			// request cost arbitrarily more than its own bytes; the sender
+			// instead pushes the presence it holds as a put, paying for it
+			// itself.
 			next, size := base, 0
 			if next != nil {
 				next = pc.ApplyTo(next)
 				size = presenceSize(next)
 			}
-			if next == nil || size > maxPresenceBaseSize || folded+size > maxPresenceFoldPerPack {
-				base = nil
+			if next == nil || size > maxPresenceBaseSize {
+				base, coalesced = nil, -1
 				if i < lastReset {
 					cn.SetPresenceChange(nil)
 					continue
@@ -184,12 +201,36 @@ func foldPresencePatches(
 				return nil, ErrPresenceBaseUnavailable
 			}
 
-			base, folded = next, folded+size
+			base = next
+			// Past the pack's budget the patches of a run share one put
+			// instead of getting one each, so the pack's folded output is a
+			// constant however many patches it carries. Refusing the push
+			// here instead would not converge: the client is told only that
+			// the base was unavailable, and replacing one patch with a put
+			// leaves the rest of the pack past the budget, so the same pack,
+			// its operations included, would be refused again.
+			if coalesced >= 0 || folded+size > maxPresenceFoldPerPack {
+				cn.SetPresenceChange(nil)
+				coalesced = i
+				continue
+			}
+
+			folded += size
 			cn.SetPresenceChange(&presence.Change{
 				ChangeType: presence.Put,
 				Presence:   base,
 			})
 		}
+	}
+
+	// What the coalesced run produced, as one put on its last change. Leaving
+	// the run without any put would hold the sender's peers on a presence it
+	// no longer holds until its next push.
+	if coalesced >= 0 {
+		pushables[coalesced].SetPresenceChange(&presence.Change{
+			ChangeType: presence.Put,
+			Presence:   base,
+		})
 	}
 
 	return fold, nil

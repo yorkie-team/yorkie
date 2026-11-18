@@ -5,10 +5,19 @@
 ## Notes
 
 - The per-put bound and the per-pack budget are the same measure
-  (`presenceSize`) applied at two scopes. Keeping the over-budget path
-  identical to the no-base path meant no new error, no new client contract
-  and no new SDK behavior: the client already knows how to answer
-  `ErrPresenceBaseUnavailable` by resending full puts.
+  (`presenceSize`) applied at two scopes, but they cannot share the same
+  failure path. Reusing `ErrPresenceBaseUnavailable` for the budget looked
+  free — no new error, no new client contract — and was not: a missing base
+  is a property of server state that one full put clears, while passing the
+  budget is a property of the pack's shape. The error names no patch, so the
+  resend the client makes is over the budget too and the whole push,
+  operations included, is refused again. The budget therefore degrades
+  instead of refusing: past it the patches of a run share the single put its
+  last change carries, which bounds the pack's folded output to the budget
+  plus one put while the push still lands the first time.
+- A run ends at a put or clear the client sent, because that change replaces
+  the presence anyway. That is what keeps the coalesced puts self-paying:
+  each one is bounded by the presence of the put that started its run.
 - Only folded puts are charged. A put the client sent itself is already paid
   for in request bytes, so charging it would refuse honest packs without
   removing any amplification.

@@ -452,19 +452,55 @@ func TestFoldPresencePatches(t *testing.T) {
 
 	// Each folded put is stored and fanned out, so a pack of minimal patches
 	// would otherwise cost one full presence per change however small the
-	// request was.
-	t.Run("a pack of patches over the fold budget is refused", func(t *testing.T) {
+	// request was. Refusing the push instead would not converge: the client
+	// is told only that the base was unavailable, so a resend that replaced
+	// one patch with a put would be refused again, operations included.
+	t.Run("patches over the fold budget share one put and keep the push", func(t *testing.T) {
 		be := newCacheBackend(t)
-		be.Cache.PresenceBase.Add(baseKey, cached(7, 3, maxFoldBase()))
+		base := maxFoldBase()
+		be.Cache.PresenceBase.Add(baseKey, cached(7, 3, base))
 
-		over := maxPresenceFoldPerPack/maxPresenceBaseSize + 1
-		pack := presencePack(4, patches(over)...)
+		within := maxPresenceFoldPerPack / maxPresenceBaseSize
+		pack := presencePack(4, patches(within+3)...)
 		_, err := foldPresencePatches(be, clientAt(docKey, 7, 3), docKey, pack)
-		assert.ErrorIs(t, err, ErrPresenceBaseUnavailable)
-		// Nothing in a refused pack is stored, so the folds the walk had
-		// already made are discarded with it; the change it stopped on is the
-		// patch the client resends as a put.
-		assert.Equal(t, presence.Patch, pack.Changes[over-1].PresenceChange().ChangeType)
+		require.NoError(t, err)
+
+		folded, total := put(presence.Data{"blob": base["blob"], "cursor": "1"}), 0
+		for i, cn := range pack.Changes {
+			pc := cn.PresenceChange()
+			if i < within || i == len(pack.Changes)-1 {
+				assert.Equal(t, folded, pc, "change %d", i)
+				total += presenceSize(pc.Presence)
+				continue
+			}
+			assert.Nil(t, pc, "change %d", i)
+		}
+		// However many patches the pack carries, its folds cost the budget
+		// plus the one put the run past it keeps.
+		assert.LessOrEqual(t, total, maxPresenceFoldPerPack+maxPresenceBaseSize)
+	})
+
+	// A put the client sent is paid for in its own bytes, so the run of
+	// patches after it keeps a put of its own.
+	t.Run("a put past the budget starts a new coalesced run", func(t *testing.T) {
+		be := newCacheBackend(t)
+		base := maxFoldBase()
+		be.Cache.PresenceBase.Add(baseKey, cached(7, 3, base))
+
+		within := maxPresenceFoldPerPack / maxPresenceBaseSize
+		pcs := append(patches(within+2), put(presence.Data{"name": "a"}))
+		pack := presencePack(4, append(pcs, patches(2)...)...)
+		_, err := foldPresencePatches(be, clientAt(docKey, 7, 3), docKey, pack)
+		require.NoError(t, err)
+
+		// The run before the put keeps no put of its own: the put replaces
+		// the presence anyway. The run after it folds onto what the put
+		// carried and keeps its last fold.
+		assert.Nil(t, pack.Changes[within+1].PresenceChange())
+		assert.Equal(t, put(presence.Data{"name": "a"}), pack.Changes[within+2].PresenceChange())
+		assert.Nil(t, pack.Changes[within+3].PresenceChange())
+		assert.Equal(t, put(presence.Data{"name": "a", "cursor": "1"}),
+			pack.Changes[len(pack.Changes)-1].PresenceChange())
 	})
 
 	t.Run("a pack of patches within the fold budget is folded", func(t *testing.T) {
