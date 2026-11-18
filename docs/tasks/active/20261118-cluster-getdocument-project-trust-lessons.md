@@ -16,6 +16,15 @@
   (`converter.FromProject`) is not. Every ClusterService handler that takes a
   message field must go through a getter or an explicit nil check.
 
+- The all-zero ObjectID is not a free "nothing names this" value here:
+  `database.ZeroID` is `DefaultProjectID`, which
+  `EnsureDefaultUserAndProject` writes on every server start. A negative test
+  that used it as an unknown project resolved the default project instead and
+  passed the whole RPC, so the integration test went green on the handler's
+  success path while claiming to cover its failure path. Negative-ID fixtures
+  need a value the schema reserves for nothing — and an assertion that it
+  differs from the project under test, so a future reservation is caught.
+
 ## Self review
 
 Not run: this branch was produced by the autonomous agent harness, which is

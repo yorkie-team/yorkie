@@ -36,8 +36,11 @@ import (
 	"github.com/yorkie-team/yorkie/test/helper"
 )
 
-// unknownProjectID is a well-formed ObjectID that names no project.
-const unknownProjectID = "000000000000000000000000"
+// unknownProjectID is a well-formed ObjectID that names no project. It is
+// deliberately not the all-zero ObjectID: that one is database.ZeroID, which
+// EnsureDefaultUserAndProject assigns to the default project, so a request
+// carrying it resolves to a real project instead of failing.
+const unknownProjectID = "ffffffffffffffffffffffff"
 
 // TestClusterServiceProjectTrust checks that the ClusterService handlers whose
 // requests still carry a whole Project message read nothing from it but the
@@ -53,6 +56,8 @@ func TestClusterServiceProjectTrust(t *testing.T) {
 	require.NoError(t, err)
 	// The forged-body check below turns on the stored flag being off.
 	require.False(t, project.RemoveOnDetach)
+	// And the unknown-project check turns on that ID naming nothing.
+	require.NotEqual(t, unknownProjectID, project.ID.String())
 
 	withKey := func(req connect.AnyRequest, k key.Key) connect.AnyRequest {
 		req.Header().Add(types.ShardKey, project.PublicKey+"/"+k.String())
