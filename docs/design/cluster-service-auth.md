@@ -171,6 +171,45 @@ When running a single Yorkie server (no cluster), `ClusterSecret` is empty by de
 
 Because an empty secret leaves ClusterService open on the public RPC port, `Yorkie.Start` logs a warning when `ClusterSecret` is empty. It does not refuse to start, so single-node and local setups keep working with the default.
 
+### Trust Only IDs Off the Wire
+
+A ClusterService handler trusts only the **identifiers** a request carries —
+`project_id`, `document_id`, `client_id`, `document_key`. Every other property
+of those entities is read back from the database; none is taken from the
+request body.
+
+This holds whatever `ClusterSecret` is set to. The secret is empty by default,
+and while it is, the interceptor admits every request that reaches the public
+RPC port, so a handler that reads a behavioural field off the wire lets an
+unauthenticated caller choose that behaviour. `DetachDocument` is the example:
+it decides on `Project.RemoveOnDetach` whether a detach also marks the document
+removed, so taking that flag off the wire would let anything that reaches the
+port turn a detach into a removal on a project that has the flag off.
+
+Handlers therefore resolve the project themselves:
+
+```go
+// server/rpc/cluster_server.go
+projectInfo, err := s.backend.DB.FindProjectInfoByID(ctx, types.ID(req.Msg.Project.GetId()))
+if err != nil {
+    return nil, err
+}
+project := projectInfo.ToProject()
+```
+
+Key details:
+- Read the ID through its generated getter (`GetId()`), which is nil-safe.
+  Direct field access, as `converter.FromProject` does, panics on a request
+  that omits the message.
+- `FindProjectInfoByID` is served from the project cache, so the read costs
+  nothing in the steady state.
+- Newer RPCs (`CompactDocument`, `PurgeDocument`, `RevalidateAccess`,
+  `ListChannels`, …) take a plain `string project_id` and are the shape to
+  copy. `DetachDocument` and `GetDocument` still carry a whole `Project`
+  message, including `SecretKey`, for wire compatibility; their handlers read
+  nothing from it but `id`, and the field is to be narrowed to `project_id` in
+  a future proto change.
+
 ### Risks and Mitigation
 
 | Risk | Mitigation |
