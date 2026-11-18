@@ -375,7 +375,18 @@ func (s *clusterServer) GetDocument(
 	ctx context.Context,
 	req *connect.Request[api.ClusterServiceGetDocumentRequest],
 ) (*connect.Response[api.ClusterServiceGetDocumentResponse], error) {
-	project := converter.FromProject(req.Msg.Project)
+	// Only the ID of the project the request carries is trusted; the stored
+	// project is read back from the database, as DetachDocument and
+	// RevalidateAccess do. Building the project with converter.FromProject
+	// instead would dereference nil on a request that omits the field, and
+	// ClusterService is unauthenticated whenever ClusterSecret is empty — the
+	// default, which Yorkie.Start only warns about. GetId is nil-safe.
+	projectInfo, err := s.backend.DB.FindProjectInfoByID(ctx, types.ID(req.Msg.Project.GetId()))
+	if err != nil {
+		return nil, err
+	}
+	project := projectInfo.ToProject()
+
 	docInfo, err := documents.FindDocInfoByKey(
 		ctx,
 		s.backend,
