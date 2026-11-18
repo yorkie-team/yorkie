@@ -105,6 +105,18 @@ func TestHLL(t *testing.T) {
 		assert.Error(t, crdt.NewHLL().Restore(make([]byte, (1<<14)+1)))
 	})
 
+	t.Run("validate agrees with restore on the payload length", func(t *testing.T) {
+		for _, length := range []int{0, 1, (1 << 14) - 1, (1 << 14) + 1} {
+			data := make([]byte, length)
+			assert.Error(t, crdt.ValidateHLLPayload(data), "length %d", length)
+			assert.Error(t, crdt.NewHLL().Restore(data), "length %d", length)
+		}
+
+		data := make([]byte, 1<<14)
+		assert.NoError(t, crdt.ValidateHLLPayload(data))
+		assert.NoError(t, crdt.NewHLL().Restore(data))
+	})
+
 	t.Run("restore accepts the largest value add can write", func(t *testing.T) {
 		data := make([]byte, 1<<14)
 		data[0] = 51 // 64 - precision + 1
