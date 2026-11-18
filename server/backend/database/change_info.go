@@ -180,7 +180,7 @@ func PresenceChangeFromBytes(bytes []byte) (*presence.Change, error) {
 		return nil, fmt.Errorf("decode presence change: %w", err)
 	}
 
-	presenceChange, err := converter.FromPresenceChange(pbChange)
+	presenceChange, err := converter.FromStoredPresenceChange(pbChange)
 	if err != nil {
 		return nil, fmt.Errorf("decode presence change: %w", err)
 	}

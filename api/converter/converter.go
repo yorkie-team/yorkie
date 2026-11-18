@@ -56,6 +56,14 @@ var (
 		"unsupported presence change type",
 	).WithCode("ErrUnsupportedPresenceChangeType")
 
+	// ErrInvalidPresenceValue is returned when a presence value arriving from
+	// the wire is not valid JSON. Every SDK reads a presence value as JSON
+	// (docs/design/presence.md, "Presence Value Encoding"), so a value that is
+	// not makes every peer that parses it fail to apply the pack carrying it.
+	ErrInvalidPresenceValue = errors.InvalidArgument(
+		"invalid presence value",
+	).WithCode("ErrInvalidPresenceValue")
+
 	// ErrInvalidRestoreSpan is returned when a restore span is malformed:
 	// a nil entry, a negative or inverted Start/End offset, or a range
 	// whose length doesn't match its Content.

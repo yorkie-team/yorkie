@@ -182,6 +182,22 @@ The Go SDK joins that contract at its own boundary (`pkg/document/presence`):
 | Storage (snapshot, change) | encoded |
 | Admin/cluster `GetDocument(s)` summaries | encoded — built from `InternalDocument` |
 
+The server enforces the contract, because no SDK can: a client speaking the
+RPC API directly runs nobody's write path, and a presence value the server
+accepts is persisted in the change history and in the next snapshot and fanned
+out to every peer — so one unparseable value wedges every JS peer on that
+document, repeatedly, for as long as it is stored.
+`converter.FromPresenceChange` therefore rejects a `PUT`/`PATCH` carrying a
+value that is not valid JSON, with `ErrInvalidPresenceValue`.
+
+That function is also the read path for rows written before the check existed,
+where rejecting would make the document permanently unreadable — the same split
+`FromOperations`/`FromStoredOperations` already has. Stored decoding goes
+through `converter.FromStoredPresenceChange`, which JSON-encodes an unparseable
+value instead of refusing it (`NormalizeStoredPresence`, applied to stored
+snapshots too). That is what the value already meant: a Go reader saw the raw
+text before and after, and a JS reader can now read it at all.
+
 Three consequences are worth stating:
 
 - **Decoding is lenient.** A value that is not a JSON string decodes to itself.

@@ -17,6 +17,7 @@
 package converter
 
 import (
+	"encoding/json"
 	goerrors "errors"
 	"fmt"
 	"math"
@@ -377,9 +378,15 @@ func fromOperation(pbOp *api.Operation) (operations.Operation, error) {
 	}
 }
 
+// fromPresences decodes the presences carried by a stored snapshot. Like
+// FromStoredPresenceChange it repairs rather than rejects, so a snapshot
+// written before presence values had to be JSON stays loadable -- and the
+// document rebuilt from it no longer carries the unparseable value into the
+// next snapshot it writes.
 func fromPresences(pbPresences map[string]*api.Presence) *presence.Map {
 	presences := presence.NewMap()
 	for id, pbPresence := range pbPresences {
+		NormalizeStoredPresence(pbPresence)
 		presences.Store(id, fromPresence(pbPresence))
 	}
 	return presences
@@ -398,7 +405,28 @@ func fromPresence(pbPresence *api.Presence) presence.Data {
 	return data
 }
 
+// validatePresence reports whether every value of the given presence is valid
+// JSON, which is the form a presence value takes on the wire: the JS SDK
+// `JSON.parse`s each one, so a value that is not valid JSON fails the whole
+// pack carrying it for every peer that reads it, and -- once the server has
+// stored it -- for every pull of that document thereafter. The server is the
+// only boundary that can keep such a value from being persisted, since a
+// client speaking the RPC API directly does not run any SDK's write path.
+func validatePresence(data presence.Data) error {
+	for key, value := range data {
+		if !json.Valid([]byte(value)) {
+			return fmt.Errorf("%q: %w", key, ErrInvalidPresenceValue)
+		}
+	}
+
+	return nil
+}
+
 // FromPresenceChange converts the given Protobuf formats to model format.
+//
+// This is the strict path: a presence value that is not valid JSON is
+// rejected. Rows persisted before that check existed are decoded by
+// FromStoredPresenceChange instead, which repairs rather than rejects.
 func FromPresenceChange(pbPresenceChange *api.PresenceChange) (*presence.Change, error) {
 	if pbPresenceChange == nil {
 		return nil, nil
@@ -410,6 +438,9 @@ func FromPresenceChange(pbPresenceChange *api.PresenceChange) (*presence.Change,
 		presenceData := fromPresence(pbPresenceChange.Presence)
 		if presenceData == nil {
 			return nil, goerrors.New("presence missing")
+		}
+		if err := validatePresence(presenceData); err != nil {
+			return nil, err
 		}
 		p = presence.Change{
 			ChangeType: presence.Put,
@@ -425,6 +456,9 @@ func FromPresenceChange(pbPresenceChange *api.PresenceChange) (*presence.Change,
 		presenceData := fromPresence(pbPresenceChange.Presence)
 		if presenceData == nil {
 			presenceData = presence.NewData()
+		}
+		if err := validatePresence(presenceData); err != nil {
+			return nil, err
 		}
 		p = presence.Change{
 			ChangeType:  presence.Patch,

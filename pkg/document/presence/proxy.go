@@ -140,8 +140,10 @@ func (p *Presence) Set(key string, value string, opts ...SetOption) {
 // number a peer should read as such -- and the way to re-apply a value that
 // was read back from a presence, which is encoded already.
 //
-// The value is stored as given: a caller that passes text which is not valid
-// JSON puts it on the wire in a form other SDKs cannot decode.
+// The value is stored as given, and no local check rejects text that is not
+// valid JSON -- the server does, when the change reaches it, with
+// ErrInvalidPresenceValue. A caller that hits that is passing a value Set
+// should have encoded.
 func (p *Presence) SetJSON(key string, value string, opts ...SetOption) {
 	var cfg setConfig
 	for _, opt := range opts {
