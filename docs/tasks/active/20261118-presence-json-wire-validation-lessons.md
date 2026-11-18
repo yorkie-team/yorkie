@@ -19,6 +19,20 @@
   at the stored-decode step is enough to keep the strict client-side decode
   from failing on legacy rows. No separate `Sanitize…` twin was needed.
 
+- The integration lane caught what unit tests could not: several suites build
+  change packs straight from `api.Presence` / `inner.Presence` literals rather
+  than through a document's write path, so they carried bare strings
+  (`"name": "a"`) that the new boundary refuses. Those fixtures had to be
+  JSON-encoded. They are the only in-tree clients that bypass
+  `presence.Set`, which is the evidence that the SDK write paths already
+  satisfy the contract — and the reminder that a wire-level check has to be
+  validated against the raw-RPC tests, not only against the SDK ones.
+- One cosmetic consequence: `packs.validateClientSeqContinuity` dereferences
+  the pack it is handed, so a test that `assert.NoError`s a failed
+  `FromChangePack` and keeps going panics on the nil pack instead of stopping
+  at the assertion. The panic was the fixture's, not the server's; hardening
+  that signature is outside this change.
+
 ## Self review
 
 Not run: this task was executed by the autonomous agent workflow, which is
