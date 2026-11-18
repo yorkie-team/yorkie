@@ -35,6 +35,9 @@ insert so the stored document carries the defaults.
 - [x] Shared testcase run by both backends: create a project, read it back,
       and assert the create response equals the stored/read value for
       `AutoRevisionEnabled` and `ChannelSessionTTL`.
+- [x] Integration: the channel TTL expiry test set the TTL server-wide and
+      relied on the default project having none. Give it a project with an
+      explicit `ChannelSessionTTL` now that a stored project TTL wins.
 
 ## Out of scope
 

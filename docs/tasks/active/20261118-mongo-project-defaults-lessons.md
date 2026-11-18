@@ -12,6 +12,17 @@
   MongoDB so it generates an ObjectID, while `ensureDefaultProjectInfo`
   pins `_id` to the fixed default project ID in the upsert filter.
 
+- Storing `channel_session_ttl` is a behaviour change, not only a
+  persistence fix: `channel.Manager` cleanup reads the project TTL and
+  only falls back to the server-wide `Backend.ChannelSessionTTL` when the
+  stored value is empty or unparsable. The integration test
+  `TestChannelIntegration/channel expires after TTL without refresh` was
+  passing on the dropped field — the default project answered an empty
+  TTL, so the helper's server-wide 5s governed and the session expired
+  inside the test's 8s window. With the default (15s) now stored, that
+  fallback no longer applies, so the test sets the TTL on a project of
+  its own instead of relying on the server-wide value.
+
 ## Self review
 
 Not run: this change was produced in an autonomous one-shot run with no
