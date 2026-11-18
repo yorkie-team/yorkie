@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 )
 
 func TestChannelSessionTTLAsTimeDuration(t *testing.T) {
@@ -132,6 +133,20 @@ func TestProjectInfo(t *testing.T) {
 			MaxAttachmentsPerDocument: 1,
 		}
 		assert.Error(t, info2.IsAttachmentLimitExceeded(1))
+	})
+
+	t.Run("attachment limit error code test", func(t *testing.T) {
+		info := &types.Project{
+			MaxAttachmentsPerDocument: 1,
+		}
+		err := info.IsAttachmentLimitExceeded(1)
+		assert.ErrorIs(t, err, types.ErrTooManyAttachments)
+
+		// The code has to survive the wrapping in IsAttachmentLimitExceeded,
+		// since that is the error clients see in the RPC metadata.
+		assert.Equal(t, "ErrTooManyAttachments", types.ErrTooManyAttachments.Code())
+		assert.Equal(t, "ErrTooManyAttachments", errors.ErrorInfoOf(err).Code)
+		assert.Equal(t, errors.ErrCodeResourceExhausted, errors.StatusOf(err))
 	})
 
 	t.Run("parse test", func(t *testing.T) {
