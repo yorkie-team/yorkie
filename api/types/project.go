@@ -28,7 +28,8 @@ import (
 
 var (
 	// ErrTooManyAttachments is the error that the attachment limit is exceeded.
-	ErrTooManyAttachments = errors.ResourceExhausted("attachment limit exceeded")
+	ErrTooManyAttachments = errors.ResourceExhausted("attachment limit exceeded").
+				WithCode("ErrTooManyAttachments")
 
 	// ErrInvalidTimeDurationString is returned when the given time duration string is not in valid format.
 	ErrInvalidTimeDurationString = errors.InvalidArgument("invalid time duration string format")
