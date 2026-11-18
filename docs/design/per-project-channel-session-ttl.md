@@ -30,8 +30,8 @@ on the server.
   admin API (and therefore the dashboard).
 - Apply the per-project value transparently inside the channel manager's
   expiration cleanup, so existing client/SDK behavior does not change.
-- Keep the global `ChannelSessionTTL` config as the default seed for new
-  projects and the fallback when a project value is unset or invalid.
+- Keep the global `ChannelSessionTTL` config as the value new projects
+  inherit and the fallback when a project value is unset or invalid.
 - Bound the value to a safe range so a misconfigured project cannot
   cause unbounded session retention.
 
@@ -70,10 +70,11 @@ Add `ChannelSessionTTL` (Go duration string, e.g. `"15s"`, `"1m"`) to:
   - Regenerate via `make proto`.
 - `server/backend/database/project_info.go` —
   - `ChannelSessionTTL string \`bson:"channel_session_ttl"\``.
-  - Default in `NewProjectInfo()`:
-    `DefaultChannelSessionTTL.String()` (15s, same constant as today's
-    global default — re-exported from `database` if needed to avoid an
-    import cycle with `server/config`).
+  - `NewProjectInfo()` leaves it empty, so a new project inherits the
+    global `ChannelSessionTTL` until the admin API sets its own value.
+    Seeding it with the `DefaultChannelSessionTTL` constant (15s) would
+    pin every new project to 15s and ignore an operator's
+    `--channel-session-ttl` (yorkie#2224).
   - `DeepCopy()` and `UpdateFields()` updated for the new field.
   - MongoDB and memory backends pick up the field automatically through
     `ProjectInfo` marshaling; no separate migration needed.
@@ -98,8 +99,7 @@ value (defensive — should not happen given API validation).
 
 Existing project rows have no `channel_session_ttl` field. The runtime
 treats an empty value as "use the global default", so no DB migration
-is required. New projects get the explicit default written by
-`NewProjectInfo`.
+is required. New projects store the field empty and behave the same way.
 
 ### Channel manager: read at cleanup time
 
@@ -172,7 +172,7 @@ duration regex, mapped one-to-one into the RPC.
 | Project lookup adds load to the cleanup loop. | `FindProjectInfoByID` is already cached. Memoize per project inside one cleanup pass so per-tick cost is `O(distinct_projects_with_channels)`, not `O(channels)`. |
 | Stale TTL after a project setting change. | The next cleanup tick (≤ cleanup interval, default 10s) picks up the new value. Sessions are short-lived; this is well within the user-perceptible "soon" window. |
 | Project lookup failure during cleanup. | Fall back to `m.sessionTTL` and log at warn — same behavior pattern as `collectAndPublishMetrics`. |
-| Existing global config users surprised by behavior change. | Behavior change is zero for projects that do not set the field: the default `15s` matches today's global default, and unset projects fall back to `m.sessionTTL` (also driven by the same global config). |
+| Existing global config users surprised by behavior change. | Behavior change is zero for projects that do not set the field: they fall back to `m.sessionTTL`, which the same global config drives. |
 
 ### Design Decisions
 

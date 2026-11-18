@@ -445,6 +445,67 @@ func RunFindProjectInfoByNameTest(
 	})
 }
 
+// RunCreateProjectInfoDefaultsTest runs the CreateProjectInfo defaults test for the given db.
+func RunCreateProjectInfoDefaultsTest(
+	t *testing.T,
+	db database.Database,
+) {
+	t.Run("created project keeps the defaults test", func(t *testing.T) {
+		ctx := context.Background()
+
+		created, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+
+		// The documented defaults are what CreateProjectInfo answers. An empty
+		// ChannelSessionTTL inherits the server-wide value.
+		assert.True(t, created.AutoRevisionEnabled)
+		assert.Empty(t, created.ChannelSessionTTL)
+
+		// Reading the project back must answer the same, whatever the backend
+		// stores: a field dropped from the insert decodes as the zero value.
+		// FindProjectInfoByName is used on purpose: it always reads the stored
+		// document, while FindProjectInfoByID may answer from the project cache.
+		found, err := db.FindProjectInfoByName(ctx, t.Name())
+		assert.NoError(t, err)
+		assert.Equal(t, created.ID, found.ID)
+		assert.Equal(t, created.AutoRevisionEnabled, found.AutoRevisionEnabled)
+		assert.Equal(t, created.ChannelSessionTTL, found.ChannelSessionTTL)
+		assert.Equal(t, created.ClientDeactivateThreshold, found.ClientDeactivateThreshold)
+		assert.Equal(t, created.SnapshotThreshold, found.SnapshotThreshold)
+		assert.Equal(t, created.SnapshotInterval, found.SnapshotInterval)
+		assert.Equal(t, created.MaxSizePerDocument, found.MaxSizePerDocument)
+	})
+
+	t.Run("default project keeps the defaults test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// The default project is seeded by its own insert path, which shares
+		// the project document with CreateProjectInfo, so the fields that
+		// insert carries have to read back from it too.
+		_, ensured, err := db.EnsureDefaultUserAndProject(ctx, "admin@yorkie.dev", "hashed-password")
+		assert.NoError(t, err)
+		assert.Equal(t, database.DefaultProjectName, ensured.Name)
+		assert.True(t, ensured.AutoRevisionEnabled)
+		assert.Equal(t, database.DefaultClientDeactivateThreshold.String(), ensured.ClientDeactivateThreshold)
+		// Empty means the server-wide session TTL and batch window, which new
+		// projects inherit until the admin API sets their own.
+		assert.Empty(t, ensured.ChannelSessionTTL)
+		assert.Equal(t, "", ensured.ChannelBatchWindow)
+		assert.False(t, ensured.UpdatedAt.IsZero())
+
+		// Reading it back by name goes to the stored document on every
+		// backend, so a field the insert dropped shows up as the zero value.
+		found, err := db.FindProjectInfoByName(ctx, database.DefaultProjectName)
+		assert.NoError(t, err)
+		assert.Equal(t, ensured.ID, found.ID)
+		assert.Equal(t, ensured.AutoRevisionEnabled, found.AutoRevisionEnabled)
+		assert.Equal(t, ensured.ChannelSessionTTL, found.ChannelSessionTTL)
+		assert.Equal(t, ensured.ChannelBatchWindow, found.ChannelBatchWindow)
+		assert.Equal(t, ensured.ClientDeactivateThreshold, found.ClientDeactivateThreshold)
+		assert.False(t, found.UpdatedAt.IsZero())
+	})
+}
+
 // RunFindDocInfosByQueryTest runs the FindDocInfosByQuery test for the given db.
 func RunFindDocInfosByQueryTest(
 	t *testing.T,
@@ -1597,7 +1658,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, database.DefaultEventWebhookMaxWaitInterval.String(), info.EventWebhookMaxWaitInterval)
 		assert.Equal(t, database.DefaultEventWebhookRequestTimeout.String(), info.EventWebhookRequestTimeout)
 		assert.Equal(t, database.DefaultClientDeactivateThreshold.String(), info.ClientDeactivateThreshold)
-		assert.Equal(t, database.DefaultChannelSessionTTL.String(), info.ChannelSessionTTL)
+		assert.Empty(t, info.ChannelSessionTTL)
 		assert.Equal(t, database.DefaultSnapshotThreshold, info.SnapshotThreshold)
 		assert.Equal(t, database.DefaultSnapshotInterval, info.SnapshotInterval)
 		assert.False(t, info.UpdatedAt.IsZero())
