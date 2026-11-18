@@ -39,3 +39,13 @@ doc's default for `NewProjectInfo` and the shared `UpdateProjectInfo`
 testcase, so the insert now stores the default like every other field
 and the backends stay identical. The operator-config gap it was aimed at
 is recorded above and in the todo's out-of-scope list.
+
+Round 2 (test coverage): the shared testcase only exercised
+`CreateProjectInfo`, while the other caller of the project document,
+`ensureDefaultProjectInfo`, now stores `channel_session_ttl`,
+`channel_batch_window` and `updated_at` on the `default` project with
+nothing reading them back. `RunCreateProjectInfoDefaultsTest` grew a
+second subtest that ensures the default project and asserts both the
+value the upsert answers with and the value a later
+`FindProjectInfoByName` decodes, so the upsert path is covered on both
+backends rather than only through the shared helper's unit test.

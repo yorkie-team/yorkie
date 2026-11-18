@@ -35,6 +35,10 @@ insert so the stored document carries the defaults.
 - [x] Shared testcase run by both backends: create a project, read it back,
       and assert the create response equals the stored/read value for
       `AutoRevisionEnabled` and `ChannelSessionTTL`.
+- [x] Same testcase covers the other caller, `EnsureDefaultUserAndProject`:
+      the `default` project's upsert document now carries
+      `channel_session_ttl`, `channel_batch_window` and `updated_at`, so
+      assert what the default project reads back too.
 - [x] Store `channel_session_ttl` as the `NewProjectInfo` default, the same
       value the memory backend stores, so the two backends answer alike.
 - [x] Integration: the channel TTL expiry test pins the TTL on a project of

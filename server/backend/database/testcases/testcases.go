@@ -474,6 +474,36 @@ func RunCreateProjectInfoDefaultsTest(
 		assert.Equal(t, created.SnapshotInterval, found.SnapshotInterval)
 		assert.Equal(t, created.MaxSizePerDocument, found.MaxSizePerDocument)
 	})
+
+	t.Run("default project keeps the defaults test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// The default project is seeded by its own insert path, which shares
+		// the project document with CreateProjectInfo, so the fields that
+		// insert carries have to read back from it too.
+		_, ensured, err := db.EnsureDefaultUserAndProject(ctx, "admin@yorkie.dev", "hashed-password")
+		assert.NoError(t, err)
+		assert.Equal(t, database.DefaultProjectName, ensured.Name)
+		assert.True(t, ensured.AutoRevisionEnabled)
+		assert.Equal(t, database.DefaultChannelSessionTTL.String(), ensured.ChannelSessionTTL)
+		assert.Equal(t, database.DefaultClientDeactivateThreshold.String(), ensured.ClientDeactivateThreshold)
+		// Empty means the server-wide batch window, which is the default for
+		// new projects; it is stored so that a later read cannot tell a
+		// dropped field from a deliberate empty one.
+		assert.Equal(t, "", ensured.ChannelBatchWindow)
+		assert.False(t, ensured.UpdatedAt.IsZero())
+
+		// Reading it back by name goes to the stored document on every
+		// backend, so a field the insert dropped shows up as the zero value.
+		found, err := db.FindProjectInfoByName(ctx, database.DefaultProjectName)
+		assert.NoError(t, err)
+		assert.Equal(t, ensured.ID, found.ID)
+		assert.Equal(t, ensured.AutoRevisionEnabled, found.AutoRevisionEnabled)
+		assert.Equal(t, ensured.ChannelSessionTTL, found.ChannelSessionTTL)
+		assert.Equal(t, ensured.ChannelBatchWindow, found.ChannelBatchWindow)
+		assert.Equal(t, ensured.ClientDeactivateThreshold, found.ClientDeactivateThreshold)
+		assert.False(t, found.UpdatedAt.IsZero())
+	})
 }
 
 // RunFindDocInfosByQueryTest runs the FindDocInfosByQuery test for the given db.
