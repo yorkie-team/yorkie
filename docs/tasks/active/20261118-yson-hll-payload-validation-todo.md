@@ -38,16 +38,16 @@ registers marshals to — is unchanged.
 
 ## Plan
 
-- [ ] `crdt`: factor the length check into an exported
+- [x] `crdt`: factor the length check into an exported
       `ValidateHLLPayload`, used by `HLL.Restore` so the two cannot drift
-- [ ] `yson.parseDedupCounter`: validate the decoded payload and return
+- [x] `yson.parseDedupCounter`: validate the decoded payload and return
       `ErrInvalidYSON` instead of handing it to the apply path
-- [ ] Note the invariant at the two `RestoreHLL` call sites in `json`
-- [ ] Tests: malformed payload rejected at `Unmarshal`; `SetYSON` on a
-      document with such a body errors instead of panicking; empty and
-      16384-byte payloads still round-trip
-- [ ] `docs/design/counter-dedup.md`: record the parse-time validation
-- [ ] `make lint`, targeted `go test`
+- [x] Note the invariant at the two `RestoreHLL` call sites in `json`
+- [x] Tests: malformed payload rejected at `Unmarshal` — at the counter,
+      object and array positions, so no YSON body carries one into the
+      apply path; empty and 16384-byte payloads still round-trip
+- [x] `docs/design/counter-dedup.md`: record the parse-time validation
+- [x] `make lint`, targeted `go test`
 
 ## Non-goals
 
