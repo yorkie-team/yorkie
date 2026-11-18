@@ -53,6 +53,26 @@ var ErrPresenceBaseUnavailable = errors.FailedPrecond(
 // did before patches existed.
 const maxPresenceBaseSize = 4 * 1024
 
+// maxPresenceFoldPerPack bounds the presence a single pack may be folded
+// into: the sum, in presenceSize, of the puts the fold rewrites that pack's
+// patches into. maxPresenceBaseSize bounds one such put; nothing bounds how
+// many a pack carries, and a patch is far smaller than the put it becomes, so
+// without this a pack of minimal patches -- only clientSeq continuity has to
+// hold -- would be rewritten into one full presence per change, each stored
+// and fanned out to every client of the document. At the 16 MiB the RPC
+// server reads that is on the order of 10^5 puts of 4 KiB from one request.
+//
+// A pack over the budget is treated the same as one whose base is
+// unavailable, which is what removes the amplification rather than merely
+// capping it: the client resends the pack with its patches as full puts, so
+// what is stored and fanned out is bounded by what the client sent.
+//
+// At 16 times the per-put bound it leaves room for a batched pack of a few
+// hundred ordinary presences -- the ~250 B cursor presence patches were
+// introduced for folds about 260 times within it -- while bounding a pack's
+// folded output to a constant however many patches it carries.
+const maxPresenceFoldPerPack = 16 * maxPresenceBaseSize
+
 // presenceEntryOverhead is what one presence key costs beyond the bytes of its
 // key and value: two string headers in the map, the slack a Go map keeps per
 // slot, and the allocation behind each string. Counting it is what bounds the
@@ -131,7 +151,7 @@ func foldPresencePatches(
 		return nil, nil
 	}
 
-	base := fold.base
+	base, folded := fold.base, 0
 	for i, cn := range pushables {
 		pc := cn.PresenceChange()
 		if pc == nil {
@@ -144,16 +164,18 @@ func foldPresencePatches(
 		case presence.Clear:
 			base = nil
 		case presence.Patch:
-			// A fold whose result would not fit the bound is treated as having
-			// no base. The put a patch is rewritten into is stored and fanned
-			// out, so folding one over the bound would let a request cost
+			// A fold whose result would not fit either bound is treated as
+			// having no base. The put a patch is rewritten into is stored and
+			// fanned out, so folding one over the per-put bound, or more of
+			// them than the pack's budget pays for, would let a request cost
 			// arbitrarily more than its own bytes; the sender instead pushes
-			// the presence it holds as a put, paying for it itself.
-			next := base
+			// the presence it holds as puts, paying for them itself.
+			next, size := base, 0
 			if next != nil {
 				next = pc.ApplyTo(next)
+				size = presenceSize(next)
 			}
-			if next == nil || presenceSize(next) > maxPresenceBaseSize {
+			if next == nil || size > maxPresenceBaseSize || folded+size > maxPresenceFoldPerPack {
 				base = nil
 				if i < lastReset {
 					cn.SetPresenceChange(nil)
@@ -162,7 +184,7 @@ func foldPresencePatches(
 				return nil, ErrPresenceBaseUnavailable
 			}
 
-			base = next
+			base, folded = next, folded+size
 			cn.SetPresenceChange(&presence.Change{
 				ChangeType: presence.Put,
 				Presence:   base,
