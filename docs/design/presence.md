@@ -213,6 +213,19 @@ that same text. So no rollout ordering is required — an upgraded server accept
 every released client, and a document carrying legacy values heals as they are
 read.
 
+The repair is the one step of the decode that makes a presence larger than it
+arrived, so it is budgeted (`maxPresenceRepairGrowth`, 4 KiB per presence).
+Encoding expands escape-heavy input sixfold — a byte below `0x20` becomes a
+six-byte `\u00XX` — and nothing bounds the size of a presence on the way in,
+since presence is excluded from every document size gate; an unbounded repair
+would therefore let one push cost several times its own bytes in memory, in
+storage and in the fan-out. The budget is on growth rather than size, so it
+never reaches the values it exists for: a legacy bare string grows by the two
+quotes put around it however long it is. A value the budget cannot afford
+becomes `""`, which loses nothing readable — a value reaching the repair is one
+every JS peer throws on today — and the budget is spent in key order, so two
+servers decoding the same bytes agree on the result.
+
 Three consequences are worth stating:
 
 - **Decoding is lenient.** A value that is not a JSON string decodes to itself.

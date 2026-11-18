@@ -21,10 +21,12 @@ import (
 	goerrors "errors"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	gotime "time"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
@@ -495,16 +497,99 @@ func withinDepth(value string, limit int) bool {
 // the entire pack carrying the value -- to that same text. No reader loses
 // anything, and what the server stores and later hands to a pulling client is a
 // value every peer can parse.
+//
+// The repair is also the one place in the decode that makes a presence bigger
+// than it arrived, so it is bounded; see maxPresenceRepairGrowth.
 func repairPresence(pbPresence *api.Presence) {
 	if pbPresence == nil {
 		return
 	}
 
+	var broken []string
 	for key, value := range pbPresence.Data {
 		if !parsablePresenceValue(value) {
-			pbPresence.Data[key] = presence.EncodeValue(value)
+			broken = append(broken, key)
 		}
 	}
+	if len(broken) == 0 {
+		return
+	}
+
+	// Sorted, so that which keys the growth budget reaches does not depend on
+	// Go's randomized map order: two servers decoding the same bytes -- an
+	// ingress on one and a snapshot read on another -- must agree on what the
+	// document holds.
+	slices.Sort(broken)
+
+	budget := maxPresenceRepairGrowth
+	for _, key := range broken {
+		value := pbPresence.Data[key]
+		growth := presenceEncodeGrowth(value)
+		if growth > budget {
+			pbPresence.Data[key] = emptyPresenceValue
+			continue
+		}
+
+		budget -= growth
+		pbPresence.Data[key] = presence.EncodeValue(value)
+	}
+}
+
+// maxPresenceRepairGrowth bounds how many bytes repairing one presence may add
+// to it, and emptyPresenceValue is what a value takes once the budget is spent.
+//
+// Encoding expands, and on the worst input it expands sixfold: a byte below
+// 0x20 becomes a six-byte `\u00XX` escape, and a byte that is not valid UTF-8
+// becomes a six-byte escape of U+FFFD. Protobuf carries those bytes in a
+// `string` field happily, and nothing bounds the size of a presence on the way
+// in -- presence is excluded from every document size gate -- so an unbounded
+// repair would let one push cost several times its own bytes in memory, in
+// what is stored, and again in the fan-out to every peer.
+//
+// Budgeting the growth rather than the size is what keeps the bound off the
+// values it exists for. A legacy bare string grows by the two quotes put
+// around it, whatever its length, so a whole presence of them spends a handful
+// of bytes; only escape-heavy content -- the shape that amplifies, and not one
+// any SDK writes -- runs the budget out. A value that does lose to the budget
+// loses nothing readable: a value reaching the repair at all is one every JS
+// peer throws on today.
+const (
+	maxPresenceRepairGrowth = 4 * 1024
+	emptyPresenceValue      = `""`
+)
+
+// presenceEncodeGrowth reports how many bytes presence.EncodeValue adds to the
+// given value, without building the encoded form: a value the budget cannot
+// afford is one the server declines to allocate in the first place, which is
+// the point of the bound on an input that may be megabytes of control bytes.
+func presenceEncodeGrowth(value string) int {
+	growth := len(`""`)
+	for i := 0; i < len(value); {
+		if c := value[i]; c < utf8.RuneSelf {
+			switch {
+			case c == '"', c == '\\', c == '\b', c == '\f', c == '\n', c == '\r', c == '\t':
+				growth++
+			case c < 0x20:
+				// Every other control byte becomes `\u00XX`.
+				growth += 5
+			}
+			i++
+			continue
+		}
+
+		r, size := utf8.DecodeRuneInString(value[i:])
+		switch {
+		case r == utf8.RuneError && size == 1:
+			// An invalid byte is replaced by the six-byte escape of U+FFFD.
+			growth += 5
+		case r == '\u2028', r == '\u2029':
+			// Escaped because they are line terminators to a JS parser.
+			growth += 3
+		}
+		i += size
+	}
+
+	return growth
 }
 
 // FromPresenceChange converts the given Protobuf formats to model format.

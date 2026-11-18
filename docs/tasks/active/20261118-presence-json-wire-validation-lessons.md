@@ -56,3 +56,27 @@ Not run: this task was executed by the autonomous agent workflow, which is
 granted no tool that can dispatch the reviewer subagent. CI, `@claude review`
 and a human reviewer stand in. Recorded here rather than left implicit so a
 skipped round does not read as a clean one.
+
+## Review round: bounding the repair
+
+- The repair is a rewrite, and a rewrite that expands is an amplifier. JSON
+  encoding is sixfold on its worst input (a byte below `0x20` becomes
+  `\u00XX`), protobuf carries those bytes in a `string` field, and presence is
+  excluded from every document size gate — so the repair, left unbounded, let
+  one push cost several times its own bytes in memory, in storage and again in
+  the fan-out. The guard is a per-presence budget on *growth*
+  (`maxPresenceRepairGrowth`): a legacy bare string grows by two quotes
+  however long it is, so the bound only ever bites the shape that amplifies.
+- Budgeting across a map needs an order, or two servers decoding the same
+  bytes disagree about which values the budget reached. Keys are sorted before
+  the budget is spent; Go's randomized map order would otherwise have made the
+  decode non-deterministic.
+- `presenceEncodeGrowth` predicts the encoder instead of calling it, so a
+  value the budget cannot afford is never built — which only helps if the
+  prediction is exact, hence the internal test that pins it against
+  `presence.EncodeValue` over every byte value, U+2028/9 and invalid UTF-8.
+- A test that hands a map to the decoder and compares the result against that
+  same map cannot fail, because the repair rewrites in place and the decode
+  returns the map it was given. Cloning on the way in is what made the
+  "legitimate values are left alone" assertion mean anything; verified by
+  forcing the repair on and watching it fail.

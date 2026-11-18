@@ -17,6 +17,8 @@
 package converter_test
 
 import (
+	"maps"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -125,9 +127,12 @@ func TestPresenceValueIsRepairedToJSON(t *testing.T) {
 			"width":     "10",
 			"label":     presence.EncodeValue(`a {[ b \" c`),
 		}
+		// Cloned on the way in, because the repair rewrites the map it is
+		// given in place and hands that same map back: comparing against the
+		// map that was passed would be comparing it with itself.
 		decoded, err := converter.FromPresenceChange(&api.PresenceChange{
 			Type:     api.PresenceChange_CHANGE_TYPE_PUT,
-			Presence: &api.Presence{Data: data},
+			Presence: &api.Presence{Data: maps.Clone(data)},
 		})
 		require.NoError(t, err)
 		assert.Equal(t, &presence.Change{ChangeType: presence.Put, Presence: data}, decoded)
@@ -164,6 +169,93 @@ func TestPresenceValueIsRepairedToJSON(t *testing.T) {
 		require.Len(t, pack.Changes, 1)
 		assert.Equal(t, presence.Data{"cursor": `"moved"`}, pack.Changes[0].PresenceChange().Presence)
 	})
+}
+
+// TestPresenceRepairIsBounded covers the one way the repair can cost more than
+// the bytes it was handed: encoding expands control bytes sixfold, and nothing
+// bounds the size of a presence on the way in, so a client could otherwise make
+// a single push cost several times its own bytes in storage and in the fan-out
+// to every peer. The repair is budgeted; what the budget cannot afford is
+// replaced rather than grown.
+func TestPresenceRepairIsBounded(t *testing.T) {
+	// Bytes below 0x20 are valid UTF-8, so protobuf carries them in a string
+	// field, and each one costs six bytes once encoded.
+	amplifying := strings.Repeat("\x01", 64*1024)
+
+	t.Run("an amplifying value is not encoded test", func(t *testing.T) {
+		decoded, err := converter.FromPresenceChange(&api.PresenceChange{
+			Type:     api.PresenceChange_CHANGE_TYPE_PUT,
+			Presence: &api.Presence{Data: map[string]string{"blob": amplifying}},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, `""`, decoded.Presence["blob"])
+	})
+
+	// The budget is on the whole presence, not on each value, or a presence of
+	// many amplifying values would amplify just as much as one large one.
+	t.Run("many amplifying values stay within the budget test", func(t *testing.T) {
+		data := map[string]string{}
+		for i := range 256 {
+			data[strconv.Itoa(i)] = strings.Repeat("\x01", 256)
+		}
+		before := presenceSize(data)
+
+		decoded, err := converter.FromPresenceChange(&api.PresenceChange{
+			Type:     api.PresenceChange_CHANGE_TYPE_PUT,
+			Presence: &api.Presence{Data: data},
+		})
+		require.NoError(t, err)
+		assert.LessOrEqual(t, presenceSize(decoded.Presence), before+4*1024)
+	})
+
+	// Decoding the same bytes twice has to give the same document, whichever
+	// server does it: the budget runs out in key order, not in Go's randomized
+	// map order.
+	t.Run("the budget is spent deterministically test", func(t *testing.T) {
+		build := func() map[string]string {
+			data := map[string]string{}
+			for i := range 64 {
+				data[strconv.Itoa(i)] = strings.Repeat("\x01", 256)
+			}
+			return data
+		}
+
+		first, err := converter.FromPresenceChange(&api.PresenceChange{
+			Type:     api.PresenceChange_CHANGE_TYPE_PUT,
+			Presence: &api.Presence{Data: build()},
+		})
+		require.NoError(t, err)
+		second, err := converter.FromPresenceChange(&api.PresenceChange{
+			Type:     api.PresenceChange_CHANGE_TYPE_PUT,
+			Presence: &api.Presence{Data: build()},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, first, second)
+
+		// And the budget is spent on something: the low keys are encoded.
+		assert.Equal(t, presence.EncodeValue(strings.Repeat("\x01", 256)), first.Presence["0"])
+	})
+
+	// A legacy value is a bare string, which grows by the two quotes around it
+	// however long it is, so the budget never reaches the values it exists for.
+	t.Run("a large plain value is still encoded test", func(t *testing.T) {
+		plain := strings.Repeat("a", 64*1024)
+		decoded, err := converter.FromPresenceChange(&api.PresenceChange{
+			Type:     api.PresenceChange_CHANGE_TYPE_PUT,
+			Presence: &api.Presence{Data: map[string]string{"label": plain}},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, presence.EncodeValue(plain), decoded.Presence["label"])
+		assert.Equal(t, plain, presence.DecodeValue(decoded.Presence["label"]))
+	})
+}
+
+func presenceSize(data presence.Data) int {
+	var size int
+	for key, value := range data {
+		size += len(key) + len(value)
+	}
+	return size
 }
 
 // TestStoredSnapshotPresenceIsRepaired covers the snapshot read path, which
