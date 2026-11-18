@@ -88,6 +88,23 @@ func presencePack(firstClientSeq uint32, pcs ...*presence.Change) *change.Pack {
 	return change.NewPack(key.Key("doc"), change.InitialCheckpoint, changes, nil, nil)
 }
 
+// maxFoldBase returns a presence that the patches below fold into a put of
+// exactly maxPresenceBaseSize, so the fold budget pays for exactly
+// maxPresenceFoldPerPack / maxPresenceBaseSize of them.
+func maxFoldBase() presence.Data {
+	size := maxPresenceBaseSize - len("blob") - len("cursor") - len("1") - 2*presenceEntryOverhead
+	return presence.Data{"blob": strings.Repeat("x", size)}
+}
+
+// patches returns n patches of the one key maxFoldBase leaves room for.
+func patches(n int) []*presence.Change {
+	var pcs []*presence.Change
+	for range n {
+		pcs = append(pcs, patch(presence.Data{"cursor": "1"}))
+	}
+	return pcs
+}
+
 // stored is what pushPack would store from the pack: every change above the
 // client's checkpoint.
 func stored(t *testing.T, docKey types.DocRefKey, cp change.Checkpoint, pack *change.Pack) []*database.ChangeInfo {
@@ -431,6 +448,72 @@ func TestFoldPresencePatches(t *testing.T) {
 		_, err := foldPresencePatches(be, clientAt(docKey, 7, 3), docKey, pack)
 		assert.ErrorIs(t, err, ErrPresenceBaseUnavailable)
 		assert.Equal(t, presence.Patch, pack.Changes[0].PresenceChange().ChangeType)
+	})
+
+	// Each folded put is stored and fanned out, so a pack of minimal patches
+	// would otherwise cost one full presence per change however small the
+	// request was.
+	t.Run("a pack of patches over the fold budget is refused", func(t *testing.T) {
+		be := newCacheBackend(t)
+		be.Cache.PresenceBase.Add(baseKey, cached(7, 3, maxFoldBase()))
+
+		over := maxPresenceFoldPerPack/maxPresenceBaseSize + 1
+		pack := presencePack(4, patches(over)...)
+		_, err := foldPresencePatches(be, clientAt(docKey, 7, 3), docKey, pack)
+		assert.ErrorIs(t, err, ErrPresenceBaseUnavailable)
+		// Nothing in a refused pack is stored, so the folds the walk had
+		// already made are discarded with it; the change it stopped on is the
+		// patch the client resends as a put.
+		assert.Equal(t, presence.Patch, pack.Changes[over-1].PresenceChange().ChangeType)
+	})
+
+	t.Run("a pack of patches within the fold budget is folded", func(t *testing.T) {
+		be := newCacheBackend(t)
+		base := maxFoldBase()
+		be.Cache.PresenceBase.Add(baseKey, cached(7, 3, base))
+
+		pack := presencePack(4, patches(maxPresenceFoldPerPack/maxPresenceBaseSize)...)
+		_, err := foldPresencePatches(be, clientAt(docKey, 7, 3), docKey, pack)
+		require.NoError(t, err)
+		folded := presence.Data{"blob": base["blob"], "cursor": "1"}
+		for _, cn := range pack.Changes {
+			assert.Equal(t, put(folded), cn.PresenceChange())
+		}
+	})
+
+	// A put is paid for in the bytes the client sent, so only the puts the
+	// fold creates are charged against the budget.
+	t.Run("the fold budget counts folded puts only", func(t *testing.T) {
+		be := newCacheBackend(t)
+		base := maxFoldBase()
+		be.Cache.PresenceBase.Add(baseKey, cached(7, 3, base))
+
+		var pcs []*presence.Change
+		for range maxPresenceFoldPerPack/maxPresenceBaseSize + 1 {
+			pcs = append(pcs, put(base))
+		}
+		pack := presencePack(4, append(pcs, patch(presence.Data{"cursor": "1"}))...)
+
+		_, err := foldPresencePatches(be, clientAt(docKey, 7, 3), docKey, pack)
+		require.NoError(t, err)
+		assert.Equal(t,
+			put(presence.Data{"blob": base["blob"], "cursor": "1"}),
+			pack.Changes[len(pack.Changes)-1].PresenceChange(),
+		)
+	})
+
+	// A detach pack ends with a clear, so passing the budget must not fail it
+	// any more than a missing base does.
+	t.Run("a patch over the fold budget is dropped when a later clear replaces it", func(t *testing.T) {
+		be := newCacheBackend(t)
+		be.Cache.PresenceBase.Add(baseKey, cached(7, 3, maxFoldBase()))
+
+		over := maxPresenceFoldPerPack/maxPresenceBaseSize + 1
+		pack := presencePack(4, append(patches(over), clearChange())...)
+		_, err := foldPresencePatches(be, clientAt(docKey, 7, 3), docKey, pack)
+		require.NoError(t, err)
+		assert.Nil(t, pack.Changes[over-1].PresenceChange())
+		assert.Equal(t, clearChange(), pack.Changes[over].PresenceChange())
 	})
 
 	t.Run("a patch folded within the size bound is stored as a put", func(t *testing.T) {

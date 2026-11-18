@@ -81,7 +81,7 @@ tracking the sender's full presence:
 |--------|--------------------------------|
 | `PUT` | becomes the tracked presence |
 | `CLEAR` | tracked presence becomes unknown |
-| `PATCH` | applied to the tracked presence; the change is rewritten to a `PUT` of the result, unless the result would pass `maxPresenceBaseSize`, which is handled as having no tracked presence |
+| `PATCH` | applied to the tracked presence; the change is rewritten to a `PUT` of the result, unless the result would pass `maxPresenceBaseSize` or the pack's folds would pass `maxPresenceFoldPerPack`, which are handled as having no tracked presence |
 | no presence | none |
 
 A patch applies its deletions first and then its sets, so a key in both ends
@@ -143,7 +143,8 @@ whose result is thrown away.
 ### No base
 
 A patch with no tracked presence (no entry, a stale entry, or a patch after a
-`CLEAR`), or one whose result would pass `maxPresenceBaseSize`, fails the push
+`CLEAR`), one whose result would pass `maxPresenceBaseSize`, or one past the
+pack's `maxPresenceFoldPerPack` budget, fails the push
 with `ErrPresenceBaseUnavailable`
 (`FailedPrecondition`). Nothing in the pack is stored. The client resends the
 pack with that patch replaced by a full `PUT`.
@@ -161,6 +162,15 @@ neither folded into nor cached; sending full `PUT`s is both the fallback and
 the steady state for such a client. It is an expected signal, so it is not
 counted in the push-pull error metric.
 
+The budget makes the same path reachable from a pack rather than from a
+single patch: a pack whose folded puts sum past `maxPresenceFoldPerPack`
+(64 KiB) is refused at the patch that passes it, and the resend carries full
+`PUT`s. A client that pushes each presence change as it happens never reaches
+it; one that batches hundreds of them into a single pack does, and pays for
+them in the bytes it sends. A patch past the budget that a later `PUT` or
+`CLEAR` in the same pack replaces loses its presence instead of failing the
+push, the same as a patch with no base.
+
 ### Risks and Mitigation
 
 | Risk | Mitigation |
@@ -172,6 +182,7 @@ counted in the push-pull error metric.
 | Cache memory | LRU bounded by `--presence-base-cache-size` (default 10,000) entries, and each entry by `maxPresenceBaseSize` (4 KiB), since presence is in no document size gate. The product, about 40 MiB, is the ceiling |
 | A presence of many tiny keys costing far more memory than its bytes | `presenceSize` counts `presenceEntryOverhead` (64 B) per key as well as the key and value bytes, so the 4 KiB bound also caps a presence at 64 keys and the 40 MiB ceiling holds whatever shape the presence has |
 | A small patch expanding into a large stored and fanned-out put | The fold refuses a patch whose result would pass the same 4 KiB bound, so a folded put costs at most that however large a presence the sender parked earlier. The client then pushes the presence as a full `PUT`, paying for its own bytes, as every client did before patches existed |
+| One pack of many small patches expanding into as many large puts | The 4 KiB bound is per put, and nothing bounds how many changes a pack carries, so it alone would let a single request of minimal patches be rewritten into one full presence per change, each stored and fanned out. `maxPresenceFoldPerPack` (64 KiB, 16 × the per-put bound) bounds the sum of a pack's folded puts; a pack past it is refused like one with no base, so the client resends its patches as full `PUT`s and what is stored is bounded by what it sent |
 
 ### Design Decisions
 
