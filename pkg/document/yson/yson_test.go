@@ -941,11 +941,42 @@ func TestYSONStringAwareParsing(t *testing.T) {
 		assert.Equal(t, crdt.LongCnt, longCounter.Type)
 		assert.Equal(t, int64(100), longCounter.Value)
 
+		registers := make([]byte, 16384)
+		registers[0] = 5
 		dedup := yson.Counter{}
-		assert.NoError(t, yson.Unmarshal(`DedupCounter(Int(15),"AQIDBA==")`, &dedup))
+		assert.NoError(t, yson.Unmarshal(fmt.Sprintf(`DedupCounter(Int(15),"%s")`,
+			base64.StdEncoding.EncodeToString(registers)), &dedup))
 		assert.Equal(t, crdt.IntegerDedupCnt, dedup.Type)
 		assert.Equal(t, int32(15), dedup.Value)
-		assert.Equal(t, []byte{1, 2, 3, 4}, dedup.Registers)
+		assert.Equal(t, registers, dedup.Registers)
+	})
+
+	t.Run("dedup counter with malformed register payload test", func(t *testing.T) {
+		// A payload of the wrong length is the one input HLL.Restore rejects,
+		// and the apply path panics on a restore error. Unmarshal must refuse
+		// it before it ever reaches that path.
+		for _, length := range []int{1, 4, 16383, 16385} {
+			encoded := base64.StdEncoding.EncodeToString(make([]byte, length))
+
+			counter := yson.Counter{}
+			err := yson.Unmarshal(fmt.Sprintf(`DedupCounter(Int(15),"%s")`, encoded), &counter)
+			assert.ErrorIs(t, err, yson.ErrInvalidYSON, "length %d", length)
+
+			obj := yson.Object{}
+			err = yson.Unmarshal(fmt.Sprintf(`{"uv":DedupCounter(Int(15),"%s")}`, encoded), &obj)
+			assert.ErrorIs(t, err, yson.ErrInvalidYSON, "length %d", length)
+
+			arr := yson.Array{}
+			err = yson.Unmarshal(fmt.Sprintf(`[DedupCounter(Int(15),"%s")]`, encoded), &arr)
+			assert.ErrorIs(t, err, yson.ErrInvalidYSON, "length %d", length)
+		}
+	})
+
+	t.Run("dedup counter with empty register payload test", func(t *testing.T) {
+		counter := yson.Counter{}
+		assert.NoError(t, yson.Unmarshal(`DedupCounter(Int(0),"")`, &counter))
+		assert.Equal(t, crdt.IntegerDedupCnt, counter.Type)
+		assert.Nil(t, counter.Registers)
 	})
 
 	t.Run("empty text and tree regressions", func(t *testing.T) {
@@ -1097,8 +1128,10 @@ func TestYSONConstructorArgumentValidation(t *testing.T) {
 	})
 
 	t.Run("well-formed DedupCounter still parses", func(t *testing.T) {
+		encoded := base64.StdEncoding.EncodeToString(make([]byte, 16384))
 		obj := yson.Object{}
-		assert.NoError(t, yson.Unmarshal(`{"c":DedupCounter(Int(15),"aGVsbG8=")}`, &obj))
+		assert.NoError(t, yson.Unmarshal(
+			fmt.Sprintf(`{"c":DedupCounter(Int(15),"%s")}`, encoded), &obj))
 	})
 
 	t.Run("DedupCounter registers must be base64", func(t *testing.T) {

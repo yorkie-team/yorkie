@@ -127,6 +127,18 @@ func (h *HLL) Bytes() []byte {
 	return h.registers[:]
 }
 
+// ValidateHLLPayload reports whether data is a register payload Restore
+// accepts, which is a length check alone. Decoders of untrusted input call it
+// before the bytes reach an apply path that cannot report a Restore error —
+// json.Object.setNewCounter and json.Array.AddNewCounter panic on one — so a
+// malformed payload is rejected where it is parsed instead.
+func ValidateHLLPayload(data []byte) error {
+	if len(data) != hllRegisterCount {
+		return fmt.Errorf("invalid HLL register payload: got %d bytes, want %d", len(data), hllRegisterCount)
+	}
+	return nil
+}
+
 // Restore loads register data from bytes. Returns an error if the data length
 // does not match the expected register count.
 //
@@ -138,8 +150,8 @@ func (h *HLL) Bytes() []byte {
 // restore the same payload still converge, and re-serializing the counter
 // writes the repaired registers back.
 func (h *HLL) Restore(data []byte) error {
-	if len(data) != hllRegisterCount {
-		return fmt.Errorf("invalid HLL register payload: got %d bytes, want %d", len(data), hllRegisterCount)
+	if err := ValidateHLLPayload(data); err != nil {
+		return err
 	}
 	for i, val := range data {
 		h.registers[i] = min(val, hllMaxRegisterValue)
