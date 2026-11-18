@@ -27,11 +27,11 @@ import (
 )
 
 // TestNewProjectInfoDoc checks that the insert document carries every default
-// the candidate sets. A field left out of the document decodes as the zero
+// NewProjectInfo sets. A field left out of the document decodes as the zero
 // value on every later read, so the stored project would disagree with the
 // info returned by the insert, as auto_revision_enabled once did.
 func TestNewProjectInfoDoc(t *testing.T) {
-	info := newProjectInfoCandidate("project", types.ID("000000000000000000000001"))
+	info := database.NewProjectInfo("project", types.ID("000000000000000000000001"))
 	doc := newProjectInfoDoc(info)
 
 	value := reflect.ValueOf(*info)
@@ -43,7 +43,7 @@ func TestNewProjectInfoDoc(t *testing.T) {
 		tag := field.Tag.Get("bson")
 		tags[tag] = struct{}{}
 
-		// _id is left to MongoDB, and fields the candidate leaves zero read
+		// _id is left to MongoDB, and fields NewProjectInfo leaves zero read
 		// back as zero whether they are stored or not.
 		if tag == "_id" || value.Field(i).IsZero() {
 			continue
@@ -62,18 +62,15 @@ func TestNewProjectInfoDoc(t *testing.T) {
 	}
 }
 
-// TestNewProjectInfoCandidateChannelSessionTTL checks that a new project is
-// stored without a channel session TTL of its own, so that the server-wide
-// ChannelSessionTTL the operator configured governs it until the project
-// chooses a value through the admin API.
-func TestNewProjectInfoCandidateChannelSessionTTL(t *testing.T) {
-	info := newProjectInfoCandidate("project", types.ID("000000000000000000000001"))
-	assert.Empty(t, info.ChannelSessionTTL)
-
+// TestNewProjectInfoDocDurationDefaults checks that the duration defaults
+// reach the document as the strings NewProjectInfo answers with. These are
+// the fields the insert used to drop, so a project read back from MongoDB
+// reported no TTL and no threshold at all.
+func TestNewProjectInfoDocDurationDefaults(t *testing.T) {
+	info := database.NewProjectInfo("project", types.ID("000000000000000000000001"))
 	doc := newProjectInfoDoc(info)
-	assert.Equal(t, "", doc["channel_session_ttl"])
 
-	// The other defaults are untouched by the clearing.
-	assert.Equal(t, database.DefaultClientDeactivateThreshold.String(), info.ClientDeactivateThreshold)
-	assert.True(t, info.AutoRevisionEnabled)
+	assert.Equal(t, database.DefaultChannelSessionTTL.String(), doc["channel_session_ttl"])
+	assert.Equal(t, database.DefaultClientDeactivateThreshold.String(), doc["client_deactivate_threshold"])
+	assert.Equal(t, true, doc["auto_revision_enabled"])
 }

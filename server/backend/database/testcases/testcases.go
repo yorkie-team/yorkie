@@ -458,11 +458,10 @@ func RunCreateProjectInfoDefaultsTest(
 
 		// The documented defaults are what CreateProjectInfo answers.
 		assert.True(t, created.AutoRevisionEnabled)
+		assert.Equal(t, database.DefaultChannelSessionTTL.String(), created.ChannelSessionTTL)
 
 		// Reading the project back must answer the same, whatever the backend
 		// stores: a field dropped from the insert decodes as the zero value.
-		// ChannelSessionTTL is compared round-trip only, without a value of its
-		// own: a backend may leave it unset so that the server-wide TTL governs.
 		// FindProjectInfoByName is used on purpose: it always reads the stored
 		// document, while FindProjectInfoByID may answer from the project cache.
 		found, err := db.FindProjectInfoByName(ctx, t.Name())

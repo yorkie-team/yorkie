@@ -659,8 +659,9 @@ func TestChannelIntegration(t *testing.T) {
 	t.Run("channel expires after TTL without refresh", func(t *testing.T) {
 		// This test verifies that channel sessions expire when clients don't send refresh.
 		// The TTL is set on the project (5s) rather than left to the server-wide
-		// ChannelSessionTTL, which a project only falls back to while it has none:
-		// pinning it here keeps the timing of the test independent of both.
+		// ChannelSessionTTL: cleanup reads the project's own value, which every
+		// created project now carries, so pinning it here keeps the timing of
+		// the test independent of the project defaults.
 		ctx := context.Background()
 
 		adminCli := helper.CreateAdminCli(t, defaultServer.RPCAddr())

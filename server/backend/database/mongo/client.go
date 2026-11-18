@@ -525,18 +525,6 @@ func (c *Client) ensureDefaultUserInfo(
 	return info, nil
 }
 
-// newProjectInfoCandidate returns the project info to insert for a new
-// project. It clears ChannelSessionTTL so that the stored project carries no
-// per-project value: the channel manager then falls back to the server-wide
-// ChannelSessionTTL, which keeps the operator's setting the default for new
-// projects instead of pinning every one of them to the package constant.
-// See docs/design/per-project-channel-session-ttl.md.
-func newProjectInfoCandidate(name string, owner types.ID) *database.ProjectInfo {
-	info := database.NewProjectInfo(name, owner)
-	info.ChannelSessionTTL = ""
-	return info
-}
-
 // newProjectInfoDoc returns the document that stores the given project info.
 // Every field the info carries must appear here: a missing field decodes as
 // the zero value on every later read, so the project would answer differently
@@ -577,7 +565,7 @@ func (c *Client) ensureDefaultProjectInfo(
 	ctx context.Context,
 	defaultUserID types.ID,
 ) (*database.ProjectInfo, error) {
-	candidate := newProjectInfoCandidate(database.DefaultProjectName, defaultUserID)
+	candidate := database.NewProjectInfo(database.DefaultProjectName, defaultUserID)
 	candidate.ID = database.DefaultProjectID
 
 	_, err := c.collection(ColProjects).UpdateOne(ctx, bson.M{
@@ -611,7 +599,7 @@ func (c *Client) CreateProjectInfo(
 	name string,
 	owner types.ID,
 ) (*database.ProjectInfo, error) {
-	info := newProjectInfoCandidate(name, owner)
+	info := database.NewProjectInfo(name, owner)
 	result, err := c.collection(ColProjects).InsertOne(ctx, newProjectInfoDoc(info))
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {

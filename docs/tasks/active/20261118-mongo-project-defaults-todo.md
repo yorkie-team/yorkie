@@ -35,8 +35,8 @@ insert so the stored document carries the defaults.
 - [x] Shared testcase run by both backends: create a project, read it back,
       and assert the create response equals the stored/read value for
       `AutoRevisionEnabled` and `ChannelSessionTTL`.
-- [x] Store `channel_session_ttl` empty for new projects so the server-wide
-      `ChannelSessionTTL` keeps seeding them, as the design doc requires.
+- [x] Store `channel_session_ttl` as the `NewProjectInfo` default, the same
+      value the memory backend stores, so the two backends answer alike.
 - [x] Integration: the channel TTL expiry test pins the TTL on a project of
       its own, so it no longer depends on the server-wide value.
 
@@ -49,5 +49,5 @@ insert so the stored document carries the defaults.
   document `auto-revision-enabled` default `true`.
 - Seeding `NewProjectInfo.ChannelSessionTTL` from the operator's
   configured value instead of the package constant. That is
-  `project_info.go` plus config plumbing, and it is what still pins new
-  projects on the memory backend to 15s.
+  `project_info.go` plus config plumbing, and it is what pins new
+  projects on both backends to 15s.
