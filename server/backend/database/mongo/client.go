@@ -525,6 +525,41 @@ func (c *Client) ensureDefaultUserInfo(
 	return info, nil
 }
 
+// newProjectInfoDoc returns the document that stores the given project info.
+// Every field of ProjectInfo that NewProjectInfo gives a default must appear
+// here: a missing field decodes as the zero value on every later read, so the
+// project would answer differently from the info returned by the insert.
+// `_id` is left out so that MongoDB generates it for new projects and
+// ensureDefaultProjectInfo can pin it through the upsert filter instead.
+func newProjectInfoDoc(info *database.ProjectInfo) bson.M {
+	return bson.M{
+		"name":                            info.Name,
+		"owner":                           info.Owner,
+		"auth_webhook_max_retries":        info.AuthWebhookMaxRetries,
+		"auth_webhook_min_wait_interval":  info.AuthWebhookMinWaitInterval,
+		"auth_webhook_max_wait_interval":  info.AuthWebhookMaxWaitInterval,
+		"auth_webhook_request_timeout":    info.AuthWebhookRequestTimeout,
+		"event_webhook_max_retries":       info.EventWebhookMaxRetries,
+		"event_webhook_min_wait_interval": info.EventWebhookMinWaitInterval,
+		"event_webhook_max_wait_interval": info.EventWebhookMaxWaitInterval,
+		"event_webhook_request_timeout":   info.EventWebhookRequestTimeout,
+		"client_deactivate_threshold":     info.ClientDeactivateThreshold,
+		"channel_session_ttl":             info.ChannelSessionTTL,
+		"channel_batch_window":            info.ChannelBatchWindow,
+		"snapshot_threshold":              info.SnapshotThreshold,
+		"snapshot_interval":               info.SnapshotInterval,
+		"max_subscribers_per_document":    info.MaxSubscribersPerDocument,
+		"max_attachments_per_document":    info.MaxAttachmentsPerDocument,
+		"max_size_per_document":           info.MaxSizePerDocument,
+		"remove_on_detach":                info.RemoveOnDetach,
+		"auto_revision_enabled":           info.AutoRevisionEnabled,
+		"public_key":                      info.PublicKey,
+		"secret_key":                      info.SecretKey,
+		"created_at":                      info.CreatedAt,
+		"updated_at":                      info.UpdatedAt,
+	}
+}
+
 // ensureDefaultProjectInfo creates the default project info if it does not exist.
 func (c *Client) ensureDefaultProjectInfo(
 	ctx context.Context,
@@ -536,29 +571,7 @@ func (c *Client) ensureDefaultProjectInfo(
 	_, err := c.collection(ColProjects).UpdateOne(ctx, bson.M{
 		"_id": candidate.ID,
 	}, bson.M{
-		"$setOnInsert": bson.M{
-			"name":                            candidate.Name,
-			"owner":                           candidate.Owner,
-			"auth_webhook_max_retries":        candidate.AuthWebhookMaxRetries,
-			"auth_webhook_min_wait_interval":  candidate.AuthWebhookMinWaitInterval,
-			"auth_webhook_max_wait_interval":  candidate.AuthWebhookMaxWaitInterval,
-			"auth_webhook_request_timeout":    candidate.AuthWebhookRequestTimeout,
-			"event_webhook_max_retries":       candidate.EventWebhookMaxRetries,
-			"event_webhook_min_wait_interval": candidate.EventWebhookMinWaitInterval,
-			"event_webhook_max_wait_interval": candidate.EventWebhookMaxWaitInterval,
-			"event_webhook_request_timeout":   candidate.EventWebhookRequestTimeout,
-			"client_deactivate_threshold":     candidate.ClientDeactivateThreshold,
-			"snapshot_threshold":              candidate.SnapshotThreshold,
-			"snapshot_interval":               candidate.SnapshotInterval,
-			"auto_revision_enabled":           candidate.AutoRevisionEnabled,
-			"max_subscribers_per_document":    candidate.MaxSubscribersPerDocument,
-			"max_attachments_per_document":    candidate.MaxAttachmentsPerDocument,
-			"max_size_per_document":           candidate.MaxSizePerDocument,
-			"remove_on_detach":                candidate.RemoveOnDetach,
-			"public_key":                      candidate.PublicKey,
-			"secret_key":                      candidate.SecretKey,
-			"created_at":                      candidate.CreatedAt,
-		},
+		"$setOnInsert": newProjectInfoDoc(candidate),
 	}, options.UpdateOne().SetUpsert(true))
 	if err != nil {
 		return nil, fmt.Errorf("create default project: %w", err)
@@ -587,29 +600,7 @@ func (c *Client) CreateProjectInfo(
 	owner types.ID,
 ) (*database.ProjectInfo, error) {
 	info := database.NewProjectInfo(name, owner)
-	result, err := c.collection(ColProjects).InsertOne(ctx, bson.M{
-		"name":                            info.Name,
-		"owner":                           owner,
-		"auth_webhook_max_retries":        info.AuthWebhookMaxRetries,
-		"auth_webhook_min_wait_interval":  info.AuthWebhookMinWaitInterval,
-		"auth_webhook_max_wait_interval":  info.AuthWebhookMaxWaitInterval,
-		"auth_webhook_request_timeout":    info.AuthWebhookRequestTimeout,
-		"event_webhook_max_retries":       info.EventWebhookMaxRetries,
-		"event_webhook_min_wait_interval": info.EventWebhookMinWaitInterval,
-		"event_webhook_max_wait_interval": info.EventWebhookMaxWaitInterval,
-		"event_webhook_request_timeout":   info.EventWebhookRequestTimeout,
-		"client_deactivate_threshold":     info.ClientDeactivateThreshold,
-		"snapshot_threshold":              info.SnapshotThreshold,
-		"snapshot_interval":               info.SnapshotInterval,
-		"max_subscribers_per_document":    info.MaxSubscribersPerDocument,
-		"max_attachments_per_document":    info.MaxAttachmentsPerDocument,
-		"max_size_per_document":           info.MaxSizePerDocument,
-		"remove_on_detach":                info.RemoveOnDetach,
-		"public_key":                      info.PublicKey,
-		"secret_key":                      info.SecretKey,
-		"created_at":                      info.CreatedAt,
-		"updated_at":                      info.UpdatedAt,
-	})
+	result, err := c.collection(ColProjects).InsertOne(ctx, newProjectInfoDoc(info))
 	if err != nil {
 		if mongo.IsDuplicateKeyError(err) {
 			return nil, database.ErrProjectAlreadyExists
