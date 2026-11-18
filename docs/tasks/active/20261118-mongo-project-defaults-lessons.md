@@ -15,16 +15,25 @@
 - Storing `channel_session_ttl` is a behaviour change, not only a
   persistence fix: `channel.Manager` cleanup reads the project TTL and
   only falls back to the server-wide `Backend.ChannelSessionTTL` when the
-  stored value is empty or unparsable. The integration test
-  `TestChannelIntegration/channel expires after TTL without refresh` was
-  passing on the dropped field — the default project answered an empty
-  TTL, so the helper's server-wide 5s governed and the session expired
-  inside the test's 8s window. With the default (15s) now stored, that
-  fallback no longer applies, so the test sets the TTL on a project of
-  its own instead of relying on the server-wide value.
+  stored value is empty or unparsable. Writing `NewProjectInfo`'s
+  hardcoded 15s into every insert would therefore retire the operator's
+  `--channel-session-ttl` for new projects, which
+  `docs/design/per-project-channel-session-ttl.md` keeps as "the default
+  seed for new projects and the fallback". So the MongoDB insert clears
+  the field (`newProjectInfoCandidate`) and stores it empty: the project
+  carries no TTL of its own until the admin API sets one, and the
+  server-wide value governs meanwhile. The returned info matches what is
+  stored, which is the invariant the rest of this change is about.
+- `NewProjectInfo` seeds `ChannelSessionTTL` from the package constant
+  rather than the operator's configured value, so the memory backend
+  still pins new projects to 15s. Closing that needs
+  `server/backend/database/project_info.go` and the config plumbing into
+  both backends — a change outside this one.
 
 ## Self review
 
-Not run: this change was produced in an autonomous one-shot run with no
-reviewer subagent available. Review is left to CI, `@claude review` and a
-human reviewer on the pull request.
+Round 1 (correctness/tests, design fit): two findings, both on
+`channel_session_ttl` being persisted by the MongoDB insert. Fixed as
+described above; the shared testcase now compares `ChannelSessionTTL`
+round-trip (create answer vs. stored value) instead of asserting the
+package constant, so it holds for a backend that leaves the field unset.

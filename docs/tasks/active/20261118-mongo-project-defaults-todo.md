@@ -35,9 +35,10 @@ insert so the stored document carries the defaults.
 - [x] Shared testcase run by both backends: create a project, read it back,
       and assert the create response equals the stored/read value for
       `AutoRevisionEnabled` and `ChannelSessionTTL`.
-- [x] Integration: the channel TTL expiry test set the TTL server-wide and
-      relied on the default project having none. Give it a project with an
-      explicit `ChannelSessionTTL` now that a stored project TTL wins.
+- [x] Store `channel_session_ttl` empty for new projects so the server-wide
+      `ChannelSessionTTL` keeps seeding them, as the design doc requires.
+- [x] Integration: the channel TTL expiry test pins the TTL on a project of
+      its own, so it no longer depends on the server-wide value.
 
 ## Out of scope
 
@@ -46,3 +47,7 @@ insert so the stored document carries the defaults.
   them on. There is no migration tool in this repo to hook into.
 - Docs under yorkie-team.github.io (separate repository); they already
   document `auto-revision-enabled` default `true`.
+- Seeding `NewProjectInfo.ChannelSessionTTL` from the operator's
+  configured value instead of the package constant. That is
+  `project_info.go` plus config plumbing, and it is what still pins new
+  projects on the memory backend to 15s.
