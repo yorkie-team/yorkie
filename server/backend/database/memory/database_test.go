@@ -98,6 +98,10 @@ func TestDB(t *testing.T) {
 		testcases.RunFindProjectInfoByNameTest(t, db)
 	})
 
+	t.Run("CreateProjectInfo defaults test", func(t *testing.T) {
+		testcases.RunCreateProjectInfoDefaultsTest(t, db)
+	})
+
 	t.Run("ListMemberInfos test", func(t *testing.T) {
 		testcases.RunListMemberInfosTest(t, db)
 	})

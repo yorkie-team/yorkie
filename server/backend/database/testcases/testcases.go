@@ -445,6 +445,37 @@ func RunFindProjectInfoByNameTest(
 	})
 }
 
+// RunCreateProjectInfoDefaultsTest runs the CreateProjectInfo defaults test for the given db.
+func RunCreateProjectInfoDefaultsTest(
+	t *testing.T,
+	db database.Database,
+) {
+	t.Run("created project keeps the defaults test", func(t *testing.T) {
+		ctx := context.Background()
+
+		created, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
+		assert.NoError(t, err)
+
+		// The documented defaults are what CreateProjectInfo answers.
+		assert.True(t, created.AutoRevisionEnabled)
+		assert.Equal(t, database.DefaultChannelSessionTTL.String(), created.ChannelSessionTTL)
+
+		// Reading the project back must answer the same, whatever the backend
+		// stores: a field dropped from the insert decodes as the zero value.
+		// FindProjectInfoByName is used on purpose: it always reads the stored
+		// document, while FindProjectInfoByID may answer from the project cache.
+		found, err := db.FindProjectInfoByName(ctx, t.Name())
+		assert.NoError(t, err)
+		assert.Equal(t, created.ID, found.ID)
+		assert.Equal(t, created.AutoRevisionEnabled, found.AutoRevisionEnabled)
+		assert.Equal(t, created.ChannelSessionTTL, found.ChannelSessionTTL)
+		assert.Equal(t, created.ClientDeactivateThreshold, found.ClientDeactivateThreshold)
+		assert.Equal(t, created.SnapshotThreshold, found.SnapshotThreshold)
+		assert.Equal(t, created.SnapshotInterval, found.SnapshotInterval)
+		assert.Equal(t, created.MaxSizePerDocument, found.MaxSizePerDocument)
+	})
+}
+
 // RunFindDocInfosByQueryTest runs the FindDocInfosByQuery test for the given db.
 func RunFindDocInfosByQueryTest(
 	t *testing.T,

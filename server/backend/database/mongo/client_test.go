@@ -147,6 +147,10 @@ func TestClient(t *testing.T) {
 		testcases.RunFindProjectInfoByNameTest(t, cli)
 	})
 
+	t.Run("CreateProjectInfo defaults test", func(t *testing.T) {
+		testcases.RunCreateProjectInfoDefaultsTest(t, cli)
+	})
+
 	t.Run("ListMemberInfos test", func(t *testing.T) {
 		testcases.RunListMemberInfosTest(t, cli)
 	})
