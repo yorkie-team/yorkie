@@ -24,11 +24,14 @@
   MongoDB by storing the field empty made the two disagree on one field
   and broke `RunUpdateProjectInfoTest`, which asserts the create response
   carries `DefaultChannelSessionTTL`.
-- `NewProjectInfo` seeds `ChannelSessionTTL` from the package constant
-  rather than the operator's configured value, so neither backend lets
-  `--channel-session-ttl` reach a new project. Closing that needs
-  `server/backend/database/project_info.go` and the config plumbing into
-  both backends — a change outside this one.
+- `NewProjectInfo` seeded `ChannelSessionTTL` from the package constant,
+  so once the MongoDB insert stored it, `--channel-session-ttl` reached no
+  new project on either backend. The review panel upheld this twice and the
+  loop stopped. The maintainer chose to leave the field empty in
+  `NewProjectInfo`, so new projects inherit the server-wide value the way
+  `ChannelBatchWindow` already does. A per-project field with a server-wide
+  fallback should default to empty; copying a constant into it hides the
+  fallback.
 
 ## Self review
 

@@ -25,9 +25,10 @@ import (
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
 
-func TestNewProjectInfoSetsDefaultChannelSessionTTL(t *testing.T) {
+func TestNewProjectInfoInheritsChannelSessionTTL(t *testing.T) {
+	// An empty TTL makes the project inherit the server-wide value.
 	info := database.NewProjectInfo("p", types.ID("000000000000000000000000"))
-	assert.Equal(t, database.DefaultChannelSessionTTL.String(), info.ChannelSessionTTL)
+	assert.Empty(t, info.ChannelSessionTTL)
 }
 
 func TestUpdateFieldsAppliesChannelSessionTTL(t *testing.T) {

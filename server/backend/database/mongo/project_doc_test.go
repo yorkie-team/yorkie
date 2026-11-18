@@ -62,15 +62,15 @@ func TestNewProjectInfoDoc(t *testing.T) {
 	}
 }
 
-// TestNewProjectInfoDocDurationDefaults checks that the duration defaults
-// reach the document as the strings NewProjectInfo answers with. These are
-// the fields the insert used to drop, so a project read back from MongoDB
-// reported no TTL and no threshold at all.
+// TestNewProjectInfoDocDurationDefaults checks that the defaults reach the
+// document as NewProjectInfo answers them. channel_session_ttl is stored
+// empty on purpose: the project inherits the server-wide TTL until the admin
+// API sets one.
 func TestNewProjectInfoDocDurationDefaults(t *testing.T) {
 	info := database.NewProjectInfo("project", types.ID("000000000000000000000001"))
 	doc := newProjectInfoDoc(info)
 
-	assert.Equal(t, database.DefaultChannelSessionTTL.String(), doc["channel_session_ttl"])
+	assert.Equal(t, "", doc["channel_session_ttl"])
 	assert.Equal(t, database.DefaultClientDeactivateThreshold.String(), doc["client_deactivate_threshold"])
 	assert.Equal(t, true, doc["auto_revision_enabled"])
 }

@@ -27,7 +27,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/client"
 	"github.com/yorkie-team/yorkie/pkg/attachable"
 	"github.com/yorkie-team/yorkie/pkg/channel"
@@ -658,39 +657,17 @@ func TestChannelIntegration(t *testing.T) {
 
 	t.Run("channel expires after TTL without refresh", func(t *testing.T) {
 		// This test verifies that channel sessions expire when clients don't send refresh.
-		// The TTL is set on the project (5s) rather than left to the server-wide
-		// ChannelSessionTTL: cleanup reads the project's own value, which every
-		// created project now carries, so pinning it here keeps the timing of
-		// the test independent of the project defaults.
+		// We use a short TTL (5s) configured in test helper.
 		ctx := context.Background()
 
-		adminCli := helper.CreateAdminCli(t, defaultServer.RPCAddr())
-		defer func() { adminCli.Close() }()
-
-		project, err := adminCli.CreateProject(ctx, "channel-ttl-expiry-test")
-		require.NoError(t, err)
-		sessionTTL := helper.ChannelSessionTTL
-		_, err = adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
-			ChannelSessionTTL: &sessionTTL,
-		})
-		require.NoError(t, err)
-
 		// cli1 has heartbeat disabled (long interval) to simulate a crash.
-		cli1, err := client.Dial(
-			defaultServer.RPCAddr(),
-			client.WithAPIKey(project.PublicKey),
-			client.WithChannelHeartbeatInterval(1*time.Hour),
-		)
+		cli1, err := client.Dial(defaultServer.RPCAddr(), client.WithChannelHeartbeatInterval(1*time.Hour))
 		require.NoError(t, err)
 		require.NoError(t, cli1.Activate(ctx))
 		defer func() { assert.NoError(t, cli1.Close()) }()
 
 		// cli2 has normal heartbeat to stay active and observe cli1's expiration.
-		cli2, err := client.Dial(
-			defaultServer.RPCAddr(),
-			client.WithAPIKey(project.PublicKey),
-			client.WithChannelHeartbeatInterval(2*time.Second),
-		)
+		cli2, err := client.Dial(defaultServer.RPCAddr(), client.WithChannelHeartbeatInterval(2*time.Second))
 		require.NoError(t, err)
 		require.NoError(t, cli2.Activate(ctx))
 		defer func() { assert.NoError(t, cli2.Close()) }()

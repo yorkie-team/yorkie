@@ -456,9 +456,10 @@ func RunCreateProjectInfoDefaultsTest(
 		created, err := db.CreateProjectInfo(ctx, t.Name(), dummyOwnerID)
 		assert.NoError(t, err)
 
-		// The documented defaults are what CreateProjectInfo answers.
+		// The documented defaults are what CreateProjectInfo answers. An empty
+		// ChannelSessionTTL inherits the server-wide value.
 		assert.True(t, created.AutoRevisionEnabled)
-		assert.Equal(t, database.DefaultChannelSessionTTL.String(), created.ChannelSessionTTL)
+		assert.Empty(t, created.ChannelSessionTTL)
 
 		// Reading the project back must answer the same, whatever the backend
 		// stores: a field dropped from the insert decodes as the zero value.
@@ -485,11 +486,10 @@ func RunCreateProjectInfoDefaultsTest(
 		assert.NoError(t, err)
 		assert.Equal(t, database.DefaultProjectName, ensured.Name)
 		assert.True(t, ensured.AutoRevisionEnabled)
-		assert.Equal(t, database.DefaultChannelSessionTTL.String(), ensured.ChannelSessionTTL)
 		assert.Equal(t, database.DefaultClientDeactivateThreshold.String(), ensured.ClientDeactivateThreshold)
-		// Empty means the server-wide batch window, which is the default for
-		// new projects; it is stored so that a later read cannot tell a
-		// dropped field from a deliberate empty one.
+		// Empty means the server-wide session TTL and batch window, which new
+		// projects inherit until the admin API sets their own.
+		assert.Empty(t, ensured.ChannelSessionTTL)
 		assert.Equal(t, "", ensured.ChannelBatchWindow)
 		assert.False(t, ensured.UpdatedAt.IsZero())
 
@@ -1658,7 +1658,7 @@ func RunUpdateProjectInfoTest(t *testing.T, db database.Database) {
 		assert.Equal(t, database.DefaultEventWebhookMaxWaitInterval.String(), info.EventWebhookMaxWaitInterval)
 		assert.Equal(t, database.DefaultEventWebhookRequestTimeout.String(), info.EventWebhookRequestTimeout)
 		assert.Equal(t, database.DefaultClientDeactivateThreshold.String(), info.ClientDeactivateThreshold)
-		assert.Equal(t, database.DefaultChannelSessionTTL.String(), info.ChannelSessionTTL)
+		assert.Empty(t, info.ChannelSessionTTL)
 		assert.Equal(t, database.DefaultSnapshotThreshold, info.SnapshotThreshold)
 		assert.Equal(t, database.DefaultSnapshotInterval, info.SnapshotInterval)
 		assert.False(t, info.UpdatedAt.IsZero())

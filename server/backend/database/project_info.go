@@ -47,8 +47,10 @@ const (
 
 	DefaultClientDeactivateThreshold time.Duration = 24 * time.Hour
 
-	// DefaultChannelSessionTTL is the default per-project channel session TTL.
-	// server/config.DefaultChannelSessionTTL aliases this value.
+	// DefaultChannelSessionTTL is the default server-wide channel session TTL.
+	// server/config.DefaultChannelSessionTTL aliases this value. New projects
+	// do not copy it: they store an empty ChannelSessionTTL and inherit the
+	// server-wide value, so the operator's setting reaches them.
 	DefaultChannelSessionTTL time.Duration = 15 * time.Second
 
 	DefaultSnapshotThreshold int64 = 500
@@ -184,7 +186,6 @@ func NewProjectInfo(name string, owner types.ID) *ProjectInfo {
 		EventWebhookMaxWaitInterval: DefaultEventWebhookMaxWaitInterval.String(),
 		EventWebhookRequestTimeout:  DefaultEventWebhookRequestTimeout.String(),
 		ClientDeactivateThreshold:   DefaultClientDeactivateThreshold.String(),
-		ChannelSessionTTL:           DefaultChannelSessionTTL.String(),
 		SnapshotThreshold:           DefaultSnapshotThreshold,
 		SnapshotInterval:            DefaultSnapshotInterval,
 		MaxSubscribersPerDocument:   0,

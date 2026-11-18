@@ -39,10 +39,13 @@ insert so the stored document carries the defaults.
       the `default` project's upsert document now carries
       `channel_session_ttl`, `channel_batch_window` and `updated_at`, so
       assert what the default project reads back too.
-- [x] Store `channel_session_ttl` as the `NewProjectInfo` default, the same
-      value the memory backend stores, so the two backends answer alike.
-- [x] Integration: the channel TTL expiry test pins the TTL on a project of
-      its own, so it no longer depends on the server-wide value.
+- [x] Maintainer decision (review standstill on the 15s TTL): new projects
+      store `channel_session_ttl` empty on both backends and inherit the
+      server-wide `--channel-session-ttl`, the same way `channel_batch_window`
+      inherits the server-wide batch window. Storing the 15s constant made
+      the operator's setting inert for every new project.
+- [x] Integration: the channel TTL expiry test is back to the `main`
+      version; the `default` project inherits the test server's 5s TTL.
 
 ## Out of scope
 
@@ -51,7 +54,6 @@ insert so the stored document carries the defaults.
   them on. There is no migration tool in this repo to hook into.
 - Docs under yorkie-team.github.io (separate repository); they already
   document `auto-revision-enabled` default `true`.
-- Seeding `NewProjectInfo.ChannelSessionTTL` from the operator's
-  configured value instead of the package constant. That is
-  `project_info.go` plus config plumbing, and it is what pins new
-  projects on both backends to 15s.
+- Copying the operator's configured TTL into each new project at creation.
+  Inheriting it through the empty value needs no config plumbing, and a
+  later change to the flag still reaches projects that never set one.
