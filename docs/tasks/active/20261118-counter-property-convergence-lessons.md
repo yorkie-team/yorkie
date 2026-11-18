@@ -38,6 +38,16 @@ CI, `@claude review`, and human review.
 ## Verification
 
 - `make lint` — green (includes the `integration` build tag lane).
-- `go vet -tags integration ./test/integration/...` — green.
-- Integration lane not run locally: it needs a MongoDB stack, which this
-  run has no time budget for. CI runs it.
+- `go test -tags integration -run TestCounterPropertyConvergence
+  ./test/integration/` — green, all 10 seeds, also under `-race`.
+- `go test -tags integration -run TestCounter ./test/integration/` —
+  green, so the new file does not disturb the existing Counter tests.
+- The shrink path was exercised deliberately: temporarily skewing the
+  expected total by one whenever a candidate had >= 3 events made the
+  property fail, and the report came back minimized from 16 events to
+  exactly 3 — the smallest sequence that still trips that injected
+  fault. The injection was reverted before committing. Worth doing: a
+  minimizer that is only reached on failure is otherwise dead code that
+  nobody notices is broken until the day it matters.
+- Not verified here: the rest of the integration lane and the complex
+  lane. CI runs those.

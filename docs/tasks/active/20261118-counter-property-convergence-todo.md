@@ -61,4 +61,5 @@ Add `test/integration/counter_property_test.go` (build tag `integration`).
 - [x] Plan written
 - [x] `test/integration/counter_property_test.go` added
 - [x] `make lint` green
-- [ ] CI integration lane green (cannot run MongoDB here)
+- [x] Targeted integration run green locally (MongoDB via docker compose)
+- [ ] CI integration lane green
