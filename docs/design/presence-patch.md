@@ -206,13 +206,19 @@ and both see only the changes above the client's checkpoint — the ones
 `pushPack` stores and every attached client then pulls. A client resending an
 already-stored change is unaffected by either bound.
 
-A `PUT` over `maxPresencePutSize` (64 KiB) is stored without its presence.
-With it goes the cached base: the server no longer knows what presence the
-sender holds, so folding its next patch onto the presence from before the
-dropped put would store a presence the sender never had. The sender's peers
-keep its previous presence until its next push fits, which is what the
-presence path — latest-wins and lossy by design — does with any intermediate
-presence.
+A `PUT` over `maxPresencePutSize` (64 KiB) loses its presence. The change
+keeps its place in the pack, which is what acknowledges the push:
+`CreateChangeInfos` advances the client's checkpoint over every change it is
+handed. A change that also carries operations keeps them and is stored
+without its presence; a presence-only one is left carrying nothing and is
+persisted nowhere, so peers pull no change for it at all.
+
+With the presence goes the cached base: the server no longer knows what
+presence the sender holds, so folding its next patch onto the presence from
+before the dropped put would store a presence the sender never had. The
+sender's peers keep its previous presence until its next push fits, which is
+what the presence path — latest-wins and lossy by design — does with any
+intermediate presence.
 
 `maxPresencePutPerPack` (256 KiB, 4 × the fold budget) bounds the sum of the
 puts one pack may carry, for the same reason `maxPresenceFoldPerPack` bounds
@@ -247,7 +253,7 @@ that motivated patches.
 | Cache memory | LRU bounded by `--presence-base-cache-size` (default 10,000) entries, and each entry by `maxPresenceBaseSize` (4 KiB), since presence is in no document size gate. The product, about 40 MiB, is the ceiling |
 | A presence of many tiny keys costing far more memory than its bytes | `presenceSize` counts `presenceEntryOverhead` (64 B) per key as well as the key and value bytes, so the 4 KiB bound also caps a presence at 64 keys and the 40 MiB ceiling holds whatever shape the presence has |
 | A small patch expanding into a large stored and fanned-out put | The fold refuses a patch whose result would pass the same 4 KiB bound, so a folded put costs at most that however large a presence the sender parked earlier. The client then pushes the presence as a full `PUT`, paying for its own bytes, as every client did before patches existed |
-| One oversized `PUT` the client sent being stored and pulled by every peer | The two bounds above cover only the presence the server produces, and no document size gate measures presence, so a put of any size the RPC server would read was stored verbatim and fanned out N times. A put over `maxPresencePutSize` (64 KiB) is stored without its presence, and the cached base with it. See [Put size](#put-size) |
+| One oversized `PUT` the client sent being stored and pulled by every peer | The two bounds above cover only the presence the server produces, and no document size gate measures presence, so a put of any size the RPC server would read was stored verbatim and fanned out N times. A put over `maxPresencePutSize` (64 KiB) loses its presence, and the cached base with it, while the push is still acknowledged. See [Put size](#put-size) |
 | One pack of many `PUT`s at the per-put bound reproducing that fan-out | The per-put bound is per put, and only clientSeq continuity limits how many changes a pack carries, so a single 16 MiB request could hold a few hundred of them. `maxPresencePutPerPack` (256 KiB) bounds the sum; past it the puts of a run share the single `PUT` their last change carries. See [Put size](#put-size) |
 | One pack of many small patches expanding into as many large puts | The 4 KiB bound is per put, and nothing bounds how many changes a pack carries, so it alone would let a single request of minimal patches be rewritten into one full presence per change, each stored and fanned out. `maxPresenceFoldPerPack` (64 KiB, 16 × the per-put bound) bounds the sum of a pack's folded puts; past it the patches of a run share the single `PUT` their last change carries, so the pack's folded output is the budget plus one put however many patches it holds. See [Fold budget](#fold-budget) |
 

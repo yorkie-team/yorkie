@@ -34,6 +34,19 @@
   pack of a few hundred puts at the bound; the fold budget already had this
   shape for server-produced puts and the pushed ones need their own.
 
+- "The push is kept" is not the same as "the change is stored". Stripping the
+  presence off a presence-only change leaves it carrying nothing, and
+  `CreateChangeInfos` persists neither branch of its split: `PresenceOnly()`
+  is false once the presence is gone and `HasOperations()` was never true, so
+  the change is silently dropped on the MongoDB path (the memory DB inserts
+  it, so the two backends differ here). What keeps the client from wedging is
+  not the row but the checkpoint: `SyncClientSeq` runs over every change the
+  store is handed, dropped ones included, so the push is acknowledged. An
+  integration test asserting the peer pulls an operation-less change was
+  asserting the backend's behaviour, not the guarantee; it now asserts the
+  guarantee directly — the client's next in-bound put is accepted on the
+  following clientSeq, and the oversized presence never reaches a peer.
+
 ## Self review
 
 Not run: this branch was produced by the autonomous agent workflow, which is

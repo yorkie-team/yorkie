@@ -99,14 +99,18 @@ const maxPresenceFoldPerPack = 16 * maxPresenceBaseSize
 // pack fold budget uses, this is well above what a cursor or a selection
 // needs while bounding what one push costs each peer.
 //
-// A put past it loses its presence and is stored without one, rather than the
-// push being refused. The push cannot be refused: a client keeps a local
-// change until the server acknowledges it, so a pack the server never stores
-// is pushed again unchanged, and the document -- its operations included --
-// would stop syncing for good. Dropping the presence is the same answer the
-// fold gives a patch it cannot pay for, and presence is latest-wins and lossy
-// by design, so the sender's peers hold its previous presence until its next
-// push fits.
+// A put past it loses its presence and keeps its place in the pack, rather
+// than the push being refused. The push cannot be refused: a client keeps a
+// local change until the server acknowledges it, so a pack the server never
+// stores is pushed again unchanged, and the document -- its operations
+// included -- would stop syncing for good. Keeping the change in the pack is
+// what acknowledges it: CreateChangeInfos advances the client's checkpoint
+// over every change it is handed, including the presence-only one that the
+// strip leaves carrying nothing and that it therefore persists nowhere. A
+// change that also carries operations keeps them and is stored without its
+// presence. Dropping the presence is the same answer the fold gives a patch
+// it cannot pay for, and presence is latest-wins and lossy by design, so the
+// sender's peers hold its previous presence until its next push fits.
 const maxPresencePutSize = 16 * maxPresenceBaseSize
 
 // maxPresencePutPerPack bounds the sum, in presenceSize, of the puts a client
@@ -233,13 +237,16 @@ func foldPresencePatches(
 		switch pc.ChangeType {
 		case presence.Put:
 			size := presenceSize(pc.Presence)
-			// A put over the per-put bound is stored without its presence:
-			// what it would cost is not the bytes the client sent but those
-			// times every client of the document, and no document size gate
-			// measures presence. The base goes with it -- the server no
-			// longer knows what presence the sender holds, so folding its
-			// next patch onto the presence from before this put would store a
-			// presence the sender never had.
+			// A put over the per-put bound loses its presence: what it
+			// would cost is not the bytes the client sent but those times
+			// every client of the document, and no document size gate
+			// measures presence. The change stays in the pack so the push is
+			// acknowledged -- it keeps any operations it carries, and when it
+			// carries none the store persists nothing for it. The base goes
+			// with the presence -- the server no longer knows what presence
+			// the sender holds, so folding its next patch onto the presence
+			// from before this put would store a presence the sender never
+			// had.
 			if size > maxPresencePutSize {
 				cn.SetPresenceChange(nil)
 				base, fold.base, coalesced = nil, nil, -1
