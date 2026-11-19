@@ -115,17 +115,28 @@ func GetUserByID(
 // DeleteAccountByName deletes a user by name, along with every project
 // membership it holds.
 //
-// The memberships go first. They are keyed by user ID but
-// only reachable by username (members.Remove resolves the name), so a row left
-// behind by a deleted user can never be listed or removed again: members.List
-// fails the whole project listing on the missing user. The two deletions are
-// not one transaction, so failing between them has to leave the recoverable
-// state — an account that lost its roles and can be invited back — rather than
-// the unreachable one.
+// The memberships are swept twice, around the user document. They are keyed by
+// user ID but only reachable by username (members.Remove resolves the name), so
+// a row left behind by a deleted user can never be listed or removed again:
+// members.List fails the whole project listing on the missing user. The
+// deletions are not one transaction, so the first sweep leaves the recoverable
+// state — an account that lost its roles and can be invited back — if the user
+// deletion then fails.
+//
+// The second sweep is what makes the pair safe against a concurrent
+// AcceptInvite. Nothing on the member write path re-checks that the user still
+// exists (invites.Accept upserts a row keyed by user ID alone), so an accept
+// that overlaps this call can insert a row after the first sweep. Sweeping
+// again after the user document is gone removes it: a request starting later
+// cannot reach the write at all, because the admin interceptor resolves the
+// caller by username on every call and now answers ErrUserNotFound. What
+// remains is only an upsert already in flight when the second sweep runs, which
+// needs the member write itself to verify the user to close.
 //
 // This drops the roles, not the credentials they could read. A copied project
 // secret key outlives the role it was read under; RotateProjectKeys is still
-// the owner's remedy, by the same reasoning as demotion
+// the owner's remedy, by the same reasoning as demotion — and a project whose
+// own owner self-deletes keeps an owner ID naming no user
 // (docs/design/admin-credentials.md).
 func DeleteAccountByName(
 	ctx context.Context,
@@ -142,6 +153,10 @@ func DeleteAccountByName(
 	}
 
 	if err := be.DB.DeleteUserInfoByName(ctx, username); err != nil {
+		return err
+	}
+
+	if err := be.DB.DeleteMemberInfosByUser(ctx, info.ID); err != nil {
 		return err
 	}
 

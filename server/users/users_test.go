@@ -85,3 +85,53 @@ func TestDeleteAccountByName(t *testing.T) {
 		assert.Equal(t, pkgerrors.ErrCodeNotFound, pkgerrors.StatusOf(err))
 	})
 }
+
+// acceptingDB inserts a membership while the account is being deleted, standing
+// in for an AcceptInvite that authenticated before the deletion started: the
+// member write path never re-checks that the user exists, so the row lands
+// after the first sweep.
+type acceptingDB struct {
+	database.Database
+
+	projectID types.ID
+	userID    types.ID
+	err       error
+}
+
+func (d *acceptingDB) DeleteUserInfoByName(ctx context.Context, username string) error {
+	if err := d.Database.DeleteUserInfoByName(ctx, username); err != nil {
+		return err
+	}
+
+	_, d.err = d.Database.UpsertMemberInfo(ctx, d.projectID, d.userID, d.userID, database.Admin)
+	return nil
+}
+
+// A membership written during the deletion is as unreachable as one written
+// before it, so the deletion has to sweep again once the user document is gone.
+func TestDeleteAccountByNameWithConcurrentAccept(t *testing.T) {
+	ctx := context.Background()
+
+	db, err := memory.New()
+	assert.NoError(t, err)
+
+	ownerID := types.ID("000000000000000000000001")
+	project, err := db.CreateProjectInfo(ctx, t.Name(), ownerID)
+	assert.NoError(t, err)
+
+	leaving, err := users.SignUp(ctx, &backend.Backend{DB: db}, t.Name()+"-leaving", "pw")
+	assert.NoError(t, err)
+	_, err = db.UpsertMemberInfo(ctx, project.ID, leaving.ID, ownerID, database.Admin)
+	assert.NoError(t, err)
+
+	racing := &acceptingDB{Database: db, projectID: project.ID, userID: leaving.ID}
+	assert.NoError(t, users.DeleteAccountByName(ctx, &backend.Backend{DB: racing}, leaving.Username))
+	assert.NoError(t, racing.err)
+
+	_, err = db.FindMemberInfo(ctx, project.ID, leaving.ID)
+	assert.Equal(t, pkgerrors.ErrCodeNotFound, pkgerrors.StatusOf(err))
+
+	list, err := members.List(ctx, &backend.Backend{DB: db}, project.ID)
+	assert.NoError(t, err)
+	assert.Empty(t, list)
+}

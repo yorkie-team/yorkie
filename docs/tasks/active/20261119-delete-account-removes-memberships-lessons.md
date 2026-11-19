@@ -21,7 +21,27 @@
 
 ## Review rounds
 
-Not run: this change was produced in a headless one-shot run, which is granted
-no tool that can launch the reviewer subagent `/self-review` requires. Review
-is left to CI, `@claude review` and a human on the PR — no round was run and
-none should be read as clean.
+Not run locally: this change was produced in a headless one-shot run, which is
+granted no tool that can launch the reviewer subagent `/self-review` requires.
+Review is left to CI, `@claude review` and a human on the PR — no local round
+was run and none should be read as clean.
+
+### CI review panel, round 1 (security lens)
+
+- Deleting the memberships before the user is not enough on its own. Nothing on
+  the member write path re-checks that the user exists (`invites.Accept` upserts
+  a row keyed by user ID alone), so an `AcceptInvite` overlapping the deletion
+  re-creates the orphan the change removes. `DeleteAccountByName` now sweeps
+  again after the user document is gone; a request starting later cannot reach
+  the write, because the admin interceptor resolves the caller by username on
+  every call. The upsert already in flight when the second sweep runs stays
+  open — closing it needs the member write to verify the user, which Mongo
+  cannot do atomically across collections, and the one obvious place to put that
+  check (`UpsertMemberInfo`) is relied on by tests that upsert fabricated user
+  IDs.
+- The threat table overclaimed. A project records its owner as a bare user ID
+  with no `members` row, so an owner who self-deletes leaves a project nobody
+  owns: rotation falls to a remaining `Admin` member, and a project with none
+  cannot rotate at all. There is no ownership transfer and no `DeleteProject` to
+  fix it from outside, so it is recorded as an unmitigated risk rather than
+  papered over.

@@ -105,12 +105,32 @@ naming that user survived. Those rows are keyed by user ID but only reachable
 by username, so `members.Remove` could never delete one again
 (`FindUserInfoByName` answers `ErrUserNotFound`), and `members.List` failed the
 whole project listing on the missing user — the owner could not even see who
-was left. `users.DeleteAccountByName` now deletes the memberships first and the
-user second; the two are not one transaction, and that order leaves the
-recoverable state if it fails between them.
+was left. `users.DeleteAccountByName` now sweeps the memberships, deletes the
+user, and sweeps once more; none of it is one transaction, and sweeping first
+leaves the recoverable state if the user deletion then fails.
+
+The second sweep is for a concurrent `AcceptInvite`. `invites.Accept` upserts a
+row keyed by user ID alone and nothing on that path re-checks that the user
+exists, so an accept overlapping the deletion can insert a row after the first
+sweep — the same unreachable row, re-created by the user being deleted. Once
+the user document is gone no later request can reach the write, because the
+admin interceptor resolves the caller by username on every call, so sweeping
+after the deletion removes it. What is left is an upsert already in flight when
+that sweep runs; closing it needs the member write itself to verify the user,
+which Mongo cannot do atomically across the two collections.
 
 This drops the roles, not the key a role could have read. Rotation stays the
 owner's deliberate act for the same reason it does after a demotion.
+
+Deletion drops memberships, not owned projects. A project records its owner as
+a bare user ID (`authz.FindUserRole`), with no `members` row, and nothing
+transfers or deletes it — so a project whose *owner* self-deletes keeps an
+owner ID naming no user. Rotation then falls to whatever `Admin` member
+remains, and a project with none has no caller who can pass
+`CheckPermission(..., Admin)`: its secret key keeps granting full
+project-scoped authority and cannot be rotated. There is no ownership transfer
+and no `DeleteProject` to fix that from the outside; the fix is one of those,
+not a change to the sweep above.
 
 ### Client migration
 
@@ -139,6 +159,7 @@ allowed through any proxy that filters request headers — the istio
 | A key copied before the change keeps full project authority | `RotateProjectKeys`; owners are told to run it after demoting or removing an admin |
 | A demoted admin keeps the key | Same; automatic rotation was dropped because the key also signs the event webhook |
 | An admin self-deletes and keeps the key | `DeleteAccount` removes their memberships, so the owner sees the role loss and can rotate; the orphan row used to hide the whole member list |
+| The project *owner* self-deletes and keeps the key | Not mitigated: the owner ID is left naming no user, so only a remaining `Admin` member can rotate and a project with none cannot rotate at all. Needs ownership transfer or project deletion, neither of which exists |
 | A procedure added later reads a scope its scheme never set | `projectScopedMethods` is opt-in; an unlisted procedure is user-scoped |
 
 ### Design Decisions
