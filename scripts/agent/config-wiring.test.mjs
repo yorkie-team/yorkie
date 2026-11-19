@@ -124,11 +124,11 @@ const EXPECTED = {
   // `cp -R … scripts/agent …/agent-tools`, each with its configuration.
   stagingCopies: 4,
   // Places a harness script is run, and how many of them read the configuration.
-  invocations: 117,
-  configReadingInvocations: 91,
+  invocations: 119,
+  configReadingInvocations: 93,
   // …by the kind of tree each runs from.
-  fromWorkspace: 71,
-  fromSideDirectory: 25,
+  fromWorkspace: 74,
+  fromSideDirectory: 24,
   fromStagedCopy: 21,
   // Jobs that run the upstream notifier, each held to `notifierProblems`.
   notifierJobs: 1,

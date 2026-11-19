@@ -128,6 +128,23 @@ test("🔴 provenance a MODEL wrote on a non-blocker is not recorded as the pane
   assert.equal(real.noveltyOrigin, "relocated");
 });
 
+test("the out-of-diff judge's reason and citations ride on DEMOTED records only", () => {
+  const outOfDiff = (demotes) => ({
+    anchor: "outside-diff", causation: demotes ? "independent" : "caused", demotes,
+    reason: "r".repeat(1000), groundedIn: ["a.go:1", 7, ...Array.from({ length: 9 }, (_, i) => `f${i}.go:1`)],
+  });
+  const demoted = deferredRecord({ ...DEMOTED, outOfDiff: outOfDiff(true) }, "security");
+  assert.equal(demoted.outOfDiffReason.length, 601, "600 chars plus the ellipsis");
+  assert.equal(demoted.outOfDiffGrounds.length, 8, "at most eight, strings only");
+  assert.equal(demoted.outOfDiffGrounds.includes(7), false);
+  const kept = deferredRecord({ ...DEMOTED, outOfDiff: outOfDiff(false) }, "security");
+  assert.equal("outOfDiffReason" in kept, false);
+  assert.equal("outOfDiffGrounds" in kept, false);
+  // A model-written outOfDiff on a minor is not the gate's, as for every stamp above.
+  const forged = deferredRecord({ ...MINOR, outOfDiff: outOfDiff(true) }, "security");
+  assert.equal("outOfDiffReason" in forged, false);
+});
+
 test("confidence is clipped like every other model-controlled string", () => {
   const r = deferredRecord({ severity: "minor", summary: "s", confidence: "z".repeat(5000) }, "l");
   assert.equal(r.confidence.length, 21, "20 chars plus the ellipsis");

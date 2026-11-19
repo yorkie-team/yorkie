@@ -1,0 +1,108 @@
+# Files the out-of-diff findings of a MERGED PR as one follow-up issue
+# (scripts/agent/follow-up-issues.mjs).
+#
+# The review panel records every finding the out-of-diff gate takes off a PR's
+# merge gate in the `agent-deferred-findings` check. This reads the PR's newest
+# record once the PR merges, drops what an earlier follow-up or any open issue
+# already tracks, and files the rest as one checklist issue. It used to file
+# from the panel, per round and per finding, which filed duplicates and findings
+# about code that never merged.
+#
+# Three steps, so the step that runs the model holds no GitHub token:
+# `collect` reads GitHub, `judge` asks the model, `file` writes the issue.
+name: Agent Follow-up
+
+on:
+  # `pull_request_target`, not `pull_request`: it runs main's copy of this file,
+  # with a token that can write issues even for a fork's PR. Nothing here checks
+  # out or runs the PR's code; every checkout is `ref: main`.
+  pull_request_target:
+    types: [closed]
+  # To file for a PR merged before this existed, or after a failed run.
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Merged PR number"
+        required: true
+      dry_run:
+        description: "Print the issue instead of filing it"
+        type: boolean
+        default: false
+
+# One run per PR: a second run reads the first's issue and files nothing.
+concurrency:
+  group: agent-follow-up-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  follow-up:
+    # The kill switch every agent workflow honours, and PRs merged into the
+    # default branch only (`collect` checks the same for a dispatched run).
+    if: >-
+      vars.AGENT_PIPELINE_ENABLED == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+        (github.event.pull_request.merged == true &&
+          github.event.pull_request.base.ref == github.event.repository.default_branch))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # The Claude credentials live in the protected `agent` environment.
+    environment: agent
+    permissions:
+      contents: read # the trusted main checkout the judge reads
+      checks: read # the PR's agent-deferred-findings records
+      issues: write # list issues, file the follow-up
+      pull-requests: read # the PR and its commits
+    steps:
+      # The whole tree, not only scripts/agent: the judge reads the code to tell
+      # whether two descriptions share a root cause.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+      - run: cd scripts/agent && npm ci --omit=dev --no-audit --no-fund --ignore-scripts
+
+      - name: Collect the deferred findings and the open issues
+        id: collect
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
+        run: node scripts/agent/follow-up-issues.mjs collect --pr "$PR" --dir "$RUNNER_TEMP/follow-up"
+
+      # No GitHub token in this step. The same credential pool as the panel, so
+      # a closed window on slot zero does not stop the check. Its own timeout,
+      # well inside the job's, so a stuck session leaves time to file.
+      - name: Check them against the tracker
+        timeout-minutes: 12
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CLAUDE_CODE_OAUTH_TOKEN_1: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_1 }}
+          CLAUDE_CODE_OAUTH_TOKEN_2: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_2 }}
+          CLAUDE_CODE_OAUTH_TOKEN_3: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_3 }}
+          CLAUDE_CODE_OAUTH_TOKEN_4: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_4 }}
+          CLAUDE_CODE_OAUTH_TOKEN_5: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_5 }}
+          CLAUDE_CODE_OAUTH_TOKEN_6: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_6 }}
+          CLAUDE_CODE_OAUTH_TOKEN_7: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_7 }}
+          CLAUDE_CODE_OAUTH_TOKEN_8: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN_8 }}
+        run: node scripts/agent/follow-up-issues.mjs judge --dir "$RUNNER_TEMP/follow-up" --repo "$GITHUB_WORKSPACE"
+
+      # Also after a judge that timed out: with no plan, it files every finding
+      # the collect step found. Not after a failed collect, which left nothing.
+      - name: File one issue for the PR
+        if: >-
+          !cancelled() && steps.collect.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=(file --dir "$RUNNER_TEMP/follow-up")
+          [ "$DRY_RUN" = "true" ] && args+=(--dry-run)
+          node scripts/agent/follow-up-issues.mjs "${args[@]}"

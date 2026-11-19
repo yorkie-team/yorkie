@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-18
+updated: 2026-11-19
 ---
 
 # Tasks Archive
@@ -8,12 +8,13 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 121
+Total archived tasks: 122
 
-## 2026/11 (9 tasks)
+## 2026/11 (10 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| File out-of-diff follow-ups once per merged PR (2026-11-19) | [20261119-follow-ups-at-merge-todo.md](./2026/11/20261119-follow-ups-at-merge-todo.md) | [20261119-follow-ups-at-merge-lessons.md](./2026/11/20261119-follow-ups-at-merge-lessons.md) |
 | Match GitHub Login Users by Auth Provider (2026-11-16) | [20261116-github-login-provider-scope-todo.md](./2026/11/20261116-github-login-provider-scope-todo.md) | [20261116-github-login-provider-scope-lessons.md](./2026/11/20261116-github-login-provider-scope-lessons.md) |
 | Add an external login provider verifying signed assertions (2026-11-16) | [20261116-external-login-provider-todo.md](./2026/11/20261116-external-login-provider-todo.md) | [20261116-external-login-provider-lessons.md](./2026/11/20261116-external-login-provider-lessons.md) |
 | Move GitHub login behind a provider interface (2026-11-16) | [20261116-auth-provider-interface-todo.md](./2026/11/20261116-auth-provider-interface-todo.md) | [20261116-auth-provider-interface-lessons.md](./2026/11/20261116-auth-provider-interface-lessons.md) |
