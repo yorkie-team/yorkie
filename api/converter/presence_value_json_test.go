@@ -60,9 +60,27 @@ func TestPresenceValueIsRepairedToJSON(t *testing.T) {
 		// side, and is now one a JS peer can parse at all.
 		assert.Equal(t, "moved", presence.DecodeValue(decoded.Presence["cursor"]))
 
-		// Repaired in place, so what the server stores and forwards to a
-		// pulling client is the repaired value rather than the original.
-		assert.Equal(t, `"moved"`, pbChange.Presence.Data["cursor"])
+		// The message decoded from is left as it arrived: the repair writes
+		// to a copy. Storage and fan-out re-encode the decoded change, so they
+		// carry the repaired value without the message being rewritten.
+		assert.Equal(t, "moved", pbChange.Presence.Data["cursor"])
+	})
+
+	// The encoders put a live document's presence map into the message without
+	// copying it, so a repair that wrote to the message would rewrite the
+	// sender's own presence on any in-process encode then decode -- the round
+	// trip the conformance runner and many document tests make.
+	t.Run("round trip leaves the source presence alone test", func(t *testing.T) {
+		source := presence.Data{"cursor": "moved", "width": "10"}
+		pbChange := converter.ToPresenceChange(&presence.Change{
+			ChangeType: presence.Put,
+			Presence:   source,
+		})
+
+		decoded, err := converter.FromPresenceChange(pbChange)
+		require.NoError(t, err)
+		assert.Equal(t, presence.EncodeValue("moved"), decoded.Presence["cursor"])
+		assert.Equal(t, presence.Data{"cursor": "moved", "width": "10"}, source)
 	})
 
 	t.Run("patch with a non-JSON value test", func(t *testing.T) {
@@ -104,6 +122,26 @@ func TestPresenceValueIsRepairedToJSON(t *testing.T) {
 		assert.Equal(t, nested, presence.DecodeValue(decoded.Presence["deep"]))
 	})
 
+	// The bound is inclusive: exactly maxPresenceValueDepth levels is left
+	// alone and one more is repaired, so an off-by-one cannot ship unnoticed.
+	t.Run("nesting at the depth bound test", func(t *testing.T) {
+		const bound = 100
+		for depth, repaired := range map[int]bool{bound: false, bound + 1: true} {
+			nested := strings.Repeat("[", depth) + strings.Repeat("]", depth)
+			decoded, err := converter.FromPresenceChange(&api.PresenceChange{
+				Type:     api.PresenceChange_CHANGE_TYPE_PUT,
+				Presence: &api.Presence{Data: map[string]string{"deep": nested}},
+			})
+			require.NoError(t, err)
+
+			want := nested
+			if repaired {
+				want = presence.EncodeValue(nested)
+			}
+			assert.Equal(t, want, decoded.Presence["deep"], "depth %d", depth)
+		}
+	})
+
 	// Nesting a presence payload plausibly reaches is left alone, so the bound
 	// repairs only what parsers actually give out on.
 	t.Run("modestly nested value test", func(t *testing.T) {
@@ -127,9 +165,9 @@ func TestPresenceValueIsRepairedToJSON(t *testing.T) {
 			"width":     "10",
 			"label":     presence.EncodeValue(`a {[ b \" c`),
 		}
-		// Cloned on the way in, because the repair rewrites the map it is
-		// given in place and hands that same map back: comparing against the
-		// map that was passed would be comparing it with itself.
+		// Cloned on the way in, because a presence with nothing to repair is
+		// handed back as the same map: comparing against the map that was
+		// passed would be comparing it with itself.
 		decoded, err := converter.FromPresenceChange(&api.PresenceChange{
 			Type:     api.PresenceChange_CHANGE_TYPE_PUT,
 			Presence: &api.Presence{Data: maps.Clone(data)},
@@ -280,4 +318,21 @@ func TestStoredSnapshotPresenceIsRepaired(t *testing.T) {
 
 	// Already-encoded values are left exactly as they were written.
 	assert.Equal(t, "10", loaded["width"])
+}
+
+// TestDocumentSummaryPresenceIsRepaired covers the admin and cluster summary
+// decode, the last of the presence decodes: a summary of a document still
+// holding a legacy value must not hand an unparseable value to its reader.
+func TestDocumentSummaryPresenceIsRepaired(t *testing.T) {
+	summary := converter.FromDocumentSummary(&api.DocumentSummary{
+		DocumentSize: &api.DocSize{Live: &api.DataSize{}, Gc: &api.DataSize{}},
+		Presences: map[string]*api.Presence{
+			"c1": {Data: map[string]string{"cursor": "moved", "width": "10"}},
+		},
+	})
+
+	assert.Equal(t, presence.Data{
+		"cursor": presence.EncodeValue("moved"),
+		"width":  "10",
+	}, summary.Presences["c1"])
 }

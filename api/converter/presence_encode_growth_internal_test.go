@@ -19,6 +19,7 @@ package converter
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 
@@ -27,9 +28,9 @@ import (
 
 // TestPresenceEncodeGrowthMatchesEncoding pins the growth count to the encoder
 // it predicts. The count exists so that an input the repair budget cannot
-// afford is never built, which only holds if it is exact: over-counting
-// discards values the budget should have covered, and under-counting lets the
-// budget be overspent.
+// afford is never built: over-counting discards values the budget should have
+// covered, and under-counting lets the budget be overspent. It is exact for
+// valid UTF-8 and an upper bound otherwise; see presenceEncodeGrowth.
 func TestPresenceEncodeGrowthMatchesEncoding(t *testing.T) {
 	values := []string{
 		"",
@@ -48,7 +49,15 @@ func TestPresenceEncodeGrowthMatchesEncoding(t *testing.T) {
 	}
 
 	for _, value := range values {
-		want := len(presence.EncodeValue(value)) - len(value)
-		assert.Equal(t, want, presenceEncodeGrowth(value), "growth of %q", value)
+		actual := len(presence.EncodeValue(value)) - len(value)
+		if utf8.ValidString(value) {
+			assert.Equal(t, actual, presenceEncodeGrowth(value), "growth of %q", value)
+			continue
+		}
+
+		// Go releases replace an invalid byte differently, so the count is
+		// an upper bound there: it must never undercount, or the budget
+		// could be overspent.
+		assert.GreaterOrEqual(t, presenceEncodeGrowth(value), actual, "growth of %q", value)
 	}
 }

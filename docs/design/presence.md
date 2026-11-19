@@ -189,9 +189,13 @@ out to every peer — so one unparseable value wedges every JS peer on that
 document, repeatedly, for as long as it is stored.
 
 `converter.FromPresenceChange` therefore **repairs rather than rejects**: a
-`PUT`/`PATCH` value no peer can parse is JSON-encoded in place
-(`repairPresence`), so what the server stores and fans out is always a value
-every peer parses. "No peer can parse it" is wider than "not valid JSON":
+`PUT`/`PATCH` value no peer can parse is JSON-encoded (`repairPresence`, run
+by `fromPresence`, which every presence decode goes through), so what the
+server stores and fans out is always a value every peer parses. The repair
+writes to a copy, never to the message it decodes: `ToPresence` and
+`ToPresenceChange` put a live document's presence map into the message without
+copying it, so an in-place repair would rewrite the sender's own presence on any
+in-process encode then decode. "No peer can parse it" is wider than "not valid JSON":
 Go's scanner accepts nesting up to 10000 levels while a recursive-descent
 parser such as V8's `JSON.parse` overflows its stack first, so a value nested
 deeper than `maxPresenceValueDepth` (100 — far above any presence payload,
@@ -224,7 +228,11 @@ never reaches the values it exists for: a legacy bare string grows by the two
 quotes put around it however long it is. A value the budget cannot afford
 becomes `""`, which loses nothing readable — a value reaching the repair is one
 every JS peer throws on today — and the budget is spent in key order, so two
-servers decoding the same bytes agree on the result.
+servers decoding the same bytes agree on the result. Dropping a value is logged
+as a warning with the keys it hit, so the rewrite is visible to operators. The
+growth count is exact for valid UTF-8 and an upper bound for invalid bytes,
+whose replacement differs between Go releases (`\ufffd` through 1.26, the raw
+U+FFFD from 1.27); counting the larger never lets the budget be overspent.
 
 Three consequences are worth stating:
 

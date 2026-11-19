@@ -80,3 +80,22 @@ skipped round does not read as a clean one.
   returns the map it was given. Cloning on the way in is what made the
   "legitimate values are left alone" assertion mean anything; verified by
   forcing the repair on and watching it fail.
+
+## Human takeover: the repair must not write to its input
+
+- The agent loop stopped on one blocking finding: `repairPresence` wrote into
+  the protobuf message, and `ToPresence`/`ToPresenceChange` put a live
+  document's presence map into that message without copying it. An in-process
+  encode then decode -- the conformance runner, many document tests -- would
+  rewrite the sender's own presence. The repair now returns a copy when it
+  changes anything and runs inside `fromPresence`, which also brings the last
+  decode site (`FromDocumentSummary`) under it. A decoder that writes to its
+  input is only safe if no encoder aliases into that input; check the encoders
+  before mutating a message on the way in.
+- The growth predictor was exact only for the toolchain it was written on. Go
+  1.27 replaces an invalid UTF-8 byte with the raw U+FFFD (three bytes) where
+  1.26 wrote the `�` escape (six), so the pinning test failed locally while
+  CI on 1.26 stayed green. The count is now an upper bound for invalid bytes,
+  and the test asserts exactness only for valid UTF-8.
+- A budget drop to `""` is logged, so a server-side rewrite of client data is
+  never silent.

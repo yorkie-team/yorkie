@@ -145,7 +145,9 @@ func (p *Presence) Set(key string, value string, opts ...SetOption) {
 // (converter.FromPresenceChange) rather than refusing the change, so neither
 // this client nor its peers wedge on it -- but a caller that relies on that is
 // passing a value Set should have encoded, and peers read it as a string
-// rather than as whatever structure was intended.
+// rather than as whatever structure was intended. Encoding such text can also
+// grow it; past the server's repair budget (4 KiB of growth per presence) a
+// value is replaced with "" rather than encoded.
 func (p *Presence) SetJSON(key string, value string, opts ...SetOption) {
 	var cfg setConfig
 	for _, opt := range opts {
