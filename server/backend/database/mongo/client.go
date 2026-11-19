@@ -252,6 +252,17 @@ func (c *Client) InvalidateCache(cacheType types.CacheType, key string) {
 		} else {
 			logging.DefaultLogger().Warnf("invalidate client cache %s: %v", key, err)
 		}
+	case types.CacheTypeDocument:
+		// A document row is cached per node and a purge performed on another
+		// node leaves this node's copy in place, so FindDocInfoByRefKey keeps
+		// answering "present" for a row that no longer exists. Dropping the
+		// entry is what makes the purge visible here: the next read misses
+		// and re-reads MongoDB, which reports the document as gone.
+		if refKey, err := types.ParseDocRefKey(key); err == nil {
+			c.docCache.Remove(refKey)
+		} else {
+			logging.DefaultLogger().Warnf("invalidate document cache %s: %v", key, err)
+		}
 	}
 }
 
@@ -3141,6 +3152,15 @@ func (c *Client) PurgeDocument(
 	}); err != nil {
 		return nil, fmt.Errorf("delete document of %s: %w", docRefKey, err)
 	}
+
+	// The row is gone, so the cached copy of it has to go as well:
+	// FindDocInfoByRefKey answers from docCache first and would keep reporting
+	// the purged document as present. This node is the one certain to hold an
+	// entry, since the purge handler reads the row to compare its key just
+	// before calling this. Dropping it after the delete, rather than before,
+	// keeps a read racing the purge from refilling the cache off the row the
+	// delete was about to remove.
+	c.docCache.Remove(docRefKey)
 
 	return res, nil
 }

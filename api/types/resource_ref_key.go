@@ -70,6 +70,31 @@ func (r DocRefKey) String() string {
 	return fmt.Sprintf("Document (%s.%s)", r.ProjectID, r.DocID)
 }
 
+// CacheKey returns the wire form of the given DocRefKey, used to name the
+// document in a cluster cache invalidation. Unlike String, it round-trips
+// through ParseDocRefKey.
+func (r DocRefKey) CacheKey() string {
+	return fmt.Sprintf("%s/%s", r.ProjectID, r.DocID)
+}
+
+// ParseDocRefKey parses the wire form produced by DocRefKey.CacheKey.
+func ParseDocRefKey(cacheKey string) (DocRefKey, error) {
+	projectID, docID, found := strings.Cut(cacheKey, "/")
+	if !found {
+		return DocRefKey{}, fmt.Errorf("parse document ref key %q: no separator", cacheKey)
+	}
+
+	refKey := DocRefKey{ProjectID: ID(projectID), DocID: ID(docID)}
+	if err := refKey.ProjectID.Validate(); err != nil {
+		return DocRefKey{}, fmt.Errorf("parse document ref key %q: %w", cacheKey, err)
+	}
+	if err := refKey.DocID.Validate(); err != nil {
+		return DocRefKey{}, fmt.Errorf("parse document ref key %q: %w", cacheKey, err)
+	}
+
+	return refKey, nil
+}
+
 // ChannelRefKey represents an identifier used to reference a channel.
 type ChannelRefKey struct {
 	ProjectID  ID
