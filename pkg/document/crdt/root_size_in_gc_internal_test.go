@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/yorkie-team/yorkie/pkg/document/resource"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 )
 
@@ -177,5 +178,153 @@ func TestReleasedRecordStaysWhileAddressable(t *testing.T) {
 
 	f.collect(t)
 	assert.Zero(t, f.root.GarbageLen())
+	assert.NotContains(t, f.root.sizeInGC, Element(y),
+		"collecting the re-removed member left its record behind")
 	f.assertRebuildsSame(t, "after collecting inside the orphan")
+}
+
+// TestMoveInsideOrphanLeavesReleaseRecordAlone pins that a move stamped on a
+// released tombstone is charged to neither ledger.
+//
+// A removal inside an orphan may raise a release record, because the removal
+// puts the element back on the collection worklist and whatever it charges to
+// GC comes back out when that entry is purged (see moveSizeToGC). A move has
+// no such entry behind it: release deleted the tombstone's, and a second
+// Remove reports nothing for an element that is already removed. Charging the
+// movedAt ticket to GC would therefore leave residue nothing can subtract,
+// and would cost the record its other way out -- index retires a release
+// record only while it is still exactly zero.
+func TestMoveInsideOrphanLeavesReleaseRecordAlone(t *testing.T) {
+	f := newSizeInGCFixture(t)
+	o := f.root.Object().Get("o").(*Object)
+
+	// The undoing replica's copy, taken before the peer's array lands.
+	restored, err := o.DeepCopy()
+	require.NoError(t, err)
+
+	// The peer adds an array into "o" and removes one of its two members, so
+	// that member is an ordinary tombstone with a charge of its own.
+	n := NewArray(NewRGATreeList(), f.tick())
+	p, err := NewPrimitive(1, f.tick())
+	require.NoError(t, err)
+	require.NoError(t, n.Add(p))
+	q, err := NewPrimitive(2, f.tick())
+	require.NoError(t, err)
+	require.NoError(t, n.Add(q))
+	o.Set("n", n)
+	f.root.RegisterElement(n, o)
+
+	removedQ, err := n.DeleteByCreatedAt(q.CreatedAt(), f.tick())
+	require.NoError(t, err)
+	f.root.RegisterRemovedElementPair(n, removedQ)
+
+	// "o" is removed and the removal is undone, orphaning the array along
+	// with the tombstone and releasing every element of the subtree.
+	removed, err := f.root.Object().DeleteByCreatedAt(o.CreatedAt(), f.tick())
+	require.NoError(t, err)
+	f.root.RegisterRemovedElementPair(f.root.Object(), removed)
+
+	f.root.Object().SetWithExecutedAt("o", restored, f.tick())
+	f.root.UnregisterRemovedElementPair(restored.CreatedAt())
+	f.root.RegisterElement(restored, f.root.Object())
+
+	require.Same(t, n, f.root.FindByCreatedAt(n.CreatedAt()),
+		"the peer's array is no longer addressable")
+	require.Contains(t, f.root.sizeInGC, Element(q),
+		"the orphaned tombstone kept no record at all")
+	require.Equal(t, resource.DataSize{}, f.root.sizeInGC[Element(q)],
+		"the orphaned tombstone is not released")
+
+	// The peer, which has not seen the undo, moves the tombstone inside the
+	// array it can still address. Only the element half of Move.Execute is
+	// replayed here; the dead position node it also registers is a node pair,
+	// which carries its own charge and its own entry.
+	before := f.root.DocSize()
+	prevCreatedAt, err := n.PosCreatedAt(p.CreatedAt())
+	require.NoError(t, err)
+	_, diff, err := n.MoveAfter(prevCreatedAt, q.CreatedAt(), f.tick())
+	require.NoError(t, err)
+	require.Equal(t, resource.DataSize{Meta: time.TicketSize}, diff,
+		"the move stamped the movedAt ticket this test is about")
+	f.root.AccMovedElement(n.GetByID(q.CreatedAt()), diff)
+
+	assert.Equal(t, before, f.root.DocSize(),
+		"a released element's move was charged to a ledger holding nothing")
+	require.Contains(t, f.root.sizeInGC, Element(q),
+		"the move dropped the release record")
+	assert.Equal(t, resource.DataSize{}, f.root.sizeInGC[Element(q)],
+		"the release record was topped up, so index can never retire it")
+
+	f.collect(t)
+	assert.Zero(t, f.root.GarbageLen())
+	f.assertRebuildsSame(t, "after moving inside the orphan")
+}
+
+// TestMoveOfLiveReleasedElementChargesNeither pins the commoner half of the
+// same rule: most of a released subtree is not a tombstone.
+//
+// UnregisterRemovedElementPair releases the pair element and every descendant,
+// so a still-live member of an orphaned array carries a zero record too, and
+// Live has already given up its bytes. A move the peer applies to it stamps a
+// movedAt ticket all the same, and charging that ticket to Live -- as any
+// element with removedAt still nil would be -- leaves bytes in Live that no
+// collection pass can take back out: nothing reaches the orphan to collect it.
+func TestMoveOfLiveReleasedElementChargesNeither(t *testing.T) {
+	f := newSizeInGCFixture(t)
+	o := f.root.Object().Get("o").(*Object)
+
+	// The undoing replica's copy, taken before the peer's array lands.
+	restored, err := o.DeepCopy()
+	require.NoError(t, err)
+
+	// The peer adds an array of two live members into "o".
+	n := NewArray(NewRGATreeList(), f.tick())
+	p, err := NewPrimitive(1, f.tick())
+	require.NoError(t, err)
+	require.NoError(t, n.Add(p))
+	q, err := NewPrimitive(2, f.tick())
+	require.NoError(t, err)
+	require.NoError(t, n.Add(q))
+	o.Set("n", n)
+	f.root.RegisterElement(n, o)
+
+	// "o" is removed and the removal is undone, orphaning the array and
+	// releasing every element of it -- all of them still live.
+	removed, err := f.root.Object().DeleteByCreatedAt(o.CreatedAt(), f.tick())
+	require.NoError(t, err)
+	f.root.RegisterRemovedElementPair(f.root.Object(), removed)
+
+	f.root.Object().SetWithExecutedAt("o", restored, f.tick())
+	f.root.UnregisterRemovedElementPair(restored.CreatedAt())
+	f.root.RegisterElement(restored, f.root.Object())
+
+	require.Same(t, n, f.root.FindByCreatedAt(n.CreatedAt()),
+		"the peer's array is no longer addressable")
+	require.Nil(t, q.RemovedAt(), "the moved member is meant to be live")
+	require.Contains(t, f.root.sizeInGC, Element(q),
+		"the live member of the orphan kept no record at all")
+	require.Equal(t, resource.DataSize{}, f.root.sizeInGC[Element(q)],
+		"the live member of the orphan is not released")
+
+	// The peer, which has not seen the undo, moves a live member of the array
+	// it can still address.
+	before := f.root.DocSize()
+	prevCreatedAt, err := n.PosCreatedAt(q.CreatedAt())
+	require.NoError(t, err)
+	_, diff, err := n.MoveAfter(prevCreatedAt, p.CreatedAt(), f.tick())
+	require.NoError(t, err)
+	require.Equal(t, resource.DataSize{Meta: time.TicketSize}, diff,
+		"the move stamped the movedAt ticket this test is about")
+	f.root.AccMovedElement(n.GetByID(p.CreatedAt()), diff)
+
+	assert.Equal(t, before, f.root.DocSize(),
+		"a live released element's move was charged to Live, which is not holding it")
+	require.Contains(t, f.root.sizeInGC, Element(p),
+		"the move dropped the release record")
+	assert.Equal(t, resource.DataSize{}, f.root.sizeInGC[Element(p)],
+		"the release record was topped up, so index can never retire it")
+
+	f.collect(t)
+	assert.Zero(t, f.root.GarbageLen())
+	f.assertRebuildsSame(t, "after moving a live member of the orphan")
 }
