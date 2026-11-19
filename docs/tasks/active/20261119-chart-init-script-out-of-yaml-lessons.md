@@ -19,6 +19,18 @@
   assertion. A comment in `configmap.yaml` alone would not have survived,
   since nothing reads it.
 
+- Extracting the payload moved the untested seam rather than removing it:
+  the assertions read `files/*`, but what the cluster mounts is the
+  ConfigMap, and the only link is the `.Files.Get` line. A rename renders
+  the empty string instead of failing the release, so the chart could ship
+  an empty key with every existing assertion green.
+  `TestChartConfigMapRendersTheInitFiles` pins the link in both directions.
+- That test still cannot run on a ConfigMap-only pull request, since
+  `configmap.yaml` remains a `build/charts/**/*.yaml` path. It fails on any
+  change that also touches `files/` — a rename, a deletion, a new entry —
+  which is the case a drifting reference actually arrives in. Closing the
+  remainder needs the `ci.yml` negation scoped, which this run cannot touch.
+
 ## Self review
 
 Not run: this run is explicitly instructed not to dispatch `/self-review`,
