@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -27,13 +28,108 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// repoFile reads a file by its path from the repository root.
+// repoPath resolves a slash-separated path relative to the repository root.
+func repoPath(rel string) string {
+	return filepath.Join("..", "..", "..", filepath.FromSlash(rel))
+}
+
+// readRepo reads a file by its path from the repository root.
+func readRepo(t *testing.T, rel string) string {
+	t.Helper()
+
+	data, err := os.ReadFile(repoPath(rel))
+	require.NoError(t, err)
+	return string(data)
+}
+
+// repoFile reads a provisioning source by its path from the repository root.
+//
+// A provisioning source this file guards may not be a build/charts/**/*.yaml
+// file. .github/workflows/ci.yml picks the jobs to run from the changed paths
+// and negates that pattern as documentation, so the `build` job — the one that
+// runs `go test` — does not run at all for a pull request touching only such a
+// file. A guard that the edits it exists to catch skip is worse than no guard:
+// it reads green. The analytics chart therefore keeps its init script in .sql
+// and .sh files under build/charts/yorkie-analytics/files and renders the
+// ConfigMap from them with .Files.Get.
 func repoFile(t *testing.T, rel string) string {
 	t.Helper()
 
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", filepath.FromSlash(rel)))
+	require.False(t, strings.HasPrefix(rel, "build/charts/") && strings.HasSuffix(rel, ".yaml"),
+		"%s: ci.yml reads build/charts/**/*.yaml as documentation and skips the job that runs this test", rel)
+
+	return readRepo(t, rel)
+}
+
+const (
+	// chartFilesDir holds the analytics chart's init payload, and
+	// chartConfigMap is the only thing that ships it. See
+	// TestChartConfigMapRendersTheInitFiles.
+	chartFilesDir  = "build/charts/yorkie-analytics/files"
+	chartConfigMap = "build/charts/yorkie-analytics/templates/starrocks/configmap.yaml"
+)
+
+// The tests above read the chart's init payload out of chartFilesDir, but
+// nothing in the cluster reads that directory: what is mounted is the
+// ConfigMap, and the only link between the two is the `.Files.Get "files/…"`
+// line chartConfigMap renders each entry through. Drop a line there, or rename
+// a file without renaming its reference, and every assertion above still
+// passes against a payload the chart no longer ships — the same shape of
+// bypass that moving the payload out of YAML set out to close, one file over.
+//
+// So assert the link itself, in both directions: every file under
+// chartFilesDir is rendered under its own name, and every file the ConfigMap
+// names exists. The second direction is what catches the rename, since
+// .Files.Get on a missing path renders empty rather than failing the release.
+//
+// Note the residual gap this cannot close from Go: chartConfigMap is still a
+// build/charts/**/*.yaml path, so ci.yml classifies it as documentation and a
+// pull request touching only it runs no Go test at all. This test fails on any
+// change that also touches chartFilesDir — a rename, a deletion, a new entry —
+// and on every pull request that touches code; closing the ConfigMap-only case
+// needs the negation in .github/workflows/ci.yml scoped, which is not this
+// change's to make.
+func TestChartConfigMapRendersTheInitFiles(t *testing.T) {
+	entries, err := os.ReadDir(repoPath(chartFilesDir))
 	require.NoError(t, err)
-	return string(data)
+
+	var onDisk []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			onDisk = append(onDisk, e.Name())
+		}
+	}
+	require.NotEmpty(t, onDisk, "%s must hold the chart's init payload", chartFilesDir)
+
+	body := readRepo(t, chartConfigMap)
+
+	// What the ConfigMap actually pulls in, in the order it renders it.
+	var rendered []string
+	for _, m := range regexp.MustCompile(`\.Files\.Get\s+"files/([^"]+)"`).FindAllStringSubmatch(body, -1) {
+		rendered = append(rendered, m[1])
+	}
+
+	// Both directions at once: a file added to the directory and never wired
+	// up, and a reference left behind by a rename, each fail here. .Files.Get
+	// on a path that does not exist renders the empty string, so the chart
+	// would ship a ConfigMap with an empty key rather than fail to render.
+	assert.ElementsMatch(t, onDisk, rendered,
+		"%s must render exactly the files under %s, one .Files.Get each", chartConfigMap, chartFilesDir)
+
+	// Each one under its own name, since the init Job mounts the ConfigMap and
+	// runs the keys by filename.
+	for _, name := range onDisk {
+		assert.Regexp(t, `(?m)^\s+`+regexp.QuoteMeta(name)+`:`, body,
+			"%s must expose %s under its own key", chartConfigMap, name)
+	}
+
+	// And nothing inline: the payload living in the ConfigMap again is the
+	// state this change exists to undo, and it would be invisible to every
+	// assertion above, which reads the files.
+	for _, inline := range []string{"CREATE TABLE", "ADD ROLLUP", "ROUTINE LOAD", "mysql -h"} {
+		assert.NotContains(t, body, inline,
+			"%s must render the payload from %s, not carry it inline", chartConfigMap, chartFilesDir)
+	}
 }
 
 // A descriptor that names a summaryRollup reads it by name — FROM <rollup>
@@ -59,11 +155,8 @@ func TestSummaryRollupsAreProvisioned(t *testing.T) {
 	}{
 		{path: "build/docker/analytics/init-create-summary.sql", createsDDL: true},
 		{path: "build/docker/analytics/init-starrocks-database.sh", altersTable: true},
-		{
-			path:        "build/charts/yorkie-analytics/templates/starrocks/configmap.yaml",
-			createsDDL:  true,
-			altersTable: true,
-		},
+		{path: "build/charts/yorkie-analytics/files/init-create-summary.sql", createsDDL: true},
+		{path: "build/charts/yorkie-analytics/files/init-starrocks-database.sh", altersTable: true},
 	}
 
 	rollups := 0
@@ -115,7 +208,7 @@ func TestSummaryRollupProvisioningNeverFailsTheRun(t *testing.T) {
 
 		for _, path := range []string{
 			"build/docker/analytics/init-starrocks-database.sh",
-			"build/charts/yorkie-analytics/templates/starrocks/configmap.yaml",
+			"build/charts/yorkie-analytics/files/init-starrocks-database.sh",
 		} {
 			t.Run(d.summaryRollup+"/"+path, func(t *testing.T) {
 				body := repoFile(t, path)
