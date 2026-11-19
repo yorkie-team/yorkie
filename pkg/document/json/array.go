@@ -168,8 +168,10 @@ func (p *Array) AddNewArray() *Array {
 // stored, so that the operation's deep-copy already carries the correct value.
 //
 // Like every adder here it panics rather than returning an error, so the
-// payload must already be valid: the YSON decoder rejects a malformed one
-// through crdt.ValidateHLLPayload, keeping untrusted input off this path.
+// payload must already be valid: both the YSON text decoder and yson's
+// Validate, which client.Attach runs over an initial root built in Go,
+// reject a malformed one through crdt.ValidateHLLPayload, keeping untrusted
+// input off this path.
 func (p *Array) AddNewCounter(valueType crdt.CounterType, value any, registers ...[]byte) *Counter {
 	v := p.addInternal(func(ticket *time.Ticket) crdt.Element {
 		counter, err := crdt.NewCounter(valueType, value, ticket)

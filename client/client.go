@@ -808,6 +808,16 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 			}
 		}
 
+		// The initial root is applied with json.Object.SetYSONElement, which
+		// panics rather than returning an error on a malformed dedup counter
+		// payload. The root is built in Go, so the YSON text decoder's guard
+		// never sees it; reject one here, before any RPC, rather than in the
+		// d.Update of step 05 below, which runs once the server already holds
+		// the attachment.
+		if err := attachOpts.InitialRoot.Validate(); err != nil {
+			return err
+		}
+
 		return c.attachDocument(ctx, d, attachOpts, generation)
 
 	}

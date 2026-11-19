@@ -172,6 +172,63 @@ func (y Counter) isElement() {}
 func (y Text) isElement()    {}
 func (y Tree) isElement()    {}
 
+// Validate reports whether the counter carries a payload the apply path
+// accepts. Only a dedup counter has one: its registers are raw HLL state,
+// and json.Object.SetYSONElement and json.Array.AddYSON panic rather than
+// return when restoring them fails. A counter decoded from YSON text was
+// already checked in parseDedupCounter, so this is for values built in Go —
+// client.WithInitialRoot takes one straight from the caller.
+func (y Counter) Validate() error {
+	if y.Type != crdt.IntegerDedupCnt || y.Registers == nil {
+		return nil
+	}
+
+	if err := crdt.ValidateHLLPayload(y.Registers); err != nil {
+		return fmt.Errorf("validate counter: %w: %w", err, ErrInvalidYSON)
+	}
+
+	return nil
+}
+
+// Validate reports whether every element of the object is one the apply path
+// accepts, recursing into nested objects and arrays.
+func (y Object) Validate() error {
+	for key, value := range y {
+		if err := validateElement(value); err != nil {
+			return fmt.Errorf("validate %q: %w", key, err)
+		}
+	}
+
+	return nil
+}
+
+// Validate reports whether every element of the array is one the apply path
+// accepts, recursing into nested objects and arrays.
+func (y Array) Validate() error {
+	for i, elem := range y {
+		if err := validateElement(elem); err != nil {
+			return fmt.Errorf("validate %d: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
+// validateElement validates any element type. Types without a payload the
+// apply path can reject — primitives, Text and Tree — pass unconditionally.
+func validateElement(elem any) error {
+	switch v := elem.(type) {
+	case Counter:
+		return v.Validate()
+	case Object:
+		return v.Validate()
+	case Array:
+		return v.Validate()
+	default:
+		return nil
+	}
+}
+
 // marshalElement marshals any element type
 func marshalElement(elem any) (string, error) {
 	switch v := elem.(type) {
@@ -264,6 +321,13 @@ func (y Counter) Marshal() (string, error) {
 	case crdt.LongCnt:
 		return fmt.Sprintf("Counter(Long(%v))", y.Value), nil
 	case crdt.IntegerDedupCnt:
+		// Refuse what Unmarshal refuses: encoding a register slice the
+		// decoder rejects would produce a string that does not round-trip,
+		// and admin.Client.CreateDocument marshals a caller-built root, so
+		// the failure belongs here rather than at the server.
+		if err := y.Validate(); err != nil {
+			return "", err
+		}
 		encoded := base64.StdEncoding.EncodeToString(y.Registers)
 		return fmt.Sprintf(`DedupCounter(Int(%v),"%s")`, y.Value, encoded), nil
 	default:

@@ -117,8 +117,10 @@ func (p *Object) SetNewDedupCounter(k string) *Counter {
 // stored, so that the operation's deep-copy already carries the correct value.
 //
 // Like every setter here it panics rather than returning an error, so the
-// payload must already be valid: the YSON decoder rejects a malformed one
-// through crdt.ValidateHLLPayload, keeping untrusted input off this path.
+// payload must already be valid: both the YSON text decoder and yson's
+// Validate, which client.Attach runs over an initial root built in Go,
+// reject a malformed one through crdt.ValidateHLLPayload, keeping untrusted
+// input off this path.
 func (p *Object) setNewCounter(k string, t crdt.CounterType, n any, registers ...[]byte) *Counter {
 	v := p.setInternal(k, func(ticket *time.Ticket) crdt.Element {
 		crdtCounter, err := crdt.NewCounter(t, n, ticket)
