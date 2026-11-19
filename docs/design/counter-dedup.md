@@ -308,6 +308,17 @@ constructor error, and `yson.Unmarshal` decodes untrusted input — admin
 `CreateDocument`/`UpdateDocument` bodies and `RestoreRevision`
 snapshots. An empty `"hll"` stays valid and decodes to nil registers.
 
+The decoder covers payloads that arrive as YSON *text* only. A
+`yson.Counter` assembled in Go — `client.WithInitialRoot` takes one from
+the caller and `Attach` applies it with `SetYSONElement` — never passes
+`parseDedupCounter`, so `Counter.Validate` runs the same check on a value
+in memory, and `Object.Validate`/`Array.Validate` recurse through a root.
+`Attach` validates the initial root before its first RPC, and
+`Counter.Marshal` validates before encoding so it refuses what `Unmarshal`
+refuses and a counter that cannot round-trip fails in the SDK rather than
+at the server. Both treat an empty payload as the decoder does: valid, and
+skipped by the restore.
+
 #### CRDT → YSON Conversion (`to_yson.go`)
 
 Extend `toCounter()` to extract HLL bytes:
