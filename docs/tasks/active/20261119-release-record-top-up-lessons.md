@@ -21,6 +21,21 @@ Generalisation worth keeping: in this accounting code the question is never
 it?". `release` is the one operation that answers *nobody* — and that is
 exactly what the zero record encodes.
 
+## The test had to fail for the right number
+
+The regression is 24 bytes — one ticket — in `docSize.GC`, against a root
+whose rebuild has none. Nothing exported shows it: `GarbageLen` is zero either
+way, because the residue has no pair, and the document marshals identically.
+`assertRebuildsSame` is what sees it, which is why the existing fixture was
+the right place to put the test rather than a new one at the `json`/`document`
+layer.
+
+Confirmed by reverting only `root.go` and re-running: before the guard,
+`GC.Meta` is 24 and the rebuild's is 0.
+
 ## Round log
 
-(filled in as review rounds run)
+- **Verification**: `make lint` (0 issues), `make verify` green,
+  `go test ./pkg/document/... -count=1` green. `/self-review` was not run —
+  this was an autonomous one-shot run with no reviewer subagent available, so
+  review is CI plus the PR's human reviewers.
