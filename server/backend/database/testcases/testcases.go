@@ -729,6 +729,55 @@ func RunDeleteMemberInfoTest(t *testing.T, db database.Database) {
 	})
 }
 
+// RunDeleteMemberInfosByUserTest runs the DeleteMemberInfosByUser test for the
+// given db.
+func RunDeleteMemberInfosByUserTest(t *testing.T, db database.Database) {
+	t.Run("delete every membership of the user test", func(t *testing.T) {
+		ctx := context.Background()
+
+		// 01. Create two projects and two users.
+		p1, err := db.CreateProjectInfo(ctx, t.Name()+"-p1", dummyOwnerID)
+		assert.NoError(t, err)
+		p2, err := db.CreateProjectInfo(ctx, t.Name()+"-p2", dummyOwnerID)
+		assert.NoError(t, err)
+		u1, err := db.CreateUserInfo(ctx, t.Name()+"-u1", "pw")
+		assert.NoError(t, err)
+		u2, err := db.CreateUserInfo(ctx, t.Name()+"-u2", "pw")
+		assert.NoError(t, err)
+
+		// 02. Join u1 to both projects and u2 to one of them.
+		_, err = db.UpsertMemberInfo(ctx, p1.ID, u1.ID, dummyOwnerID, database.Admin)
+		assert.NoError(t, err)
+		_, err = db.UpsertMemberInfo(ctx, p2.ID, u1.ID, dummyOwnerID, database.Member)
+		assert.NoError(t, err)
+		_, err = db.UpsertMemberInfo(ctx, p1.ID, u2.ID, dummyOwnerID, database.Member)
+		assert.NoError(t, err)
+
+		// 03. Delete the memberships of u1 alone.
+		assert.NoError(t, db.DeleteMemberInfosByUser(ctx, u1.ID))
+
+		_, err = db.FindMemberInfo(ctx, p1.ID, u1.ID)
+		assert.Equal(t, pkgerrors.ErrCodeNotFound, pkgerrors.StatusOf(err))
+		_, err = db.FindMemberInfo(ctx, p2.ID, u1.ID)
+		assert.Equal(t, pkgerrors.ErrCodeNotFound, pkgerrors.StatusOf(err))
+
+		// 04. The other user keeps its membership.
+		member, err := db.FindMemberInfo(ctx, p1.ID, u2.ID)
+		assert.NoError(t, err)
+		assert.Equal(t, u2.ID, member.UserID)
+	})
+
+	// Deleting an account that never joined a project must not fail.
+	t.Run("no membership test", func(t *testing.T) {
+		ctx := context.Background()
+
+		u1, err := db.CreateUserInfo(ctx, t.Name()+"-u1", "pw")
+		assert.NoError(t, err)
+
+		assert.NoError(t, db.DeleteMemberInfosByUser(ctx, u1.ID))
+	})
+}
+
 // RunCreateInviteInfoTest runs the CreateInviteInfo test for the given db.
 func RunCreateInviteInfoTest(t *testing.T, db database.Database) {
 	t.Run("success test", func(t *testing.T) {

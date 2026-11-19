@@ -163,6 +163,10 @@ func TestClient(t *testing.T) {
 		testcases.RunDeleteMemberInfoTest(t, cli)
 	})
 
+	t.Run("DeleteMemberInfosByUser test", func(t *testing.T) {
+		testcases.RunDeleteMemberInfosByUserTest(t, cli)
+	})
+
 	t.Run("CreateInviteInfo test", func(t *testing.T) {
 		testcases.RunCreateInviteInfoTest(t, cli)
 	})

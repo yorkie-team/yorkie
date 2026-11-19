@@ -92,6 +92,26 @@ is covered:
 `CreateProject` (the caller is the owner), `UpdateProject` and
 `RotateProjectKeys` (both already `CheckPermission(..., Admin)`) are unaffected.
 
+### Role loss
+
+Redaction decides who may *read* the key; it cannot decide who still holds a
+copy. So every way of losing a role has to leave the owner able to see the loss
+and rotate deliberately. Demotion and `RemoveMember` do: the membership row
+changes or goes, and the member list shows it.
+
+Account deletion (`DeleteAccount`, password-verified and reachable without a
+session) did not. It removed the user document alone, and the `members` rows
+naming that user survived. Those rows are keyed by user ID but only reachable
+by username, so `members.Remove` could never delete one again
+(`FindUserInfoByName` answers `ErrUserNotFound`), and `members.List` failed the
+whole project listing on the missing user — the owner could not even see who
+was left. `users.DeleteAccountByName` now deletes the memberships first and the
+user second; the two are not one transaction, and that order leaves the
+recoverable state if it fails between them.
+
+This drops the roles, not the key a role could have read. Rotation stays the
+owner's deliberate act for the same reason it does after a demotion.
+
 ### Client migration
 
 This changes the wire contract for every client that authenticates
@@ -118,6 +138,7 @@ allowed through any proxy that filters request headers — the istio
 | Non-Go clients break for `member` users the moment the server ships | Documented here and in the changelog as a breaking change; the Go client and the chart ship the fallback in the same change |
 | A key copied before the change keeps full project authority | `RotateProjectKeys`; owners are told to run it after demoting or removing an admin |
 | A demoted admin keeps the key | Same; automatic rotation was dropped because the key also signs the event webhook |
+| An admin self-deletes and keeps the key | `DeleteAccount` removes their memberships, so the owner sees the role loss and can rotate; the orphan row used to hide the whole member list |
 | A procedure added later reads a scope its scheme never set | `projectScopedMethods` is opt-in; an unlisted procedure is user-scoped |
 
 ### Design Decisions

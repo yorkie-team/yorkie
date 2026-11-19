@@ -7,6 +7,16 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Remove the user's project memberships when the account is deleted.
+  `DeleteAccount` used to delete the user document alone, leaving `members`
+  rows that no API path could reach: `RemoveMember` resolves the user by
+  username and failed with `ErrUserNotFound`, and `ListMembers` failed for the
+  whole project on the missing user. Existing orphan rows from accounts deleted
+  before this change are not cleaned up; removing them needs a manual delete of
+  the `members` rows whose `user_id` has no user.
+
 ## [v0.7.28] - 2026-11-16
 
 ### Fixed
