@@ -112,12 +112,35 @@ func GetUserByID(
 	return info.ToUser(), nil
 }
 
-// DeleteAccountByName deletes a user by name.
+// DeleteAccountByName deletes a user by name, along with every project
+// membership it holds.
+//
+// The memberships go first. They are keyed by user ID but
+// only reachable by username (members.Remove resolves the name), so a row left
+// behind by a deleted user can never be listed or removed again: members.List
+// fails the whole project listing on the missing user. The two deletions are
+// not one transaction, so failing between them has to leave the recoverable
+// state — an account that lost its roles and can be invited back — rather than
+// the unreachable one.
+//
+// This drops the roles, not the credentials they could read. A copied project
+// secret key outlives the role it was read under; RotateProjectKeys is still
+// the owner's remedy, by the same reasoning as demotion
+// (docs/design/admin-credentials.md).
 func DeleteAccountByName(
 	ctx context.Context,
 	be *backend.Backend,
 	username string,
 ) error {
+	info, err := be.DB.FindUserInfoByName(ctx, username)
+	if err != nil {
+		return err
+	}
+
+	if err := be.DB.DeleteMemberInfosByUser(ctx, info.ID); err != nil {
+		return err
+	}
+
 	if err := be.DB.DeleteUserInfoByName(ctx, username); err != nil {
 		return err
 	}

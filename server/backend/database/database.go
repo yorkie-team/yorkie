@@ -224,6 +224,10 @@ type Database interface {
 	// DeleteMemberInfo deletes a member from the project.
 	DeleteMemberInfo(ctx context.Context, projectID types.ID, userID types.ID) error
 
+	// DeleteMemberInfosByUser deletes every membership of the given user. It
+	// succeeds when the user has none.
+	DeleteMemberInfosByUser(ctx context.Context, userID types.ID) error
+
 	// CreateInviteInfo creates a new reusable invite link for the project.
 	CreateInviteInfo(
 		ctx context.Context,

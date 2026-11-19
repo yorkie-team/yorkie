@@ -879,6 +879,24 @@ func (d *DB) DeleteMemberInfo(
 	return nil
 }
 
+// DeleteMemberInfosByUser deletes every membership of the given user. It
+// succeeds when the user has none, because its caller deletes an account
+// whether or not it joined a project.
+func (d *DB) DeleteMemberInfosByUser(
+	_ context.Context,
+	userID types.ID,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	if _, err := txn.DeleteAll(tblMembers, "user_id", userID.String()); err != nil {
+		return fmt.Errorf("delete memberships of %s: %w", userID, err)
+	}
+	txn.Commit()
+
+	return nil
+}
+
 // CreateInviteInfo creates a new reusable invite link for the project.
 func (d *DB) CreateInviteInfo(
 	_ context.Context,

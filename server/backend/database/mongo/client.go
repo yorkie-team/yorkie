@@ -1131,6 +1131,22 @@ func (c *Client) DeleteMemberInfo(
 	return nil
 }
 
+// DeleteMemberInfosByUser deletes every membership of the given user. It
+// succeeds when the user has none, because its caller deletes an account
+// whether or not it joined a project.
+func (c *Client) DeleteMemberInfosByUser(
+	ctx context.Context,
+	userID types.ID,
+) error {
+	if _, err := c.collection(ColMembers).DeleteMany(ctx, bson.M{
+		"user_id": userID,
+	}); err != nil {
+		return fmt.Errorf("delete memberships of %s: %w", userID, err)
+	}
+
+	return nil
+}
+
 // ListProjectInfosByMember returns all projects that the user is a member of.
 func (c *Client) ListProjectInfosByMember(
 	ctx context.Context,
