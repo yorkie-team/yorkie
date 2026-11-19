@@ -29,14 +29,23 @@ A purged document reads as gone on every node, not just in MongoDB.
 - [x] Broadcast `CacheTypeDocument` invalidation from `packs.Purge` after the
       purge lands; log failures rather than returning them, as the client
       broadcast does — the delete has already happened.
+- [x] Add `docLocks`, the `clientLocks` equivalent for the document cache, and
+      hold it in `FindDocInfoByRefKey` across the MongoDB read and the `Add`
+      that follows, and at both removal sites. Removing after the delete is
+      not enough on its own: a read that fetched the row first can `Add` that
+      pre-purge copy afterwards, and `docCache` has no TTL to expire it.
 - [x] Tests: ref-key parse round trip; warm the document cache in
-      `testcases.RunPurgeDocument` before purging so a cache-first read of a
-      purged document fails the suite.
+      `testcases.RunPurgeDocument` before purging, and run that testcase
+      against the mongo client, which is the only backend with a document
+      cache; cross-node invalidation and a read racing a purge in
+      `mongo/client_test.go`.
 
 ## Out of scope
 
-- A per-document cache lock (the `clientLocks` equivalent). Every existing
-  `docCache.Remove` has the same read-fills-after-remove window; closing it is
-  a separate change.
-- `UpdateDocInfoStatusToRemoved` and the other non-purge write paths; they
-  already remove their entry locally.
+- The non-purge `docCache.Remove` sites (`UpdateDocInfoStatusToRemoved`,
+  `FindOrCreateDocInfo`). They now race the lock-holding read rather than an
+  unlocked one, which is no worse than before, but bringing them under
+  `docLocks` touches write paths this change does not otherwise reach.
+- Invalidating the snapshot, change, presence and vector caches cluster-wide.
+  Only `docCache` is broadcast here; the rest are dropped on the purging node
+  by `purgeDocumentInternals`.
