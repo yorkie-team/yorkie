@@ -863,19 +863,26 @@ func (r *Root) Acc(diff resource.DataSize) {
 // leave residue no pass can ever subtract, and would cost the record its only
 // other way out: index retires a release record only while it is still zero,
 // so a topped-up one keeps the dead subtree reachable for good.
+//
+// Which is why the release record is read before removedAt and not after. A
+// release record is not a tombstone's alone: UnregisterRemovedElementPair
+// releases the pair element and every descendant, and most of a released
+// subtree is live -- Live has already given up those bytes, so charging a
+// live released element's move to Live is the same unsubtractable residue,
+// on the commoner of the two paths.
 func (r *Root) AccMovedElement(elem Element, diff resource.DataSize) {
-	if elem == nil || elem.RemovedAt() == nil {
+	if elem == nil {
 		r.docSize.Live.Add(diff)
 		return
 	}
 
 	charged, ok := r.sizeInGC[elem]
-	if !ok {
-		r.docSize.Live.Add(diff)
+	if ok && charged == (resource.DataSize{}) {
 		return
 	}
 
-	if charged == (resource.DataSize{}) {
+	if !ok || elem.RemovedAt() == nil {
+		r.docSize.Live.Add(diff)
 		return
 	}
 
