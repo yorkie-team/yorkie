@@ -178,8 +178,10 @@ func (y Tree) isElement()    {}
 // return when restoring them fails. A counter decoded from YSON text was
 // already checked in parseDedupCounter, so this is for values built in Go —
 // client.WithInitialRoot takes one straight from the caller.
+// An empty payload is accepted like a nil one: setNewCounter skips the
+// restore for it and the decoder hands an empty payload back as nil.
 func (y Counter) Validate() error {
-	if y.Type != crdt.IntegerDedupCnt || y.Registers == nil {
+	if y.Type != crdt.IntegerDedupCnt || len(y.Registers) == 0 {
 		return nil
 	}
 

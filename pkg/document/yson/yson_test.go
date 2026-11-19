@@ -1392,3 +1392,93 @@ func TestYSONPlainTypeField(t *testing.T) {
 		assert.Empty(t, obj)
 	})
 }
+
+func TestYSONValidate(t *testing.T) {
+	validRegisters := func() []byte {
+		registers := make([]byte, 16384)
+		registers[0] = 5
+		return registers
+	}
+
+	t.Run("dedup counter register length test", func(t *testing.T) {
+		assert.NoError(t, yson.Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(15),
+			Registers: validRegisters(),
+		}.Validate())
+
+		// An empty payload — nil or not — leaves the HLL untouched on the
+		// apply path, so Validate accepts it as the decoder does.
+		assert.NoError(t, yson.Counter{Type: crdt.IntegerDedupCnt, Value: int32(0)}.Validate())
+		assert.NoError(t, yson.Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(0),
+			Registers: []byte{},
+		}.Validate())
+
+		for _, length := range []int{1, 16383, 16385} {
+			err := yson.Counter{
+				Type:      crdt.IntegerDedupCnt,
+				Value:     int32(15),
+				Registers: make([]byte, length),
+			}.Validate()
+			assert.ErrorIs(t, err, yson.ErrInvalidYSON, "length %d", length)
+		}
+	})
+
+	t.Run("plain counter carries no payload test", func(t *testing.T) {
+		assert.NoError(t, yson.Counter{Type: crdt.IntegerCnt, Value: int32(1)}.Validate())
+		assert.NoError(t, yson.Counter{Type: crdt.LongCnt, Value: int64(1)}.Validate())
+	})
+
+	t.Run("nested container test", func(t *testing.T) {
+		malformed := yson.Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(15),
+			Registers: make([]byte, 4),
+		}
+		valid := yson.Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(15),
+			Registers: validRegisters(),
+		}
+
+		assert.ErrorIs(t, yson.Object{"uv": malformed}.Validate(), yson.ErrInvalidYSON)
+		assert.ErrorIs(t, yson.Array{malformed}.Validate(), yson.ErrInvalidYSON)
+		assert.ErrorIs(t, yson.Object{
+			"a": yson.Array{yson.Object{"uv": malformed}},
+		}.Validate(), yson.ErrInvalidYSON)
+
+		assert.NoError(t, yson.Object{
+			"a": yson.Array{yson.Object{"uv": valid}, int32(1), "s"},
+			"t": yson.Text{Nodes: []yson.TextNode{{Value: "hello"}}},
+		}.Validate())
+	})
+
+	t.Run("marshal rejects what unmarshal rejects test", func(t *testing.T) {
+		counter := yson.Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(15),
+			Registers: make([]byte, 4),
+		}
+		_, err := counter.Marshal()
+		assert.ErrorIs(t, err, yson.ErrInvalidYSON)
+
+		_, err = yson.Object{"uv": counter}.Marshal()
+		assert.ErrorIs(t, err, yson.ErrInvalidYSON)
+
+		_, err = yson.Array{counter}.Marshal()
+		assert.ErrorIs(t, err, yson.ErrInvalidYSON)
+
+		// The valid payload still round-trips.
+		marshalled, err := yson.Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(15),
+			Registers: validRegisters(),
+		}.Marshal()
+		assert.NoError(t, err)
+		decoded := yson.Counter{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &decoded))
+		assert.Equal(t, validRegisters(), decoded.Registers)
+	})
+}
