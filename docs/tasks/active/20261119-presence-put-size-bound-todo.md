@@ -26,45 +26,49 @@ to N peers: N× amplification with N bounded by nothing on this path.
 
 ## Fix
 
-Refuse a push carrying a presence `PUT` larger than `maxPresencePutSize`,
-measured in the same `presenceSize` the other two bounds use, with
-`ErrPresenceTooLarge` (`ResourceExhausted`). Only the changes `pushPack` will
-store are measured — the ones above the client's checkpoint — so a resend that
-repeats an already-acked change is not refused for a presence the server
-accepted before this bound existed.
+Bound a presence `PUT` the client pushes, measured in the same `presenceSize`
+the other two bounds use, inside the walk `foldPresencePatches` already makes
+over the changes `pushPack` will store. Only those changes — the ones above
+the client's checkpoint — are measured, so a resend that repeats an
+already-acked change is not touched.
 
-Budget: 64 KiB, the same 16 × `maxPresenceBaseSize` the pack fold budget uses.
-It cannot be `maxPresenceBaseSize` itself: a presence over 4 KiB is a
-supported, if degraded, case today — such a client is never folded into nor
-cached and pushes full puts instead (the motivating app of #2154 held about
-7.4 KB) — so refusing at 4 KiB would break clients that work now. 64 KiB is
-well above any presence a cursor or a selection needs and bounds the per-peer
-fan-out of one push to a constant.
+Per put: `maxPresencePutSize`, 64 KiB, the same 16 x `maxPresenceBaseSize` the
+pack fold budget uses. It cannot be `maxPresenceBaseSize` itself: a presence
+over 4 KiB is a supported, if degraded, case today — such a client is never
+folded into nor cached and pushes full puts instead (the motivating app of
+#2154 held about 7.4 KB) — so bounding at 4 KiB would break clients that work
+now. 64 KiB is well above any presence a cursor or a selection needs and
+bounds the per-peer fan-out of one push to a constant.
 
-The push is refused rather than coalesced. Unlike passing the fold budget,
-which is a property of the pack's shape and would recur on every resend, an
-oversized put is a property of the presence the client chose to send: the
-client clears it by sending a smaller presence, and the error names a limit,
-so a resend of the same pack is correctly refused again. `ResourceExhausted`
-puts it with `ErrDocumentSizeExceedsLimit` and `ErrChangeTooLarge`, the other
-"resending this will not help" rejections.
+Per pack: `maxPresencePutPerPack`, 256 KiB, 4 x the fold budget. The per-put
+bound alone leaves the same amplification available to a pack of a few
+hundred puts at the bound, since only clientSeq continuity limits how many
+changes a pack carries.
+
+Neither bound refuses the push. A client keeps a local change until the
+server acknowledges it, so a refused pack is pushed again unchanged: the
+refusal would be permanent rather than something a smaller presence clears,
+and the document — operations included — would stop syncing for good, taking
+the detach and remove packs with it. An oversized put is stored without its
+presence, and the cached base goes with it so the client's next patch is not
+folded onto a presence the sender no longer holds; puts past the pack budget
+share the put of their run's last change, as the fold's own budget does.
 
 ## Plan
 
-- [x] `maxPresencePutSize` and `ErrPresenceTooLarge` in `presence_patch.go`,
-      with `checkPresenceSizes` walking the pushable changes.
-- [x] Call it from `PushPull` after the presence strip and before the fold.
-- [x] `client.isWriteRejected` recognises the code, so the Go client's sync
-      loop holds the document off instead of retrying a push that cannot
-      succeed.
-- [x] Internal tests: a put at the bound passes; one over it is refused with
-      the code and status the client matches on; a put of many tiny keys is
-      refused; a put at or below the checkpoint, a patch, a clear and a
-      change without presence are not measured.
+- [x] `maxPresencePutSize` and `maxPresencePutPerPack` in
+      `presence_patch.go`, enforced in the `presence.Put` arm of
+      `foldPresencePatches`.
+- [x] Internal tests: a put at the bound is stored as sent; one over it loses
+      its presence, drops the base and refuses the patch that follows it; a
+      put of many tiny keys is dropped; puts past the pack budget share the
+      put of their last change; a put at or below the checkpoint is left
+      alone; a detach pack carrying an oversized put is not refused.
 - [x] An integration test driving an oversized put through `AttachDocument`,
-      so the refusal is checked against the real RPC surface.
-- [x] `docs/design/presence-patch.md`: a "Put size" section, the risk row and
-      the decision row.
+      so the push is checked against the real RPC surface and a peer's pull
+      shows the presence was not stored.
+- [x] `docs/design/presence-patch.md`: a "Put size" section, the risk rows
+      and the decision row.
 
 ## Out of scope
 
@@ -74,5 +78,6 @@ puts it with `ErrDocumentSizeExceedsLimit` and `ErrChangeTooLarge`, the other
 - Enforcing in `converter.FromPresenceChange`. That function is the read path
   for stored rows as well (`server/backend/database/change_info.go`), so a
   bound there would make a row stored before the bound unreadable.
-- The JS SDK side: it matches the error code the same way the Go client does,
-  but is a separate repository.
+- Any SDK change. Neither bound returns an error, so no client has to learn
+  a new code; a client that wants to know its presence was too large to fan
+  out would need a reply field, which is a separate decision.

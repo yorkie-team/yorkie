@@ -131,16 +131,9 @@ func PushPull(
 		reqPack.Changes = stripPresenceChanges(reqPack.Changes)
 	}
 
-	// 01b. Refuse a put the whole document would have to pull and that no
-	// document size gate measures. A presence-disabled document has none left
-	// after the strip above, so this runs after it.
-	if err := checkPresenceSizes(docKey, clientInfo.Checkpoint(docKey.DocID), reqPack); err != nil {
-		be.Metrics.AddPushPullErrors(hostname, project, 1)
-		return nil, err
-	}
-
-	// 01c. Fold presence patches into full puts, so only puts are stored and
-	// every client keeps pulling the full presence. A presence-disabled
+	// 01b. Fold presence patches into full puts, so only puts are stored and
+	// every client keeps pulling the full presence, and bound the puts the
+	// client sent, which no document size gate measures. A presence-disabled
 	// document has none left after the strip above.
 	var fold *presenceFold
 	if !opts.DisablePresence {

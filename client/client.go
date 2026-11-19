@@ -747,14 +747,9 @@ func (c *Client) syncInternal(ctx context.Context, attachment *Attachment, opts 
 // ErrChangeTooLarge (database.ErrChangeTooLarge, named by its code because the
 // client does not import the server) is listed for parity with the JS SDK and
 // in case a write path ever returns it; today only compaction does.
-//
-// ErrPresenceTooLarge (packs.ErrPresenceTooLarge, named the same way) is a
-// push the server refuses for the presence it carries. Only a smaller
-// presence clears it, so the hold-off keeps the loop from retrying the pack
-// every round while the application decides to set one.
 func isWriteRejected(err error) bool {
 	switch converter.ErrorCodeOf(err) {
-	case document.ErrDocumentSizeExceedsLimit.Code(), "ErrChangeTooLarge", "ErrPresenceTooLarge":
+	case document.ErrDocumentSizeExceedsLimit.Code(), "ErrChangeTooLarge":
 		return true
 	}
 	return false

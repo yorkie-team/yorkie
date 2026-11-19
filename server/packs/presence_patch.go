@@ -17,8 +17,6 @@
 package packs
 
 import (
-	"fmt"
-
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
@@ -36,13 +34,6 @@ import (
 var ErrPresenceBaseUnavailable = errors.FailedPrecond(
 	"presence base unavailable",
 ).WithCode("ErrPresenceBaseUnavailable")
-
-// ErrPresenceTooLarge is returned when a pushed presence put carries more
-// than maxPresencePutSize. Nothing in the pack is stored. Resending the same
-// pack cannot change the outcome; the client has to hold a smaller presence.
-var ErrPresenceTooLarge = errors.ResourceExhausted(
-	"presence too large",
-).WithCode("ErrPresenceTooLarge")
 
 // maxPresenceBaseSize bounds the presence one cache entry holds and the
 // presence a patch may be folded into, measured by presenceSize. Presence is
@@ -107,7 +98,36 @@ const maxPresenceFoldPerPack = 16 * maxPresenceBaseSize
 // would break clients that work now. At 16 times it, the same multiple the
 // pack fold budget uses, this is well above what a cursor or a selection
 // needs while bounding what one push costs each peer.
+//
+// A put past it loses its presence and is stored without one, rather than the
+// push being refused. The push cannot be refused: a client keeps a local
+// change until the server acknowledges it, so a pack the server never stores
+// is pushed again unchanged, and the document -- its operations included --
+// would stop syncing for good. Dropping the presence is the same answer the
+// fold gives a patch it cannot pay for, and presence is latest-wins and lossy
+// by design, so the sender's peers hold its previous presence until its next
+// push fits.
 const maxPresencePutSize = 16 * maxPresenceBaseSize
+
+// maxPresencePutPerPack bounds the sum, in presenceSize, of the puts a client
+// may push in one pack. maxPresencePutSize bounds one put; nothing bounds how
+// many a pack carries -- only clientSeq continuity has to hold -- so without
+// this a single request of a few hundred puts at the per-put bound reproduces
+// the fan-out that bound exists to cap, each put stored and pulled by every
+// client of the document.
+//
+// Past the budget the puts of a run share the single put their last change
+// carries, the way the fold coalesces patches past maxPresenceFoldPerPack:
+// the intermediate presences of a pack are the transient ones, and the one
+// kept at the end of the run is the presence the sender holds. So a pack's
+// stored puts cost the budget plus one put however many it carries.
+//
+// At four times maxPresenceFoldPerPack it sits well above what the fold
+// itself lets a pack produce, so a pack of puts near maxPresenceBaseSize --
+// the shape the fold budget pays for in full -- is not coalesced for being
+// the same size in puts the client sent, and well above a batched pack of a
+// few hundred ordinary presences.
+const maxPresencePutPerPack = 4 * maxPresenceFoldPerPack
 
 // presenceEntryOverhead is what one presence key costs beyond the bytes of its
 // key and value: two string headers in the map, the slack a Go map keeps per
@@ -128,40 +148,6 @@ func presenceSize(data presence.Data) int {
 		size += presenceEntryOverhead + len(k) + len(v)
 	}
 	return size
-}
-
-// checkPresenceSizes refuses a push carrying a presence put over
-// maxPresencePutSize, before anything in the pack is stored.
-//
-// It measures only the changes above the client's checkpoint, the ones
-// pushPack will store and every attached client will then pull. A change at
-// or below it was stored by an earlier push and is dropped here, so a client
-// resending one -- after a reconnect, say -- is not refused for a presence
-// the server accepted before this bound existed.
-//
-// Patches are not measured: the fold already refuses one whose result passes
-// maxPresenceBaseSize, so no patch reaches the store as a put larger than
-// that, and a patch the fold drops is stored with no presence at all.
-func checkPresenceSizes(docKey types.DocRefKey, cp change.Checkpoint, reqPack *change.Pack) error {
-	for _, cn := range reqPack.Changes {
-		if cn.ClientSeq() <= cp.ClientSeq {
-			continue
-		}
-
-		pc := cn.PresenceChange()
-		if pc == nil || pc.ChangeType != presence.Put {
-			continue
-		}
-
-		if size := presenceSize(pc.Presence); size > maxPresencePutSize {
-			return fmt.Errorf(
-				"push to %s: presence of %d bytes at client seq %d exceeds %d: %w",
-				docKey, size, cn.ClientSeq(), maxPresencePutSize, ErrPresenceTooLarge,
-			)
-		}
-	}
-
-	return nil
 }
 
 // presenceFold carries the client's presence from before a push, read from
@@ -185,6 +171,14 @@ type presenceFold struct {
 // maxPresenceFoldPerPack keep the push but share one put between them. It
 // returns nil when there is nothing to commit: no cached base and nothing to
 // push.
+//
+// The same walk bounds the puts the client sent: one over maxPresencePutSize
+// loses its presence, and the puts past maxPresencePutPerPack share the put
+// of the last change of their run. Neither refuses the push, so no presence
+// can wedge a client -- including the detach or remove pack it needs to leave
+// the document. It walks only the changes above the client's checkpoint, the
+// ones pushPack stores and every attached client then pulls, so a client
+// resending an already-stored change is unaffected by either bound.
 func foldPresencePatches(
 	be *backend.Backend,
 	clientInfo *database.ClientInfo,
@@ -223,7 +217,7 @@ func foldPresencePatches(
 		return nil, nil
 	}
 
-	base, folded := fold.base, 0
+	base, folded, pushed := fold.base, 0, 0
 	// coalesced is the index in pushables of the last patch the pack's fold
 	// budget did not pay for a put of. Such a patch loses its presence while
 	// the walk keeps folding it into base, and the presence the run of them
@@ -238,6 +232,31 @@ func foldPresencePatches(
 
 		switch pc.ChangeType {
 		case presence.Put:
+			size := presenceSize(pc.Presence)
+			// A put over the per-put bound is stored without its presence:
+			// what it would cost is not the bytes the client sent but those
+			// times every client of the document, and no document size gate
+			// measures presence. The base goes with it -- the server no
+			// longer knows what presence the sender holds, so folding its
+			// next patch onto the presence from before this put would store a
+			// presence the sender never had.
+			if size > maxPresencePutSize {
+				cn.SetPresenceChange(nil)
+				base, fold.base, coalesced = nil, nil, -1
+				continue
+			}
+			// Past the pack's budget the puts of a run share one put, the
+			// last one of the run, so a pack's stored puts cost a constant
+			// however many it carries. Refusing the push instead would not
+			// converge: a client keeps a local change until it is
+			// acknowledged, so the same pack would be pushed again unchanged.
+			if pushed+size > maxPresencePutPerPack {
+				cn.SetPresenceChange(nil)
+				base, coalesced = pc.Presence, i
+				continue
+			}
+
+			pushed += size
 			base, coalesced = pc.Presence, -1
 		case presence.Clear:
 			base, coalesced = nil, -1

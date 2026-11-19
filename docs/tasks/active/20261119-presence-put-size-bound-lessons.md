@@ -17,6 +17,22 @@
   set `pushPack` stores. Measuring the whole pack would refuse a reconnecting
   client that resends an already-acked change whose presence the server
   accepted before this bound existed.
+- The bound cannot refuse the push. A client keeps a local change until the
+  server acknowledges it (`InternalDocument.RemovePushedLocalChanges`), so a
+  pack the server never stores is pushed again unchanged: a refusal is
+  permanent rather than something a smaller presence clears, it stalls the
+  document's operations along with its presence, and it blocks the detach and
+  remove packs that every other write gate on this path deliberately lets
+  through. Dropping the presence and keeping the push is the answer the fold
+  already gives a patch it cannot pay for.
+- Dropping an oversized put has to drop the cached base with it. `commit`
+  rebuilds the base from the puts that were actually stored, so leaving the
+  entry alone would let the client's next patch fold onto the presence from
+  before the dropped put — a presence the sender no longer holds.
+- A per-put bound alone is not a bound. Only clientSeq continuity limits how
+  many changes a pack carries, so the same amplification is available to a
+  pack of a few hundred puts at the bound; the fold budget already had this
+  shape for server-produced puts and the pushed ones need their own.
 
 ## Self review
 

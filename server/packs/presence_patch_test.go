@@ -405,8 +405,10 @@ func TestPresencePatch(t *testing.T) {
 
 	// A put is stored as the client sent it and pulled by every client of the
 	// document, and no document size gate measures presence, so the size of
-	// one is the size of the fan-out it causes.
-	t.Run("a put over the size bound is refused", func(t *testing.T) {
+	// one is the size of the fan-out it causes. The push itself goes through:
+	// a client keeps a local change until it is acknowledged, so refusing the
+	// pack would stop the document syncing for good.
+	t.Run("a put over the size bound loses its presence and keeps the push", func(t *testing.T) {
 		docKey := helper.TestKey(t).String()
 		clientID, actorID := activate(t, "-k")
 
@@ -421,8 +423,32 @@ func TestPresencePatch(t *testing.T) {
 				})},
 			},
 		}))
-		require.Error(t, err)
-		assert.Equal(t, connect.CodeResourceExhausted, connect.CodeOf(err))
-		assert.Equal(t, "ErrPresenceTooLarge", converter.ErrorCodeOf(err))
+		require.NoError(t, err, "error code: %s", converter.ErrorCodeOf(err))
+
+		// The change was stored, so the peer pulls it; the presence it
+		// carried was not, so the peer is never sent the oversized put.
+		peerID, peerActorID := activate(t, "-l")
+		peerResp, err := testClient.AttachDocument(ctx, connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId: peerID,
+			ChangePack: &api.ChangePack{
+				DocumentKey: docKey,
+				Checkpoint:  &api.Checkpoint{ClientSeq: 1},
+				Changes: []*api.Change{presenceChange(peerActorID, 1, &api.PresenceChange{
+					Type:     api.PresenceChange_CHANGE_TYPE_PUT,
+					Presence: &api.Presence{Data: map[string]string{"name": "b"}},
+				})},
+			},
+		}))
+		require.NoError(t, err)
+
+		var pulled int
+		for _, c := range peerResp.Msg.ChangePack.Changes {
+			if hex.EncodeToString(c.Id.ActorId) != clientID {
+				continue
+			}
+			pulled++
+			assert.Nil(t, c.PresenceChange)
+		}
+		assert.Equal(t, 1, pulled)
 	})
 }

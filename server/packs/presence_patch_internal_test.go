@@ -30,7 +30,6 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/change"
 	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
-	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/cache"
@@ -635,60 +634,121 @@ func sizedPresence(size int) presence.Data {
 	return presence.Data{"blob": strings.Repeat("x", size-len("blob")-presenceEntryOverhead)}
 }
 
-func TestCheckPresenceSizes(t *testing.T) {
+func TestPresencePutBounds(t *testing.T) {
 	docKey := types.DocRefKey{ProjectID: types.ID(sessionActorHex), DocID: types.ID(stableActorHex)}
+	baseKey := cache.PresenceBaseKey{DocRefKey: docKey, ClientID: types.ID(sessionActorHex)}
+	cached := func(serverSeq int64, clientSeq uint32, data presence.Data) cache.PresenceBase {
+		return cache.PresenceBase{Checkpoint: change.NewCheckpoint(serverSeq, clientSeq), Epoch: 1, Presence: data}
+	}
 
-	t.Run("a put at the bound passes", func(t *testing.T) {
-		pack := presencePack(1, put(sizedPresence(maxPresencePutSize)))
+	t.Run("a put at the bound is stored as sent", func(t *testing.T) {
+		data := sizedPresence(maxPresencePutSize)
+		pack := presencePack(1, put(data))
 
-		assert.NoError(t, checkPresenceSizes(docKey, change.InitialCheckpoint, pack))
+		_, err := foldPresencePatches(newCacheBackend(t), clientAt(docKey, 0, 0), docKey, pack)
+		require.NoError(t, err)
+		assert.Equal(t, put(data), pack.Changes[0].PresenceChange())
 	})
 
-	t.Run("a put over the bound is refused", func(t *testing.T) {
+	t.Run("a put over the bound loses its presence and keeps the push", func(t *testing.T) {
 		pack := presencePack(1, put(sizedPresence(maxPresencePutSize+1)))
 
-		err := checkPresenceSizes(docKey, change.InitialCheckpoint, pack)
-		assert.ErrorIs(t, err, ErrPresenceTooLarge)
-		// The code reaches the client only when it survives the wrapper the
-		// message detail needs.
-		assert.Equal(t, "ErrPresenceTooLarge", errors.ErrorInfoOf(err).Code)
-		assert.Equal(t, errors.ErrCodeResourceExhausted, errors.StatusOf(err))
+		_, err := foldPresencePatches(newCacheBackend(t), clientAt(docKey, 0, 0), docKey, pack)
+		require.NoError(t, err)
+		assert.Nil(t, pack.Changes[0].PresenceChange())
 	})
 
 	// Nothing else bounds the key count, and a map entry costs far more than
 	// the two bytes a one-byte key and value weigh.
-	t.Run("a put of many tiny keys is refused", func(t *testing.T) {
+	t.Run("a put of many tiny keys loses its presence", func(t *testing.T) {
 		many := presence.Data{}
 		for i := range maxPresencePutSize/presenceEntryOverhead + 1 {
 			many[strconv.Itoa(i)] = "x"
 		}
+		pack := presencePack(1, put(many))
 
-		assert.ErrorIs(t, checkPresenceSizes(docKey, change.InitialCheckpoint, presencePack(1, put(many))),
-			ErrPresenceTooLarge)
+		_, err := foldPresencePatches(newCacheBackend(t), clientAt(docKey, 0, 0), docKey, pack)
+		require.NoError(t, err)
+		assert.Nil(t, pack.Changes[0].PresenceChange())
 	})
 
-	// pushPack drops it, so the fan-out this bounds never happens; a client
-	// resending one pushed before the bound existed must not be refused.
-	t.Run("a put at or below the checkpoint is not measured", func(t *testing.T) {
-		pack := presencePack(1,
+	// The sender's presence moved on with a put the server did not store, so
+	// the presence it held from before that put is no longer the sender's.
+	t.Run("a put over the bound drops the base instead of leaving a stale one", func(t *testing.T) {
+		be := newCacheBackend(t)
+		be.Cache.PresenceBase.Add(baseKey, cached(7, 3, presence.Data{"name": "a"}))
+		clientInfo := clientAt(docKey, 7, 3)
+		cp := change.NewCheckpoint(7, 3)
+		pack := presencePack(4, put(sizedPresence(maxPresencePutSize+1)))
+
+		fold, err := foldPresencePatches(be, clientInfo, docKey, pack)
+		require.NoError(t, err)
+		pullTo(clientInfo, docKey.DocID, 8, 4)
+		fold.commit(be, storedAs(clientInfo), docKey.DocID, afterPush(4), stored(t, docKey, cp, pack))
+
+		_, ok := be.Cache.PresenceBase.Get(baseKey)
+		assert.False(t, ok)
+	})
+
+	// Folding the next patch onto the presence from before the dropped put
+	// would store a presence the sender never held.
+	t.Run("a patch after a put over the bound is refused", func(t *testing.T) {
+		be := newCacheBackend(t)
+		be.Cache.PresenceBase.Add(baseKey, cached(7, 3, presence.Data{"name": "a"}))
+		pack := presencePack(4,
 			put(sizedPresence(maxPresencePutSize+1)),
-			put(presence.Data{"name": "a"}),
+			patch(presence.Data{"cursor": "1"}),
 		)
 
-		assert.NoError(t, checkPresenceSizes(docKey, change.NewCheckpoint(7, 1), pack))
+		_, err := foldPresencePatches(be, clientAt(docKey, 7, 3), docKey, pack)
+		assert.ErrorIs(t, err, ErrPresenceBaseUnavailable)
 	})
 
-	// The fold refuses a patch whose result passes maxPresenceBaseSize, so no
-	// patch reaches the store as a put larger than that.
-	t.Run("a patch is not measured", func(t *testing.T) {
-		pack := presencePack(1, patch(sizedPresence(maxPresencePutSize+1)))
+	// Only clientSeq continuity bounds how many changes a pack carries, so
+	// without a per-pack budget a few hundred puts at the per-put bound would
+	// reproduce the fan-out that bound caps.
+	t.Run("puts past the pack budget share the put of their last change", func(t *testing.T) {
+		// Puts at the per-put bound, so the budget pays for exactly
+		// maxPresencePutPerPack / maxPresencePutSize of them, and each is a
+		// different size so the put kept at the end names which one it is.
+		var pcs []*presence.Change
+		paid := maxPresencePutPerPack / maxPresencePutSize
+		for i := range paid + 2 {
+			pcs = append(pcs, put(sizedPresence(maxPresencePutSize-i)))
+		}
+		pack := presencePack(1, pcs...)
 
-		assert.NoError(t, checkPresenceSizes(docKey, change.InitialCheckpoint, pack))
+		_, err := foldPresencePatches(newCacheBackend(t), clientAt(docKey, 0, 0), docKey, pack)
+		require.NoError(t, err)
+		for i := range paid {
+			assert.Equal(t, pcs[i], pack.Changes[i].PresenceChange(), "change %d", i)
+		}
+		// The rest of the run costs one put between them, and it carries the
+		// presence the sender holds.
+		assert.Nil(t, pack.Changes[paid].PresenceChange())
+		assert.Equal(t, pcs[paid+1], pack.Changes[paid+1].PresenceChange())
 	})
 
-	t.Run("a clear and a change without presence are not measured", func(t *testing.T) {
-		pack := presencePack(1, clearChange(), nil)
+	// pushPack drops it, so the fan-out these bound never happens; a client
+	// resending one pushed before the bounds existed must not lose it.
+	t.Run("a put at or below the checkpoint is not measured", func(t *testing.T) {
+		data := sizedPresence(maxPresencePutSize + 1)
+		pack := presencePack(1, put(data))
 
-		assert.NoError(t, checkPresenceSizes(docKey, change.InitialCheckpoint, pack))
+		_, err := foldPresencePatches(newCacheBackend(t), clientAt(docKey, 7, 1), docKey, pack)
+		require.NoError(t, err)
+		assert.Equal(t, put(data), pack.Changes[0].PresenceChange())
+	})
+
+	// A client keeps a local change until the server acknowledges it, so a
+	// refused pack is pushed again unchanged -- including the pack that
+	// detaches the client, which ends with a clear.
+	t.Run("a detach pack carrying a put over the bound is not refused", func(t *testing.T) {
+		pack := presencePack(1, put(sizedPresence(maxPresencePutSize+1)), clearChange())
+
+		_, err := foldPresencePatches(newCacheBackend(t), clientAt(docKey, 0, 0), docKey, pack)
+		require.NoError(t, err)
+		assert.Nil(t, pack.Changes[0].PresenceChange())
+		assert.Equal(t, clearChange(), pack.Changes[1].PresenceChange())
 	})
 }
