@@ -22,14 +22,14 @@ A purged document reads as gone on every node, not just in MongoDB.
 
 ## Tasks
 
-- [ ] Add `DocRefKey.CacheKey()` and `ParseDocRefKey` to
+- [x] Add `DocRefKey.CacheKey()` and `ParseDocRefKey` to
       `api/types/resource_ref_key.go`, mirroring the client ref key pair.
-- [ ] Handle `types.CacheTypeDocument` in `mongo.Client.InvalidateCache`.
-- [ ] Drop the `docCache` entry in `mongo.Client.PurgeDocument`.
-- [ ] Broadcast `CacheTypeDocument` invalidation from `packs.Purge` after the
+- [x] Handle `types.CacheTypeDocument` in `mongo.Client.InvalidateCache`.
+- [x] Drop the `docCache` entry in `mongo.Client.PurgeDocument`.
+- [x] Broadcast `CacheTypeDocument` invalidation from `packs.Purge` after the
       purge lands; log failures rather than returning them, as the client
       broadcast does — the delete has already happened.
-- [ ] Tests: ref-key parse round trip; warm the document cache in
+- [x] Tests: ref-key parse round trip; warm the document cache in
       `testcases.RunPurgeDocument` before purging so a cache-first read of a
       purged document fails the suite.
 
