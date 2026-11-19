@@ -172,16 +172,29 @@ func (y Counter) isElement() {}
 func (y Text) isElement()    {}
 func (y Tree) isElement()    {}
 
-// Validate reports whether the counter carries a payload the apply path
-// accepts. Only a dedup counter has one: its registers are raw HLL state,
-// and json.Object.SetYSONElement and json.Array.AddYSON panic rather than
-// return when restoring them fails. A counter decoded from YSON text was
-// already checked in parseDedupCounter, so this is for values built in Go —
-// client.WithInitialRoot takes one straight from the caller.
+// Validate reports whether the counter is one the apply path can build.
+// json.Object.SetYSONElement and json.Array.AddYSON panic rather than return
+// when building it fails, so the two ways it can fail are checked here:
+// crdt.NewCounter rejects an unknown type and a value the type cannot hold,
+// and RestoreHLL rejects registers of the wrong length. A counter decoded
+// from YSON text was already checked in parseDedupCounter, so this is for
+// values built in Go — client.WithInitialRoot takes one straight from the
+// caller.
 // An empty payload is accepted like a nil one: setNewCounter skips the
 // restore for it and the decoder hands an empty payload back as nil.
 func (y Counter) Validate() error {
-	if y.Type != crdt.IntegerDedupCnt || len(y.Registers) == 0 {
+	// A dedup counter ignores Value, and constructing one to learn that
+	// would allocate a 16KB HLL this check has no use for.
+	if y.Type != crdt.IntegerDedupCnt {
+		if _, err := crdt.NewCounter(y.Type, y.Value, nil); err != nil {
+			return fmt.Errorf("validate counter: %w: %w", err, ErrInvalidYSON)
+		}
+	}
+
+	// Registers are raw HLL state. RestoreHLL takes them for whatever type
+	// carries them, creating the HLL when there is none, so the length is
+	// checked for a normal counter too rather than for dedup alone.
+	if len(y.Registers) == 0 {
 		return nil
 	}
 
@@ -196,7 +209,7 @@ func (y Counter) Validate() error {
 // accepts, recursing into nested objects and arrays.
 func (y Object) Validate() error {
 	for key, value := range y {
-		if err := validateElement(value); err != nil {
+		if err := ValidateElement(value); err != nil {
 			return fmt.Errorf("validate %q: %w", key, err)
 		}
 	}
@@ -208,7 +221,7 @@ func (y Object) Validate() error {
 // accepts, recursing into nested objects and arrays.
 func (y Array) Validate() error {
 	for i, elem := range y {
-		if err := validateElement(elem); err != nil {
+		if err := ValidateElement(elem); err != nil {
 			return fmt.Errorf("validate %d: %w", i, err)
 		}
 	}
@@ -216,9 +229,51 @@ func (y Array) Validate() error {
 	return nil
 }
 
-// validateElement validates any element type. Types without a payload the
-// apply path can reject — primitives, Text and Tree — pass unconditionally.
-func validateElement(elem any) error {
+// Validate reports whether the tree is one the apply path can build. Its root
+// is built by buildRoot, which takes the root's children itself and ignores
+// its Value, so a text-typed root fails only when it carries children:
+// index.Node.Append refuses a text node as a parent.
+func (y Tree) Validate() error {
+	if y.Root.Type == TextNodeType && len(y.Root.Children) > 0 {
+		return fmt.Errorf("validate tree: text root with children: %w", ErrInvalidYSON)
+	}
+
+	for i, child := range y.Root.Children {
+		if err := validateTreeNode(child); err != nil {
+			return fmt.Errorf("validate tree %d: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
+// validateTreeNode validates a descendant of the tree root the way
+// json.buildDescendants builds it: a text node must carry a value, and the
+// children it may also carry are ignored rather than appended, so only an
+// element node is recursed into.
+func validateTreeNode(node TreeNode) error {
+	if node.Type == TextNodeType {
+		if len(node.Value) == 0 {
+			return fmt.Errorf("validate tree node: empty text node: %w", ErrInvalidYSON)
+		}
+
+		return nil
+	}
+
+	for i, child := range node.Children {
+		if err := validateTreeNode(child); err != nil {
+			return fmt.Errorf("validate %d: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
+// ValidateElement reports whether the given element is one the apply path
+// accepts. It mirrors json.Object.SetYSONElement and json.Array.AddYSON,
+// which panic rather than return for anything else: a value of a type they
+// do not carry reaches their default branch and panics there.
+func ValidateElement(elem any) error {
 	switch v := elem.(type) {
 	case Counter:
 		return v.Validate()
@@ -226,8 +281,16 @@ func validateElement(elem any) error {
 		return v.Validate()
 	case Array:
 		return v.Validate()
-	default:
+	case Tree:
+		return v.Validate()
+	case Text:
+		// Every node is applied with Text.Edit at the position the nodes
+		// before it end, which is in range by construction.
 		return nil
+	case nil, bool, int32, int64, float64, string, []byte, time.Time:
+		return nil
+	default:
+		return fmt.Errorf("validate %T: %w: %w", v, ErrUnsupported, ErrInvalidYSON)
 	}
 }
 

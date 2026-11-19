@@ -24,6 +24,24 @@
   to nil, so rejecting it would have made `Marshal` fail on a value that
   was previously fine and is harmless on the apply path.
 
+- The register payload was the narrowest of the apply path's panics, and a
+  guard that stops there reads as covering more than it does. The ways
+  `SetYSONElement`/`AddYSON` panic were enumerated instead:
+  `crdt.NewCounter` on a value its type cannot hold or an unknown type,
+  `RestoreHLL` on wrong-length registers *for any counter type* (it creates
+  the HLL when there is none, so a normal counter is not spared),
+  `buildDescendants` on an empty tree text node, `index.Node.Append` on a
+  text-typed tree root with children, and the default branch on a value of
+  a type it does not carry (`int` among them). `yson.ValidateElement`
+  mirrors that list, and a table test asserts each rejected value really
+  does panic on the apply path — the two drift apart otherwise.
+- A pre-RPC guard must be no stricter than the step it protects. Step 05
+  skips a key the document already holds, so validating the whole root
+  would refuse an attach over a value never read. `Attach` runs the same
+  `Get(k) != nil` test, and step 05 re-validates what it does set: a key
+  held at attach time can be deleted by a change in the pack the attach
+  applies, which would otherwise reach `SetYSONElement` unchecked.
+
 ## Verification
 
 `make lint`, `make verify-license`, `make verify-modernize` and

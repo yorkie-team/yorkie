@@ -38,6 +38,8 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/channel"
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/crdt"
+	"github.com/yorkie-team/yorkie/pkg/document/json"
+	"github.com/yorkie-team/yorkie/pkg/document/presence"
 	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/pkg/key"
 )
@@ -161,6 +163,66 @@ func TestAttachInitialRoot(t *testing.T) {
 		}))
 		assert.ErrorIs(t, err, yson.ErrInvalidYSON)
 		assert.Equal(t, attachable.StatusDetached, doc.Status())
+	})
+
+	// The same guard covers every other value SetYSONElement panics on, not
+	// the dedup payload alone.
+	t.Run("unsupported initial root value test", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.Handle(v1connect.NewYorkieServiceHandler(&activatingYorkieServer{}))
+		httpServer := httptest.NewServer(mux)
+		defer httpServer.Close()
+
+		cli, err := client.Dial(httpServer.URL)
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Activate(context.Background()))
+
+		for _, value := range []any{
+			1,
+			yson.Counter{Type: crdt.IntegerCnt, Value: "one"},
+			yson.Tree{Root: yson.TreeNode{
+				Type:     "doc",
+				Children: []yson.TreeNode{{Type: yson.TextNodeType}},
+			}},
+		} {
+			doc := document.New(key.Key("test-doc"))
+			err = cli.Attach(context.Background(), doc, client.WithInitialRoot(yson.Object{
+				"k": value,
+			}))
+			assert.ErrorIs(t, err, yson.ErrInvalidYSON)
+			assert.Equal(t, attachable.StatusDetached, doc.Status())
+		}
+	})
+
+	// The apply step skips a key the document already holds, so the guard
+	// must skip it too rather than refuse an attach over a value never read.
+	t.Run("value under an existing key test", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.Handle(v1connect.NewYorkieServiceHandler(&activatingYorkieServer{}))
+		httpServer := httptest.NewServer(mux)
+		defer httpServer.Close()
+
+		cli, err := client.Dial(httpServer.URL)
+		assert.NoError(t, err)
+		assert.NoError(t, cli.Activate(context.Background()))
+
+		doc := document.New(key.Key("test-doc"))
+		assert.NoError(t, doc.Update(func(r *json.Object, p *presence.Presence) error {
+			r.SetString("uv", "already here")
+			return nil
+		}))
+
+		// AttachDocument is left unimplemented, so reaching the RPC -- any
+		// error but the validation one -- is what shows the guard passed.
+		err = cli.Attach(context.Background(), doc, client.WithInitialRoot(yson.Object{
+			"uv": yson.Counter{
+				Type:      crdt.IntegerDedupCnt,
+				Value:     int32(15),
+				Registers: make([]byte, 4),
+			},
+		}))
+		assert.Error(t, err)
+		assert.NotErrorIs(t, err, yson.ErrInvalidYSON)
 	})
 }
 
