@@ -47,6 +47,17 @@
   guarantee directly — the client's next in-bound put is accepted on the
   following clientSeq, and the oversized presence never reaches a peer.
 
+- Dropping an oversized put is the only drop on this path that discards a
+  client's *final* presence. Every other one has a presence behind it: a
+  coalesced run keeps the put of its last change, and a patch is dropped for a
+  missing base only when a later put or clear in the same pack replaces the
+  presence anyway. So the sender is the replica left out of step rather than
+  its peers, and it converges only at its next snapshot pull —
+  `InternalDocument.applySnapshot` replaces the whole presence map, and the
+  dropped put was acknowledged, so it is not among the local changes replayed
+  afterwards. The rollback is silent; surfacing it needs a field on the push
+  reply, which is the SDK change the todo rules out of scope.
+
 ## Self review
 
 Not run: this branch was produced by the autonomous agent workflow, which is

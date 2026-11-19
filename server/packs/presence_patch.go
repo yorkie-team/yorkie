@@ -111,6 +111,16 @@ const maxPresenceFoldPerPack = 16 * maxPresenceBaseSize
 // presence. Dropping the presence is the same answer the fold gives a patch
 // it cannot pay for, and presence is latest-wins and lossy by design, so the
 // sender's peers hold its previous presence until its next push fits.
+//
+// Unlike every other drop on this path, the presence dropped here is the last
+// one the sender set, so the sender's own replica is the one left out of step:
+// it holds a presence no replica else does, and no reply tells it otherwise.
+// It converges on the server's view at its next snapshot pull, which replaces
+// the whole presence map (InternalDocument.applySnapshot) and so rolls the
+// sender back to the presence stored before the dropped put, or to none when
+// no put of this client was ever stored. Telling the sender instead would take
+// a field on the push reply, which is a protocol change and no client reads
+// one today.
 const maxPresencePutSize = 16 * maxPresenceBaseSize
 
 // maxPresencePutPerPack bounds the sum, in presenceSize, of the puts a client
@@ -246,7 +256,9 @@ func foldPresencePatches(
 			// with the presence -- the server no longer knows what presence
 			// the sender holds, so folding its next patch onto the presence
 			// from before this put would store a presence the sender never
-			// had.
+			// had. The sender itself is left holding a presence no other
+			// replica has, and converges on the server's only at its next
+			// snapshot pull; see maxPresencePutSize.
 			if size > maxPresencePutSize {
 				cn.SetPresenceChange(nil)
 				base, fold.base, coalesced = nil, nil, -1
