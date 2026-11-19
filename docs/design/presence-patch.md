@@ -189,6 +189,35 @@ many round trips as the pack has patches. A client that pushes each presence
 change as it happens never reaches the budget at all; one that batches
 hundreds of them into a single pack does.
 
+### Put size
+
+Both bounds above cover only presence the server itself produces: the entry
+it caches and the puts a fold writes. A `PUT` the client sent is exempt from
+both, since the client paid for it in the bytes it sent. That pays for the
+write, not for the fan-out: the put is stored as sent and then pulled by every
+client attached to the document, and presence is in no document size gate
+(`checkDocumentSize` measures operations, and `canGrow` is false for a
+presence-only change), so the only ceiling left would be the 16 MiB the RPC
+server reads — one request, N times its size on the way out.
+
+`checkPresenceSizes` runs in `PushPull` after the presence strip and before
+the fold, and refuses a push whose `PUT` passes `maxPresencePutSize` (64 KiB)
+with `ErrPresenceTooLarge` (`ResourceExhausted`, the status
+`ErrDocumentSizeExceedsLimit` and `ErrChangeTooLarge` carry). Nothing in the
+pack is stored. It measures only the changes above the client's checkpoint,
+the ones `pushPack` stores, so a client resending an already-acked change is
+not refused for a presence the server accepted before the bound existed.
+Patches are not measured: the fold already refuses one whose result passes
+`maxPresenceBaseSize`.
+
+The bound is not `maxPresenceBaseSize`. A presence above that works today — it
+is never cached nor folded into, so the client pushes full puts — and
+refusing it here would break clients that work now, including the ~7.4 KB
+presence that motivated patches. Unlike passing the fold budget, an oversized
+put is a property of the presence the client chose rather than of the pack's
+shape, so refusing is the right answer: a smaller presence clears it, and a
+resend of the same pack is correctly refused again.
+
 ### Risks and Mitigation
 
 | Risk | Mitigation |
@@ -200,6 +229,7 @@ hundreds of them into a single pack does.
 | Cache memory | LRU bounded by `--presence-base-cache-size` (default 10,000) entries, and each entry by `maxPresenceBaseSize` (4 KiB), since presence is in no document size gate. The product, about 40 MiB, is the ceiling |
 | A presence of many tiny keys costing far more memory than its bytes | `presenceSize` counts `presenceEntryOverhead` (64 B) per key as well as the key and value bytes, so the 4 KiB bound also caps a presence at 64 keys and the 40 MiB ceiling holds whatever shape the presence has |
 | A small patch expanding into a large stored and fanned-out put | The fold refuses a patch whose result would pass the same 4 KiB bound, so a folded put costs at most that however large a presence the sender parked earlier. The client then pushes the presence as a full `PUT`, paying for its own bytes, as every client did before patches existed |
+| One oversized `PUT` the client sent being stored and pulled by every peer | The two bounds above cover only the presence the server produces, and no document size gate measures presence, so a put of any size the RPC server would read was stored verbatim and fanned out N times. `maxPresencePutSize` (64 KiB) refuses it with `ErrPresenceTooLarge` before anything in the pack is stored. See [Put size](#put-size) |
 | One pack of many small patches expanding into as many large puts | The 4 KiB bound is per put, and nothing bounds how many changes a pack carries, so it alone would let a single request of minimal patches be rewritten into one full presence per change, each stored and fanned out. `maxPresenceFoldPerPack` (64 KiB, 16 × the per-put bound) bounds the sum of a pack's folded puts; past it the patches of a run share the single `PUT` their last change carries, so the pack's folded output is the budget plus one put however many patches it holds. See [Fold budget](#fold-budget) |
 
 ### Design Decisions
@@ -212,6 +242,8 @@ hundreds of them into a single pack does.
 | Advertise on `ChangePack.capabilities` | It is the existing negotiation channel and is returned on push-pull as well as attach, so a client learns about an upgraded server without re-attaching |
 | Refuse the whole push when there is no base | See [No base](#no-base) |
 | Coalesce past the pack's fold budget instead of refusing | Passing the budget is a property of the pack's shape, so a refusal would recur on the resend. See [Fold budget](#fold-budget) |
+| Refuse an oversized `PUT` instead of coalescing it | It is a property of the presence the client chose, which only the client can change, and it carries no presence the server could fall back to. See [Put size](#put-size) |
+| Bound the pushed put on the push path, not in the converter | `converter.FromPresenceChange` is the decode path for stored rows as well as for the wire, so a bound there would turn a row stored before the bound into a read error on every pull |
 
 `api.ServerCapabilities` is emitted for the first time with this change, so it
 lists only `presence-patch`. It used to list `element-restore`, which the

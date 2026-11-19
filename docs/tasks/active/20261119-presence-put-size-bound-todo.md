@@ -57,9 +57,12 @@ puts it with `ErrDocumentSizeExceedsLimit` and `ErrChangeTooLarge`, the other
 - [x] `client.isWriteRejected` recognises the code, so the Go client's sync
       loop holds the document off instead of retrying a push that cannot
       succeed.
-- [x] Internal tests: an oversized put is refused; one at the bound passes; a
-      put below the checkpoint is not measured; a presence-disabled document
-      is not refused; a patch is not measured by this gate.
+- [x] Internal tests: a put at the bound passes; one over it is refused with
+      the code and status the client matches on; a put of many tiny keys is
+      refused; a put at or below the checkpoint, a patch, a clear and a
+      change without presence are not measured.
+- [x] An integration test driving an oversized put through `AttachDocument`,
+      so the refusal is checked against the real RPC surface.
 - [x] `docs/design/presence-patch.md`: a "Put size" section, the risk row and
       the decision row.
 

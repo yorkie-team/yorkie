@@ -21,6 +21,7 @@ package packs_test
 import (
 	"context"
 	"encoding/hex"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -400,5 +401,28 @@ func TestPresencePatch(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 		assert.Equal(t, "ErrPresenceBaseUnavailable", converter.ErrorCodeOf(err))
+	})
+
+	// A put is stored as the client sent it and pulled by every client of the
+	// document, and no document size gate measures presence, so the size of
+	// one is the size of the fan-out it causes.
+	t.Run("a put over the size bound is refused", func(t *testing.T) {
+		docKey := helper.TestKey(t).String()
+		clientID, actorID := activate(t, "-k")
+
+		_, err := testClient.AttachDocument(ctx, connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId: clientID,
+			ChangePack: &api.ChangePack{
+				DocumentKey: docKey,
+				Checkpoint:  &api.Checkpoint{ClientSeq: 1},
+				Changes: []*api.Change{presenceChange(actorID, 1, &api.PresenceChange{
+					Type:     api.PresenceChange_CHANGE_TYPE_PUT,
+					Presence: &api.Presence{Data: map[string]string{"blob": strings.Repeat("x", 64*1024)}},
+				})},
+			},
+		}))
+		require.Error(t, err)
+		assert.Equal(t, connect.CodeResourceExhausted, connect.CodeOf(err))
+		assert.Equal(t, "ErrPresenceTooLarge", converter.ErrorCodeOf(err))
 	})
 }
