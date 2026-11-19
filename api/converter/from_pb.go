@@ -527,13 +527,13 @@ func repairPresence(data presence.Data) presence.Data {
 
 	repaired := maps.Clone(data)
 	budget := maxPresenceRepairGrowth
-	var dropped []string
+	dropped := 0
 	for _, key := range broken {
 		value := repaired[key]
 		growth := presenceEncodeGrowth(value)
 		if growth > budget {
 			repaired[key] = emptyPresenceValue
-			dropped = append(dropped, key)
+			dropped++
 			continue
 		}
 
@@ -541,10 +541,13 @@ func repairPresence(data presence.Data) presence.Data {
 		repaired[key] = presence.EncodeValue(value)
 	}
 
-	if len(dropped) > 0 {
+	// Only the count: the keys are chosen by the client and their number is
+	// bounded by nothing, so naming them would let one push write a log line
+	// as large as the presence it carried.
+	if dropped > 0 {
 		logging.DefaultLogger().Warnf(
-			"presence repair budget (%d bytes) exhausted: replaced %d value(s) with %s, keys %q",
-			maxPresenceRepairGrowth, len(dropped), emptyPresenceValue, dropped,
+			"presence repair budget (%d bytes) exhausted: replaced %d value(s) with %s",
+			maxPresenceRepairGrowth, dropped, emptyPresenceValue,
 		)
 	}
 

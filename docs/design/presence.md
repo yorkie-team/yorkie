@@ -229,7 +229,9 @@ quotes put around it however long it is. A value the budget cannot afford
 becomes `""`, which loses nothing readable — a value reaching the repair is one
 every JS peer throws on today — and the budget is spent in key order, so two
 servers decoding the same bytes agree on the result. Dropping a value is logged
-as a warning with the keys it hit, so the rewrite is visible to operators. The
+as a warning with the number of values replaced, so the rewrite is visible to
+operators; the keys are left out, because the client picks them and nothing
+bounds how many there are. The
 growth count is exact for valid UTF-8 and an upper bound for invalid bytes,
 whose replacement differs between Go releases (`\ufffd` through 1.26, the raw
 U+FFFD from 1.27); counting the larger never lets the budget be overspent.
