@@ -28,8 +28,20 @@ import (
 )
 
 // repoFile reads a file by its path from the repository root.
+//
+// A provisioning source this file guards may not be a build/charts/**/*.yaml
+// file. .github/workflows/ci.yml picks the jobs to run from the changed paths
+// and negates that pattern as documentation, so the `build` job — the one that
+// runs `go test` — does not run at all for a pull request touching only such a
+// file. A guard that the edits it exists to catch skip is worse than no guard:
+// it reads green. The analytics chart therefore keeps its init script in .sql
+// and .sh files under build/charts/yorkie-analytics/files and renders the
+// ConfigMap from them with .Files.Get.
 func repoFile(t *testing.T, rel string) string {
 	t.Helper()
+
+	require.False(t, strings.HasPrefix(rel, "build/charts/") && strings.HasSuffix(rel, ".yaml"),
+		"%s: ci.yml reads build/charts/**/*.yaml as documentation and skips the job that runs this test", rel)
 
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", filepath.FromSlash(rel)))
 	require.NoError(t, err)
@@ -59,11 +71,8 @@ func TestSummaryRollupsAreProvisioned(t *testing.T) {
 	}{
 		{path: "build/docker/analytics/init-create-summary.sql", createsDDL: true},
 		{path: "build/docker/analytics/init-starrocks-database.sh", altersTable: true},
-		{
-			path:        "build/charts/yorkie-analytics/templates/starrocks/configmap.yaml",
-			createsDDL:  true,
-			altersTable: true,
-		},
+		{path: "build/charts/yorkie-analytics/files/init-create-summary.sql", createsDDL: true},
+		{path: "build/charts/yorkie-analytics/files/init-starrocks-database.sh", altersTable: true},
 	}
 
 	rollups := 0
@@ -115,7 +124,7 @@ func TestSummaryRollupProvisioningNeverFailsTheRun(t *testing.T) {
 
 		for _, path := range []string{
 			"build/docker/analytics/init-starrocks-database.sh",
-			"build/charts/yorkie-analytics/templates/starrocks/configmap.yaml",
+			"build/charts/yorkie-analytics/files/init-starrocks-database.sh",
 		} {
 			t.Run(d.summaryRollup+"/"+path, func(t *testing.T) {
 				body := repoFile(t, path)
