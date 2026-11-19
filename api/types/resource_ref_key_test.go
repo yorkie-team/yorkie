@@ -52,3 +52,33 @@ func TestClientRefKey(t *testing.T) {
 		}
 	})
 }
+
+func TestDocRefKey(t *testing.T) {
+	refKey := types.DocRefKey{
+		ProjectID: types.ID("000000000000000000000000"),
+		DocID:     types.ID("000000000000000000000001"),
+	}
+
+	t.Run("cache key round-trip test", func(t *testing.T) {
+		// A purge names the document by this key when it asks the other nodes
+		// to drop their cached copy of the row, so a key that does not
+		// round-trip leaves a purged document readable as present.
+		parsed, err := types.ParseDocRefKey(refKey.CacheKey())
+		assert.NoError(t, err)
+		assert.Equal(t, refKey, parsed)
+	})
+
+	t.Run("malformed cache key test", func(t *testing.T) {
+		for _, cacheKey := range []string{
+			"",
+			"000000000000000000000000",
+			"/000000000000000000000001",
+			"000000000000000000000000/",
+			"not-an-id/000000000000000000000001",
+			"000000000000000000000000/not-an-id",
+		} {
+			_, err := types.ParseDocRefKey(cacheKey)
+			assert.Error(t, err, "cache key: %q", cacheKey)
+		}
+	})
+}

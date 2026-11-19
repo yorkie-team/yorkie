@@ -2714,7 +2714,14 @@ func RunPurgeDocument(t *testing.T, db database.Database, projectID types.ID) {
 		assert.NoError(t, clientInfo.AttachDocument(docRefKey.DocID, false, docInfo.Epoch, 0, change.InitialCheckpoint))
 		assert.NoError(t, db.UpdateClientInfoAfterPushPull(ctx, clientInfo, docInfo))
 
-		// 02. Purge the document and check the document is purged.
+		// 02. Read the document back so a backend that caches the row holds
+		// an entry for it. The purge handler does the same read to compare
+		// the document key, so this is the state a real purge runs in: an
+		// eviction the purge misses leaves the document readable as present.
+		_, err := db.FindDocInfoByRefKey(ctx, docRefKey)
+		assert.NoError(t, err)
+
+		// 03. Purge the document and check the document is purged.
 		counts, err := db.PurgeDocument(ctx, docRefKey)
 		assert.NoError(t, err)
 		_, err = db.FindDocInfoByRefKey(ctx, docRefKey)
