@@ -308,6 +308,29 @@ constructor error, and `yson.Unmarshal` decodes untrusted input — admin
 `CreateDocument`/`UpdateDocument` bodies and `RestoreRevision`
 snapshots. An empty `"hll"` stays valid and decodes to nil registers.
 
+The decoder covers payloads that arrive as YSON *text* only. A
+`yson.Counter` assembled in Go — `client.WithInitialRoot` takes one from
+the caller and `Attach` applies it with `SetYSONElement` — never passes
+`parseDedupCounter`, so `Counter.Validate` runs the same check on a value
+in memory, and `Object.Validate`/`Array.Validate` recurse through a root.
+`Attach` validates the initial root before its first RPC, and
+`Counter.Marshal` validates before encoding so it refuses what `Unmarshal`
+refuses and a counter that cannot round-trip fails in the SDK rather than
+at the server. Both treat an empty payload as the decoder does: valid, and
+skipped by the restore.
+
+The register payload is only one of the ways `SetYSONElement` panics, so
+`yson.ValidateElement` covers the rest of what it and `AddYSON` build:
+a counter whose value its type cannot hold or whose type is unknown
+(`crdt.NewCounter`), a tree text node with no value or a text-typed root
+carrying children (`buildDescendants`/`index.Node.Append`), and a value of
+a type their default branch does not carry. Registers are length-checked
+for a normal counter too — `RestoreHLL` creates the HLL when there is
+none, so the type does not spare it. `Attach` checks only the keys the
+apply step would set, skipping those the document already holds, and that
+step re-checks what it sets, since a key held at attach time can be
+deleted by the pack the attach applies.
+
 #### CRDT → YSON Conversion (`to_yson.go`)
 
 Extend `toCounter()` to extract HLL bytes:
