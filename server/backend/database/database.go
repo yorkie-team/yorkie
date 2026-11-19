@@ -244,6 +244,10 @@ type Database interface {
 	// DeleteExpiredInviteInfos deletes expired invites and returns the number of deleted items.
 	DeleteExpiredInviteInfos(ctx context.Context, now gotime.Time) (int64, error)
 
+	// DeleteInviteInfosByCreator deletes every invite created by the given
+	// user. It succeeds when the user created none.
+	DeleteInviteInfosByCreator(ctx context.Context, userID types.ID) error
+
 	// ListProjectInfosByMember returns all projects that the user is a member of.
 	ListProjectInfosByMember(ctx context.Context, userID types.ID) ([]*ProjectInfo, error)
 

@@ -43,5 +43,29 @@ was run and none should be read as clean.
   with no `members` row, so an owner who self-deletes leaves a project nobody
   owns: rotation falls to a remaining `Admin` member, and a project with none
   cannot rotate at all. There is no ownership transfer and no `DeleteProject` to
-  fix it from outside, so it is recorded as an unmitigated risk rather than
-  papered over.
+  fix it from outside, so it was recorded as an unmitigated risk.
+
+### CI review panel, round 2
+
+- The member write does have to verify the user, and it can. `UpsertMemberInfo`
+  now resolves the user on both sides of its write: memdb serializes write
+  transactions so the check before the insert is enough there, and Mongo pairs
+  a check before with a check after that deletes the row it just wrote. The
+  pair closes the race with the second sweep rather than narrowing it — a row
+  written before the user document goes is swept, and one written after it is
+  reverted by its own re-check, whose read necessarily follows the deletion.
+  The tests that upserted fabricated user IDs (`projects_test.go`) now create
+  the users; relying on them was the reason the check was skipped the first
+  time, and it was not a good one.
+- Invites were the other writer nobody swept. `invites.Accept` grants the
+  invite's role without consulting its creator, so a link an admin created
+  before deleting the account kept handing out membership on a user ID that no
+  longer exists. `DeleteInviteInfosByCreator` sweeps them with the
+  memberships. memdb has no `created_by` index on `invites`, so the memory
+  backend filters a full scan, like `DeleteExpiredInviteInfos` does.
+- Refusing beats documenting for the owner case. Rather than leaving a live
+  project with an owner ID naming no user, `DeleteAccountByName` now returns
+  `ErrOwnedProjectExists` while the account owns any project. It is the only
+  remedy that fits inside this change — ownership transfer and `DeleteProject`
+  are new API surface — and it keeps the account, which can still be handed
+  over, instead of stranding the project.
