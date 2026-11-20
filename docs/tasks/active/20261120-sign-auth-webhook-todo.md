@@ -33,6 +33,24 @@ untouched, and a receiver that ignores the header sees no difference.
 Not an architecture change, so no `docs/design/` entry; the behavior is one
 header on an existing request.
 
+## Known limitation
+
+The project secret key is also a bearer credential: `API-Key <secretKey>`
+authenticates project-scoped `AdminService` calls with `database.Admin`
+authority (`server/rpc/interceptors/admin.go`). So a receiver that wants to
+verify the signature has to hold a credential that can also drive the
+project's admin API. That property is not introduced here — event webhooks
+already sign with the same key (`server/packs/pushpull.go`,
+`server/backend/webhook/manager.go`) — and verification stays opt-in: a
+receiver that ignores `X-Signature-256` is unaffected, and the HMAC tag
+does not disclose the key.
+
+Narrowing it means a webhook-only signing secret on the project, separate
+from the secret key: a new `ProjectInfo` field, `api/types.Project`, the
+`AdminService` update path and its generated protobuf, plus rotation and
+migration for existing projects. That is its own change, tracked apart
+from this one.
+
 ## Steps
 
 - [x] `server/rpc/auth/webhook.go`: pass `prj.SecretKey` as the HMAC key.
