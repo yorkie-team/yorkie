@@ -17,13 +17,17 @@
 package converter
 
 import (
+	"encoding/json"
 	goerrors "errors"
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	gotime "time"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/yorkie-team/yorkie/api/types"
 	"github.com/yorkie-team/yorkie/api/types/events"
@@ -36,6 +40,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document/time"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
+	"github.com/yorkie-team/yorkie/server/logging"
 )
 
 var (
@@ -377,6 +382,11 @@ func fromOperation(pbOp *api.Operation) (operations.Operation, error) {
 	}
 }
 
+// fromPresences decodes the presences carried by a stored snapshot. Like
+// FromPresenceChange it repairs rather than rejects, so a snapshot written
+// before presence values had to be JSON stays loadable -- and the document
+// rebuilt from it no longer carries the unparseable value into the next
+// snapshot it writes.
 func fromPresences(pbPresences map[string]*api.Presence) *presence.Map {
 	presences := presence.NewMap()
 	for id, pbPresence := range pbPresences {
@@ -385,6 +395,9 @@ func fromPresences(pbPresences map[string]*api.Presence) *presence.Map {
 	return presences
 }
 
+// fromPresence decodes a presence, repairing any value peers cannot parse; see
+// repairPresence. Every presence decode goes through here, so no path can hand
+// an unrepaired value onward.
 func fromPresence(pbPresence *api.Presence) presence.Data {
 	if pbPresence == nil {
 		return nil
@@ -392,13 +405,224 @@ func fromPresence(pbPresence *api.Presence) presence.Data {
 
 	data := pbPresence.GetData()
 	if data == nil {
-		data = presence.NewData()
+		return presence.NewData()
 	}
 
-	return data
+	return repairPresence(data)
+}
+
+// maxPresenceValueDepth bounds how deeply a presence value may nest. It exists
+// because "valid JSON" is a weaker predicate than "a peer can parse it": Go's
+// scanner accepts nesting up to 10000 levels, while a recursive-descent parser
+// such as V8's `JSON.parse` overflows its call stack well before that and
+// throws. A value that is valid JSON but nested beyond what peers can parse
+// wedges them exactly as unparseable text does, so it is repaired the same way.
+//
+// The bound is far above anything presence carries -- a cursor, a selection
+// range, a user label -- and far below where any parser gives out.
+const maxPresenceValueDepth = 100
+
+// parsablePresenceValue reports whether every peer can parse the given presence
+// value. That is the form a presence value takes on the wire: the JS SDK
+// `JSON.parse`s each one, so a value no parser accepts fails the whole pack
+// carrying it for every peer that reads it, and -- once the server has stored
+// it -- for every pull of that document thereafter.
+func parsablePresenceValue(value string) bool {
+	if !json.Valid([]byte(value)) {
+		return false
+	}
+
+	// Only a composite value can be nested, and most presence values are not
+	// one, so the scan below is skipped for the encoded strings and numbers
+	// that make up the ordinary case.
+	if !strings.ContainsAny(value, "{[") {
+		return true
+	}
+
+	return withinDepth(value, maxPresenceValueDepth)
+}
+
+// withinDepth reports whether the given JSON text nests no deeper than the
+// given limit. It is only ever called on text json.Valid has accepted, so it
+// tracks string literals -- where a brace is a character rather than a nesting
+// level -- and nothing else.
+func withinDepth(value string, limit int) bool {
+	var depth int
+	var inString, escaped bool
+	for i := range len(value) {
+		c := value[i]
+		if inString {
+			switch {
+			case escaped:
+				escaped = false
+			case c == '\\':
+				escaped = true
+			case c == '"':
+				inString = false
+			}
+			continue
+		}
+
+		switch c {
+		case '"':
+			inString = true
+		case '{', '[':
+			depth++
+			if depth > limit {
+				return false
+			}
+		case '}', ']':
+			depth--
+		}
+	}
+
+	return true
+}
+
+// repairPresence returns the given presence with every value peers cannot parse
+// JSON-encoded. It never writes to the map it is given: when a value needs
+// repair it repairs a copy. The encoders (ToPresence, ToPresenceChange) put a
+// live document's presence map into the protobuf message without copying it,
+// so an in-process encode then decode would otherwise rewrite -- and could race
+// on -- the sending document's own presence.
+//
+// The server is the only boundary that can keep such a value out of a document,
+// since a client speaking the RPC API directly runs no SDK's write path. It
+// repairs rather than rejects, because this decode sits on three paths with
+// incompatible needs: a pack pushed by a client, which may be running a Go SDK
+// older than the presence encoding and would otherwise be refused forever with
+// nothing it can do about it; a pack pulled from the server, which the Go
+// client decodes with this same function and where a rejection wedges the
+// client rather than protecting anyone; and rows and snapshots written before
+// the encoding existed, where rejecting makes the document permanently
+// unreadable.
+//
+// Encoding is the faithful repair rather than a convenient one: such a value is
+// a bare string a client wrote before the encoding existed, and the string it
+// stands for is itself. A Go reader saw that text before the repair
+// (presence.DecodeValue returns an unencoded value as it arrived) and sees the
+// same text after it; a JS reader goes from a thrown JSON.parse -- which fails
+// the entire pack carrying the value -- to that same text. No reader loses
+// anything, and what the server stores and later hands to a pulling client is a
+// value every peer can parse.
+//
+// The repair is also the one place in the decode that makes a presence bigger
+// than it arrived, so it is bounded; see maxPresenceRepairGrowth.
+func repairPresence(data presence.Data) presence.Data {
+	var broken []string
+	for key, value := range data {
+		if !parsablePresenceValue(value) {
+			broken = append(broken, key)
+		}
+	}
+	if len(broken) == 0 {
+		return data
+	}
+
+	// Sorted, so that which keys the growth budget reaches does not depend on
+	// Go's randomized map order: two servers decoding the same bytes -- an
+	// ingress on one and a snapshot read on another -- must agree on what the
+	// document holds.
+	slices.Sort(broken)
+
+	repaired := maps.Clone(data)
+	budget := maxPresenceRepairGrowth
+	dropped := 0
+	for _, key := range broken {
+		value := repaired[key]
+		growth := presenceEncodeGrowth(value)
+		if growth > budget {
+			repaired[key] = emptyPresenceValue
+			dropped++
+			continue
+		}
+
+		budget -= growth
+		repaired[key] = presence.EncodeValue(value)
+	}
+
+	// Only the count: the keys are chosen by the client and their number is
+	// bounded by nothing, so naming them would let one push write a log line
+	// as large as the presence it carried.
+	if dropped > 0 {
+		logging.DefaultLogger().Warnf(
+			"presence repair budget (%d bytes) exhausted: replaced %d value(s) with %s",
+			maxPresenceRepairGrowth, dropped, emptyPresenceValue,
+		)
+	}
+
+	return repaired
+}
+
+// maxPresenceRepairGrowth bounds how many bytes repairing one presence may add
+// to it, and emptyPresenceValue is what a value takes once the budget is spent.
+//
+// Encoding expands, and on the worst input it expands sixfold: a byte below
+// 0x20 becomes a six-byte `\u00XX` escape, and a byte that is not valid UTF-8
+// becomes a six-byte escape of U+FFFD. Protobuf carries those bytes in a
+// `string` field happily, and nothing bounds the size of a presence on the way
+// in -- presence is excluded from every document size gate -- so an unbounded
+// repair would let one push cost several times its own bytes in memory, in
+// what is stored, and again in the fan-out to every peer.
+//
+// Budgeting the growth rather than the size is what keeps the bound off the
+// values it exists for. A legacy bare string grows by the two quotes put
+// around it, whatever its length, so a whole presence of them spends a handful
+// of bytes; only escape-heavy content -- the shape that amplifies, and not one
+// any SDK writes -- runs the budget out. A value that does lose to the budget
+// loses nothing readable: a value reaching the repair at all is one every JS
+// peer throws on today.
+const (
+	maxPresenceRepairGrowth = 4 * 1024
+	emptyPresenceValue      = `""`
+)
+
+// presenceEncodeGrowth reports how many bytes presence.EncodeValue adds to the
+// given value, without building the encoded form: a value the budget cannot
+// afford is one the server declines to allocate in the first place, which is
+// the point of the bound on an input that may be megabytes of control bytes.
+//
+// The count is exact for valid UTF-8. For a byte that is not valid UTF-8 it is
+// an upper bound, because Go releases disagree on the replacement: through Go
+// 1.26 encoding/json writes the six-byte escape `�`, from Go 1.27 the
+// three raw bytes of U+FFFD. Counting the larger keeps the budget from being
+// overspent on either toolchain; it can only make the budget stricter on
+// content no SDK writes.
+func presenceEncodeGrowth(value string) int {
+	growth := len(`""`)
+	for i := 0; i < len(value); {
+		if c := value[i]; c < utf8.RuneSelf {
+			switch {
+			case c == '"', c == '\\', c == '\b', c == '\f', c == '\n', c == '\r', c == '\t':
+				growth++
+			case c < 0x20:
+				// Every other control byte becomes `\u00XX`.
+				growth += 5
+			}
+			i++
+			continue
+		}
+
+		r, size := utf8.DecodeRuneInString(value[i:])
+		switch {
+		case r == utf8.RuneError && size == 1:
+			// An invalid byte becomes U+FFFD: at most the six-byte escape,
+			// which is the upper bound counted here.
+			growth += 5
+		case r == '\u2028', r == '\u2029':
+			// Escaped because they are line terminators to a JS parser.
+			growth += 3
+		}
+		i += size
+	}
+
+	return growth
 }
 
 // FromPresenceChange converts the given Protobuf formats to model format.
+//
+// A presence value peers cannot parse is repaired rather than rejected; see
+// repairPresence for why no caller of this can afford the rejection.
 func FromPresenceChange(pbPresenceChange *api.PresenceChange) (*presence.Change, error) {
 	if pbPresenceChange == nil {
 		return nil, nil
