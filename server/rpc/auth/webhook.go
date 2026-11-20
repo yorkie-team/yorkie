@@ -91,10 +91,12 @@ func verifyAccess(
 		gen = currentCacheGen()
 	}
 
+	// Signed with the project's secret key, the same key the event webhook
+	// signs with, so one verifier on the receiver accepts both.
 	res, status, err := be.AuthWebhookClient.Send(
 		ctx,
 		prj.AuthWebhookURL,
-		"",
+		prj.SecretKey,
 		body,
 		options,
 	)

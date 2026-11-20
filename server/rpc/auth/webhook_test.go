@@ -18,9 +18,15 @@ package auth
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -37,16 +43,36 @@ import (
 
 // webhookStub answers every request with the given status and counts calls.
 // started and block, when set before the first request, let a test hold an
-// answer in flight.
+// answer in flight. It also keeps the last request's signature and body, so
+// a test can check what was signed.
 type webhookStub struct {
 	status  atomic.Int32
 	calls   atomic.Int32
 	started chan struct{}
 	block   chan struct{}
+
+	mu        sync.Mutex
+	signature string
+	body      []byte
 }
 
-func (s *webhookStub) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+// lastRequest returns the signature header and body of the last request.
+func (s *webhookStub) lastRequest() (string, []byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.signature, s.body
+}
+
+func (s *webhookStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.calls.Add(1)
+
+	body, err := io.ReadAll(r.Body)
+	if err == nil {
+		s.mu.Lock()
+		s.signature, s.body = r.Header.Get("X-Signature-256"), body
+		s.mu.Unlock()
+	}
+
 	if s.started != nil {
 		s.started <- struct{}{}
 	}
@@ -84,6 +110,7 @@ func newWebhookTestWithConfig(
 
 	project := &types.Project{
 		PublicKey:                  "public-key",
+		SecretKey:                  "secret-key",
 		AuthWebhookURL:             srv.URL,
 		AuthWebhookMethods:         []string{string(types.Watch)},
 		AuthWebhookMaxRetries:      10,
@@ -109,6 +136,39 @@ func webhookCacheKey(t *testing.T, prj *types.Project, token string, access *typ
 	})
 	require.NoError(t, err)
 	return generateCacheKey(prj.PublicKey, body)
+}
+
+func TestVerifyAccessSignsRequest(t *testing.T) {
+	ctx := context.Background()
+
+	// signatureOf returns the header the receiver expects over the body.
+	signatureOf := func(key string, body []byte) string {
+		mac := hmac.New(sha256.New, []byte(key))
+		_, err := mac.Write(body)
+		require.NoError(t, err)
+		return fmt.Sprintf("sha256=%s", hex.EncodeToString(mac.Sum(nil)))
+	}
+
+	t.Run("the request is signed with the project's secret key", func(t *testing.T) {
+		be, project, stub := newWebhookTest(t)
+		access := watchOf("doc-1")
+
+		require.NoError(t, verifyAccess(ctx, be, project, "alice", access, false))
+
+		signature, body := stub.lastRequest()
+		assert.Equal(t, signatureOf(project.SecretKey, body), signature,
+			"a receiver that verifies the event webhook must accept this one too")
+		assert.NotEmpty(t, body)
+	})
+
+	t.Run("a recheck is signed as well", func(t *testing.T) {
+		be, project, stub := newWebhookTest(t)
+
+		require.NoError(t, verifyAccess(ctx, be, project, "alice", watchOf("doc-1"), true))
+
+		signature, body := stub.lastRequest()
+		assert.Equal(t, signatureOf(project.SecretKey, body), signature)
+	})
 }
 
 func TestVerifyAccessCacheDrop(t *testing.T) {
