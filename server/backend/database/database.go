@@ -224,6 +224,10 @@ type Database interface {
 	// DeleteMemberInfo deletes a member from the project.
 	DeleteMemberInfo(ctx context.Context, projectID types.ID, userID types.ID) error
 
+	// DeleteMemberInfosByUser deletes every membership of the given user. It
+	// succeeds when the user has none.
+	DeleteMemberInfosByUser(ctx context.Context, userID types.ID) error
+
 	// CreateInviteInfo creates a new reusable invite link for the project.
 	CreateInviteInfo(
 		ctx context.Context,
@@ -239,6 +243,10 @@ type Database interface {
 
 	// DeleteExpiredInviteInfos deletes expired invites and returns the number of deleted items.
 	DeleteExpiredInviteInfos(ctx context.Context, now gotime.Time) (int64, error)
+
+	// DeleteInviteInfosByCreator deletes every invite created by the given
+	// user. It succeeds when the user created none.
+	DeleteInviteInfosByCreator(ctx context.Context, userID types.ID) error
 
 	// ListProjectInfosByMember returns all projects that the user is a member of.
 	ListProjectInfosByMember(ctx context.Context, userID types.ID) ([]*ProjectInfo, error)

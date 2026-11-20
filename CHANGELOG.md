@@ -7,6 +7,25 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Fixed
+
+- Remove the user's project memberships and invites when the account is
+  deleted. `DeleteAccount` used to delete the user document alone, leaving
+  `members` rows that no API path could reach: `RemoveMember` resolves the user
+  by username and failed with `ErrUserNotFound`, and `ListMembers` failed for
+  the whole project on the missing user. Invite links the account created also
+  kept granting their role, because `AcceptInvite` never consults the invite's
+  creator. `UpsertMemberInfo` now refuses a membership for a user that does not
+  exist, so an accept racing the deletion cannot re-create an orphan row.
+  Existing orphan rows from accounts deleted before this change are not cleaned
+  up; removing them needs a manual delete of the `members` rows whose `user_id`
+  has no user.
+- Refuse `DeleteAccount` while the account still owns a project
+  (`ErrOwnedProjectExists`). A project records its owner as a bare user ID and
+  nothing transfers or deletes it, so deleting the owner left a live project
+  that no one could administer: its secret key kept granting full
+  project-scoped authority and could never be rotated.
+
 ## [v0.7.28] - 2026-11-16
 
 ### Fixed

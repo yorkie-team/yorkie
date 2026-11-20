@@ -752,6 +752,18 @@ func (d *DB) UpsertMemberInfo(
 	txn := d.db.Txn(true)
 	defer txn.Abort()
 
+	// A member row names its user by ID alone, so one naming a user that no
+	// longer exists can never be listed or removed again. memdb serializes
+	// write transactions, so resolving the user here keeps a membership from
+	// outliving the account it belongs to.
+	user, err := txn.First(tblUsers, "id", userID.String())
+	if err != nil {
+		return nil, fmt.Errorf("upsert project member: %w", err)
+	}
+	if user == nil {
+		return nil, fmt.Errorf("upsert member %s: %w", userID, database.ErrUserNotFound)
+	}
+
 	// Check if member already exists
 	existing, err := txn.First(tblMembers, "project_id_user_id", projectID.String(), userID.String())
 	if err != nil {
@@ -879,6 +891,24 @@ func (d *DB) DeleteMemberInfo(
 	return nil
 }
 
+// DeleteMemberInfosByUser deletes every membership of the given user. It
+// succeeds when the user has none, because its caller deletes an account
+// whether or not it joined a project.
+func (d *DB) DeleteMemberInfosByUser(
+	_ context.Context,
+	userID types.ID,
+) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	if _, err := txn.DeleteAll(tblMembers, "user_id", userID.String()); err != nil {
+		return fmt.Errorf("delete memberships of %s: %w", userID, err)
+	}
+	txn.Commit()
+
+	return nil
+}
+
 // CreateInviteInfo creates a new reusable invite link for the project.
 func (d *DB) CreateInviteInfo(
 	_ context.Context,
@@ -961,6 +991,41 @@ func (d *DB) DeleteExpiredInviteInfos(_ context.Context, now gotime.Time) (int64
 
 	txn.Commit()
 	return deleted, nil
+}
+
+// DeleteInviteInfosByCreator deletes every invite created by the given user. It
+// succeeds when the user created none, because its caller deletes an account
+// whether or not it invited anyone.
+func (d *DB) DeleteInviteInfosByCreator(_ context.Context, userID types.ID) error {
+	txn := d.db.Txn(true)
+	defer txn.Abort()
+
+	iter, err := txn.Get(tblInvites, "id")
+	if err != nil {
+		return fmt.Errorf("delete invites of %s: %w", userID, err)
+	}
+
+	// The invites are collected before being deleted, because deleting from
+	// the table the iterator walks is not defined.
+	var targets []*database.InviteInfo
+	for {
+		raw := iter.Next()
+		if raw == nil {
+			break
+		}
+		if invite := raw.(*database.InviteInfo); invite.CreatedBy == userID {
+			targets = append(targets, invite)
+		}
+	}
+
+	for _, invite := range targets {
+		if err := txn.Delete(tblInvites, invite); err != nil {
+			return fmt.Errorf("delete invites of %s: %w", userID, err)
+		}
+	}
+
+	txn.Commit()
+	return nil
 }
 
 // ListProjectInfosByMember returns all projects that the user is a member of.

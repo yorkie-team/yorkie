@@ -58,18 +58,21 @@ func TestSecretKeyVisibility(t *testing.T) {
 	ctx := context.Background()
 	be := newTestBackend(t)
 
-	const (
-		adminID  = types.ID("000000000000000000000001")
-		memberID = types.ID("000000000000000000000002")
-	)
+	// A membership names a real account: the member write refuses a row keyed
+	// by a user that does not exist, because such a row could never be listed
+	// or removed again.
+	admin, err := be.DB.CreateUserInfo(ctx, t.Name()+"-admin", "pw")
+	assert.NoError(t, err)
+	member, err := be.DB.CreateUserInfo(ctx, t.Name()+"-member", "pw")
+	assert.NoError(t, err)
 
 	info, err := be.DB.CreateProjectInfo(ctx, t.Name(), testOwnerID)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, info.SecretKey)
 
-	_, err = be.DB.UpsertMemberInfo(ctx, info.ID, adminID, testOwnerID, database.Admin)
+	_, err = be.DB.UpsertMemberInfo(ctx, info.ID, admin.ID, testOwnerID, database.Admin)
 	assert.NoError(t, err)
-	_, err = be.DB.UpsertMemberInfo(ctx, info.ID, memberID, testOwnerID, database.Member)
+	_, err = be.DB.UpsertMemberInfo(ctx, info.ID, member.ID, testOwnerID, database.Member)
 	assert.NoError(t, err)
 
 	tests := []struct {
@@ -79,8 +82,8 @@ func TestSecretKeyVisibility(t *testing.T) {
 		secretKey string
 	}{
 		{"owner", testOwnerID, database.Owner, info.SecretKey},
-		{"admin", adminID, database.Admin, info.SecretKey},
-		{"member", memberID, database.Member, ""},
+		{"admin", admin.ID, database.Admin, info.SecretKey},
+		{"member", member.ID, database.Member, ""},
 	}
 
 	t.Run("project and role test", func(t *testing.T) {
@@ -113,7 +116,7 @@ func TestSecretKeyVisibility(t *testing.T) {
 	t.Run("unresolved member role test", func(t *testing.T) {
 		be := &backend.Backend{DB: failingMemberDB{be.DB}, Lockers: sync.New()}
 
-		list, err := projects.ListProjects(ctx, be, memberID)
+		list, err := projects.ListProjects(ctx, be, member.ID)
 		assert.NoError(t, err)
 		assert.Len(t, list, 1)
 		assert.Equal(t, info.ID, list[0].ID)
