@@ -21,6 +21,7 @@ package packs_test
 import (
 	"context"
 	"encoding/hex"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -406,5 +407,71 @@ func TestPresencePatch(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 		assert.Equal(t, "ErrPresenceBaseUnavailable", converter.ErrorCodeOf(err))
+	})
+
+	// A put is stored as the client sent it and pulled by every client of the
+	// document, and no document size gate measures presence, so the size of
+	// one is the size of the fan-out it causes. The push itself goes through:
+	// a client keeps a local change until it is acknowledged, so refusing the
+	// pack would stop the document syncing for good.
+	t.Run("a put over the size bound loses its presence and keeps the push", func(t *testing.T) {
+		docKey := helper.TestKey(t).String()
+		clientID, actorID := activate(t, "-k")
+
+		attachResp, err := testClient.AttachDocument(ctx, connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId: clientID,
+			ChangePack: &api.ChangePack{
+				DocumentKey: docKey,
+				Checkpoint:  &api.Checkpoint{ClientSeq: 1},
+				Changes: []*api.Change{presenceChange(actorID, 1, &api.PresenceChange{
+					Type:     api.PresenceChange_CHANGE_TYPE_PUT,
+					Presence: &api.Presence{Data: map[string]string{"blob": strings.Repeat("x", 64*1024)}},
+				})},
+			},
+		}))
+		require.NoError(t, err, "error code: %s", converter.ErrorCodeOf(err))
+
+		// The push was acknowledged, so the client advances instead of
+		// resending the pack forever: its next put, within the bound, is
+		// accepted on the clientSeq that follows the dropped one.
+		_, err = testClient.PushPullChanges(ctx, connect.NewRequest(&api.PushPullChangesRequest{
+			ClientId:   clientID,
+			DocumentId: attachResp.Msg.DocumentId,
+			ChangePack: &api.ChangePack{
+				DocumentKey: docKey,
+				Checkpoint:  &api.Checkpoint{ServerSeq: attachResp.Msg.ChangePack.Checkpoint.ServerSeq, ClientSeq: 2},
+				Changes: []*api.Change{presenceChange(actorID, 2, &api.PresenceChange{
+					Type:     api.PresenceChange_CHANGE_TYPE_PUT,
+					Presence: &api.Presence{Data: map[string]string{"name": "a"}},
+				})},
+			},
+		}))
+		require.NoError(t, err, "error code: %s", converter.ErrorCodeOf(err))
+
+		// The peer is never sent the oversized put: the only presence it
+		// pulls from the client is the one that fit.
+		peerID, peerActorID := activate(t, "-l")
+		peerResp, err := testClient.AttachDocument(ctx, connect.NewRequest(&api.AttachDocumentRequest{
+			ClientId: peerID,
+			ChangePack: &api.ChangePack{
+				DocumentKey: docKey,
+				Checkpoint:  &api.Checkpoint{ClientSeq: 1},
+				Changes: []*api.Change{presenceChange(peerActorID, 1, &api.PresenceChange{
+					Type:     api.PresenceChange_CHANGE_TYPE_PUT,
+					Presence: &api.Presence{Data: map[string]string{"name": "b"}},
+				})},
+			},
+		}))
+		require.NoError(t, err)
+
+		var pulled []*api.PresenceChange
+		for _, c := range peerResp.Msg.ChangePack.Changes {
+			if hex.EncodeToString(c.Id.ActorId) == clientID && c.PresenceChange != nil {
+				pulled = append(pulled, c.PresenceChange)
+			}
+		}
+		require.Len(t, pulled, 1)
+		assert.Equal(t, api.PresenceChange_CHANGE_TYPE_PUT, pulled[0].Type)
+		assert.Equal(t, map[string]string{"name": "a"}, pulled[0].Presence.Data)
 	})
 }

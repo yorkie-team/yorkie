@@ -82,6 +82,67 @@ const maxPresenceBaseSize = 4 * 1024
 // sent.
 const maxPresenceFoldPerPack = 16 * maxPresenceBaseSize
 
+// maxPresencePutSize bounds the presence one put a client sends may carry.
+// The other two bounds cover only what the server itself produces: a cache
+// entry and the puts a fold writes. A put the client sent is exempt from both
+// because it is paid for in the bytes the client sent -- which pays for the
+// write, not for the fan-out. Presence is in no document size gate
+// (checkDocumentSize measures operations, and canGrow is false for a
+// presence-only change), so without this the only ceiling on a stored put is
+// the 16 MiB the RPC server reads, and that put is then pulled by every
+// client attached to the document: one request, N times its size out.
+//
+// It is not maxPresenceBaseSize. A presence above that bound works today --
+// it is never cached nor folded into, so the client pushes full puts, which
+// is what every client did before patches existed -- and refusing it here
+// would break clients that work now. At 16 times it, the same multiple the
+// pack fold budget uses, this is well above what a cursor or a selection
+// needs while bounding what one push costs each peer.
+//
+// A put past it loses its presence and keeps its place in the pack, rather
+// than the push being refused. The push cannot be refused: a client keeps a
+// local change until the server acknowledges it, so a pack the server never
+// stores is pushed again unchanged, and the document -- its operations
+// included -- would stop syncing for good. Keeping the change in the pack is
+// what acknowledges it: CreateChangeInfos advances the client's checkpoint
+// over every change it is handed, including the presence-only one that the
+// strip leaves carrying nothing and that it therefore persists nowhere. A
+// change that also carries operations keeps them and is stored without its
+// presence. Dropping the presence is the same answer the fold gives a patch
+// it cannot pay for, and presence is latest-wins and lossy by design, so the
+// sender's peers hold its previous presence until its next push fits.
+//
+// Unlike every other drop on this path, the presence dropped here is the last
+// one the sender set, so the sender's own replica is the one left out of step:
+// it holds a presence no replica else does, and no reply tells it otherwise.
+// It converges on the server's view at its next snapshot pull, which replaces
+// the whole presence map (InternalDocument.applySnapshot) and so rolls the
+// sender back to the presence stored before the dropped put, or to none when
+// no put of this client was ever stored. Telling the sender instead would take
+// a field on the push reply, which is a protocol change and no client reads
+// one today.
+const maxPresencePutSize = 16 * maxPresenceBaseSize
+
+// maxPresencePutPerPack bounds the sum, in presenceSize, of the puts a client
+// may push in one pack. maxPresencePutSize bounds one put; nothing bounds how
+// many a pack carries -- only clientSeq continuity has to hold -- so without
+// this a single request of a few hundred puts at the per-put bound reproduces
+// the fan-out that bound exists to cap, each put stored and pulled by every
+// client of the document.
+//
+// Past the budget the puts of a run share the single put their last change
+// carries, the way the fold coalesces patches past maxPresenceFoldPerPack:
+// the intermediate presences of a pack are the transient ones, and the one
+// kept at the end of the run is the presence the sender holds. So a pack's
+// stored puts cost the budget plus one put however many it carries.
+//
+// At four times maxPresenceFoldPerPack it sits well above what the fold
+// itself lets a pack produce, so a pack of puts near maxPresenceBaseSize --
+// the shape the fold budget pays for in full -- is not coalesced for being
+// the same size in puts the client sent, and well above a batched pack of a
+// few hundred ordinary presences.
+const maxPresencePutPerPack = 4 * maxPresenceFoldPerPack
+
 // presenceEntryOverhead is what one presence key costs beyond the bytes of its
 // key and value: two string headers in the map, the slack a Go map keeps per
 // slot, and the allocation behind each string. Counting it is what bounds the
@@ -124,6 +185,14 @@ type presenceFold struct {
 // maxPresenceFoldPerPack keep the push but share one put between them. It
 // returns nil when there is nothing to commit: no cached base and nothing to
 // push.
+//
+// The same walk bounds the puts the client sent: one over maxPresencePutSize
+// loses its presence, and the puts past maxPresencePutPerPack share the put
+// of the last change of their run. Neither refuses the push, so no presence
+// can wedge a client -- including the detach or remove pack it needs to leave
+// the document. It walks only the changes above the client's checkpoint, the
+// ones pushPack stores and every attached client then pulls, so a client
+// resending an already-stored change is unaffected by either bound.
 func foldPresencePatches(
 	be *backend.Backend,
 	clientInfo *database.ClientInfo,
@@ -162,7 +231,7 @@ func foldPresencePatches(
 		return nil, nil
 	}
 
-	base, folded := fold.base, 0
+	base, folded, pushed := fold.base, 0, 0
 	// coalesced is the index in pushables of the last patch the pack's fold
 	// budget did not pay for a put of. Such a patch loses its presence while
 	// the walk keeps folding it into base, and the presence the run of them
@@ -177,6 +246,36 @@ func foldPresencePatches(
 
 		switch pc.ChangeType {
 		case presence.Put:
+			size := presenceSize(pc.Presence)
+			// A put over the per-put bound loses its presence: what it
+			// would cost is not the bytes the client sent but those times
+			// every client of the document, and no document size gate
+			// measures presence. The change stays in the pack so the push is
+			// acknowledged -- it keeps any operations it carries, and when it
+			// carries none the store persists nothing for it. The base goes
+			// with the presence -- the server no longer knows what presence
+			// the sender holds, so folding its next patch onto the presence
+			// from before this put would store a presence the sender never
+			// had. The sender itself is left holding a presence no other
+			// replica has, and converges on the server's only at its next
+			// snapshot pull; see maxPresencePutSize.
+			if size > maxPresencePutSize {
+				cn.SetPresenceChange(nil)
+				base, fold.base, coalesced = nil, nil, -1
+				continue
+			}
+			// Past the pack's budget the puts of a run share one put, the
+			// last one of the run, so a pack's stored puts cost a constant
+			// however many it carries. Refusing the push instead would not
+			// converge: a client keeps a local change until it is
+			// acknowledged, so the same pack would be pushed again unchanged.
+			if pushed+size > maxPresencePutPerPack {
+				cn.SetPresenceChange(nil)
+				base, coalesced = pc.Presence, i
+				continue
+			}
+
+			pushed += size
 			base, coalesced = pc.Presence, -1
 		case presence.Clear:
 			base, coalesced = nil, -1
