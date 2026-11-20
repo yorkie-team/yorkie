@@ -38,6 +38,7 @@ import (
 // sequence that was known to need it, so it is pinned here at the level it
 // lives at.
 func TestToTreePosRejectsAChainEndingInAPurgedNode(t *testing.T) {
+
 	ctx := helper.TextChangeContext(helper.TestRoot())
 	tree := createHelloTree(t, ctx) // <r><p>hello</p></r>
 
@@ -51,11 +52,11 @@ func TestToTreePosRejectsAChainEndingInAPurgedNode(t *testing.T) {
 	require.True(t, p.IsRemoved())
 	require.True(t, text.IsRemoved())
 
-	// Purge <p> while its text child is still around. Purge clears the purged
-	// node's own parent link and touches none of its children, so the text
-	// node keeps pointing at a <p> that no longer hangs off the root.
-	require.NoError(t, tree.Purge(p))
-	require.Nil(t, p.Index.Parent, "purge unlinks the node it purges")
+	// Detach <p> while its text child still points at it. GC keeps a
+	// collected node in place as a skeleton, so no purge produces this state
+	// any more; it is built directly to pin the guard.
+	require.NoError(t, tree.Root().Index.RemoveChild(p.Index))
+	require.Nil(t, p.Index.Parent, "detaching unlinks the node")
 	require.NotNil(t, text.Index.Parent, "but leaves its children pointing at it")
 
 	// Resolving a position anchored at the text node now walks text -> <p> ->

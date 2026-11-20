@@ -1,27 +1,27 @@
 {
   "gen-all-132-min.json": {
-    "result": "fail",
-    "checks": "11101",
+    "result": "pass",
+    "checks": "11111",
     "digest": "ff9d164eed449c90",
     "xmlDigest": "ad11c9322a618e86"
   },
   "gen-all-193-min.json": {
-    "result": "fail",
-    "checks": "11101",
+    "result": "pass",
+    "checks": "11111",
     "digest": "016fb7f6bc1fc48c",
     "xmlDigest": "c81262dfe1b6245d"
   },
   "gen-all-83-min.json": {
-    "result": "error",
-    "checks": "10101",
-    "digest": "4678caa91d6423bc",
-    "xmlDigest": "4678caa91d6423bc"
+    "result": "pass",
+    "checks": "11111",
+    "digest": "bf9f78113e9880b8",
+    "xmlDigest": "e2f351b074a3d9e8"
   },
   "gen-merge-1631-min.json": {
-    "result": "error",
-    "checks": "10101",
-    "digest": "3d98ab4515c98242",
-    "xmlDigest": "3d98ab4515c98242"
+    "result": "pass",
+    "checks": "11111",
+    "digest": "7b22bcf3c3058147",
+    "xmlDigest": "737b96bb00d488ce"
   },
   "gen-merge-53-min.json": {
     "result": "diverged",
@@ -72,16 +72,16 @@
     "xmlDigest": "0255001f8de8fee1"
   },
   "i2169-redo-after-peer-insert-gc.json": {
-    "result": "fail",
-    "checks": "11101",
+    "result": "pass",
+    "checks": "11111",
     "digest": "28e2f59f05701b1b",
     "xmlDigest": "f49a9321f5e8b0a9"
   },
   "i2189-delete-empty-p-after-undo.json": {
-    "result": "fail",
-    "checks": "11101",
-    "digest": "2f80ef7574bf4c05",
-    "xmlDigest": "d5df3a6b72396302"
+    "result": "pass",
+    "checks": "11111",
+    "digest": "cbca304db5f53002",
+    "xmlDigest": "5701978835d219a3"
   },
   "i2190-concurrent-multilevel-deletes.json": {
     "result": "diverged",
@@ -108,10 +108,10 @@
     "xmlDigest": "ac9f349ebf370d9b"
   },
   "js1436-min-b.json": {
-    "result": "diverged",
-    "checks": "01101",
-    "digest": "6d72d46c25cc9022",
-    "xmlDigest": "41ee48fc767ed9ed"
+    "result": "pass",
+    "checks": "11111",
+    "digest": "d1072cbcf53e9a70",
+    "xmlDigest": "80d758b410292bd4"
   },
   "js1436-min-c.json": {
     "result": "diverged",
@@ -216,10 +216,10 @@
     "xmlDigest": "db41bf8a0a546ab6"
   },
   "ri-restore-element-and-text-in-one-change-around-enter.json": {
-    "result": "error",
-    "checks": "10101",
-    "digest": "d151092ccf9f9ed8",
-    "xmlDigest": "d151092ccf9f9ed8"
+    "result": "pass",
+    "checks": "11111",
+    "digest": "77582d75c090dca5",
+    "xmlDigest": "6e31b3d8840af0bb"
   },
   "ri-restore-element-left-of-enter.json": {
     "result": "pass",
@@ -228,16 +228,16 @@
     "xmlDigest": "571f980d5cd164a4"
   },
   "ri-restore-element-right-of-enter.json": {
-    "result": "fail",
-    "checks": "11101",
+    "result": "pass",
+    "checks": "11111",
     "digest": "8cca2a14925ff58c",
     "xmlDigest": "5ac19d8ea0efe58d"
   },
   "ri-restore-text-at-enter.json": {
-    "result": "error",
-    "checks": "10101",
-    "digest": "4a182a0b1486b5a3",
-    "xmlDigest": "4a182a0b1486b5a3"
+    "result": "pass",
+    "checks": "11111",
+    "digest": "28dc9ee6a053b748",
+    "xmlDigest": "9b500465a5f6d46e"
   },
   "ri-restore-text-left-of-enter.json": {
     "result": "pass",
@@ -252,8 +252,8 @@
     "xmlDigest": "3033337a4b7f6830"
   },
   "ri-restore-two-separate-text-ranges-around-enter.json": {
-    "result": "fail",
-    "checks": "11101",
+    "result": "pass",
+    "checks": "11111",
     "digest": "08bb72b1627f6c5a",
     "xmlDigest": "de3aa7ebcdc9bbcb"
   },
@@ -294,10 +294,10 @@
     "xmlDigest": "9bd77c4321c0e102"
   },
   "ri-retombstone-element-split-by-enter.json": {
-    "result": "error",
-    "checks": "10101",
-    "digest": "57e4ca2f7dce33ca",
-    "xmlDigest": "57e4ca2f7dce33ca"
+    "result": "pass",
+    "checks": "11111",
+    "digest": "658c3c494681e2c5",
+    "xmlDigest": "44c0bbd5c4e59da5"
   },
   "ri-retombstone-text-ending-at-enter.json": {
     "result": "pass",
@@ -452,8 +452,8 @@
   "split-product-walk-past-concurrent-insert.json": {
     "result": "pass",
     "checks": "11111",
-    "digest": "d6c820351f05e624",
-    "xmlDigest": "d4884033fb42d557"
+    "digest": "34dc6b72959bcf4a",
+    "xmlDigest": "943b95af975d4852"
   },
   "text-insert-sequential.json": {
     "result": "pass",
