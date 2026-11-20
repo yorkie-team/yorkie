@@ -34,3 +34,12 @@
     means `ProjectInfo`, `api/types.Project`, the `AdminService` update
     path and its generated protobuf, plus rotation and migration —
     none of them in this task's diff.
+- Round 2 (security lens): same item, unchanged, plus one constraint
+  found while weighing the one-file alternative. A derived key —
+  `HMAC(secretKey, label)` computed in `server/rpc/auth/webhook.go` —
+  would fit the diff and would separate both the key and the two
+  payload families, but it misses what #2416 reports: the receiver
+  behind that issue verifies with the project secret key, so a derived
+  signature leaves it answering `401`, which is the state the issue
+  asks to fix. Whichever key auth webhooks move to, event webhooks have
+  to move with them, and that is the stored-secret change above.

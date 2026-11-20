@@ -51,6 +51,17 @@ from the secret key: a new `ProjectInfo` field, `api/types.Project`, the
 migration for existing projects. That is its own change, tracked apart
 from this one.
 
+Deriving a per-family key here instead — `HMAC(secretKey, "auth-webhook")`
+— would stay inside this file and would give both key separation and
+domain separation against the event webhook body. It is not taken because
+it does not solve the reported problem: #2416 asks for the signature the
+receiver already verifies ("the same key the event webhook signs with, so
+one verifier works for both"), and the endpoint that prompted the issue
+verifies with the project's secret key today. Signed with a derived key,
+that endpoint still answers `401` and stays blocked, now needing a second
+key that nothing in the API hands out. Key separation has to arrive for
+both webhook families at once, through the stored-secret change above.
+
 ## Steps
 
 - [x] `server/rpc/auth/webhook.go`: pass `prj.SecretKey` as the HMAC key.
