@@ -1079,7 +1079,14 @@ func (c *Client) UpsertMemberInfo(
 		return nil, fmt.Errorf("upsert member: %w", err)
 	}
 
+	// Revert only when the user is confirmed gone. Any other error says nothing
+	// about the user, and the row may predate this call, since the upsert
+	// leaves an existing membership untouched.
 	if _, err := c.FindUserInfoByID(ctx, userID); err != nil {
+		if !errors.Is(err, database.ErrUserNotFound) {
+			return nil, err
+		}
+
 		if _, dErr := c.collection(ColMembers).DeleteOne(ctx, bson.M{
 			"project_id": projectID,
 			"user_id":    userID,
