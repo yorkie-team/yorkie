@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-18
+updated: 2026-11-20
 ---
 
 # Tasks Index
@@ -21,6 +21,7 @@ Track task-specific plan/review and lessons files using the active/archive layou
 | Task | Todo | Lessons |
 |---|---|---|
 | Property-based convergence tests for Json.Counter (2026-11-18) | [20261118-counter-property-convergence-todo.md](./active/20261118-counter-property-convergence-todo.md) | [20261118-counter-property-convergence-lessons.md](./active/20261118-counter-property-convergence-lessons.md) |
+| Stop trusting the wire Project in ClusterService GetDocument (2026-11-18) | [20261118-cluster-getdocument-project-trust-todo.md](./active/20261118-cluster-getdocument-project-trust-todo.md) | [20261118-cluster-getdocument-project-trust-lessons.md](./active/20261118-cluster-getdocument-project-trust-lessons.md) |
 | Make the agent workflows read the repository's values from configuration (2026-11-14) | [20261114-agent-harness-workflows-todo.md](./active/20261114-agent-harness-workflows-todo.md) | [20261114-agent-harness-workflows-lessons.md](./active/20261114-agent-harness-workflows-lessons.md) |
 | Tell a copy of the shared agent harness when it is behind (2026-11-14) | [20261114-agent-harness-notify-todo.md](./active/20261114-agent-harness-notify-todo.md) | [20261114-agent-harness-notify-lessons.md](./active/20261114-agent-harness-notify-lessons.md) |
 | Detect drift in copies of the shared agent harness (2026-11-14) | [20261114-agent-harness-manifest-todo.md](./active/20261114-agent-harness-manifest-todo.md) | [20261114-agent-harness-manifest-lessons.md](./active/20261114-agent-harness-manifest-lessons.md) |
@@ -40,5 +41,5 @@ Track task-specific plan/review and lessons files using the active/archive layou
 
 ## Archive
 
-- Archived task count: 121
+- Archived task count: 132
 - Archive index: [archive/README.md](./archive/README.md)

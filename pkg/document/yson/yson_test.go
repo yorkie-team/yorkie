@@ -1392,3 +1392,200 @@ func TestYSONPlainTypeField(t *testing.T) {
 		assert.Empty(t, obj)
 	})
 }
+
+func TestYSONValidate(t *testing.T) {
+	validRegisters := func() []byte {
+		registers := make([]byte, 16384)
+		registers[0] = 5
+		return registers
+	}
+
+	t.Run("dedup counter register length test", func(t *testing.T) {
+		assert.NoError(t, yson.Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(15),
+			Registers: validRegisters(),
+		}.Validate())
+
+		// An empty payload — nil or not — leaves the HLL untouched on the
+		// apply path, so Validate accepts it as the decoder does.
+		assert.NoError(t, yson.Counter{Type: crdt.IntegerDedupCnt, Value: int32(0)}.Validate())
+		assert.NoError(t, yson.Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(0),
+			Registers: []byte{},
+		}.Validate())
+
+		for _, length := range []int{1, 16383, 16385} {
+			err := yson.Counter{
+				Type:      crdt.IntegerDedupCnt,
+				Value:     int32(15),
+				Registers: make([]byte, length),
+			}.Validate()
+			assert.ErrorIs(t, err, yson.ErrInvalidYSON, "length %d", length)
+		}
+	})
+
+	t.Run("plain counter carries no payload test", func(t *testing.T) {
+		assert.NoError(t, yson.Counter{Type: crdt.IntegerCnt, Value: int32(1)}.Validate())
+		assert.NoError(t, yson.Counter{Type: crdt.LongCnt, Value: int64(1)}.Validate())
+	})
+
+	t.Run("plain counter register length test", func(t *testing.T) {
+		// RestoreHLL creates the HLL when the counter has none, so a normal
+		// counter carrying registers takes the same length check.
+		assert.NoError(t, yson.Counter{
+			Type:      crdt.IntegerCnt,
+			Value:     int32(1),
+			Registers: validRegisters(),
+		}.Validate())
+		assert.ErrorIs(t, yson.Counter{
+			Type:      crdt.IntegerCnt,
+			Value:     int32(1),
+			Registers: make([]byte, 4),
+		}.Validate(), yson.ErrInvalidYSON)
+	})
+
+	t.Run("counter value and type test", func(t *testing.T) {
+		// crdt.NewCounter rejects both, and the apply path panics on its
+		// error rather than returning it.
+		assert.ErrorIs(t, yson.Counter{
+			Type:  crdt.IntegerCnt,
+			Value: "one",
+		}.Validate(), yson.ErrInvalidYSON)
+		assert.ErrorIs(t, yson.Counter{
+			Type:  crdt.CounterType(99),
+			Value: int32(1),
+		}.Validate(), yson.ErrInvalidYSON)
+
+		// A dedup counter ignores Value, so no value makes it invalid.
+		assert.NoError(t, yson.Counter{Type: crdt.IntegerDedupCnt, Value: "one"}.Validate())
+	})
+
+	t.Run("unsupported primitive type test", func(t *testing.T) {
+		// SetYSONElement and AddYSON panic on anything their default branch
+		// does not carry -- a plain int among them.
+		assert.ErrorIs(t, yson.Object{"n": 1}.Validate(), yson.ErrInvalidYSON)
+		assert.ErrorIs(t, yson.Array{uint8(1)}.Validate(), yson.ErrInvalidYSON)
+		assert.ErrorIs(t, yson.Object{
+			"m": map[string]any{"a": 1},
+		}.Validate(), yson.ErrInvalidYSON)
+
+		assert.NoError(t, yson.Object{
+			"b": true, "i": int32(1), "l": int64(1), "d": 1.5,
+			"s": "s", "y": []byte{1}, "t": gotime.Now(), "n": nil,
+		}.Validate())
+	})
+
+	t.Run("tree node test", func(t *testing.T) {
+		// buildDescendants rejects a text node with no value.
+		assert.ErrorIs(t, yson.Object{"tr": yson.Tree{Root: yson.TreeNode{
+			Type:     "doc",
+			Children: []yson.TreeNode{{Type: yson.TextNodeType}},
+		}}}.Validate(), yson.ErrInvalidYSON)
+
+		// ... at any depth.
+		assert.ErrorIs(t, yson.Array{yson.Tree{Root: yson.TreeNode{
+			Type: "doc",
+			Children: []yson.TreeNode{{Type: "p", Children: []yson.TreeNode{
+				{Type: yson.TextNodeType, Value: "ok"},
+				{Type: yson.TextNodeType},
+			}}},
+		}}}.Validate(), yson.ErrInvalidYSON)
+
+		// buildRoot appends the root's children to it, which index.Node
+		// refuses for a text node.
+		assert.ErrorIs(t, yson.Object{"tr": yson.Tree{Root: yson.TreeNode{
+			Type:     yson.TextNodeType,
+			Value:    "ok",
+			Children: []yson.TreeNode{{Type: yson.TextNodeType, Value: "ok"}},
+		}}}.Validate(), yson.ErrInvalidYSON)
+
+		assert.NoError(t, yson.Object{"tr": yson.Tree{Root: yson.TreeNode{
+			Type: "doc",
+			Children: []yson.TreeNode{{Type: "p", Children: []yson.TreeNode{
+				{Type: yson.TextNodeType, Value: "ok"},
+			}}},
+		}}}.Validate())
+	})
+
+	t.Run("apply path agreement test", func(t *testing.T) {
+		// What Validate rejects is exactly what the apply path panics on.
+		for i, elem := range []any{
+			yson.Counter{Type: crdt.IntegerDedupCnt, Value: int32(1), Registers: make([]byte, 4)},
+			yson.Counter{Type: crdt.IntegerCnt, Value: "one"},
+			yson.Counter{Type: crdt.IntegerCnt, Value: int32(1), Registers: make([]byte, 4)},
+			1,
+			yson.Tree{Root: yson.TreeNode{
+				Type:     "doc",
+				Children: []yson.TreeNode{{Type: yson.TextNodeType}},
+			}},
+			yson.Tree{Root: yson.TreeNode{
+				Type:     yson.TextNodeType,
+				Value:    "ok",
+				Children: []yson.TreeNode{{Type: yson.TextNodeType, Value: "ok"}},
+			}},
+		} {
+			assert.ErrorIs(t, yson.Object{"k": elem}.Validate(), yson.ErrInvalidYSON, "elem %d", i)
+
+			doc := document.New("yson")
+			assert.Panics(t, func() {
+				_ = doc.Update(func(r *json.Object, p *presence.Presence) error {
+					r.SetYSONElement("k", elem)
+					return nil
+				})
+			}, "elem %d", i)
+		}
+	})
+
+	t.Run("nested container test", func(t *testing.T) {
+		malformed := yson.Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(15),
+			Registers: make([]byte, 4),
+		}
+		valid := yson.Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(15),
+			Registers: validRegisters(),
+		}
+
+		assert.ErrorIs(t, yson.Object{"uv": malformed}.Validate(), yson.ErrInvalidYSON)
+		assert.ErrorIs(t, yson.Array{malformed}.Validate(), yson.ErrInvalidYSON)
+		assert.ErrorIs(t, yson.Object{
+			"a": yson.Array{yson.Object{"uv": malformed}},
+		}.Validate(), yson.ErrInvalidYSON)
+
+		assert.NoError(t, yson.Object{
+			"a": yson.Array{yson.Object{"uv": valid}, int32(1), "s"},
+			"t": yson.Text{Nodes: []yson.TextNode{{Value: "hello"}}},
+		}.Validate())
+	})
+
+	t.Run("marshal rejects what unmarshal rejects test", func(t *testing.T) {
+		counter := yson.Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(15),
+			Registers: make([]byte, 4),
+		}
+		_, err := counter.Marshal()
+		assert.ErrorIs(t, err, yson.ErrInvalidYSON)
+
+		_, err = yson.Object{"uv": counter}.Marshal()
+		assert.ErrorIs(t, err, yson.ErrInvalidYSON)
+
+		_, err = yson.Array{counter}.Marshal()
+		assert.ErrorIs(t, err, yson.ErrInvalidYSON)
+
+		// The valid payload still round-trips.
+		marshalled, err := yson.Counter{
+			Type:      crdt.IntegerDedupCnt,
+			Value:     int32(15),
+			Registers: validRegisters(),
+		}.Marshal()
+		assert.NoError(t, err)
+		decoded := yson.Counter{}
+		assert.NoError(t, yson.Unmarshal(marshalled, &decoded))
+		assert.Equal(t, validRegisters(), decoded.Registers)
+	})
+}

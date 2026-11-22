@@ -182,6 +182,60 @@ The Go SDK joins that contract at its own boundary (`pkg/document/presence`):
 | Storage (snapshot, change) | encoded |
 | Admin/cluster `GetDocument(s)` summaries | encoded — built from `InternalDocument` |
 
+The server enforces the contract, because no SDK can: a client speaking the
+RPC API directly runs nobody's write path, and a presence value the server
+accepts is persisted in the change history and in the next snapshot and fanned
+out to every peer — so one unparseable value wedges every JS peer on that
+document, repeatedly, for as long as it is stored.
+
+`converter.FromPresenceChange` therefore **repairs rather than rejects**: a
+`PUT`/`PATCH` value no peer can parse is JSON-encoded (`repairPresence`, run
+by `fromPresence`, which every presence decode goes through), so what the
+server stores and fans out is always a value every peer parses. The repair
+writes to a copy, never to the message it decodes: `ToPresence` and
+`ToPresenceChange` put a live document's presence map into the message without
+copying it, so an in-place repair would rewrite the sender's own presence on any
+in-process encode then decode. "No peer can parse it" is wider than "not valid JSON":
+Go's scanner accepts nesting up to 10000 levels while a recursive-descent
+parser such as V8's `JSON.parse` overflows its stack first, so a value nested
+deeper than `maxPresenceValueDepth` (100 — far above any presence payload,
+far below where parsers give out) is repaired the same way.
+
+Repair rather than rejection is what the three callers of that decode need:
+
+| Caller | Why a rejection is not an option |
+| --- | --- |
+| Server ingress (`FromChangePack` at `yorkie_server.go`) | A client on a Go SDK older than `presence.EncodeValue` (added for 0.6.36) puts a bare string on the wire. Rejecting refuses its whole change pack — every document operation batched with it — on every retry, with nothing the client can do but upgrade. |
+| Go client pull (`client.Client`) | The same function decodes every server response. A value arriving from an older server would fail the pull permanently; the rejection would protect nobody and wedge the client. |
+| Stored rows and snapshots (`PresenceChangeFromBytes`, `fromPresences`) | A row written before the encoding existed would make its document permanently unreadable — the same hazard `FromStoredOperations` exists for. |
+
+Encoding is the faithful repair, not a convenient one: the value is a bare
+string, and the string it stands for is itself. A Go reader saw that text
+before the repair (`DecodeValue` returns an unencoded value as it arrived) and
+sees the same text after it; a JS reader goes from a thrown `JSON.parse` to
+that same text. So no rollout ordering is required — an upgraded server accepts
+every released client, and a document carrying legacy values heals as they are
+read.
+
+The repair is the one step of the decode that makes a presence larger than it
+arrived, so it is budgeted (`maxPresenceRepairGrowth`, 4 KiB per presence).
+Encoding expands escape-heavy input sixfold — a byte below `0x20` becomes a
+six-byte `\u00XX` — and nothing bounds the size of a presence on the way in,
+since presence is excluded from every document size gate; an unbounded repair
+would therefore let one push cost several times its own bytes in memory, in
+storage and in the fan-out. The budget is on growth rather than size, so it
+never reaches the values it exists for: a legacy bare string grows by the two
+quotes put around it however long it is. A value the budget cannot afford
+becomes `""`, which loses nothing readable — a value reaching the repair is one
+every JS peer throws on today — and the budget is spent in key order, so two
+servers decoding the same bytes agree on the result. Dropping a value is logged
+as a warning with the number of values replaced, so the rewrite is visible to
+operators; the keys are left out, because the client picks them and nothing
+bounds how many there are. The
+growth count is exact for valid UTF-8 and an upper bound for invalid bytes,
+whose replacement differs between Go releases (`\ufffd` through 1.26, the raw
+U+FFFD from 1.27); counting the larger never lets the budget be overspent.
+
 Three consequences are worth stating:
 
 - **Decoding is lenient.** A value that is not a JSON string decodes to itself.

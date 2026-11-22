@@ -19,10 +19,13 @@
 package integration
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1132,4 +1135,71 @@ func TestAuthWebhookInitialWatchDenied(t *testing.T) {
 	_, _, err = cli.WatchStream(doc2)
 	assert.NoError(t, err)
 	assert.NoError(t, cli.Detach(ctx, doc2))
+}
+
+// TestAuthWebhookSignature verifies that auth webhook requests carry an
+// X-Signature-256 over the request body, signed with the project's secret
+// key, so a receiver guarding both webhooks with one HMAC verifier accepts
+// the auth webhook as it already accepts the event webhook.
+func TestAuthWebhookSignature(t *testing.T) {
+	ctx := context.Background()
+
+	svr, err := server.New(helper.TestConfig())
+	assert.NoError(t, err)
+	assert.NoError(t, svr.Start())
+	defer func() { assert.NoError(t, svr.Shutdown(true)) }()
+
+	adminCli := helper.CreateAdminCli(t, svr.RPCAddr())
+	defer func() { adminCli.Close() }()
+
+	project, err := adminCli.CreateProject(ctx, "auth-webhook-signature")
+	assert.NoError(t, err)
+
+	token := xid.New().String()
+	var verified atomic.Int32
+	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		assert.NoError(t, err)
+
+		// The receiver refuses anything it cannot authenticate, as it does
+		// on the event webhook endpoint.
+		signature := r.Header.Get("X-Signature-256")
+		if err := helper.VerifySignature(signature, project.SecretKey, body); err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, err := (&types.AuthWebhookResponse{Reason: "missing webhook signature"}).Write(w)
+			assert.NoError(t, err)
+			return
+		}
+		verified.Add(1)
+
+		req, err := types.NewAuthWebhookRequest(bytes.NewReader(body))
+		assert.NoError(t, err)
+		assert.Equal(t, token, req.Token)
+
+		w.WriteHeader(http.StatusOK)
+		_, err = (&types.AuthWebhookResponse{Allowed: true}).Write(w)
+		assert.NoError(t, err)
+	}))
+	defer authServer.Close()
+
+	_, err = adminCli.UpdateProject(ctx, project.ID.String(), &types.UpdatableProjectFields{
+		AuthWebhookURL:     &authServer.URL,
+		AuthWebhookMethods: allWebhookMethods,
+	})
+	assert.NoError(t, err)
+
+	cli, err := client.Dial(
+		svr.RPCAddr(),
+		client.WithAPIKey(project.PublicKey),
+		client.WithToken(token),
+	)
+	assert.NoError(t, err)
+	defer func() { assert.NoError(t, cli.Close()) }()
+	assert.NoError(t, cli.Activate(ctx))
+	defer func() { assert.NoError(t, cli.Deactivate(ctx)) }()
+
+	doc := document.New(helper.TestKey(t))
+	assert.NoError(t, cli.Attach(ctx, doc))
+
+	assert.Positive(t, verified.Load())
 }

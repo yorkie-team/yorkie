@@ -239,6 +239,10 @@ func TestClient(t *testing.T) {
 		testcases.RunFindAttachedClientCountsByDocIDsTest(t, cli, dummyProjectID)
 	})
 
+	t.Run("RunPurgeDocument test", func(t *testing.T) {
+		testcases.RunPurgeDocument(t, cli, dummyProjectID)
+	})
+
 	t.Run("RunFindCandidates test", func(t *testing.T) {
 		testcases.RunFindCandidatesTest(t, cli, dummyProjectID)
 	})
@@ -360,6 +364,86 @@ func TestClient_AttachedClientLookupDoesNotCacheStaleRows(t *testing.T) {
 	cached, err := nodeB.FindClientInfoByRefKey(ctx, refKey)
 	require.NoError(t, err)
 	require.ErrorIs(t, cached.EnsureDocumentAttached(docInfo.ID), database.ErrDocumentNotAttached)
+}
+
+// TestClient_DocCacheInvalidationAcrossNodes checks that a purge performed on
+// one node becomes visible on another once the invalidation reaches it. The
+// document row is cached per node and the cache has no TTL, so without the
+// drop the second node keeps answering FindDocInfoByRefKey from a copy of a
+// row that no longer exists.
+func TestClient_DocCacheInvalidationAcrossNodes(t *testing.T) {
+	// Two clients on one database stand in for two server nodes: each keeps
+	// its own document cache.
+	ctx := context.Background()
+	nodeA := setupTestWithDummyData(t)
+	nodeB := setupTestWithDummyData(t)
+
+	info, err := nodeA.ActivateClient(ctx, dummyProjectID, t.Name(), nil)
+	require.NoError(t, err)
+	docInfo, err := nodeA.FindOrCreateDocInfo(
+		ctx, info.RefKey(), key.Key(fmt.Sprintf("tests$%s-%s", t.Name(), info.ID)), false,
+	)
+	require.NoError(t, err)
+	refKey := docInfo.RefKey()
+
+	// nodeB reads the document, which is what fills its cache.
+	_, err = nodeB.FindDocInfoByRefKey(ctx, refKey)
+	require.NoError(t, err)
+
+	_, err = nodeA.PurgeDocument(ctx, refKey)
+	require.NoError(t, err)
+
+	// This is the call the purge's cluster broadcast makes on every other
+	// node. Without it nodeB still reads the document it cached.
+	nodeB.InvalidateCache(types.CacheTypeDocument, refKey.CacheKey())
+
+	_, err = nodeB.FindDocInfoByRefKey(ctx, refKey)
+	require.ErrorIs(t, err, database.ErrDocumentNotFound)
+}
+
+// TestClient_DocCacheUnderReadRacingPurge checks that a read racing a purge
+// of the same document cannot leave the purged row in the cache. The read
+// fetches the row from MongoDB, then the purge deletes it and drops the
+// cached entry; if the read's cache fill lands after that drop, the purged
+// document reads back as present for good, as the cache has no TTL.
+func TestClient_DocCacheUnderReadRacingPurge(t *testing.T) {
+	ctx := context.Background()
+	cli := setupTestWithDummyData(t)
+
+	info, err := cli.ActivateClient(ctx, dummyProjectID, t.Name(), nil)
+	require.NoError(t, err)
+
+	for i := range 50 {
+		docInfo, err := cli.FindOrCreateDocInfo(
+			ctx,
+			info.RefKey(),
+			key.Key(fmt.Sprintf("tests$%s-%s-%d", t.Name(), info.ID, i)),
+			false,
+		)
+		require.NoError(t, err)
+		refKey := docInfo.RefKey()
+
+		// Creating the document cached it. Drop that entry so the read below
+		// is the miss that reads MongoDB and fills the cache, which is the
+		// race the purge has to survive.
+		cli.InvalidateCache(types.CacheTypeDocument, refKey.CacheKey())
+
+		var readErr, purgeErr error
+		var wg sync.WaitGroup
+		wg.Go(func() { _, readErr = cli.FindDocInfoByRefKey(ctx, refKey) })
+		wg.Go(func() { _, purgeErr = cli.PurgeDocument(ctx, refKey) })
+		wg.Wait()
+
+		require.NoError(t, purgeErr)
+		// The read may win or lose the race, but losing it must report the
+		// document as gone rather than as some other failure.
+		if readErr != nil {
+			require.ErrorIs(t, readErr, database.ErrDocumentNotFound)
+		}
+
+		_, err = cli.FindDocInfoByRefKey(ctx, refKey)
+		require.ErrorIs(t, err, database.ErrDocumentNotFound, "iteration %d", i)
+	}
 }
 
 func TestClient_CompactChangeInfosAcrossNodes(t *testing.T) {

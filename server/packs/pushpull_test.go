@@ -562,7 +562,8 @@ func TestPacks(t *testing.T) {
 					PresenceChange: &api.PresenceChange{
 						Type: api.PresenceChange_CHANGE_TYPE_PUT,
 						Presence: &api.Presence{
-							Data: map[string]string{"k": "v"},
+							// JSON-encoded, as the wire boundary requires.
+							Data: map[string]string{"k": `"v"`},
 						},
 					},
 				},
@@ -670,7 +671,8 @@ func TestPacks(t *testing.T) {
 					PresenceChange: &api.PresenceChange{
 						Type: api.PresenceChange_CHANGE_TYPE_PUT,
 						Presence: &api.Presence{
-							Data: map[string]string{"k": "v"},
+							// JSON-encoded, as the wire boundary requires.
+							Data: map[string]string{"k": `"v"`},
 						},
 					},
 				},

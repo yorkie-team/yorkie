@@ -84,6 +84,14 @@ type Client struct {
 	// one, and every later request of the client reads the stale copy: an
 	// attach that the database holds then fails with "document not attached".
 	clientLocks *locker.Locker
+
+	// docLocks serializes, per document, a read of the document row with the
+	// docCache update that follows it, and with the removals that invalidate
+	// that entry. Without it a read that fetched the row before a purge
+	// deleted it can Add that pre-purge copy right after the purge's Remove,
+	// and since docCache has no TTL, the purged document reads back as
+	// present for good.
+	docLocks *locker.Locker
 }
 
 // Dial creates an instance of Client and dials the given MongoDB.
@@ -194,6 +202,7 @@ func Dial(conf *Config) (*Client, error) {
 		clientCache:   clientCache,
 		clientLocks:   locker.New(),
 		docCache:      docCache,
+		docLocks:      locker.New(),
 		changeCache:   changeCache,
 		presenceCache: presenceCache,
 		vectorCache:   vectorCache,
@@ -251,6 +260,26 @@ func (c *Client) InvalidateCache(cacheType types.CacheType, key string) {
 			unlock()
 		} else {
 			logging.DefaultLogger().Warnf("invalidate client cache %s: %v", key, err)
+		}
+	case types.CacheTypeDocument:
+		// A document row is cached per node and a purge performed on another
+		// node leaves this node's copy in place, so FindDocInfoByRefKey keeps
+		// answering "present" for a row that no longer exists. Dropping the
+		// entry is what makes the purge visible here: the next read misses
+		// and re-reads MongoDB, which reports the document as gone.
+		//
+		// The drop takes the document's cache lock, which a read holds across
+		// its MongoDB FindOne and the Add that follows (see
+		// FindDocInfoByRefKey). Without it a read that fetched the row before
+		// the purge landed could Add that pre-purge copy right after this
+		// Remove, and since docCache has no TTL, the dropped row would be
+		// back for good.
+		if refKey, err := types.ParseDocRefKey(key); err == nil {
+			unlock := c.lockDocCache(refKey)
+			c.docCache.Remove(refKey)
+			unlock()
+		} else {
+			logging.DefaultLogger().Warnf("invalidate document cache %s: %v", key, err)
 		}
 	}
 }
@@ -1830,11 +1859,31 @@ func (c *Client) FindDocInfosByIDs(
 	return infos, nil
 }
 
+// lockDocCache locks the given document's entry of docLocks and returns its
+// unlock function.
+func (c *Client) lockDocCache(refKey types.DocRefKey) func() {
+	name := refKey.CacheKey()
+	c.docLocks.Lock(name)
+	return func() {
+		// Unlock fails only for a name that is not locked, which cannot
+		// happen here: this function locked it.
+		_ = c.docLocks.Unlock(name)
+	}
+}
+
 // FindDocInfoByRefKey finds a docInfo of the given refKey.
 func (c *Client) FindDocInfoByRefKey(
 	ctx context.Context,
 	refKey types.DocRefKey,
 ) (*database.DocInfo, error) {
+	if info, ok := c.docCache.Get(refKey); ok {
+		return info.DeepCopy(), nil
+	}
+
+	// A miss reads the row and fills the cache under the document's lock, so
+	// the copy read here cannot land after a purge dropped the entry.
+	unlock := c.lockDocCache(refKey)
+	defer unlock()
 	if info, ok := c.docCache.Get(refKey); ok {
 		return info.DeepCopy(), nil
 	}
@@ -3179,6 +3228,22 @@ func (c *Client) PurgeDocument(
 	}); err != nil {
 		return nil, fmt.Errorf("delete document of %s: %w", docRefKey, err)
 	}
+
+	// The row is gone, so the cached copy of it has to go as well:
+	// FindDocInfoByRefKey answers from docCache first and would keep reporting
+	// the purged document as present. This node is the one certain to hold an
+	// entry, since the purge handler reads the row to compare its key just
+	// before calling this.
+	//
+	// The drop runs after the delete and under the document's cache lock,
+	// which a read holds across its FindOne and the Add that follows: a read
+	// that fetched the row before the delete either filled the cache before
+	// this Remove, which then drops it, or fills it after and misses. Either
+	// way no pre-purge copy survives, which matters because docCache has no
+	// TTL and would otherwise hold it for good.
+	unlock := c.lockDocCache(docRefKey)
+	c.docCache.Remove(docRefKey)
+	unlock()
 
 	return res, nil
 }

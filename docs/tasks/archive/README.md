@@ -1,5 +1,5 @@
 ---
-updated: 2026-11-18
+updated: 2026-11-20
 ---
 
 # Tasks Archive
@@ -8,12 +8,23 @@ Completed task records, grouped by year/month.
 
 - Back to tasks index: [../README.md](../README.md)
 
-Total archived tasks: 121
+Total archived tasks: 132
 
-## 2026/11 (9 tasks)
+## 2026/11 (20 tasks)
 
 | Task | Todo | Lessons |
 |---|---|---|
+| Sign auth webhook requests with X-Signature-256 (2026-11-20) | [20261120-sign-auth-webhook-todo.md](./2026/11/20261120-sign-auth-webhook-todo.md) | [20261120-sign-auth-webhook-lessons.md](./2026/11/20261120-sign-auth-webhook-lessons.md) |
+| Validate a Go-built yson.Counter payload off the text decoder (2026-11-19) | [20261119-validate-yson-counter-payload-todo.md](./2026/11/20261119-validate-yson-counter-payload-todo.md) | [20261119-validate-yson-counter-payload-lessons.md](./2026/11/20261119-validate-yson-counter-payload-lessons.md) |
+| Keep a release record zero when nothing will collect the charge (2026-11-19) | [20261119-release-record-top-up-todo.md](./2026/11/20261119-release-record-top-up-todo.md) | [20261119-release-record-top-up-lessons.md](./2026/11/20261119-release-record-top-up-lessons.md) |
+| Invalidate the document cache on purge (2026-11-19) | [20261119-purge-doc-cache-invalidation-todo.md](./2026/11/20261119-purge-doc-cache-invalidation-todo.md) | [20261119-purge-doc-cache-invalidation-lessons.md](./2026/11/20261119-purge-doc-cache-invalidation-lessons.md) |
+| File out-of-diff follow-ups once per merged PR (2026-11-19) | [20261119-follow-ups-at-merge-todo.md](./2026/11/20261119-follow-ups-at-merge-todo.md) | [20261119-follow-ups-at-merge-lessons.md](./2026/11/20261119-follow-ups-at-merge-lessons.md) |
+| Move the analytics chart's init script out of configmap.yaml (2026-11-19) | [20261119-chart-init-script-out-of-yaml-todo.md](./2026/11/20261119-chart-init-script-out-of-yaml-todo.md) | [20261119-chart-init-script-out-of-yaml-lessons.md](./2026/11/20261119-chart-init-script-out-of-yaml-lessons.md) |
+| Reject malformed HLL register payloads when YSON is parsed (2026-11-18) | [20261118-yson-hll-payload-validation-todo.md](./2026/11/20261118-yson-hll-payload-validation-todo.md) | [20261118-yson-hll-payload-validation-lessons.md](./2026/11/20261118-yson-hll-payload-validation-lessons.md) |
+| Enforce the presence JSON wire contract on the server (2026-11-18) | [20261118-presence-json-wire-validation-todo.md](./2026/11/20261118-presence-json-wire-validation-todo.md) | [20261118-presence-json-wire-validation-lessons.md](./2026/11/20261118-presence-json-wire-validation-lessons.md) |
+| The presence fold's size bound is per put, not per pack (2026-11-18) | [20261118-presence-fold-pack-budget-todo.md](./2026/11/20261118-presence-fold-pack-budget-todo.md) | [20261118-presence-fold-pack-budget-lessons.md](./2026/11/20261118-presence-fold-pack-budget-lessons.md) |
+| MongoDB new projects drop auto_revision_enabled and channel_session_ttl (2026-11-18) | [20261118-mongo-project-defaults-todo.md](./2026/11/20261118-mongo-project-defaults-todo.md) | [20261118-mongo-project-defaults-lessons.md](./2026/11/20261118-mongo-project-defaults-lessons.md) |
+| Give ErrTooManyAttachments an error code (2026-11-18) | [20261118-attachment-limit-error-code-todo.md](./2026/11/20261118-attachment-limit-error-code-todo.md) | [20261118-attachment-limit-error-code-lessons.md](./2026/11/20261118-attachment-limit-error-code-lessons.md) |
 | Match GitHub Login Users by Auth Provider (2026-11-16) | [20261116-github-login-provider-scope-todo.md](./2026/11/20261116-github-login-provider-scope-todo.md) | [20261116-github-login-provider-scope-lessons.md](./2026/11/20261116-github-login-provider-scope-lessons.md) |
 | Add an external login provider verifying signed assertions (2026-11-16) | [20261116-external-login-provider-todo.md](./2026/11/20261116-external-login-provider-todo.md) | [20261116-external-login-provider-lessons.md](./2026/11/20261116-external-login-provider-lessons.md) |
 | Move GitHub login behind a provider interface (2026-11-16) | [20261116-auth-provider-interface-todo.md](./2026/11/20261116-auth-provider-interface-todo.md) | [20261116-auth-provider-interface-lessons.md](./2026/11/20261116-auth-provider-interface-lessons.md) |

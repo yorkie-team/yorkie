@@ -992,11 +992,21 @@ outside the change.
 - **No critical carve-out.** The surface gate keeps a critical blocking because
   merging would ship it. A finding that passes the revert test is on `main`
   whether or not the PR merges.
-- **Follow-up issues.** `follow-up-issues.mjs` files each demoted finding as an
-  `agent:follow-up` issue, de-duplicated against every follow-up the workflow
-  bot already filed (open or closed, across lenses, by the same similarity the
-  stall detector uses), at most three per run. Mentions and `<!--` in model
-  text are neutralised.
+- **Follow-up issues.** The panel files nothing. When a PR merges,
+  `agent-follow-up.yml` runs `follow-up-issues.mjs`, which reads the PR's
+  newest `agent-deferred-findings` record (written by the `github-actions`
+  app) and files its demoted findings as ONE `agent:follow-up` issue for the
+  PR, a checklist. Before that, a finding is dropped as already tracked when it
+  matches a follow-up the bot filed earlier (open or closed, by anchor or by
+  the similarity the stall detector uses), or when a judge session finds an
+  open issue of any author, or an earlier follow-up, with the same root cause.
+  A claimed duplicate must name an issue the judge was shown; a failed judge
+  files everything. Findings of the same PR with one root cause fold into one
+  item. Nothing new, no issue; a hidden per-PR marker keeps a re-run from
+  filing twice. Mentions and `<!--` in model text are neutralised. The panel
+  used to file per round and per finding: from 2026-10-04 to 2026-11-19 that
+  filed 93 issues from 39 PRs, and 29 of the 54 closed were closed unfixed,
+  mostly as duplicates or about code that never merged.
 - **The round guard.** `backlog` never reaches `output.text`, so the stall
   detector and the standstill count never see a deferred finding.
   `exhaustedFindings` also filters `backlog` itself, so the rule is pinned by a

@@ -35,6 +35,12 @@ import (
 // TestPresencePatch drives a presence patch through the RPC surface: the server
 // advertises the capability, folds the patch into a full put, and refuses a
 // patch it has no base for.
+//
+// The presence values here are JSON, which is the form a value takes once it
+// has been through any SDK's write path: a string is quoted, a number stands
+// as it is. Sending them already encoded keeps the assertions below about the
+// fold itself rather than about the repair the wire boundary would otherwise
+// apply (converter.FromPresenceChange).
 func TestPresencePatch(t *testing.T) {
 	ctx := context.Background()
 
@@ -66,7 +72,7 @@ func TestPresencePatch(t *testing.T) {
 				Checkpoint:  &api.Checkpoint{ClientSeq: 1},
 				Changes: []*api.Change{presenceChange(actorID, 1, &api.PresenceChange{
 					Type:     api.PresenceChange_CHANGE_TYPE_PUT,
-					Presence: &api.Presence{Data: map[string]string{"name": "a", "selection": "x"}},
+					Presence: &api.Presence{Data: map[string]string{"name": `"a"`, "selection": `"x"`}},
 				})},
 			},
 		}))
@@ -98,7 +104,7 @@ func TestPresencePatch(t *testing.T) {
 				Checkpoint:  &api.Checkpoint{ClientSeq: 1},
 				Changes: []*api.Change{presenceChange(peerActorID, 1, &api.PresenceChange{
 					Type:     api.PresenceChange_CHANGE_TYPE_PUT,
-					Presence: &api.Presence{Data: map[string]string{"name": "b"}},
+					Presence: &api.Presence{Data: map[string]string{"name": `"b"`}},
 				})},
 			},
 		}))
@@ -112,7 +118,7 @@ func TestPresencePatch(t *testing.T) {
 		}
 		require.Len(t, pulled, 2)
 		assert.Equal(t, api.PresenceChange_CHANGE_TYPE_PUT, pulled[1].Type)
-		assert.Equal(t, map[string]string{"name": "a", "cursor": "1"}, pulled[1].Presence.Data)
+		assert.Equal(t, map[string]string{"name": `"a"`, "cursor": "1"}, pulled[1].Presence.Data)
 		assert.Empty(t, pulled[1].RemovedKeys)
 	})
 
@@ -132,7 +138,7 @@ func TestPresencePatch(t *testing.T) {
 				Checkpoint:  &api.Checkpoint{ClientSeq: 1},
 				Changes: []*api.Change{presenceChange(actorID, 1, &api.PresenceChange{
 					Type:     api.PresenceChange_CHANGE_TYPE_PUT,
-					Presence: &api.Presence{Data: map[string]string{"name": "a", "selection": "x"}},
+					Presence: &api.Presence{Data: map[string]string{"name": `"a"`, "selection": `"x"`}},
 				})},
 			},
 		}))
@@ -176,7 +182,7 @@ func TestPresencePatch(t *testing.T) {
 				Checkpoint:  &api.Checkpoint{ClientSeq: 1},
 				Changes: []*api.Change{presenceChange(peerActorID, 1, &api.PresenceChange{
 					Type:     api.PresenceChange_CHANGE_TYPE_PUT,
-					Presence: &api.Presence{Data: map[string]string{"name": "b"}},
+					Presence: &api.Presence{Data: map[string]string{"name": `"b"`}},
 				})},
 			},
 		}))
@@ -193,8 +199,8 @@ func TestPresencePatch(t *testing.T) {
 			assert.Equal(t, api.PresenceChange_CHANGE_TYPE_PUT, pc.Type)
 			assert.Empty(t, pc.RemovedKeys)
 		}
-		assert.Equal(t, map[string]string{"name": "a", "cursor": "1"}, pulled[1].Presence.Data)
-		assert.Equal(t, map[string]string{"name": "a", "cursor": "2"}, pulled[2].Presence.Data)
+		assert.Equal(t, map[string]string{"name": `"a"`, "cursor": "1"}, pulled[1].Presence.Data)
+		assert.Equal(t, map[string]string{"name": `"a"`, "cursor": "2"}, pulled[2].Presence.Data)
 	})
 
 	// A detach zeroes the client's checkpoint to what a fresh attach seeds, so
@@ -211,7 +217,7 @@ func TestPresencePatch(t *testing.T) {
 				Checkpoint:  &api.Checkpoint{ClientSeq: 1},
 				Changes: []*api.Change{presenceChange(actorID, 1, &api.PresenceChange{
 					Type:     api.PresenceChange_CHANGE_TYPE_PUT,
-					Presence: &api.Presence{Data: map[string]string{"name": "a"}},
+					Presence: &api.Presence{Data: map[string]string{"name": `"a"`}},
 				})},
 			},
 		}))
@@ -291,7 +297,7 @@ func TestPresencePatch(t *testing.T) {
 				Checkpoint:  &api.Checkpoint{ClientSeq: 1},
 				Changes: []*api.Change{presenceChange(actorID, 1, &api.PresenceChange{
 					Type:     api.PresenceChange_CHANGE_TYPE_PUT,
-					Presence: &api.Presence{Data: map[string]string{"name": "a"}},
+					Presence: &api.Presence{Data: map[string]string{"name": `"a"`}},
 				})},
 			},
 		}))
@@ -308,7 +314,7 @@ func TestPresencePatch(t *testing.T) {
 				Checkpoint:  &api.Checkpoint{ClientSeq: 1},
 				Changes: []*api.Change{presenceChange(peerActorID, 1, &api.PresenceChange{
 					Type:     api.PresenceChange_CHANGE_TYPE_PUT,
-					Presence: &api.Presence{Data: map[string]string{"name": "b"}},
+					Presence: &api.Presence{Data: map[string]string{"name": `"b"`}},
 				})},
 			},
 		}))
@@ -365,7 +371,7 @@ func TestPresencePatch(t *testing.T) {
 				Checkpoint:  &api.Checkpoint{ClientSeq: 1},
 				Changes: []*api.Change{presenceChange(lateActorID, 1, &api.PresenceChange{
 					Type:     api.PresenceChange_CHANGE_TYPE_PUT,
-					Presence: &api.Presence{Data: map[string]string{"name": "c"}},
+					Presence: &api.Presence{Data: map[string]string{"name": `"c"`}},
 				})},
 			},
 		}))
@@ -379,7 +385,7 @@ func TestPresencePatch(t *testing.T) {
 		}
 		require.NotNil(t, last)
 		assert.Equal(t, api.PresenceChange_CHANGE_TYPE_PUT, last.Type)
-		assert.Equal(t, map[string]string{"name": "a", "cursor": "2"}, last.Presence.Data)
+		assert.Equal(t, map[string]string{"name": `"a"`, "cursor": "2"}, last.Presence.Data)
 	})
 
 	t.Run("a patch without a base is refused", func(t *testing.T) {

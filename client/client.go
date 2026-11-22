@@ -48,6 +48,7 @@ import (
 	"github.com/yorkie-team/yorkie/pkg/document"
 	"github.com/yorkie-team/yorkie/pkg/document/json"
 	"github.com/yorkie-team/yorkie/pkg/document/time"
+	"github.com/yorkie-team/yorkie/pkg/document/yson"
 	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/pkg/key"
 	"github.com/yorkie-team/yorkie/server/logging"
@@ -808,6 +809,29 @@ func (c *Client) Attach(ctx context.Context, r attachable.Attachable, opts ...an
 			}
 		}
 
+		// The initial root is applied with json.Object.SetYSONElement, which
+		// panics rather than returning an error on a value it cannot build:
+		// a malformed HLL payload, a counter value its type cannot hold, an
+		// empty tree text node, a primitive of a type it does not carry. The
+		// root is built in Go, so the YSON text decoder's guard never sees
+		// it; reject one here, before any RPC, rather than in the d.Update of
+		// step 05 below, which runs once the server already holds the
+		// attachment.
+		//
+		// Only the keys step 05 would apply are checked, with the same test
+		// it uses: it skips a key the document already holds, so validating
+		// those would refuse an attach over a value never read.
+		root := d.RootObject()
+		for k, v := range attachOpts.InitialRoot {
+			if root.Get(k) != nil {
+				continue
+			}
+
+			if err := yson.ValidateElement(v); err != nil {
+				return fmt.Errorf("validate initial root %q: %w", k, err)
+			}
+		}
+
 		return c.attachDocument(ctx, d, attachOpts, generation)
 
 	}
@@ -1150,6 +1174,14 @@ func (c *Client) attachDocument(
 		for k, v := range opts.InitialRoot {
 			if r.Get(k) != nil {
 				continue
+			}
+
+			// Attach validated the keys the document did not hold then. A
+			// key it did hold can have been deleted by a change in the pack
+			// this attach applied, which brings it here unchecked; re-check
+			// it so SetYSONElement cannot panic on it.
+			if err := yson.ValidateElement(v); err != nil {
+				return fmt.Errorf("validate initial root %q: %w", k, err)
 			}
 
 			r.SetYSONElement(k, v)

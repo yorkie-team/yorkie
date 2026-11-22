@@ -26,6 +26,67 @@ and Yorkie adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   that no one could administer: its secret key kept granting full
   project-scoped authority and could never be rotated.
 
+## [v0.7.29] - 2026-11-20
+
+### Added
+
+- Support external identity providers for dashboard login by @hackerwins in
+  https://github.com/yorkie-team/yorkie/pull/2380. An operator-run broker
+  posts a short-lived ES256 JWT through the browser, and brokers are
+  configured with `Auth.ExternalProviders`, `--auth-external-providers-file`
+  or the helm value `yorkie.args.externalProviders`, and listed at
+  `GET /auth/providers`. GitHub login becomes one provider among them. The
+  login state is now bound to the browser through a `__Host-` cookie and
+  expires after 10 minutes, which closes login CSRF. Users gain a `subject`
+  field: every start backfills it from the username before building a
+  unique index on `(auth_provider, subject)`, so no manual migration is
+  needed and users written by an older server during a rolling update can
+  still sign in. The auth callback now redirects with 303 instead of 307,
+  and a GitHub login started before the upgrade and finished after it fails
+  once with "invalid state".
+
+### Changed
+
+- Sign auth webhook requests with the project's secret key, so one HMAC
+  verifier accepts both the auth and the event webhook, by
+  @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2417.
+  A receiver that ignores `X-Signature-256` sees no difference. Rotating the
+  project's secret key now also changes auth webhook signatures, so a
+  verifying receiver must switch keys at the same time.
+
+### Fixed
+
+- Repair, on the server, presence values that peers cannot parse by
+  JSON-encoding them, so a value written as plain text by a Go app or a raw
+  RPC client no longer stops every JS peer from syncing the document, by
+  @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2386.
+  The repair is budgeted at 4 KiB per presence.
+- Bound the presence fold per pack, so a push of many small presence patches
+  can no longer be stored and fanned out as up to 10^5 full puts, by
+  @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2384
+- Read only the project ID from the request in cluster `GetDocument`, so a
+  request that omits the project no longer panics the handler, by
+  @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2387
+- Reject malformed HLL register payloads when YSON is parsed instead of
+  panicking, by @yorkie-team-agent[bot] in
+  https://github.com/yorkie-team/yorkie/pull/2385, and validate a Go-built
+  `yson.Counter` passed to `WithInitialRoot` before attach, by
+  @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2402
+- Leave a released element's release record alone on move, so a move inside
+  an orphaned subtree no longer leaves an uncollectable GC entry, by
+  @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2398
+- Invalidate the document cache on every node when a document is purged, so
+  a purged document no longer reads back as present, by
+  @yorkie-team-agent[bot] in https://github.com/yorkie-team/yorkie/pull/2397
+- Store the auto revision default when a project is created on MongoDB, so
+  new projects get automatic revisions, by @yorkie-team-agent[bot] in
+  https://github.com/yorkie-team/yorkie/pull/2392. New projects also leave
+  the channel session TTL empty and inherit `--channel-session-ttl`. Projects
+  already stored keep auto revisions off until updated.
+- Give `ErrTooManyAttachments` its error code, so the JS SDK's
+  `Code.ErrTooManyAttachments` check matches, by @yorkie-team-agent[bot] in
+  https://github.com/yorkie-team/yorkie/pull/2391
+
 ## [v0.7.28] - 2026-11-16
 
 ### Fixed

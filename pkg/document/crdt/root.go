@@ -530,6 +530,17 @@ func (r *Root) release(elem Element) {
 // charge topped up: DataSize grows by a ticket when removedAt is set, which
 // can happen after the move.
 //
+// Topping up a release record (a charge of exactly zero, see release) is
+// deliberate, and it is safe here and nowhere else: every call reaching this
+// function is part of a removal that puts the element back on the collection
+// worklist. adoptRemovedElementPair and RegisterRemovedElementPair register a
+// pair for the element themselves, and moveDescendantsToGC -- called only by
+// those two -- is covered by the same Descendants walk deregisterElement makes
+// when that pair is purged. So the charge written here always has something
+// that will subtract it again, which is what lets the record stop being a
+// release record. A caller with no entry behind it must leave the record
+// alone instead (see AccMovedElement).
+//
 // Another element sharing this createdAt has a charge of its own, and it is not
 // this one's: this element is still in Live and moves in full.
 func (r *Root) moveSizeToGC(elem Element) bool {
@@ -842,14 +853,35 @@ func (r *Root) Acc(diff resource.DataSize) {
 // left the record alone would only move the stray bytes from Live to GC. An
 // element with no record is one Live is still holding (deregisterElement makes
 // the same split), so it is charged to Live.
+//
+// A released element is charged to neither, and takes the diff nowhere. Its
+// record is exactly zero because a restore orphaned it (see release), so there
+// is no ledger the stamped ticket can come back out of: release already
+// deleted the collection entry, and a move -- unlike every caller of
+// moveSizeToGC -- registers no new one, nor can a second Remove, which reports
+// nothing for an element that is already removed. Adding to GC here would
+// leave residue no pass can ever subtract, and would cost the record its only
+// other way out: index retires a release record only while it is still zero,
+// so a topped-up one keeps the dead subtree reachable for good.
+//
+// Which is why the release record is read before removedAt and not after. A
+// release record is not a tombstone's alone: UnregisterRemovedElementPair
+// releases the pair element and every descendant, and most of a released
+// subtree is live -- Live has already given up those bytes, so charging a
+// live released element's move to Live is the same unsubtractable residue,
+// on the commoner of the two paths.
 func (r *Root) AccMovedElement(elem Element, diff resource.DataSize) {
-	if elem == nil || elem.RemovedAt() == nil {
+	if elem == nil {
 		r.docSize.Live.Add(diff)
 		return
 	}
 
 	charged, ok := r.sizeInGC[elem]
-	if !ok {
+	if ok && charged == (resource.DataSize{}) {
+		return
+	}
+
+	if !ok || elem.RemovedAt() == nil {
 		r.docSize.Live.Add(diff)
 		return
 	}

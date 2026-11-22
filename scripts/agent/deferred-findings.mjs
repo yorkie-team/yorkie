@@ -213,6 +213,21 @@ export function deferredRecord(finding, lens) {
     ...(stamped && str(finding.outOfDiff?.anchor) ? { anchorScope: clip(finding.outOfDiff.anchor, 20) } : {}),
     ...(stamped && str(finding.outOfDiff?.causation) ? { causation: clip(finding.outOfDiff.causation, 20) } : {}),
     ...(stamped && finding.outOfDiff?.demotes === true ? { outOfDiffDemoted: true } : {}),
+    // The judge's reason and citations, on DEMOTED records only. They are what
+    // the follow-up issue filed at merge shows a maintainer, and that workflow
+    // reads this record, not `verdict.json`. On a kept finding they would be
+    // bytes with no reader. Clipped to the widths `outOfDiffRecord` applies.
+    ...(stamped && finding.outOfDiff?.demotes === true && str(finding.outOfDiff?.reason)
+      ? { outOfDiffReason: clip(finding.outOfDiff.reason, 600) }
+      : {}),
+    ...(stamped && finding.outOfDiff?.demotes === true && Array.isArray(finding.outOfDiff?.groundedIn)
+      ? {
+        outOfDiffGrounds: finding.outOfDiff.groundedIn
+          .filter((s) => typeof s === "string")
+          .slice(0, 8)
+          .map((s) => clip(s, 200)),
+      }
+      : {}),
   };
 }
 

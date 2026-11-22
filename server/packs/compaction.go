@@ -167,6 +167,25 @@ func Purge(
 		return err
 	}
 
+	// 3. Ask the other nodes to drop their cached copy of the document row.
+	//
+	// The row is cached per node and the purge is routed to a single one, so
+	// without this every other node that has read the document keeps
+	// answering FindDocInfoByRefKey from a copy of a row that no longer
+	// exists — with no time bound, as the cache has no TTL. A deactivation
+	// landing on such a node then classifies the purged document as still
+	// attached and routes it to a cluster detach that cannot succeed.
+	//
+	// Failure is logged, not returned: the purge itself has already landed in
+	// the database, and the caller must not be told it did not.
+	if err := be.BroadcastCacheInvalidation(
+		ctx,
+		types.CacheTypeDocument,
+		docInfo.RefKey().CacheKey(),
+	); err != nil {
+		logging.From(ctx).Warnf("broadcast document cache invalidation: %v", err)
+	}
+
 	logging.From(ctx).Infow(fmt.Sprintf(
 		"purged document internals [project_id=%s doc_id=%s]",
 		projectID, docInfo.ID,
