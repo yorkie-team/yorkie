@@ -492,7 +492,13 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 		splitTickets = append(splitTickets, issued)
 		return issued
 	}
-	pairs, diff, _, err := t.Tree.Edit(
+	var origin *crdt.TreeInsertOrigin
+	if (len(clones) > 0 || splitLevel > 0) && crdt.TreeOrigins {
+		if o, ok := t.Tree.LocalTreeOrigin(fromPos); ok {
+			origin = &crdt.TreeInsertOrigin{Right: o.Right}
+		}
+	}
+	pairs, diff, _, err := t.Tree.EditWithOrigin(
 		fromPos,
 		toPos,
 		clones,
@@ -505,6 +511,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 		// OpSourceLocal. Asked for anyway, so the clone and the root take the
 		// same path through Edit -- including the same error cases.
 		true,
+		origin,
 	)
 	if err != nil {
 		panic(err)
@@ -525,6 +532,7 @@ func (t *Tree) edit(fromPos, toPos *crdt.TreePos, contents []*TreeNode, splitLev
 		ticket,
 	)
 	edit.SetSplitTickets(splitTickets)
+	edit.SetTreeOrigin(origin)
 	t.context.Push(edit)
 
 	return true

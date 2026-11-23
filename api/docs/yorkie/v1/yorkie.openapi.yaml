@@ -1654,6 +1654,33 @@ components:
           description: ""
           title: from
           type: object
+        hasOrigin:
+          additionalProperties: false
+          description: |-
+            Insertion context for the two-origin placement rule.
+             has_origin distinguishes "no origin" from "right origin = end".
+          title: has_origin
+          type: boolean
+        originLeft:
+          $ref: '#/components/schemas/yorkie.v1.TextNodeID'
+          additionalProperties: false
+          description: ""
+          title: origin_left
+          type: object
+        originRight:
+          $ref: '#/components/schemas/yorkie.v1.TextNodeID'
+          additionalProperties: false
+          description: ""
+          title: origin_right
+          type: object
+        originRightAtFrom:
+          additionalProperties: false
+          description: |-
+            origin_left is omitted when it equals from (the usual case); the
+             receiver derives it. origin_right_at_from marks a right origin that is
+             the character at from itself.
+          title: origin_right_at_from
+          type: boolean
         parentCreatedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
@@ -1952,6 +1979,20 @@ components:
           additionalProperties: false
           description: ""
           title: from
+          type: object
+        hasOrigin:
+          additionalProperties: false
+          description: |-
+            Right insertion origin of the contents. The left origin
+             is the from position itself, so only the right is carried. has_origin
+             distinguishes "no origin" from "right origin = end of the parent".
+          title: has_origin
+          type: boolean
+        originRight:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: ""
+          title: origin_right
           type: object
         parentCreatedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
@@ -2556,6 +2597,23 @@ components:
           type: string
       title: Rule
       type: object
+    yorkie.v1.TextNodeID:
+      additionalProperties: false
+      description: ""
+      properties:
+        createdAt:
+          $ref: '#/components/schemas/yorkie.v1.TimeTicket'
+          additionalProperties: false
+          description: ""
+          title: created_at
+          type: object
+        offset:
+          additionalProperties: false
+          description: ""
+          title: offset
+          type: integer
+      title: TextNodeID
+      type: object
     yorkie.v1.TextNodePos:
       additionalProperties: false
       description: ""
@@ -2616,6 +2674,16 @@ components:
           description: ""
           title: depth
           type: integer
+        hasOrigin:
+          additionalProperties: false
+          description: |-
+            Insertion origins for the two-origin placement rule.
+             has_origin distinguishes "no origin" (legacy node) from an origin whose
+             left is the start of the parent (origin_left unset) or whose right is
+             the end of the parent (origin_right unset). Fields 1-10 match
+             yorkie-js-sdk main; 11-14 are free there.
+          title: has_origin
+          type: boolean
         id:
           $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
           additionalProperties: false
@@ -2653,12 +2721,33 @@ components:
              concurrent merge. It points to the source parent's ID.
           title: merged_from
           type: object
+        originLeft:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: ""
+          title: origin_left
+          type: object
+        originRight:
+          $ref: '#/components/schemas/yorkie.v1.TreeNodeID'
+          additionalProperties: false
+          description: ""
+          title: origin_right
+          type: object
         removedAt:
           $ref: '#/components/schemas/yorkie.v1.TimeTicket'
           additionalProperties: false
           description: ""
           title: removed_at
           type: object
+        skeletonLen:
+          additionalProperties: false
+          description: |-
+            skeleton_len > 0 marks a garbage-collected tombstone kept in its parent's
+             child list only for its position: its value, attributes and subtree are
+             gone. For a text node it is the UTF-16 length of the ID range it still
+             covers; an element writes 1.
+          title: skeleton_len
+          type: integer
         type:
           additionalProperties: false
           description: ""

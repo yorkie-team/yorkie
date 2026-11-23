@@ -2,7 +2,7 @@
   "v": 1,
   "id": "gen-all-132-min",
   "issues": ["yorkie#2099"],
-  "status": { "go": "known-fail", "js": "known-fail" },
+  "status": { "go": "pass", "js": "known-fail" },
   "note": "Minimised from gen-all-n2-s24-132 (a parity all row). Off mode converges (I1 holds); minvv mode ends with different XML (I4 fails). Likely cause: a split rule reads tombstones that one replica has already collected.",
   "replicas": 2,
   "init": "abcd",

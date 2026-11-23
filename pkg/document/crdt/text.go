@@ -68,6 +68,28 @@ func (t *TextValue) Len() int {
 	return length
 }
 
+// LenGreaterThan reports whether Len() > n. It answers from the byte length
+// when it can, since a UTF-16 length is at most the byte length and at least
+// a third of it, and otherwise stops counting as soon as it passes n. Caret
+// checks on long pieces use it so they don't pay a full count per edit.
+func (t *TextValue) LenGreaterThan(n int) bool {
+	b := len(t.value)
+	if b <= n {
+		return false
+	}
+	if b/3 > n {
+		return true
+	}
+	length := 0
+	for _, r := range t.value {
+		length += max(utf16.RuneLen(r), 1)
+		if length > n {
+			return true
+		}
+	}
+	return false
+}
+
 // String returns the string representation of this value.
 func (t *TextValue) String() string {
 	return t.value
@@ -132,6 +154,11 @@ func (t *TextValue) Split(offset int) RGATreeSplitValue {
 }
 
 // DeepCopy copies itself deeply.
+// skeletonValue returns the empty value a collected tombstone keeps.
+func (t *TextValue) skeletonValue() RGATreeSplitValue {
+	return NewTextValue("", NewRHT())
+}
+
 func (t *TextValue) DeepCopy() RGATreeSplitValue {
 	return &TextValue{
 		attrs: t.attrs.DeepCopy(),
@@ -317,6 +344,10 @@ func (t *Text) DeepCopy() (Element, error) {
 func (t *Text) GCPairs() []GCPair {
 	var pairs []GCPair
 	for _, node := range t.Nodes() {
+		if node.IsSkeleton() {
+			// Already collected.
+			continue
+		}
 		if node.removedAt != nil {
 			// Text.DataSize skips a removed node, so this one was never in
 			// the Live the scan's root was built with.
@@ -425,6 +456,32 @@ func (t *Text) Edit(
 	executedAt *time.Ticket,
 	versionVector time.VersionVector,
 ) (*RGATreeSplitNodePos, []GCPair, resource.DataSize, []string, []RestoreSpan, error) {
+	return t.EditWithOrigin(from, to, content, attributes, executedAt, versionVector, InsertOrigin{}, false)
+}
+
+// LocalOrigin returns the origin a local insert at pos records: the
+// absolute boundary of pos and the ID of the character right of it.
+func (t *Text) LocalOrigin(pos *RGATreeSplitNodePos) (InsertOrigin, error) {
+	left := pos.getAbsoluteID()
+	right, err := t.rgaTreeSplit.RightOriginOf(left)
+	if err != nil {
+		return InsertOrigin{}, err
+	}
+	return InsertOrigin{Left: left, Right: right}, nil
+}
+
+// EditWithOrigin is Edit with the insertion's origins. A zero origin keeps
+// the createdAt-only placement rule.
+func (t *Text) EditWithOrigin(
+	from,
+	to *RGATreeSplitNodePos,
+	content string,
+	attributes map[string]string,
+	executedAt *time.Ticket,
+	versionVector time.VersionVector,
+	origin InsertOrigin,
+	local bool,
+) (*RGATreeSplitNodePos, []GCPair, resource.DataSize, []string, []RestoreSpan, error) {
 	val := NewTextValue(content, NewRHT())
 	for key, value := range attributes {
 		val.attrs.Set(key, value, executedAt)
@@ -436,6 +493,8 @@ func (t *Text) Edit(
 		val,
 		executedAt,
 		versionVector,
+		origin,
+		local,
 	)
 	if err != nil {
 		return caretPos, pairs, diff, nil, nil, err
