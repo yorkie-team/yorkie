@@ -1039,6 +1039,17 @@ func (c *Client) UpsertMemberInfo(
 	invitedBy types.ID,
 	role database.MemberRole,
 ) (*database.MemberInfo, error) {
+	// A member row names its user by ID alone, so one naming a user that no
+	// longer exists can never be listed or removed again. No transaction spans
+	// the two collections, so the user is resolved on both sides of the
+	// upsert: the check before rejects the ordinary case, and the check after
+	// removes a row that raced an account deletion. Account deletion sweeps
+	// memberships once more after the user document is gone, so a row written
+	// here is always caught by one side or the other.
+	if _, err := c.FindUserInfoByID(ctx, userID); err != nil {
+		return nil, err
+	}
+
 	opts := options.FindOneAndUpdate().
 		SetUpsert(true).
 		SetReturnDocument(options.After)
@@ -1066,6 +1077,24 @@ func (c *Client) UpsertMemberInfo(
 	info := &database.MemberInfo{}
 	if err := result.Decode(info); err != nil {
 		return nil, fmt.Errorf("upsert member: %w", err)
+	}
+
+	// Revert only when the user is confirmed gone. Any other error says nothing
+	// about the user, and the row may predate this call, since the upsert
+	// leaves an existing membership untouched.
+	if _, err := c.FindUserInfoByID(ctx, userID); err != nil {
+		if !errors.Is(err, database.ErrUserNotFound) {
+			return nil, err
+		}
+
+		if _, dErr := c.collection(ColMembers).DeleteOne(ctx, bson.M{
+			"project_id": projectID,
+			"user_id":    userID,
+		}); dErr != nil {
+			return nil, fmt.Errorf("revert member %s: %w", userID, dErr)
+		}
+
+		return nil, err
 	}
 
 	return info, nil
@@ -1155,6 +1184,22 @@ func (c *Client) DeleteMemberInfo(
 	}
 	if result.DeletedCount == 0 {
 		return fmt.Errorf("delete project member: %w", database.ErrMemberNotFound)
+	}
+
+	return nil
+}
+
+// DeleteMemberInfosByUser deletes every membership of the given user. It
+// succeeds when the user has none, because its caller deletes an account
+// whether or not it joined a project.
+func (c *Client) DeleteMemberInfosByUser(
+	ctx context.Context,
+	userID types.ID,
+) error {
+	if _, err := c.collection(ColMembers).DeleteMany(ctx, bson.M{
+		"user_id": userID,
+	}); err != nil {
+		return fmt.Errorf("delete memberships of %s: %w", userID, err)
 	}
 
 	return nil
@@ -3349,6 +3394,19 @@ func (c *Client) DeleteExpiredInviteInfos(ctx context.Context, now gotime.Time) 
 		return 0, fmt.Errorf("delete expired invites: %w", err)
 	}
 	return res.DeletedCount, nil
+}
+
+// DeleteInviteInfosByCreator deletes every invite created by the given user. It
+// succeeds when the user created none, because its caller deletes an account
+// whether or not it invited anyone.
+func (c *Client) DeleteInviteInfosByCreator(ctx context.Context, userID types.ID) error {
+	if _, err := c.collection(ColInvites).DeleteMany(ctx, bson.M{
+		"created_by": userID,
+	}); err != nil {
+		return fmt.Errorf("delete invites of %s: %w", userID, err)
+	}
+
+	return nil
 }
 
 // escapeRegex escapes special characters by putting a backslash in front of it.

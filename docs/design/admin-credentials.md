@@ -92,6 +92,60 @@ is covered:
 `CreateProject` (the caller is the owner), `UpdateProject` and
 `RotateProjectKeys` (both already `CheckPermission(..., Admin)`) are unaffected.
 
+### Role loss
+
+Redaction decides who may *read* the key; it cannot decide who still holds a
+copy. So every way of losing a role has to leave the owner able to see the loss
+and rotate deliberately. Demotion and `RemoveMember` do: the membership row
+changes or goes, and the member list shows it.
+
+Account deletion (`DeleteAccount`, password-verified and reachable without a
+session) did not. It removed the user document alone, and the `members` rows
+naming that user survived. Those rows are keyed by user ID but only reachable
+by username, so `members.Remove` could never delete one again
+(`FindUserInfoByName` answers `ErrUserNotFound`), and `members.List` failed the
+whole project listing on the missing user — the owner could not even see who
+was left. `users.DeleteAccountByName` now sweeps the memberships, deletes the
+user, and sweeps once more; none of it is one transaction, and sweeping first
+leaves the recoverable state if the user deletion then fails.
+
+The second sweep is for a concurrent `AcceptInvite`. `invites.Accept` upserts a
+row keyed by user ID alone, so an accept overlapping the deletion can insert a
+row after the first sweep — the same unreachable row, re-created by the user
+being deleted. Once the user document is gone no later request can reach the
+write, because the admin interceptor resolves the caller by username on every
+call, so sweeping after the deletion removes it.
+
+What the sweeps cannot see is an upsert already in flight when the second one
+runs, so the member write checks the user itself. `UpsertMemberInfo` resolves
+the user before and after its write: the check before refuses the ordinary
+case, and the check after deletes the row it just wrote when the account went
+in between. Mongo has no transaction spanning the two collections, but the two
+checks and the second sweep cover each other — a row written before the user
+document goes is swept, and one written after it fails its own re-check, since
+that read necessarily follows the deletion. memdb serializes write
+transactions, so the check before the write is enough there.
+
+Invites are swept on the same schedule. An invite outlives the session that
+created it and `invites.Accept` grants the invite's role without consulting its
+creator, so a token created by the deleted account would keep handing out
+`Admin` or `Member` on a user ID that no longer exists —
+`DeleteInviteInfosByCreator` removes them alongside the memberships.
+
+This drops the roles, not the key a role could have read. Rotation stays the
+owner's deliberate act for the same reason it does after a demotion.
+
+Deletion drops memberships, not owned projects — so an account that owns a
+project is refused deletion outright (`users.ErrOwnedProjectExists`). A project
+records its owner as a bare user ID (`authz.FindUserRole`), with no `members`
+row, and nothing transfers or deletes it. Were the owner allowed to delete
+itself, the project would keep an owner ID naming no user: rotation would fall
+to whatever `Admin` member remains, and a project with none would have no
+caller who can pass `CheckPermission(..., Admin)`, leaving its secret key
+granting full project-scoped authority forever. Refusing keeps the account,
+which can still be handed over; the lasting fix is ownership transfer or a
+`DeleteProject`, neither of which exists yet.
+
 ### Client migration
 
 This changes the wire contract for every client that authenticates
@@ -118,6 +172,9 @@ allowed through any proxy that filters request headers — the istio
 | Non-Go clients break for `member` users the moment the server ships | Documented here and in the changelog as a breaking change; the Go client and the chart ship the fallback in the same change |
 | A key copied before the change keeps full project authority | `RotateProjectKeys`; owners are told to run it after demoting or removing an admin |
 | A demoted admin keeps the key | Same; automatic rotation was dropped because the key also signs the event webhook |
+| An admin self-deletes and keeps the key | `DeleteAccount` removes their memberships and the invites they created, so the owner sees the role loss and can rotate; the orphan row used to hide the whole member list |
+| The project *owner* self-deletes and keeps the key | `DeleteAccount` refuses while the account owns a project, so no project is left with an owner ID naming no user. Handing the project over still needs ownership transfer or project deletion, neither of which exists |
+| An invite the deleted admin created keeps granting roles | `DeleteInviteInfosByCreator` removes the account's invites on both sweeps; `invites.Accept` never consults the creator, so the token is the only thing to revoke |
 | A procedure added later reads a scope its scheme never set | `projectScopedMethods` is opt-in; an unlisted procedure is user-scoped |
 
 ### Design Decisions

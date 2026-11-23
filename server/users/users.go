@@ -22,9 +22,19 @@ import (
 	"fmt"
 
 	"github.com/yorkie-team/yorkie/api/types"
+	"github.com/yorkie-team/yorkie/pkg/errors"
 	"github.com/yorkie-team/yorkie/server/backend"
 	"github.com/yorkie-team/yorkie/server/backend/database"
 )
+
+// ErrOwnedProjectExists is returned when the account to delete still owns a
+// project. A project names its owner by user ID and there is no way to transfer
+// or drop that ownership, so deleting the owner would leave a live project
+// whose owner is nobody: its keys could never be rotated and its member list
+// could never be read again.
+var ErrOwnedProjectExists = errors.FailedPrecond(
+	"owned project exists",
+).WithCode("ErrOwnedProjectExists")
 
 // SignUp signs up a new user.
 func SignUp(
@@ -112,13 +122,77 @@ func GetUserByID(
 	return info.ToUser(), nil
 }
 
-// DeleteAccountByName deletes a user by name.
+// DeleteAccountByName deletes a user by name, along with every project
+// membership it holds and every invite it created.
+//
+// An account that owns a project cannot be deleted at all. A project names its
+// owner by user ID, nothing transfers or drops that ownership, and authz reads
+// the owner straight off the project document, so deleting the owner would
+// leave a live project that no one can administer: its leaked secret key could
+// never be rotated and its member list could never be read. Refusing keeps the
+// account, which can still be handed over, instead of stranding the project.
+//
+// The memberships are swept twice, around the user document. They are keyed by
+// user ID but only reachable by username (members.Remove resolves the name), so
+// a row left behind by a deleted user can never be listed or removed again:
+// members.List fails the whole project listing on the missing user. The
+// deletions are not one transaction, so the first sweep leaves the recoverable
+// state — an account that lost its roles and can be invited back — if the user
+// deletion then fails.
+//
+// The second sweep closes the race with a concurrent AcceptInvite, together
+// with the user check UpsertMemberInfo makes on both sides of its write. An
+// accept that overlaps this call can land a row after the first sweep; the
+// second sweep removes it when the row is written before the user document
+// goes, and the member write's own re-check removes it when it is written
+// after. A request starting later cannot reach the write at all, because the
+// admin interceptor resolves the caller by username on every call and now
+// answers ErrUserNotFound.
+//
+// The invites are swept on the same schedule and for the same reason:
+// invites.Accept grants the invite's role without consulting its creator, so a
+// surviving token would keep handing out membership on behalf of an account
+// that no longer exists.
+//
+// This drops the roles, not the credentials they could read. A copied project
+// secret key outlives the role it was read under; RotateProjectKeys is still
+// the owner's remedy, by the same reasoning as demotion
+// (docs/design/admin-credentials.md).
 func DeleteAccountByName(
 	ctx context.Context,
 	be *backend.Backend,
 	username string,
 ) error {
+	info, err := be.DB.FindUserInfoByName(ctx, username)
+	if err != nil {
+		return err
+	}
+
+	owned, err := be.DB.ListProjectInfos(ctx, info.ID)
+	if err != nil {
+		return err
+	}
+	if len(owned) > 0 {
+		return fmt.Errorf("delete account owning %d project(s): %w", len(owned), ErrOwnedProjectExists)
+	}
+
+	if err := be.DB.DeleteMemberInfosByUser(ctx, info.ID); err != nil {
+		return err
+	}
+
+	if err := be.DB.DeleteInviteInfosByCreator(ctx, info.ID); err != nil {
+		return err
+	}
+
 	if err := be.DB.DeleteUserInfoByName(ctx, username); err != nil {
+		return err
+	}
+
+	if err := be.DB.DeleteMemberInfosByUser(ctx, info.ID); err != nil {
+		return err
+	}
+
+	if err := be.DB.DeleteInviteInfosByCreator(ctx, info.ID); err != nil {
 		return err
 	}
 

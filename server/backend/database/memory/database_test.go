@@ -114,6 +114,18 @@ func TestDB(t *testing.T) {
 		testcases.RunDeleteMemberInfoTest(t, db)
 	})
 
+	t.Run("DeleteMemberInfosByUser test", func(t *testing.T) {
+		testcases.RunDeleteMemberInfosByUserTest(t, db)
+	})
+
+	t.Run("UpsertMemberInfoForDeletedUser test", func(t *testing.T) {
+		testcases.RunUpsertMemberInfoForDeletedUserTest(t, db)
+	})
+
+	t.Run("DeleteInviteInfosByCreator test", func(t *testing.T) {
+		testcases.RunDeleteInviteInfosByCreatorTest(t, db)
+	})
+
 	t.Run("CreateInviteInfo test", func(t *testing.T) {
 		testcases.RunCreateInviteInfoTest(t, db)
 	})
