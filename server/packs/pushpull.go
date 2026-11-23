@@ -132,7 +132,8 @@ func PushPull(
 	}
 
 	// 01b. Fold presence patches into full puts, so only puts are stored and
-	// every client keeps pulling the full presence. A presence-disabled
+	// every client keeps pulling the full presence, and bound the puts the
+	// client sent, which no document size gate measures. A presence-disabled
 	// document has none left after the strip above.
 	var fold *presenceFold
 	if !opts.DisablePresence {
